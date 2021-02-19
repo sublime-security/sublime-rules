@@ -1,0 +1,17 @@
+name: "SPF temp error"
+description: |
+  Attackers can spoof domains that have no MX/SPF records, resulting
+  in a DNS timeout. In O365 this fails closed (goes to spam), but in 
+  Gmail this fails open (lands in the inbox) and shows a red padlock
+  Reproduce on Ubuntu 18.04: 
+  echo "test" | mail -s "Test" user@gmail.com -a"From: Support <support@nomxdomain.com>"
+  Example headers:
+  Received-SPF: temperror (google.com: error in processing during lookup of support@ltbit.com: DNS error) client-ip=<>;
+  Authentication-Results: mx.google.com; spf=temperror
+    (google.com: error in processing during lookup of support@nomxdomain.com: DNS error) smtp.mailfrom=support@nomxdomain.com
+type: "rule"
+source: |
+  type.inbound
+  and any(headers.hops, any(.fields, ilike(.name, "Received-SPF") and ilike(.value, "*spf=temperror*")))
+tags:
+  - "suspicious-headers"
