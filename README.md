@@ -1,2 +1,2 @@
 # sublime-rules
-Sublime rules, snippets, and queries for phishing detection, DLP, and compliance.
+Sublime rules and queries for phishing detection, DLP, and compliance.
