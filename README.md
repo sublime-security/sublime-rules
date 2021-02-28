@@ -21,6 +21,7 @@ and iedit_distance(sender.email.domain.domain, 'YOURDOMAIN1.COM') < 2
 
 ### Sublime Platform
 _Coming soon_
+
 The [Sublime Platform](https://dev.sublimesecurity.com/products/platform/) has built-in connectors for Office 365, G Suite, and IMAP, and a pretty Dashboard. The Community Edition is and always will be completely free and self-hostable.
 
 The example below can be used with the Platform to dynamically detect homoglyph attacks with frequent contacts:
