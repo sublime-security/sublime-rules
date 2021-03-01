@@ -16,7 +16,7 @@ The alpha Analysis API is a free API for analyzing messages using MQL. You need 
 The example below can be customized to detect homoglyph attacks:
 ```javascript
 type.inbound
-and iedit_distance(sender.email.domain.domain, 'YOURDOMAIN1.COM') < 2
+and iedit_distance(sender.email.domain.domain, 'EXAMPLE.COM') < 2
 ```
 
 ### Sublime Platform
