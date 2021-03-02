@@ -16,7 +16,8 @@ The alpha Analysis API is a free API for analyzing messages using MQL. You need 
 The example below can be customized to detect homoglyph attacks:
 ```javascript
 type.inbound
-and iedit_distance(sender.email.domain.domain, 'EXAMPLE.COM') < 2
+and iedit_distance(sender.email.domain.root_domain, 'example.com') < 2
+and sender.email.domain.root_domain != 'example.com'`
 ```
 
 ### Sublime Platform
@@ -27,7 +28,8 @@ The [Sublime Platform](https://sublimesecurity.com/products/platform/) is free, 
 The example below can be used with the Platform to dynamically detect homoglyph attacks with frequent contacts:
 ```javascript
 type.inbound
-and iedit_distance(sender.email.domain.domain, $frequent_domains) < 2
+and iedit_distance(sender.email.domain.root_domain, $frequent_domains) < 2
+and sender.email.domain.root_domain not in $frequent_domains`
 ```
 
 Rules that return `true` in the Platform trigger actions such as SIEM alerts, auto-trash, or the insertion of a warning banner.
