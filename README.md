@@ -1,11 +1,11 @@
 # Sublime Rules
 This repo contains open-source detection rules and queries, primarily for phishing defense.
 
-Follow our [Quick Start Guide](https://docs.sublimesecurity.com/quick-start) to run these rules using the free Analysis API.
+Follow our [Quick Start Guide](https://docs.sublimesecurity.com/docs/quickstart) to run these rules using the free Analysis API.
 
 Learn more about [Message Query Language (MQL)](https://docs.sublimesecurity.com/docs/message-query-language), Sublime's DSL purpose-built for email analysis.
 
-Use our [Tutorials](https://docs.sublimesecurity.com/docs/tutorials) to learn about the Sublime system and how to write your own rules.
+Use our [Tutorials](https://docs.sublimesecurity.com/docs/introduction-to-the-message-data-model) to learn about the Sublime system and how to write your own rules.
 
 Follow us on [Twitter](https://twitter.com/sublime_sec) for updates.
 
