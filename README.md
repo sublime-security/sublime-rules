@@ -23,7 +23,7 @@ and sender.email.domain.root_domain != 'example.com'`
 ### Sublime Platform
 _Coming soon_
 
-The [Sublime Platform](https://sublimesecurity.com/products/platform/) is free, self-hostable, has built-in connectors for Office 365, G Suite, and IMAP, and a pretty Dashboard.
+The [Sublime Platform](https://sublimesecurity.com/platform/) is free, self-hostable, has built-in connectors for Office 365, G Suite, and IMAP, and a pretty Dashboard.
 
 The example below can be used with the Platform to dynamically detect homoglyph attacks with frequent contacts:
 ```javascript
@@ -34,4 +34,4 @@ and sender.email.domain.root_domain not in $frequent_domains`
 
 Rules that return `true` in the Platform trigger actions such as SIEM alerts, auto-trash, or the insertion of a warning banner.
 
-Sign up for [Platform early access here](https://sublimesecurity.com/products/platform/).
+Sign up for [Platform early access here](https://sublimesecurity.com/platform/).
