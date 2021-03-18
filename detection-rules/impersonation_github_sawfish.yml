@@ -1,17 +1,29 @@
-name: "Brand impersonation: Github sawfish campaign"
+name: "Brand impersonation: Github (sawfish campaign)"
 description: |
-  Impersonation of Githb as part of the sawfish campaign, which seeks to harvest Github credentials, 
-  likely for IP theft.
+  Impersonation of Github, potentially as part of the sawfish campaign, seeking to harvest Github credentials.
 references:
   - "https://github.blog/2020-04-14-sawfish-phishing-campaign-targets-github-users/"
+  - "https://twitter.com/DanielGallagher/status/1372280418582552578"
 type: "rule"
 source: |
   type.inbound
-  and sender.email.domain.domain !~ 'github.com'
-  and ilike(body.plain.raw, '*account activity*', '*github*', '*your activity*', '*suspicious api call*')
-  and ilike(body.html.raw, '*account activity*', '*github*', '*your activity*', '*suspicious api call*')
-  or any (body.links, .href_url.domain.root_domain in~ 
-      ('aws-update.net',
+  and sender.email.domain.domain != 'github.com'
+  and 3 of (
+    iregex_search(body.plain.raw, '.*account activity.*', '.*github.*', '.*your activity.*', '.*suspicious api call.*'),
+    iregex_search(body.html.raw, '.*account activity.*', '.*github.*', '.*your activity.*', '.*suspicious api call.*'),
+    iregex_search(subject.subject, '.*account activity.*', '.*your activity.*', '.*suspicious api call.*'),
+    ilike(sender.display_name, '*github*'),
+    ilike(sender.email.email, '*github*'),
+    ilike(subject.subject, '*github*')
+  )
+  or any(body.links, .href_url.domain.root_domain in 
+      ('secure-git.org',
+      'auth-glthub.com',
+      'secure-glthub.com',
+      'githb.net',
+      'github-team.com',
+      'githubb.net',
+      'aws-update.net',
       'corp-github.com',
       'ensure-https.com',
       'git-hub.co',
@@ -35,5 +47,4 @@ source: |
       'tsl-github.com'))
 tags:
   - "brand-impersonation"
-  - "suspicious-sender"
-
+  - "credential-phishing"
