@@ -1,0 +1,26 @@
+name: "Attachment with auto-opening VBA macro (unsolicited)"
+description: |
+  Recursively scans files and archives to detect embedded VBA files with an auto open exec.
+references:
+  - "https://threatpost.com/microsoft-outlook-users-targeted-by-gamaredons-new-vba-macro/156484/"
+type: "rule"
+source: |
+  type.inbound
+  and any(attachments,
+        any(beta.binexplode(.),
+          any(.scan.vba.auto_exec, . == "AutoOpen")
+  		)
+  )
+  and (
+        (
+            sender.email.domain.root_domain in $free_email_providers
+            and sender.email.email not in $recipient_emails
+        )
+        or (
+            sender.email.domain.root_domain not in $free_email_providers
+            and sender.email.domain.domain not in $recipient_domains
+        )
+  )
+tags:
+  - "Suspicious attachment"
+  - "Macros"

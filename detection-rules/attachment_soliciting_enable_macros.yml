@@ -1,0 +1,23 @@
+name: "Attachment soliciting user to enable macros"
+description: |
+  Recursively scans files and archives to detect documents that ask the
+  user to enable macros, including if that text appears within an embedded image.
+references:
+  - "https://www.fortinet.com/blog/threat-research/new-dridex-variant-being-spread-by-crafted-excel-document"
+type: "rule"
+source: |
+  type.inbound
+  and (any(attachments,
+         any(beta.binexplode(.),
+           any(.scan.ocr.text, ilike(., "*please*"))
+           and any(.scan.ocr.text, ilike(., "*enable*"))
+           and any(.scan.ocr.text, ilike(., "*macros*")))
+    )
+    or (any(attachments,
+         any(beta.binexplode(.),
+          any(.scan.strings.strings, ilike(., "*please enable macros*"))))
+    )
+  )
+tags:
+  - "Suspicious attachment"
+  - "Macros"
