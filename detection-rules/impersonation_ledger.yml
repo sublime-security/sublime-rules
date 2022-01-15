@@ -20,7 +20,20 @@ source: |-
               or ilike(sender.display_name, '*ledger*')
               or iedit_distance(sender.email.domain.sld, "ledger") <= 2
           )
-          and sender.email.email not in $recipient_emails
+          and (
+              // if this comes from a free email provider,
+              // flag if org has never sent an email to sender's email before
+              (
+                  sender.email.domain.root_domain in $free_email_providers
+                  and sender.email.email not in $recipient_emails
+              )
+              // if this comes from a custom domain,
+              // flag if org has never sent an email to sender's domain before
+              or (
+                  sender.email.domain.root_domain not in $free_email_providers
+                  and sender.email.domain.domain not in $recipient_domains
+              )
+          )
       )
   )
 tags:
