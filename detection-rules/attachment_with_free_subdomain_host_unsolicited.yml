@@ -6,13 +6,22 @@ description: |
 type: "rule"
 source: |
   type.inbound
-  and any(attachments,
-        any(beta.binexplode(.),
+  and any(attachments, .file_extension in~ ("pdf")
+        and any(beta.binexplode(.),
           any(.scan.url.urls, .domain.root_domain in $free_subdomain_hosts
                               and .domain.subdomain is not null
                               and .domain.subdomain != "www"))
   )
-  and sender.email.email not in $recipient_emails
+  and (
+      (
+          sender.email.domain.root_domain in $free_email_providers
+          and sender.email.email not in $recipient_emails
+      )
+      or (
+          sender.email.domain.root_domain not in $free_email_providers
+          and sender.email.domain.domain not in $recipient_domains
+      )
+  )
 tags:
   - "Suspicious attachment"
   - "Suspicious link"
