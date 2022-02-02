@@ -6,9 +6,18 @@ references:
 type: "rule"
 source: |
   type.inbound
-  and any(attachments,
-        any(beta.binexplode(.), any(.flavors.yara, . == 'encrypted_zip'))
+  and any(attachments, .file_type == "zip" or .file_extension == "zip"
+        and any(beta.binexplode(.), any(.flavors.yara, . == 'encrypted_zip'))
   )
-  and sender.email.email not in $recipient_emails
+  and (
+      (
+          sender.email.domain.root_domain in $free_email_providers
+          and sender.email.email not in $recipient_emails
+      )
+      or (
+          sender.email.domain.root_domain not in $free_email_providers
+          and sender.email.domain.domain not in $recipient_domains
+      )
+  )
 tags:
   - "Suspicious attachment"
