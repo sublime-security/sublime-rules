@@ -1,0 +1,21 @@
+name: "Attachment: Office Document with VSTO Add-in"
+description: |
+  Recursively scans files and archives to detect Office documents with VSTO Add-ins.
+type: "rule"
+references:
+  - "https://medium.com/@airlockdigital/make-phishing-great-again-vsto-office-files-are-the-new-macro-nightmare-e09fcadef010"
+severity: "medium"
+authors:
+  - twitter: "vector_sec"
+source: |
+  type.inbound
+  and any(attachments, .file_extension in~ ("doc","docm","docx","dot","dotm","xls","xlsx","xlsm","xlm","xlsb","xlt","xltm","ppt","pptx","pptm","ppsm",
+                                            "7z","bz2","gz","rar","tar","zip","zipx","iso","img")
+      and any(beta.binexplode(.),
+          .extension in~ ("doc","docm","docx","dot","dotm","xls","xlsx","xlsm","xlm","xlsb","xlt","xltm","ppt","pptx","pptm","ppsm")
+          and any(.scan.exiftool.fields, .key == "Tag_AssemblyLocation"
+          and ilike(.value, "*.vsto*"))
+      )
+  )
+tags:
+  - "Suspicious attachment"
