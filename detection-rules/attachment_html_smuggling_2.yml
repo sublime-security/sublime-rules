@@ -1,0 +1,24 @@
+name: "Attachment: HTML smuggling with fromCharCode and other signals"
+description: |
+  Recursively scans files and archives to detect HTML smuggling techniques.
+references:
+  - "https://www.microsoft.com/security/blog/2021/11/11/html-smuggling-surges-highly-evasive-loader-technique-increasingly-used-in-banking-malware-targeted-attacks/"
+type: "rule"
+source: |
+  type.inbound
+  and any(attachments,
+      .file_extension in~ ("html","htm",
+                          "7z","bz2","gz","rar","tar","zip","zipx","iso","img")
+      and any(beta.binexplode(.),
+          any(.scan.javascript.identifiers, . == "location")
+          and any(.scan.javascript.identifiers, . == "charCodeAt")
+          and any(.scan.javascript.identifiers, . == "fromCharCode")
+          and any(.scan.javascript.identifiers, . == "indexOf")
+          and any(.scan.javascript.keywords, . == "try")
+          and any(.scan.javascript.keywords, . == "catch")
+          and length(.scan.javascript.identifiers) < 100  
+      )
+  ) 
+tags:
+  - "Suspicious attachment"
+  - "HTML smuggling"
