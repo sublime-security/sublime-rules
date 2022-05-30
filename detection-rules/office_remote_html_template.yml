@@ -1,0 +1,45 @@
+name: "Attachment: Office document loads remote HTML template"
+description: |
+  Recursively scans archives and Office documents to detect remote HTML template injection.
+
+  As of time of writing (30 May 2022), a zero-click remote code execution technique has been
+  observed in the wild in order to exploit Microsoft Office through MSDT (Microsoft Diagnostics Tool).
+references:
+  - "https://twitter.com/nao_sec/status/1530196847679401984"
+  - "https://twitter.com/malwarejake/status/1530974352660897793"
+  - "https://twitter.com/gossithedog/status/1530844804061573120"
+  - "https://twitter.com/MalwareJake/status/1531019243411623939"
+  - "https://doublepulsar.com/follina-a-microsoft-office-code-execution-vulnerability-1a47fce5629e"
+  - "https://www.huntress.com/blog/microsoft-office-remote-code-execution-follina-msdt-bug"
+  - "https://twitter.com/sans_isc/status/1531321260784898050"
+  - "https://twitter.com/Ledtech3/status/1530979998416441347"
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and any(attachments,
+      (
+          (
+              .file_extension in~ ("doc", "docm", "docx", "dot", "dotm", "pptm", "ppsm", "xlm", "xls", "xlsb", "xlsm", "xlt", "xltm", "rtf")
+
+              // detect files without an extension
+              or .file_type in ("docx")
+          )
+          and any(beta.oletools(.).relationships, iregex_search(.target, ".*html!"))
+      )
+      or (
+          (
+              .file_extension in~ ("7z","bz2","gz","rar","tar","zip","zipx","iso","img")
+
+              // detect files without an extension
+              or .file_type in ("7z")
+          )
+          and any(beta.binexplode(.),
+              .flavors.mime == "text/xml" and
+              any(.scan.strings.strings, iregex_search(., ".*oleObject.*html!.*"))
+          )
+      )
+  )
+tags:
+  - "Suspicious attachment"
+  - "Office exploit"
