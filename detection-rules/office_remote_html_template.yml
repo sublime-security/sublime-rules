@@ -17,6 +17,7 @@ references:
   - "https://twitter.com/sans_isc/status/1531321260784898050"
   - "https://twitter.com/Ledtech3/status/1530979998416441347"
   - "https://twitter.com/gentilkiwi/status/1531384447219781634"
+  - "https://twitter.com/jkamdjou/status/1531387025533943809"
 type: "rule"
 severity: "high"
 source: |
@@ -24,7 +25,8 @@ source: |
   and any(attachments,
       (
           (
-              .file_extension in~ ("doc", "docm", "docx", "dot", "dotm", "pptm", "ppsm", "xlm", "xls", "xlsb", "xlsm", "xlt", "xltm", "rtf")
+              // office files
+              .file_extension in~ ("doc", "docm", "docx", "dot", "dotm", "pptm", "ppsm", "xlm", "xls", "xlsb", "xlsm", "xlt", "xltm")
 
               // detect files without an extension
               or .file_type in ("docx")
@@ -33,14 +35,28 @@ source: |
       )
       or (
           (
+              // explode archives
               .file_extension in~ ("7z","bz2","gz","rar","tar","zip","zipx","iso","img")
 
               // detect files without an extension
               or .file_type in ("7z")
+
+              or .file_extension in~ ("rtf")
           )
-          and any(beta.binexplode(.),
-              .flavors.mime == "text/xml" and
-              any(.scan.strings.strings, iregex_search(., "oleObject.*html?!"))
+
+          and (
+
+              // office files
+              any(beta.binexplode(.),
+                  .flavors.mime == "text/xml" and
+                  any(.scan.strings.strings, iregex_search(., "oleObject.*html?!"))
+              )
+
+              // rtf files
+              or any(beta.binexplode(.),
+                  .flavors.mime == "text/rtf" and
+                  any(.scan.strings.strings, iregex_search(., "objclass.*htm.?"))
+              )
           )
       )
   )
