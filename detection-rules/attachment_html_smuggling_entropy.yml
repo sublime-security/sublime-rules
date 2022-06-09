@@ -1,0 +1,27 @@
+name: "Attachment: HTML smuggling with high entropy and other signals"
+description: |
+  Recursively scans files and archives to detect HTML smuggling techniques.
+references:
+  - "https://www.microsoft.com/security/blog/2021/11/11/html-smuggling-surges-highly-evasive-loader-technique-increasingly-used-in-banking-malware-targeted-attacks/"
+type: "rule"
+source: |
+  type.inbound 
+  and any(attachments,
+      (
+          .file_extension in~ ("html", "htm", 
+                                  "7z","bz2","gz","rar","tar","zip","zipx","iso","img") or
+          .file_type == "html"
+      )
+      and any(beta.binexplode(.), 
+          .scan.entropy.entropy >= 5 and
+          any(.scan.strings.strings, 
+              iregex_search(., "fromCharCode") and
+              iregex_search(., "parseInt") and
+              iregex_search(., "charCodeAt") and
+              iregex_search(., '(\\x0.*){50}')
+          )
+      )
+  )
+tags:
+  - "Suspicious attachment"
+  - "HTML smuggling"
