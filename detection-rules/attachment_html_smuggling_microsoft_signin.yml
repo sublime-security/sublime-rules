@@ -1,0 +1,36 @@
+name: "Attachment: HTML Smuggling Microsoft Sign In"
+description: |
+  Scans HTML files to detect HTML smuggling techniques impersonating a Microsoft login page.
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and any(attachments,
+      (
+          .file_extension in~ ("html", "htm") or
+          .file_type == "html"
+      )
+      and any(beta.binexplode(.),
+          .scan.entropy.entropy >= 5.8
+          and .flavors.mime == "text/html"
+          and length(.scan.javascript.identifiers) == 0
+          and any(.scan.url.urls,
+              .domain.domain not in $tranco_1m
+              or .domain.root_domain in $free_subdomain_hosts
+          )
+          and ilike(.scan.html.title, "*sign in*", "*microsoft*")
+      )
+  )
+  and (
+          (
+              sender.email.domain.root_domain in $free_email_providers
+              and sender.email.email not in $recipient_emails
+          )
+          or (
+              sender.email.domain.root_domain not in $free_email_providers
+              and sender.email.domain.domain not in $recipient_domains
+          )
+  )
+tags:
+  - "Suspicious attachment"
+  - "HTML smuggling"
