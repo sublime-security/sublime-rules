@@ -1,0 +1,21 @@
+name: "Attachment: HTML smuggling with setTimeout"
+description: |
+  Recursively scans files and archives to detect HTML smuggling techniques.
+references:
+  - "https://www.microsoft.com/security/blog/2021/11/11/html-smuggling-surges-highly-evasive-loader-technique-increasingly-used-in-banking-malware-targeted-attacks/"
+type: "rule"
+source: |
+  type.inbound
+  and any(attachments, .size <= 400 and
+      (
+          .file_extension in~ ("html", "htm", "7z","bz2","gz","rar","tar","zip","zipx","iso","img") or
+          .file_type == "html"
+      )
+      and any(beta.binexplode(.),
+          "setTimeout" in .scan.javascript.identifiers
+          and any(.scan.strings.strings, ilike(., "*location.href*"))
+      )
+  )
+tags:
+  - "Suspicious attachment"
+  - "HTML smuggling"
