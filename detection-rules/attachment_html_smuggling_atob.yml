@@ -1,0 +1,17 @@
+name: "Attachment: HTML smuggling with atob and high entropy"
+description: |
+  Recursively scans files and archives to detect HTML smuggling techniques.
+references:
+  - "https://www.microsoft.com/security/blog/2021/11/11/html-smuggling-surges-highly-evasive-loader-technique-increasingly-used-in-banking-malware-targeted-attacks/"
+type: "rule"
+source: |
+  type.inbound
+  and any(attachments, .file_type == "html" and .size <= 15000
+      and any(beta.binexplode(.),
+          .scan.entropy.entropy >= 5
+          and all(["document", "write", "atob"], . in ..scan.javascript.identifiers)
+      )
+  )
+tags:
+  - "Suspicious attachment"
+  - "HTML smuggling"
