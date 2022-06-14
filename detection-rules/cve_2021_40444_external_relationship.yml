@@ -1,4 +1,4 @@
-name: "CVE-2021-40444: MSHTML Remote Code Execution Vulnerability"
+name: "Attachment: CVE-2021-40444 - MSHTML Remote Code Execution Vulnerability"
 description: |
   Attachment contains an external relationship that attempts to load a remote OLE object, consistent with use in CVE-2021-40444.
 
@@ -15,11 +15,20 @@ references:
 type: "rule"
 severity: "high"
 source: |
-  type.inbound 
-  and any(attachments, 
-    .file_extension in~ ("doc", "docm", "docx", "dot", "dotm", "pptm", "ppsm", "xlm", "xls", "xlsb", "xlsm", "xlt", "xltm", "rtf")
-   and any(beta.oletools(.).relationships, iregex_search(.target, ".*html:http.*"))
+  type.inbound
+  and any(attachments,
+      (
+          .file_extension in~ ("doc", "docm", "docx", "dot", "dotm", "pptm", "ppsm", "xlm", "xls", "xlsb", "xlsm", "xlt", "xltm", "rtf")
+          and any(beta.oletools(.).relationships, iregex_search(.target, ".*html:http.*"))
+      ) or (
+          .file_extension in~ ("7z","bz2","gz","rar","tar","zip","zipx","iso","img")
+          and any(beta.binexplode(.),
+              .flavors.mime == "text/xml" and
+              any(.scan.strings.strings, iregex_search(., ".*oleObject.*mhtml.*http.*"))
+          )
+      )
   )
 tags:
   - "Suspicious attachment"
   - "CVE-2021-40444"
+  - "Office exploit"

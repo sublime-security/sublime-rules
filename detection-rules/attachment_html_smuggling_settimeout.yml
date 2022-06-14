@@ -1,0 +1,19 @@
+name: "Attachment: HTML smuggling with setTimeout"
+description: |
+  Recursively scans files and archives to detect HTML smuggling techniques.
+type: "rule"
+source: |
+  type.inbound
+  and any(attachments, .size <= 400 and
+      (
+          .file_extension in~ ("html", "htm", "7z","bz2","gz","rar","tar","zip","zipx","iso","img") or
+          .file_type == "html"
+      )
+      and any(beta.binexplode(.),
+          "setTimeout" in .scan.javascript.identifiers
+          and any(.scan.strings.strings, ilike(., "*location.href*"))
+      )
+  )
+tags:
+  - "Suspicious attachment"
+  - "HTML smuggling"

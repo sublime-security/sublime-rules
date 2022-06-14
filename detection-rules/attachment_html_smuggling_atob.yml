@@ -1,0 +1,24 @@
+name: "Attachment: HTML smuggling with atob and high entropy"
+description: |
+  Recursively scans files and archives to detect HTML smuggling techniques.
+type: "rule"
+source: |
+  type.inbound
+  and any(attachments, .size <= 15000 and
+      (
+          .file_extension in~ ("html", "htm", "7z","bz2","gz","rar","tar","zip","zipx","iso","img") or
+          .file_type == "html"
+      )
+      and any(beta.binexplode(.),
+          .scan.entropy.entropy >= 5
+          and (
+              all(["document", "write", "atob"], . in ..scan.javascript.identifiers)
+              
+              // usage: document['write'](atob)
+              or any(.scan.strings.strings, ilike(., "*document*write*atob*"))
+          )
+      )
+  )
+tags:
+  - "Suspicious attachment"
+  - "HTML smuggling"
