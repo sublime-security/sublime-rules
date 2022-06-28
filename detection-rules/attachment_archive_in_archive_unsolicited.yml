@@ -1,0 +1,29 @@
+name: "Attachment: Archive within archive (unsolicited)"
+description: |
+  Recursively scans archives to detect embedded archives from unsolicited senders. 
+
+  Attackers are known to embed archives within other archives to bypass email gateway controls.
+references:
+  - "https://twitter.com/1ZRR4H/status/1538988819260887040"
+  - "https://twitter.com/jkamdjou/status/1541535870272114688"
+type: "rule"
+source: |
+  type.inbound
+  and any(attachments,
+        .file_extension in~ ( "7z", "bz2", "gz", "rar", "tar", "zip", "zipx", "iso", "img")
+        and any(beta.binexplode(.), .depth > 0 and
+          .extension in~ ("7z", "bz2", "gz", "rar", "tar", "zip", "zipx", "iso", "img") )
+  )
+  and (
+          (
+              sender.email.domain.root_domain in $free_email_providers
+              and sender.email.email not in $recipient_emails
+          )
+          or (
+              sender.email.domain.root_domain not in $free_email_providers
+              and sender.email.domain.domain not in $recipient_domains
+          )
+  )
+tags:
+  - "Suspicious attachment"
+  - "Attack surface reduction"
