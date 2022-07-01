@@ -5,8 +5,12 @@ reference:
   - "https://krebsonsecurity.com/2020/08/sendgrid-under-siege-from-hacked-accounts/comment-page-1/"
 type: "rule"
 source: |
-  type.inbound
-  and headers.return_path.domain.domain == 'sendgrid.net'
-  and ilike(subject.subject, '*voicemail*', '*voice message*')
+  type.inbound 
+  and (headers.return_path.domain.domain == 'sendgrid.net'
+    or any(headers.domains, ilike(.domain, "*.outbound-mail.sendgrid.net"))
+    or any(headers.hops, any(.fields, ilike(.name, "Received") and ilike(.value, "*.outbound-mail.sendgrid.net*")))
+    or any(headers.hops, any(.authentication_results.dkim_details, .domain == 'sendgrid.net'))
+  )
+  and ilike(subject.subject, '*voicemail*', '*voice message*', 'Voice*')
 tags:
   - "Suspicious headers"
