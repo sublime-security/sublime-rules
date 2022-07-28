@@ -12,7 +12,7 @@ Examples
 - [Encrypted zips](https://github.com/sublime-security/sublime-rules/blob/main/detection-rules/attachment_with_encrypted_zip_unsolicited.yml)
 - [High risk VBA macros](https://github.com/sublime-security/sublime-rules/blob/main/detection-rules/attachment_vba_macro_high_risk.yml)
 - [Malicious LNK files](https://github.com/sublime-security/sublime-rules/blob/main/detection-rules/attachment_lnk_file_with_embedded_content.yml)
-- [VIP impersonation](https://github.com/sublime-security/sublime-rules/blob/main/detection-rules/vip_impersonation_attack_surface_reduction.yml)
+- [VIP / Executive impersonation](https://github.com/sublime-security/sublime-rules/blob/main/detection-rules/vip_impersonation_attack_surface_reduction.yml)
 
 Community Rule Feeds
 ----------
