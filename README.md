@@ -17,6 +17,7 @@ Examples
 Community Rule Feeds
 ----------
 - [vector-sec](https://github.com/vector-sec/public-sublime-rules)
+- [amitchell516](https://github.com/aidenmitchell/custom-sublime-rules)
 
 Learn more
 ----------
