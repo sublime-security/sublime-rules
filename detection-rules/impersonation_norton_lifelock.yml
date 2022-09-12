@@ -1,0 +1,22 @@
+name: "Brand impersonation: Norton Lifelock"
+description: |
+  Scans files to detect Norton Lifelock impersonation.
+references:
+  - "https://techaeris.com/2021/10/23/psa-watch-out-for-norton-lifelock-phishing-emails/"
+type: "rule"
+source: |
+  type.inbound
+  and any(attachments,
+      .file_extension in~ ('pdf', 'jpg', 'jpeg', 'png')
+      and (
+          ilike(.file_name, "*norton*")
+          or any(beta.binexplode(.),
+              any(.scan.strings.strings, iregex_search(., ".*norton.?60.*", ".*lifelock.*"))
+          )
+      )
+  )
+  and sender.email.domain.root_domain in $free_email_providers
+  and sender.email.email not in $recipient_emails
+tags:
+  - "Brand impersonation"
+  - "Suspicious attachment"

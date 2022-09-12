@@ -1,0 +1,27 @@
+name: "Attachment: Office365 image"
+description: |
+  Looks for messages with an image attachment that contains words related to Microsoft, Office365, and passwords.
+type: "rule"
+severity: "medium"
+authors:
+  - twitter: "vector_sec"
+source: |
+  type.inbound
+  and length(body.html.inner_text) < 100
+  and any(attachments, .file_extension in~ ('png','jpg','jpeg')
+      and any(beta.binexplode(.),
+          (
+              (
+                  any(.scan.strings.strings, ilike(., "*microsoft*", "*office365*", "*office*")) and
+                  any(.scan.strings.strings, ilike(., "*password*", "*expire*", "*expiry*"))
+              )
+          or
+              (
+                  any(.scan.ocr.text, ilike(., "*microsoft*", "*office365*", "*office*")) and
+                  any(.scan.ocr.text, ilike(., "*password*", "*expire*", "*expiry*"))
+              )
+          )
+      )
+  )
+tags:
+  - "Suspicious attachment"

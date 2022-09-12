@@ -1,0 +1,24 @@
+name: "Attachment: Suspicious VBA macros from first-time sender"
+description: |
+  Detects any VBA macro attachment that scores above a medium confidence threshold in the Sublime Macro Classifier.
+type: "rule"
+source: |
+  type.inbound
+  and any(attachments, .file_extension in~ ("doc", "docm", "docx", "dot", "dotm", "pptm", "ppsm", "xlm", "xls", "xlsb", "xlsm", "xlt", "xltm")
+      and beta.ml_macro_classifier(.).malicious
+      and beta.ml_macro_classifier(.).confidence in ("medium", "high")
+  )
+  and (
+        (
+            sender.email.domain.root_domain in $free_email_providers
+            and sender.email.email not in $sender_emails
+        )
+        or (
+            sender.email.domain.root_domain not in $free_email_providers
+            and sender.email.domain.domain not in $sender_domains
+        )
+  )
+tags:
+  - "Suspicious attachment"
+  - "Macros"
+  - "Machine learning"

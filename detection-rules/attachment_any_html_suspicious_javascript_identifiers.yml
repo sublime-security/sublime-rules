@@ -1,0 +1,25 @@
+name: "Attachment: Any HTML file with suspicious JavaScript identifiers"
+description: |
+  Potential HTML obfuscation attack based on suspicious JavaScript identifiers.
+  Some attackers may use obfuscation techniques such as ROT13 to bypass email security filters.
+  This rule may be expanded to inspect HTML attachments for other suspicious identifiers.
+type: "rule"
+authors:
+  - twitter: "Kyle_Parrish_"
+    name: "Kyle Parrish"
+source: |
+  type.inbound and
+  any(attachments,
+        (
+            .file_extension in~ ("html", "htm", 
+                                 "7z","bz2","gz","rar","tar","zip","zipx","iso","img") or
+            .file_type == "html"
+        )
+        and any(beta.binexplode(.),
+            any(.scan.javascript.identifiers, . in~ ("rot13"))
+            and length(.scan.javascript.identifiers) < 100
+        )
+  )
+tags:
+  - "Suspicious attachment"
+  - "HTML smuggling"

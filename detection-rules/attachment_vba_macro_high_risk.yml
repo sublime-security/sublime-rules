@@ -1,0 +1,26 @@
+name: "Attachment with high risk VBA macro (unsolicited)"
+description: |
+  Potentially malicious attachment containing a VBA macro. Oletools categorizes the macro risk as 'high'.
+references:
+  - "https://threatpost.com/microsoft-outlook-users-targeted-by-gamaredons-new-vba-macro/156484/"
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and any(attachments, 
+    .file_extension in~ ("doc", "docm", "docx", "dot", "dotm", "pptm", "ppsm", "xlm", "xls", "xlsb", "xlsm", "xlt", "xltm")
+    and beta.oletools(.).indicators.vba_macros.risk == "high"
+  )
+  and (
+        (
+            sender.email.domain.root_domain in $free_email_providers
+            and sender.email.email not in $recipient_emails
+        )
+        or (
+            sender.email.domain.root_domain not in $free_email_providers
+            and sender.email.domain.domain not in $recipient_domains
+        )
+  )
+tags:
+  - "Suspicious attachment"
+  - "Macros"

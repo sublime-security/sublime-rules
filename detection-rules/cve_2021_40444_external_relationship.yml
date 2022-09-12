@@ -1,0 +1,34 @@
+name: "Attachment: CVE-2021-40444 - MSHTML Remote Code Execution Vulnerability"
+description: |
+  Attachment contains an external relationship that attempts to load a remote OLE object, consistent with use in CVE-2021-40444.
+
+  On September 7, 2021, Microsoft released details about a zero day RCE vulnerability in MSHTML that affects Microsoft Windows.
+
+  According to Microsoft: "we are aware of targeted attacks that attempt to exploit this vulnerability by using specially-crafted Microsoft Office documents. An attacker could craft a malicious ActiveX control to be used by a Microsoft Office document that hosts the browser rendering engine."
+references:
+  - "https://msrc.microsoft.com/update-guide/vulnerability/CVE-2021-40444"
+  - "https://twitter.com/buffaloverflow/status/1436261107329642522"
+  - "https://twitter.com/jroosen/status/1435792491899494402"
+  - "https://twitter.com/decalage2/status/1436433067619622916"
+  - "https://www.reddit.com/r/crowdstrike/comments/pkb9wi/situational_awareness_cve202140444_mshtml_remote/"
+  - "https://twitter.com/aaaddress1/status/1436393045939814400"
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and any(attachments,
+      (
+          .file_extension in~ ("doc", "docm", "docx", "dot", "dotm", "pptm", "ppsm", "xlm", "xls", "xlsb", "xlsm", "xlt", "xltm", "rtf")
+          and any(beta.oletools(.).relationships, iregex_search(.target, ".*html:http.*"))
+      ) or (
+          .file_extension in~ ("7z","bz2","gz","rar","tar","zip","zipx","iso","img")
+          and any(beta.binexplode(.),
+              .flavors.mime == "text/xml" and
+              any(.scan.strings.strings, iregex_search(., ".*oleObject.*mhtml.*http.*"))
+          )
+      )
+  )
+tags:
+  - "Suspicious attachment"
+  - "CVE-2021-40444"
+  - "Office exploit"

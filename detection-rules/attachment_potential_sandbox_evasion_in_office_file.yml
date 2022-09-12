@@ -1,0 +1,31 @@
+name: "Attachment: Potential Sandbox Evasion in Office File"
+description: |
+  Scans attached files with known Office file extension, and alerts on the presence of strings indicative of sandbox evasion checks.
+
+  Malicious code may carry out checks against the local host (e.g. running processes, disk size, domain-joined status) before running its final payload.
+references:
+  - "https://github.com/S3cur3Th1sSh1t/OffensiveVBA/tree/main/src/SandBoxEvasion"
+type: "rule"
+authors:
+  - twitter: "ajpc500"
+source: |
+  type.inbound 
+  and any(attachments, .file_extension in (
+      // MS Word
+      "doc", "docm", "docx", "dot", "dotm",
+      // MS Excel
+      "xls", "xlsx", "xlsm", "xlm", "xlsb", "xlt", "xltm",
+      // MS PowerPoint
+      "ppt", "pptx", "pptm", "ppsm"
+      ) and any(beta.binexplode(.), 
+          length(filter(.scan.strings.strings, ilike(.,
+              "*Win32_Processor*",
+              "*Win32_LogicalDisk*",
+              "*Win32_ComputerSystem*",
+              "*Win32_Process*",
+              "*LDAP://RootDSE*"
+          ))) >= 1
+      )
+  )
+tags:
+  - "Suspicious attachment"

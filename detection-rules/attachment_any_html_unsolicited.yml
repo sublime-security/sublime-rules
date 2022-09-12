@@ -1,0 +1,27 @@
+name: "Attachment: Any HTML file (unsolicited)"
+description: |
+  Potential HTML smuggling attacks in unsolicited messages.
+  Use if passing HTML files is not normal behavior in your environment.
+  This rule may be expanded to inspect HTML attachments for suspicious code.
+references:
+  - "https://ired.team/offensive-security/defense-evasion/file-smuggling-with-html-and-javascript"
+type: "rule"
+source: |
+  type.inbound
+  and any(attachments, .file_extension in~ ('htm', 'html'))
+  and (
+          // if this comes from a free email provider,
+          // flag if org has never sent an email to sender's email before
+          (
+              sender.email.domain.root_domain in $free_email_providers
+              and sender.email.email not in $recipient_emails
+          )
+          // if this comes from a custom domain,
+          // flag if org has never sent an email to sender's domain before
+          or (
+              sender.email.domain.root_domain not in $free_email_providers
+              and sender.email.domain.domain not in $recipient_domains
+          )
+  )
+tags:
+  - "Suspicious attachment"

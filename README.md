@@ -1,37 +1,31 @@
-# Sublime Rules
-This repo contains open-source detection rules and queries, primarily for phishing defense.
+<a href="https://sublimesecurity.com"><img src="https://user-images.githubusercontent.com/11003450/115128085-5805da00-9fa9-11eb-8c7a-dc8b708053ee.png" width="75px" alt="Sublime Logo" /></a>
+ 
+Sublime Rules
+==========
+by Sublime Security
 
-Follow our [Quick Start Guide](https://docs.sublimesecurity.com/docs/quickstart) to run these rules using the free Analysis API.
+This repo contains open-source detection rules and queries for the [Sublime Platform](https://github.com/sublime-security/sublime-platform).
 
-Learn more about [Message Query Language (MQL)](https://docs.sublimesecurity.com/docs/message-query-language), Sublime's DSL purpose-built for email analysis.
+Examples
+----------
+- [HTML smuggling](https://github.com/sublime-security/sublime-rules/blob/main/detection-rules/attachment_html_smuggling.yml)
+- [Encrypted zips](https://github.com/sublime-security/sublime-rules/blob/main/detection-rules/attachment_with_encrypted_zip_unsolicited.yml)
+- [High risk VBA macros](https://github.com/sublime-security/sublime-rules/blob/main/detection-rules/attachment_vba_macro_high_risk.yml)
+- [Malicious LNK files](https://github.com/sublime-security/sublime-rules/blob/main/detection-rules/attachment_lnk_file_with_embedded_content.yml)
+- [VIP / Executive impersonation](https://github.com/sublime-security/sublime-rules/blob/main/detection-rules/vip_impersonation_attack_surface_reduction.yml)
 
-Use our [Tutorials](https://docs.sublimesecurity.com/docs/introduction-to-the-message-data-model) to learn about the Sublime system and how to write your own rules.
+Community Rule Feeds
+----------
+- [vector-sec](https://github.com/vector-sec/public-sublime-rules)
+- [amitchell516](https://github.com/aidenmitchell/custom-sublime-rules)
 
-Follow us on [Twitter](https://twitter.com/sublime_sec) for updates.
+Learn more
+----------
+- [Sublime home page](https://sublimesecurity.com)
+- [Sublime Platform overview](https://docs.sublimesecurity.com)
+- [Message Query Language (MQL) reference](https://docs.sublimesecurity.com/docs/message-query-language) - Sublime's DSL purpose-built for email analysis
+- [Release log](https://new.sublimesecurity.com)
 
-### Free Analysis API
+Follow us on [Twitter](https://twitter.com/sublime_sec) for updates on new rules and detection capabilities, and star/watch this repo for updates and general availability.
 
-The alpha Analysis API is a free API for analyzing messages using MQL. You need to Bring Your Own Messages, such as reported phish. 
-
-The example below can be customized to detect homoglyph attacks:
-```javascript
-type.inbound
-and iedit_distance(sender.email.domain.root_domain, 'example.com') < 2
-and sender.email.domain.root_domain != 'example.com'`
-```
-
-### Sublime Platform
-_Coming soon_
-
-The [Sublime Platform](https://sublimesecurity.com/platform/) is free, self-hostable, has built-in connectors for Office 365, G Suite, and IMAP, and a pretty Dashboard.
-
-The example below can be used with the Platform to dynamically detect homoglyph attacks with frequent contacts:
-```javascript
-type.inbound
-and iedit_distance(sender.email.domain.root_domain, $frequent_domains) < 2
-and sender.email.domain.root_domain not in $frequent_domains`
-```
-
-Rules that return `true` in the Platform trigger actions such as SIEM alerts, auto-trash, or the insertion of a warning banner.
-
-Sign up for [Platform early access here](https://sublimesecurity.com/platform/).
+[Request early access to Sublime](https://sublimesecurity.com/platform)
