@@ -1,0 +1,30 @@
+name: Rules PR CI
+
+on:
+  push:
+    branches: [ "**" ]
+  workflow_dispatch: {}
+
+concurrency:
+  group: ${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+  tests:
+    name: Run Rule Validation
+    runs-on: ubuntu-20.04
+
+    steps:
+      - name: Set up yq
+        uses: mikefarah/yq@v4.27.3
+
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Validate Rules
+        run: |
+          for f in *-rules/*.yml
+          do
+            echo "Processing $f"
+            yq -o=json eval 'del(.type)' "$f" | curl -H "Content-Type: application/json" -X POST --data-binary @- --fail --silent https://sandbox.sublimesecurity.com/v1/rules/validate
+          done
