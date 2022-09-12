@@ -6,7 +6,9 @@ references:
     - "https://cofense.com/blog/office-365-phishing-variant/"
     - "https://www.helpnetsecurity.com/2020/05/04/fake-microsoft-teams-notification/"
 type: "rule"
-severity: "high"
+severity: "medium"
+authors:
+  - twitter: "amitchell516"
 source: |
   type.inbound
   and (
@@ -14,7 +16,14 @@ source: |
       ilike(subject.subject, '*Microsoft 365*') 
       and ilike(subject.subject, '*is expired*')
     )
-    or iregex_search(body.html.inner_text, ".*reach you.*microsoft teams")
+  or
+    (
+      // should catch any instance of the word "expired"
+      ilike(body.html.display_text, "*expir*")
+      and ilike(body.html.display_text, "*password*")
+      and ilike(body.html.display_text, "*microsoft*")
+    )
+    or iregex_search(body.html.display_text, ".*reach you.*microsoft teams")
     or ilike(sender.display_name, '*new activity in Teams*')
     or subject.subject =~ 'Offline Message in Teams'
     or ilike(subject.subject, '*Teams Sent A Message')
@@ -24,7 +33,18 @@ source: |
                                'Microsoft Azure')
   )                                                                                                                         
   and sender.email.domain.root_domain not in~ ('microsoft.com', 'microsoftsupport.com', 'office.com')
-  and sender.email.email not in $recipient_emails
+
+  // first-time sender
+  and (
+      (
+          sender.email.domain.root_domain in $free_email_providers
+          and sender.email.email not in $sender_emails
+      )
+      or (
+          sender.email.domain.root_domain not in $free_email_providers
+          and sender.email.domain.domain not in $sender_domains
+      )
+  )
 tags:
   - "Brand impersonation"
   - "Suspicious sender"
