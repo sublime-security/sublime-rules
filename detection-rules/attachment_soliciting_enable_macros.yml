@@ -5,13 +5,14 @@ description: |
 references:
   - "https://www.fortinet.com/blog/threat-research/new-dridex-variant-being-spread-by-crafted-excel-document"
 type: "rule"
+severity: "high"
 source: |
   type.inbound
   and any(attachments, .file_extension in~ ("doc", "docm", "docx", "dot", "dotm", "pptm", "ppsm", "xlm", "xls", "xlsb", "xlsm", "xlt", "xltm", "zip")
          and any(beta.binexplode(.), 
-           (any(.scan.ocr.text, ilike(., "*please*")) and any(.scan.ocr.text, ilike(., "*enable*")) and any(.scan.ocr.text, ilike(., "*macros*"))
-           or any(.scan.strings.strings, ilike(., "*please enable macros*"))))
-        )
+           strings.ilike(.scan.ocr.raw, "*please*enable*macros")
+           or any(.scan.strings.strings, strings.ilike(., "*please enable macros*"))
+        ))
   and (
       (
           sender.email.domain.root_domain in $free_email_providers
