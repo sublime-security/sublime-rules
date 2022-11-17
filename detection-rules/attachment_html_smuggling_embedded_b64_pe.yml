@@ -1,0 +1,28 @@
+name: "Attachment: HTML smuggling with embedded base64-encoded executable"
+description: |
+  HTML attachmemt contains a base-64 encoded executable.
+type: "rule"
+severity: "high"
+  type.inbound 
+  and any(attachments,
+      (
+          .file_extension in~ ("html", "htm") or
+          .file_extension in~ $file_extensions_common_archives or
+          .file_type == "html"
+      ) 
+      and any(beta.binexplode(.), 
+        any(.flavors.yara, . == 'base64_pe')) 
+  )
+  and (
+          (
+              sender.email.domain.root_domain in $free_email_providers
+              and sender.email.email not in $recipient_emails
+          )
+          or (
+              sender.email.domain.root_domain not in $free_email_providers
+              and sender.email.domain.domain not in $recipient_domains
+          )
+  )
+tags:
+  - "Suspicious attachment"
+  - "HTML smuggling"
