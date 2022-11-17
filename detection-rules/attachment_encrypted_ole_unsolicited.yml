@@ -8,11 +8,20 @@ type: "rule"
 severity: "high"
 source: |
   type.inbound
-  and any(attachments, 
-    .file_extension in~ ("doc", "dot", "docm", "dotm", "docx", "xlm", "xls", "xlsb", "xlsm", "pptm", "ppsm")
-    and beta.oletools(.).indicators.encryption.exists
+  and any(attachments,
+      .file_extension in~ $file_extensions_macros
+      and beta.oletools(.).indicators.encryption.exists
   )
-  and sender.email.email not in $recipient_emails
+  and (
+      (
+          sender.email.domain.root_domain in $free_email_providers
+          and sender.email.email not in $recipient_emails
+      )
+      or (
+          sender.email.domain.root_domain not in $free_email_providers
+          and sender.email.domain.domain not in $recipient_domains
+      )
+  )
 tags:
   - "Suspicious attachment"
   - "Encrypted attachment"

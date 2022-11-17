@@ -8,11 +8,16 @@ type: "rule"
 severity: "high"
 source: |
   type.inbound
-  and any(attachments, .file_extension in~ ("doc", "docm", "docx", "dot", "dotm", "pptm", "ppsm", "xlm", "xls", "xlsb", "xlsm", "xlt", "xltm", "zip")
-         and any(beta.binexplode(.), 
-           strings.ilike(.scan.ocr.raw, "*please*enable*macros")
-           or any(.scan.strings.strings, strings.ilike(., "*please enable macros*"))
-        ))
+  and any(attachments,
+      (
+          .file_extension in~ $file_extensions_macros
+          or .file_extension in~ $file_extensions_common_archives
+      )
+      and any(beta.binexplode(.),
+          strings.ilike(.scan.ocr.raw, "*please*enable*macros")
+          or any(.scan.strings.strings, strings.ilike(., "*please enable macros*"))
+      )
+  )
   and (
       (
           sender.email.domain.root_domain in $free_email_providers

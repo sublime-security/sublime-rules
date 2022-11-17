@@ -1,4 +1,4 @@
-name: "Attachment with VBA macros from employee impersonation"
+name: "Attachment with VBA macros from employee impersonation (unsolicited)"
 description: |
   Attachment contains a VBA macro from a sender your organization has never sent an email to.
   
@@ -13,15 +13,20 @@ severity: "high"
 source: |
   type.inbound
   and sender.display_name in $org_display_names
-  and any(attachments, 
-          .file_extension in~ ("doc", "docm", "docx", "dot", "dotm", "pptm", 
-                               "ppsm", "xlm", "xls", "xlsb", "xlsm", "xlt", "xltm")
-          and beta.oletools(.).indicators.vba_macros.exists
-      )
-  and (sender.email.domain.root_domain in $free_email_providers
-    or sender.email.domain.root_domain not in $tranco_1m
+  and any(attachments,
+      (.file_extension in~ $file_extensions_macros or .file_extension in~ $file_extensions_common_archives)
+      and beta.oletools(.).indicators.vba_macros.exists
   )
-  and sender.email.email not in $recipient_emails
+  and (
+          (
+              sender.email.domain.root_domain in $free_email_providers
+              and sender.email.email not in $recipient_emails
+          )
+          or (
+              sender.email.domain.root_domain not in $free_email_providers
+              and sender.email.domain.domain not in $recipient_domains
+          )
+  )
 tags:
   - "Suspicious attachment"
   - "Macros"
