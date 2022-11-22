@@ -1,0 +1,36 @@
+name: "Download link to disk image in encrypted zip"
+description: |
+  A link in the body of the email downloads an encrypted zip that contains a disk image of the format IMG, ISO or VHD. This is a combination of file types used to deliver Qakbot.
+type: "rule"
+references:
+  - "https://twitter.com/pr0xylife/status/1592502966409654272"
+severity: "medium"
+authors:
+  - twitter: "ajpc500"
+source: |
+  type.inbound and 
+  (
+      (
+          sender.email.domain.root_domain in $free_email_providers
+          and sender.email.email not in $sender_emails
+      )
+      or (
+          sender.email.domain.root_domain not in $free_email_providers
+          and sender.email.domain.domain not in $sender_domains
+      )
+  ) and
+  any(body.links, 
+      any(beta.linkanalysis(.).files_downloaded, 
+          any(
+              beta.binexplode(.), (
+                  any(.flavors.yara, . == "encrypted_zip") and
+                  any(.scan.zip.all_paths, any([".img", ".iso", ".vhd"], strings.ends_with(.., .)))
+              )
+          )
+      )
+  )
+tags:
+  - "Qakbot"
+  - "Suspicious link"
+  - "Suspicious subject"
+  - "Malware"
