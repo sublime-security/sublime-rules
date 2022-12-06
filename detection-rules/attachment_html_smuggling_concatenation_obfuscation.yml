@@ -1,0 +1,25 @@
+name: "Attachment: HTML smuggling with concatenation obfuscation"
+description: |
+  Recursively scans files and archives to detect HTML smuggling techniques.
+references:
+type: "rule"
+severity: "high"
+authors:
+  - twitter: "vector_sec"
+source: |
+  type.inbound 
+  and any(attachments,
+      (
+          .file_extension in~ ("html", "htm") or
+          .file_extension in~ $file_extensions_common_archives or
+          .file_type == "html"
+      )
+      and any(beta.binexplode(.), 
+          any(.scan.strings.strings, 
+              strings.ilike(., "*CJzYyIuY29uY2F0KCJyaXB0Iik*",'*"sc".concat("ript")*')
+          )
+      )
+  )
+tags:
+  - "Suspicious attachment"
+  - "HTML smuggling"
