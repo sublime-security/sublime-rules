@@ -9,20 +9,21 @@ type: "rule"
 severity: "medium"
 source: |
   type.inbound
-  and any(attachments, .file_extension in~ ('htm', 'html'))
+  and any(attachments,
+      .file_extension in~ ('htm', 'html') or
+      .file_type == "html"
+  )
+
+  // unsolicited
   and (
-          // if this comes from a free email provider,
-          // flag if org has never sent an email to sender's email before
-          (
-              sender.email.domain.root_domain in $free_email_providers
-              and sender.email.email not in $recipient_emails
-          )
-          // if this comes from a custom domain,
-          // flag if org has never sent an email to sender's domain before
-          or (
-              sender.email.domain.root_domain not in $free_email_providers
-              and sender.email.domain.domain not in $recipient_domains
-          )
+      (
+          sender.email.domain.root_domain in $free_email_providers
+          and sender.email.email not in $recipient_emails
+      )
+      or (
+          sender.email.domain.root_domain not in $free_email_providers
+          and sender.email.domain.domain not in $recipient_domains
+      )
   )
 tags:
   - "Suspicious attachment"
