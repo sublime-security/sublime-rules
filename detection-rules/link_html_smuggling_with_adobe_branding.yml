@@ -1,0 +1,43 @@
+name: "Link to auto-downloaded file with Adobe branding"
+description: |
+  A link in the body of the email downloads a file from a site that uses Adobe branding as employed by threat actors, such as Qakbot.
+type: "rule"
+references:
+  - "https://delivr.to/payloads?id=0e04949a-24f3-4acd-b77c-bbffc4cb3cb9"
+  - "https://twitter.com/ankit_anubhav/status/1578257383133876225"
+severity: "high"
+source: |
+  type.inbound
+  and any(body.links,
+      // There are files downloaded
+      length(beta.linkanalysis(.).files_downloaded) > 0 and 
+
+      // Adobe branding
+      beta.linkanalysis(.).credphish.brand.name == "Adobe" and 
+      beta.linkanalysis(.).credphish.brand.confidence == "high" and 
+
+      // Qakbot text for user coercion
+      any(beta.binexplode(beta.linkanalysis(.).screenshot),
+          all([
+              "the file is not displayed correctly",
+              "document password"
+          ], strings.icontains(..scan.ocr.raw, .))
+      )
+  )
+  // unsolicited
+  and (
+          (
+              sender.email.domain.root_domain in $free_email_providers
+              and sender.email.email not in $recipient_emails
+          )
+          or (
+              sender.email.domain.root_domain not in $free_email_providers
+              and sender.email.domain.domain not in $recipient_domains
+          )
+  ) 
+tags:
+  - "HTML smuggling"
+  - "Suspicious link"
+  - "Brand impersonation"
+  - "Malware"
+  - "Qakbot"
