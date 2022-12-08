@@ -28,5 +28,10 @@ jobs:
           for f in *-rules/*.yml
           do
             echo "Processing $f"
-            yq -o=json eval 'del(.type)' "$f" | curl -H "Content-Type: application/json" -X POST --data-binary @- --fail --silent https://sandbox.sublimesecurity.com/v1/rules/validate
+            http_code=$(yq -o=json eval 'del(.type)' "$f" | curl -H "Content-Type: application/json" -X POST --data-binary @- -o response.txt -w "%{http_code}" --silent https://sandbox.sublimesecurity.com/v1/rules/validate)
+            cat response.txt
+            if [[ "$http_code" != "200" ]]; then
+              echo "Unexpected response $http_code"
+              exit 1
+            fi
           done
