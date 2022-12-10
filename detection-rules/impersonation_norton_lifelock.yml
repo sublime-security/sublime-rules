@@ -3,9 +3,9 @@ description: |
   Scans files to detect Norton (Lifelock) impersonation.
 references:
   - "https://techaeris.com/2021/10/23/psa-watch-out-for-norton-lifelock-phishing-emails/"
-  - "https://playground.sublimesecurity.com?id=36860300-32fb-4752-b445-a8782741fbd2"
-  - "https://playground.sublimesecurity.com?id=7dff3723-099f-4168-8792-1e9c5f9f5421"
-  - "https://playground.sublimesecurity.com?id=9f6b4b1b-992e-400b-85f7-35cfabb57aa8"
+  - "https://playground.sublimesecurity.com?id=166390d4-4ee1-4d23-a374-465cd7e1cbff"
+  - "https://playground.sublimesecurity.com?id=571b5736-d63a-4822-ad12-93461f08c01c"
+  - "https://playground.sublimesecurity.com?id=7d60ef59-95e8-4afc-92fd-f80743434e1e"
 type: "rule"
 severity: "low"
 source: |
@@ -19,16 +19,28 @@ source: |
           )
       )
   )
-  // first-time sender
   and (
-            (
-                sender.email.domain.root_domain in $free_email_providers
-                and sender.email.email not in $sender_emails
-            )
-            or (
-                sender.email.domain.root_domain not in $free_email_providers
-                and sender.email.domain.domain not in $sender_domains
-            )
+      (
+          // if freemail, flag if it's a first-time sender
+          sender.email.domain.root_domain in $free_email_providers
+          and sender.email.email not in $sender_emails
+      )
+      or
+      (
+          // if custom domain, we want to avoid flagging
+          // on the real Norton invoices
+          // so we flag if it's not a first-time sender
+          // and if it's not in the tranco 1M w/ a reply-to mismatch
+          // for example we've observed:
+          // Sender: Norton <quickbooks@notification.intuit.com>
+          // Reply-to: foo@outlook.com
+          sender.email.domain.domain not in $sender_domains
+          and (
+              sender.email.domain.root_domain not in $tranco_1m
+              or any(headers.reply_to, .email.domain.domain != sender.email.domain.domain)
+          )
+
+      )
   )
 tags:
   - "Brand impersonation"
