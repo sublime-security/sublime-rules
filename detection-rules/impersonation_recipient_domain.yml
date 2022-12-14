@@ -1,0 +1,34 @@
+name: "Impersonation using recipient domain (first-time sender)"
+description: |
+  The recipient's domain is used in the sender's display name
+  in order to impersonate the organization. The impersonation has been 
+  observed to use both the recipient's full email address, as well as 
+  just the domain.
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+
+  // only 1 To: recipient
+  and length(recipients.to) + length(recipients.bcc) + length(recipients.cc) == 1
+
+  and any(recipients.to,
+      // custom domains only
+      sender.email.domain.domain not in $free_email_providers
+
+      // recipient's domain is in the sender's display name
+      and strings.icontains(sender.display_name, .email.domain.root_domain))
+
+  // first-time sender
+  and (
+            (
+                sender.email.domain.root_domain in $free_email_providers
+                and sender.email.email not in $sender_emails
+            )
+            or (
+                sender.email.domain.root_domain not in $free_email_providers
+                and sender.email.domain.domain not in $sender_domains
+            )
+  )
+tags:
+  - "Suspicious sender"
