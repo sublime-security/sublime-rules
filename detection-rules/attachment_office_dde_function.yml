@@ -1,0 +1,22 @@
+name: "Attachment: Document with DDE command"
+description: |
+  Recursively scans files and archives to detect Office documents with DDE functions that contain commands.
+  If a user disregards Office warnings, unwanted commands could execute on their machine.
+type: "rule"
+references:
+  - "https://delivr.to/payloads?id=55075047-bdd7-41aa-a791-0cf509c38bc9"
+severity: "high"
+source: |
+  type.inbound 
+      and any(attachments,
+          (
+          .file_extension in~ $file_extensions_macros 
+          or .file_extension in~ $file_extensions_common_archives
+          or .file_extension == "csv"
+          )
+          and any(beta.binexplode(.),
+              any(.scan.strings.strings, strings.ilike(., "?cmd|*", "*powershell|*", '=DDE(?cmd?*', '=DDE(?powershell?*'))
+          )
+  )
+tags:
+  - "Suspicious attachment"
