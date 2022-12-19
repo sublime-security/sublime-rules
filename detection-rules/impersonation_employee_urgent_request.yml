@@ -1,0 +1,34 @@
+name: "Impersonation: Employee impersonation with urgent request"
+description: |
+    Sender is using a display name that matches the display name of someone in your organization.
+
+    NLU engine classifies the email body as Business Email Compromise with an urgent tone detected.
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+
+  and sender.display_name in~ $org_display_names
+
+  and any([body.plain.raw, body.html.inner_text], 
+    any(beta.ml_nlu_classifier(.).intent,
+      .name == "bec" and .confidence == "high"
+    )
+    or any(beta.ml_nlu_classifier(.).entities, .name == "urgency")
+  )
+
+  // first-time sender
+  and (
+          (
+              sender.email.domain.root_domain in $free_email_providers
+              and sender.email.email not in $sender_emails
+          )
+          or (
+              sender.email.domain.root_domain not in $free_email_providers
+              and sender.email.domain.domain not in $sender_domains
+          )
+  )
+tags:
+  - "Brand impersonation"
+  - "Suspicious sender"
+  - "Machine Learning"

@@ -1,0 +1,28 @@
+name: "Extortion / sextortion (first-time sender)"
+description: |
+    An email body classified by the NLU engine as an Extortion attempt from a freemail sender.
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound 
+  and any([body.html.display_text, body.plain.raw],
+  any(beta.ml_nlu_classifier(.).intent,
+        .name == "extortion" and .confidence == "high"
+      )
+  )
+
+  and (
+          (
+              sender.email.domain.root_domain in $free_email_providers
+              and sender.email.email not in $sender_emails
+          )
+          or (
+              sender.email.domain.root_domain not in $free_email_providers
+              and sender.email.domain.domain not in $sender_domains
+          )
+          or any(headers.hops, .authentication_results.dmarc == "fail")
+  )
+tags:
+  - "Machine Learning"
+  - "Extortion"
+  - "Sextortion"

@@ -1,0 +1,31 @@
+name: "Callback scam with attachment (first-time sender)"
+description: |
+    An invoice or receipt attachment from a freemail sender which is classified by the NLU engine as a Callback Scam.
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+
+  and any(attachments, .file_type in ("png", "jpg", "jpeg")
+    and any(beta.binexplode(.),
+      any(beta.ml_nlu_classifier(.scan.ocr.raw).intent,
+        .name == "callback_scam" and .confidence == "high"
+      )
+  ))
+
+  // first-time sender
+  and (
+          (
+              sender.email.domain.root_domain in $free_email_providers
+              and sender.email.email not in $sender_emails
+          )
+          or (
+              sender.email.domain.root_domain not in $free_email_providers
+              and sender.email.domain.domain not in $sender_domains
+          )
+  )
+tags:
+  - "Machine Learning"
+  - "Invoice fraud"
+  - "Receipt fraud"
+  - "Customer service fraud"

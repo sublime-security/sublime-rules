@@ -1,0 +1,32 @@
+name: "BEC from unsolicited sender"
+description: |
+    NLU engine classifies the email body as Business Email Compromise with
+    an urgent tone detected.
+
+    Email is from First-time Sender
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+
+  and any([body.html.display_text, body.plain.raw],
+    any(beta.ml_nlu_classifier(.).intents,
+        .name in ("bec") and .confidence == "high"
+    )
+  )
+
+  // first-time sender
+  and (
+          (
+              sender.email.domain.root_domain in $free_email_providers
+              and sender.email.email not in $sender_emails
+          )
+          or (
+              sender.email.domain.root_domain not in $free_email_providers
+              and sender.email.domain.domain not in $sender_domains
+          )
+  )
+tags:
+  - "Machine Learning"
+  - "Suspicious sender"
+  - "Executive impersonation"
