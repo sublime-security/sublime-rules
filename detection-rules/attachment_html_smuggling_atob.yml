@@ -7,21 +7,22 @@ type: "rule"
 severity: "high"
 source: |
   type.inbound
-  and any(attachments, .size <= 15000 and
+  and any(attachments, .size <= 20000 and
       (
           .file_extension in~ ("html", "htm") or
           .file_extension in~ $file_extensions_common_archives or
           .file_type == "html"
       )
       and any(beta.binexplode(.),
-          .scan.entropy.entropy >= 5
+          .scan.entropy.entropy >= 4.5
           and (
               all(["document", "write", "atob"], . in ..scan.javascript.identifiers)
-              
               // usage: document['write'](atob)
               or any(.scan.strings.strings, strings.ilike(., "*document*write*atob*"))
               // usage: some_var = atob();
               or any(.scan.strings.strings, strings.ilike(., "*=*atob*;"))
+              // usage: obfuscating "atob"
+              or any(.scan.javascript.identifiers, strings.ilike(., '*ato\u0062*'))
           )
       )
   )
