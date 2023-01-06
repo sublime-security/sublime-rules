@@ -1,0 +1,25 @@
+name: "Attachment: HTML smuggling sign-in prompt"
+description: |
+  Scans HTML files to detect HTML smuggling techniques impersonating a generic login page.
+type: "rule"
+severity: "high"
+source: |
+  type.inbound 
+  and any(attachments, 
+      (
+            .file_extension in~ ("html", "htm") or
+            .file_extension in~ $file_extensions_common_archives or
+            .file_type == "html"
+      )
+      and any(beta.binexplode(.), 
+          any(.scan.strings.strings, strings.ilike(., '*method="post"*', '*type="password"*'))
+          // any strings match a recipient email address
+          and any(.scan.strings.strings, 
+              any(recipients.to, 
+                  strings.icontains(.., .email.email))
+              )
+      )
+  )
+tags:
+  - "Suspicious attachment"
+  - "HTML smuggling"
