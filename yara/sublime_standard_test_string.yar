@@ -1,4 +1,4 @@
-rule SublimeTest {
+rule SublimeStandardTestString {
    meta:
       author = "Sublime Security"
       description = "Used to test that Sublime Platform YARA signature support is working properly."
