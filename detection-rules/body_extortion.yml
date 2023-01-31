@@ -1,0 +1,30 @@
+name: "Extortion / sextortion (first-time sender)"
+description: |
+    Detects extortion and sextortion attempts by analyzing the email body text from a first-time sender.
+type: "rule"
+severity: "low"
+source: |
+  type.inbound 
+  and any([body.html.display_text, body.plain.raw],
+  any(beta.ml_nlu_classifier(.).intents,
+        .name == "extortion" and .confidence == "high"
+      )
+  )
+
+  and (
+          (
+              sender.email.domain.root_domain in $free_email_providers
+              and sender.email.email not in $sender_emails
+          )
+          or (
+              sender.email.domain.root_domain not in $free_email_providers
+              and sender.email.domain.domain not in $sender_domains
+          )
+          // many extortion emails spoof sender domains and fail sender authentication
+          or any(headers.hops, .authentication_results.dmarc == "fail")
+  )
+tags:
+  - "Machine Learning"
+  - "Natural Language Understanding"
+  - "Extortion"
+  - "Sextortion"
