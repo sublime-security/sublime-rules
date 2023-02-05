@@ -1,0 +1,28 @@
+name: "Attachment: Credential theft attempt from first-time sender"
+description: |
+    Detects credential theft by analyzing text within attachments from first time senders.
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and any(attachments, (.file_type in $file_extensions_macros or .file_type == "pdf")
+      and any(beta.binexplode(.),
+      any(beta.ml_nlu_classifier(.scan.ocr.raw).intents,
+          .name == "cred_theft" and .confidence == "high"
+      )
+  ))
+  // first-time sender
+  and (
+          (
+              sender.email.domain.root_domain in $free_email_providers
+              and sender.email.email not in $sender_emails
+          )
+          or (
+              sender.email.domain.root_domain not in $free_email_providers
+              and sender.email.domain.domain not in $sender_domains
+          )
+  )
+tags:
+  - "Machine Learning"
+  - "Credential Phishing"
+  - "Natural Language Understanding"
