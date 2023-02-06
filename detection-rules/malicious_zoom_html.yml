@@ -1,0 +1,31 @@
+name: "Malicious Zoom download HTML file"
+description: |
+  Impersonation of the video conferencing provider Zoom, encouraging the user to download a fake Zoom client.
+references:
+  - "https://delivr.to/payloads?id=8cec31fa-105c-4687-bf25-b2c367c56519"
+type: "rule"
+severity: "high"
+source: |
+  type.inbound 
+  and sender.email.domain.root_domain not in ("zoom.us")
+
+  and (
+    body.html.display_text != ""
+    and strings.ilike(body.html.display_text, "*zoom*")
+    and strings.ilike(body.html.display_text, "*Zoom Client*", "*download*")
+  
+  or any(attachments,
+        (
+            .file_extension in~ ("html", "htm", "shtml", "dhtml") or
+            .file_extension in~ $file_extensions_common_archives or
+            .file_type == "html"
+        )
+        and any(beta.binexplode(.),
+                strings.ilike(.scan.html.title, "*zoom*") and
+                any(.scan.url.urls, strings.ilike(.path, '*exe*', '*msi*', '*zip*'))
+              )
+  
+  ) 
+)
+tags:
+  - "Brand impersonation"
