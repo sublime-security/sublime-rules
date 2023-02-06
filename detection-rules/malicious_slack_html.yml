@@ -1,0 +1,31 @@
+name: "Malicious Slack download HTML file"
+description: |
+  Impersonation of the video conferencing provider Slack, encouraging the user to download a fake Slack client.
+references:
+  - "https://delivr.to/payloads?id=790c79d0-3ecc-4bcf-aa51-f417c65c5983"
+type: "rule"
+severity: "high"
+source: |
+  type.inbound 
+  and sender.email.domain.root_domain not in ("slack.com")
+
+  and (
+    body.html.display_text != ""
+    and strings.ilike(body.html.display_text, "*Slack*for*Windows*")
+    and strings.ilike(body.html.display_text, "*download*")
+  
+  or any(attachments,
+        (
+            .file_extension in~ ("html", "htm", "shtml", "dhtml") or
+            .file_extension in~ $file_extensions_common_archives or
+            .file_type == "html"
+        )
+        and any(beta.binexplode(.),
+                strings.ilike(.scan.html.title, "*slack*") and
+                any(.scan.url.urls, strings.ilike(.path, '*exe*', '*msi*', '*zip*'))
+              )
+  
+  ) 
+)
+tags:
+  - "Brand impersonation"
