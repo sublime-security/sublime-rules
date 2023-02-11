@@ -8,12 +8,11 @@ severity: "high"
 source: |
   type.inbound 
   and sender.email.domain.root_domain not in ("zoom.us")
-
   and (
       body.html.display_text != ""
       and strings.ilike(body.html.display_text, "*zoom*")
       and strings.ilike(body.html.display_text, "*Zoom Client*", "*download*")
-
+      and any(body.links, strings.ilike(.href_url.url, '*exe*', '*msi*', '*zip*'))
     or any(attachments,
           (
               .file_extension in~ ("html", "htm", "shtml", "dhtml") or
@@ -24,8 +23,17 @@ source: |
                   strings.ilike(.scan.html.title, "*zoom*") and
                   any(.scan.url.urls, strings.ilike(.path, '*exe*', '*msi*', '*zip*'))
                 )
-
     )
+  )
+  and (
+          (
+              sender.email.domain.root_domain in $free_email_providers
+              and sender.email.email not in $sender_emails
+          )
+          or (
+              sender.email.domain.root_domain not in $free_email_providers
+              and sender.email.domain.domain not in $sender_domains
+          )
   )
 tags:
   - "Brand impersonation"
