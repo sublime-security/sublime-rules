@@ -1,4 +1,4 @@
-name: "Malicious Slack download HTML file"
+name: "Malicious Slack download attachment"
 description: |
   Impersonation of the video conferencing provider Slack, encouraging the user to download a fake Slack client.
 references:
@@ -7,25 +7,36 @@ type: "rule"
 severity: "high"
 source: |
   type.inbound 
-  and sender.email.domain.root_domain not in ("slack.com")
+   and sender.email.domain.root_domain not in ("slack.com")
+   and (
+       body.html.display_text != ""
+       and strings.ilike(body.html.display_text, "*Slack*for*Windows*")
+       and strings.ilike(body.html.display_text, "*download*")
+     or any(attachments,
+           (
+               .file_extension in~ ("html", "htm", "shtml", "dhtml") or
+               .file_extension in~ $file_extensions_common_archives or
+               .file_type == "html"
+           )
+           and any(beta.binexplode(.),
+                   strings.ilike(.scan.html.title, "*slack*") and
+                   any(.scan.url.urls, strings.ilike(.path, '*exe*', '*msi*', '*zip*'))
+                 )
+     )
+    or any(body.links,
+    // Slack branding
+    beta.linkanalysis(.).credphish.brand.name == "Slack" and 
+    beta.linkanalysis(.).credphish.brand.confidence == "high" and 
+    beta.linkanalysis(.).credphish.disposition == "phishing" and 
 
-  and (
-      body.html.display_text != ""
-      and strings.ilike(body.html.display_text, "*Slack*for*Windows*")
-      and strings.ilike(body.html.display_text, "*download*")
-
-    or any(attachments,
-          (
-              .file_extension in~ ("html", "htm", "shtml", "dhtml") or
-              .file_extension in~ $file_extensions_common_archives or
-              .file_type == "html"
-          )
-          and any(beta.binexplode(.),
-                  strings.ilike(.scan.html.title, "*slack*") and
-                  any(.scan.url.urls, strings.ilike(.path, '*exe*', '*msi*', '*zip*'))
-                )
-
-    ) 
-  )
+    any(beta.binexplode(beta.linkanalysis(.).screenshot),
+        all([
+            "download",
+            "app",
+            "version"
+        ], strings.icontains(..scan.ocr.raw, .))
+    )
+    )
+   )
 tags:
   - "Brand impersonation"
