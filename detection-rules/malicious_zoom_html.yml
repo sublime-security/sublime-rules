@@ -1,4 +1,4 @@
-name: "Malicious Zoom download HTML file"
+name: "Malicious Zoom download link or attachment"
 description: |
   Impersonation of the video conferencing provider Zoom, encouraging the user to download a fake Zoom client.
 references:
@@ -25,6 +25,20 @@ source: |
                 )
     )
   )
+  or any(body.links,
+   // Zoom branding
+    beta.linkanalysis(.).credphish.brand.name == "Zoom" and 
+    beta.linkanalysis(.).credphish.brand.confidence == "high" and 
+    beta.linkanalysis(.).credphish.disposition == "phishing" and 
+
+    // Qakbot text for user coercion
+    any(beta.binexplode(beta.linkanalysis(.).screenshot),
+        all([
+            "download",
+            "client"
+        ], strings.icontains(..scan.ocr.raw, .))
+    )
+)
   and (
           (
               sender.email.domain.root_domain in $free_email_providers
