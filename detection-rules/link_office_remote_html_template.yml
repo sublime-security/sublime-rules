@@ -23,45 +23,41 @@ references:
 type: "rule"
 severity: "high"
 source: |
-  type.inbound
-  and any(attachments,
-      (
-          (
-              // office files
-              .file_extension in~ ("doc", "docm", "docx", "dot", "dotm", "pptm", "ppsm", "xlm", "xls", "xlsb", "xlsm", "xlt", "xltm")
+  type.inbound 
+  and any(body.links, 
+        any(beta.linkanalysis(.).files_downloaded, 
+        (
+        (
+            // office files
+            .file_extension in~ ("doc", "docm", "docx", "dot", "dotm", "pptm", "ppsm", "xlm", "xls", "xlsb", "xlsm", "xlt", "xltm")
+        )
+        and any(beta.oletools(.).relationships, regex.icontains(.target, "html?!"))
+    )
+    or (
+        (
+            // explode archives
+            .file_extension in~ $file_extensions_common_archives
 
-              // detect files without an extension
-              or .file_type in ("docx")
+            // rtf files
+            or .file_extension in~ ("rtf")
+        )
+
+        and (
+          any(beta.binexplode(.),
+              (
+                  // office files
+                  .flavors.mime == "text/xml" and
+                  any(.scan.strings.strings, regex.icontains(., "oleObject.*html?!"))
+              ) or
+              (
+                  // rtf files
+                  .flavors.mime == "text/rtf" and
+                  any(.scan.strings.strings, regex.icontains(., "objclass.*htm.?"))
+              )
           )
-          and any(beta.oletools(.).relationships, regex.icontains(.target, "html?!"))
-      )
-      or (
-          (
-              // explode archives
-              .file_extension in~ $file_extensions_common_archives
-
-              // detect files without an extension
-              or .file_type in ("7z")
-
-              // rtf files
-              or .file_extension in~ ("rtf")
-          )
-
-          and (
-            any(beta.binexplode(.),
-                (
-                    // office files
-                    .flavors.mime == "text/xml" and
-                    any(.scan.strings.strings, regex.icontains(., "oleObject.*html?!"))
-                ) or
-                (
-                    // rtf files
-                    .flavors.mime == "text/rtf" and
-                    any(.scan.strings.strings, regex.icontains(., "objclass.*htm.?"))
-                )
-            )
-          )
-      )
+        )
+    )
+    )
   )
 tags:
   - "Suspicious link"
