@@ -1,0 +1,69 @@
+name: "Link: Office document loads remote HTML template"
+description: |
+  Recursively scans archives and Office documents to detect remote HTML template injection.
+
+  As of time of writing (30 May 2022), a zero-click remote code execution technique has been
+  observed in the wild in order to exploit Microsoft Office through MSDT (Microsoft Diagnostics Tool).
+  Microsoft issued CVE-2022-30190 (also known as Follina).
+references:
+  - "https://msrc.microsoft.com/update-guide/en-US/vulnerability/CVE-2022-30190"
+  - "https://msrc-blog.microsoft.com/2022/05/30/guidance-for-cve-2022-30190-microsoft-support-diagnostic-tool-vulnerability/"
+  - "https://twitter.com/nao_sec/status/1530196847679401984"
+  - "https://twitter.com/malwarejake/status/1530974352660897793"
+  - "https://twitter.com/gossithedog/status/1530844804061573120"
+  - "https://twitter.com/MalwareJake/status/1531019243411623939"
+  - "https://doublepulsar.com/follina-a-microsoft-office-code-execution-vulnerability-1a47fce5629e"
+  - "https://www.huntress.com/blog/microsoft-office-remote-code-execution-follina-msdt-bug"
+  - "https://twitter.com/sans_isc/status/1531321260784898050"
+  - "https://twitter.com/Ledtech3/status/1530979998416441347"
+  - "https://twitter.com/gentilkiwi/status/1531384447219781634"
+  - "https://twitter.com/jkamdjou/status/1531387025533943809"
+  - "https://sandbox.sublimesecurity.com/?id=95cb0bd2-7c6c-488d-a591-9bb3e1d66101"
+  - "https://sandbox.sublimesecurity.com/?id=85c23b23-3db5-45bf-ad90-3f65597da861"
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and any(attachments,
+      (
+          (
+              // office files
+              .file_extension in~ ("doc", "docm", "docx", "dot", "dotm", "pptm", "ppsm", "xlm", "xls", "xlsb", "xlsm", "xlt", "xltm")
+
+              // detect files without an extension
+              or .file_type in ("docx")
+          )
+          and any(beta.oletools(.).relationships, regex.icontains(.target, "html?!"))
+      )
+      or (
+          (
+              // explode archives
+              .file_extension in~ $file_extensions_common_archives
+
+              // detect files without an extension
+              or .file_type in ("7z")
+
+              // rtf files
+              or .file_extension in~ ("rtf")
+          )
+
+          and (
+            any(beta.binexplode(.),
+                (
+                    // office files
+                    .flavors.mime == "text/xml" and
+                    any(.scan.strings.strings, regex.icontains(., "oleObject.*html?!"))
+                ) or
+                (
+                    // rtf files
+                    .flavors.mime == "text/rtf" and
+                    any(.scan.strings.strings, regex.icontains(., "objclass.*htm.?"))
+                )
+            )
+          )
+      )
+  )
+tags:
+  - "Suspicious link"
+  - "Office exploit"
+  - "CVE-2022-30190"
