@@ -1,20 +1,18 @@
-name: "Detection of Fedex Phishing Email with Link Analysis"
+name: "Malspam: Fake Shipping notification with link to free file hosting Email"
 description: |
   This rule detects spam emails impersonating FedEx, with links to free file hosting.
 references: 
   - "https://playground.sublimesecurity.com?id=64feb22a-03e8-4d8f-83f6-a828dc5e3540"
-type: "rule"
 severity: "low"
+type: "rule"
 source: |
   type.inbound
   and length(attachments) == 0
   and (
-    (
-      regex.icontains(coalesce(body.html.inner_text, body.html.display_text), 'f\s?e\s?d\s?e\s?x')
-      and sender.email.domain.domain != "fedex.com"
-      and headers.return_path.domain.domain != sender.email.domain.domain
-      and any(body.links, strings.contains(.display_text, "track"))
-    )
+    regex.icontains(coalesce(body.html.inner_text, body.html.display_text), '(U\s?(S?\s?P\s?S)|(f\s?e\s?d\s?e\s?x))')
+    and sender.email.domain.domain not in ("fedex.com", "usps.com", "ups.com")
+    and headers.return_path.domain.domain != sender.email.domain.domain
+    and any(body.links, strings.contains(.display_text, "track"))
   )
   and any(body.links, .href_url.domain.domain in $free_file_hosts)
   and (
@@ -24,10 +22,10 @@ source: |
     )
     or (
       sender.email.domain.root_domain not in $free_email_providers
-      and sender.email.email not in $recipient_domains
+      and sender.email.domain.root_domain not in $recipient_domains
     )
     or sender.email.domain.valid == false
   )
 tags:
   - "Spam"
-  - "Brand impersonation"
+  - "Brand Impersonation"
