@@ -7,17 +7,14 @@ type: "rule"
 severity: "medium"
 source: |
   type.inbound
+  and length(body.links) > 0
   and any([sender.display_name, subject.subject],
     regex.icontains(., '[MМⅯ𝕄𝔐𝗠𝙈𝙢𝙼𝚖][eⅴ𝑒𝒆𝓔𝔢𝕖𝕖𝖊𝖊𝗲𝘀𝙀𝚎𝜅𝝴𝞮][t𝑇𝒕𝓣𝔗𝕥𝕥𝖙𝖙𝘵𝚃𝛕𝝉𝞃𝞣][aaₐ𝖆𝗮𝘢𝙖𝚊𝛂𝜶𝞪]\s?[MМⅯ𝕄𝔐𝗠𝙈𝙢𝙼𝚖][aaₐ𝖆𝗮𝘢𝙖𝚊𝛂𝜶𝞪][ѕs𝑆𝒔𝓢𝔰𝕊𝕊𝖘𝖘𝗦𝘴𝙎𝚂][k𝑘𝒌𝔞𝕜𝕜𝗞𝘬𝙆𝙉𝙠]')
   )
   and not sender.email.domain.domain in ("metamask.io", "zendesk.com", "discoursemail.com")
-  and any(body.links,
-    any([beta.linkanalysis(.)],
-      .effective_url.domain.root_domain not in $alexa_1m
-      or .original_url.domain.root_domain in $alexa_1m
-      or .effective_url.domain.tld in $suspicious_tlds
-      or .original_url.domain.domain in $url_shorteners
-    )
+  and any([body.plain.raw, body.html.inner_text],
+  any(beta.ml_nlu_classifier(.).entities,
+    .name == "urgency") and any(beta.ml_nlu_classifier(.).entities, .name == "financial")
   )
 tags:
   - "Brand impersonation"
