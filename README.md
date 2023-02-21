@@ -27,6 +27,4 @@ Learn more
 - [Message Query Language (MQL) reference](https://docs.sublimesecurity.com/docs/message-query-language) - Sublime's DSL purpose-built for email analysis
 - [Release log](https://new.sublimesecurity.com)
 
-Follow us on [Twitter](https://twitter.com/sublime_sec) for updates on new rules and detection capabilities, and star/watch this repo for updates and general availability.
-
-[Request early access to Sublime](https://sublimesecurity.com/platform)
+Follow us on [Twitter](https://twitter.com/sublime_sec) for updates on new rules and detection capabilities.
