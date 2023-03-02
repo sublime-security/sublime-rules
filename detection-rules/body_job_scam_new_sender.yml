@@ -1,0 +1,32 @@
+name: "Job Scam (first-time sender)"
+description: |
+    Detects job scam attempts by analyzing the email body text from a first-time sender.
+type: "rule"
+severity: "low"
+source: |
+  type.inbound 
+  and any([body.html.display_text, body.plain.raw],
+  any(ml.nlu_classifier(.).intents,
+        .name == "job_scam" and .confidence == "high"
+      )
+      and (
+        any(ml.nlu_classifier(.).entities, .name == "financial")
+      )
+  )
+
+  and (
+          (
+              sender.email.domain.root_domain in $free_email_providers
+              and sender.email.email not in $sender_emails
+          )
+          or (
+              sender.email.domain.root_domain not in $free_email_providers
+              and sender.email.domain.domain not in $sender_domains
+          )
+  )
+
+tags:
+  - "Machine Learning"
+  - "Natural Language Understanding"
+  - "Scam"
+  - "Suspicious sender"
