@@ -1,0 +1,33 @@
+name: "Attachment: PDF with singular link to a zip with no creator from first-time sender"
+description: "Detects a PDF attachment with a singular link to a zip, with no creator. This delivery
+  mechanism has been observed to be used by Bumblebee."
+type: "rule"
+severity: "high"
+references:
+  - "https://delivr.to/payloads?id=61b6892e-51d9-4840-8446-4a78c80af5cb"
+
+source: |
+  type.inbound
+  and length(attachments) < 2
+  and any(attachments, 
+    .file_extension == "pdf"
+  and any(file.explode(.), (
+      .depth == 0 
+  and length(filter(.scan.strings.strings,
+       regex.contains(.,'\/S\/URI\/URI\(http(s):\/\/.+\.zip'))) == 1
+  and .scan.exiftool.creator is null
+    ))
+  )
+  and (
+    (
+      sender.email.domain.root_domain in $free_email_providers
+      and sender.email.email not in $sender_emails
+    )
+    or (
+      sender.email.domain.root_domain not in $free_email_providers
+      and sender.email.domain.domain not in $sender_domains
+    )
+  )
+tags:
+  - "Suspicous attachment"
+  - "Bumblebee"
