@@ -1,0 +1,23 @@
+name: "Link: Document with DDE command"
+description: |
+  Scans links to detect Office documents with DDE functions that contain commands. If a user disregards Office warnings, unwanted commands could execute on their machine.
+references:
+  - "https://delivr.to/payloads?id=66ecd3f0-80d2-4aa6-b4f2-1cf227f79357"
+type: "rule"
+severity: "high"
+source: |
+  type.inbound 
+  and any(body.links, 
+      any(beta.linkanalysis(.).files_downloaded,
+          (
+             .file_extension in~ $file_extensions_macros 
+             or .file_extension in~ $file_extensions_common_archives
+             or .file_extension == "csv"
+             )
+             and any(file.explode(.),
+                 any(.scan.strings.strings, strings.ilike(., "*DDEAUTO*", "*DDE*cmd*/c*", "*DDE*powershell*"))
+             )
+      )
+  )
+tags: 
+  - "Suspicious attachment"
