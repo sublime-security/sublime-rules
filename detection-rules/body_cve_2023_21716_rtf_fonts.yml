@@ -1,0 +1,25 @@
+name: "Body: CVE-2023-21716 - Microsoft Office Remote Code Execution Vulnerability"
+description: |
+  Body contains RTF content with a font table defining an excessive number of fonts, used to exploit CVE-2023-21716.
+references:
+  
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and strings.ilike(body.plain.raw, '{\rtf1*')
+  and strings.ilike(body.plain.raw, '*\fonttbl*')
+  and regex.contains(body.plain.raw, '(?:(?:{\\f.*;}).*?){1000,}')
+  and (
+            (
+                sender.email.domain.root_domain in $free_email_providers
+                and sender.email.email not in $sender_emails
+            )
+            or (
+                sender.email.domain.root_domain not in $free_email_providers
+                and sender.email.domain.domain not in $sender_domains
+            )
+  )
+tags: 
+  - "Suspicious content"
+  - "Office exploit"
