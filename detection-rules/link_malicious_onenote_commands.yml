@@ -1,0 +1,38 @@
+name: "Link: Malicious OneNote Commands"
+description: |
+  Scans for links to OneNote files that contain suspicious commands that may indicate malicious activity.
+references:
+  - "https://delivr.to/payloads?id=7516721e-450d-47f3-a9c6-bfbb74bc4d3d"
+  - "https://github.com/sublime-security/sublime-rules/blob/main/detection-rules/attachment_malicious_onenote_commands.yml"
+type: "rule"
+severity: "high"
+source: |
+    type.inbound 
+    and any(body.links, 
+        any(beta.linkanalysis(.).files_downloaded, 
+            (
+          .file_extension in~ ("one") or
+          .file_extension in~ $file_extensions_common_archives
+      )
+      and any(file.explode(.),
+      any(
+          .flavors.yara, . == "onenote_file"
+           and
+            any(..scan.strings.strings,
+              strings.ilike(.,
+                  "*WshShell*",
+                  "*ExecuteCmdAsync*",
+                  "*CreateObject*",
+                  "*Wscript.Shell*",
+                  "*schtasks*",
+                  "*CreateProcess*",
+                  "*winmgmts*",
+                  "*SetEnvironmentVariable*",
+                  "*powershell*")
+                )
+            )
+        )
+      )
+    )
+tags: 
+  - "Suspicious link"
