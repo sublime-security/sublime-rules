@@ -1,0 +1,38 @@
+name: "Employee impersonation with urgent request (first-time sender)"
+description: |
+    Sender is using a display name that matches the display name of someone in your organization.
+
+    Detects potential Business Email Compromise (BEC) attacks by analyzing text within email body first-time senders.
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+
+  and sender.display_name in~ $org_display_names
+
+  and any([body.plain.raw, body.html.inner_text], 
+    any(ml.nlu_classifier(.).intents,
+      .name == "bec" and .confidence == "high"
+    )
+    or (
+      any(ml.nlu_classifier(.).entities, .name == "urgency")
+      and any(ml.nlu_classifier(.).entities, .name == "request")
+    )
+  )
+
+  // first-time sender
+  and (
+          (
+              sender.email.domain.root_domain in $free_email_providers
+              and sender.email.email not in $sender_emails
+          )
+          or (
+              sender.email.domain.root_domain not in $free_email_providers
+              and sender.email.domain.domain not in $sender_domains
+          )
+  )
+tags:
+  - "Employee impersonation"
+  - "Suspicious sender"
+  - "Machine Learning"
+  - "Natural Language Understanding"

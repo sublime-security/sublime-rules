@@ -8,7 +8,7 @@ This repo contains open-source detection rules and queries for the [Sublime Plat
 
 Examples
 ----------
-- [HTML smuggling](https://github.com/sublime-security/sublime-rules/blob/main/detection-rules/attachment_html_smuggling.yml)
+- [HTML smuggling](https://github.com/sublime-security/sublime-rules/search?q=html+smuggling)
 - [Encrypted zips](https://github.com/sublime-security/sublime-rules/blob/main/detection-rules/attachment_with_encrypted_zip_unsolicited.yml)
 - [High risk VBA macros](https://github.com/sublime-security/sublime-rules/blob/main/detection-rules/attachment_vba_macro_high_risk.yml)
 - [Malicious LNK files](https://github.com/sublime-security/sublime-rules/blob/main/detection-rules/attachment_lnk_file_with_embedded_content.yml)
@@ -16,6 +16,7 @@ Examples
 
 Community Rule Feeds
 ----------
+- [DelivrTo](https://github.com/delivr-to/detections)
 - [vector-sec](https://github.com/vector-sec/public-sublime-rules)
 - [amitchell516](https://github.com/aidenmitchell/custom-sublime-rules)
 
@@ -26,6 +27,4 @@ Learn more
 - [Message Query Language (MQL) reference](https://docs.sublimesecurity.com/docs/message-query-language) - Sublime's DSL purpose-built for email analysis
 - [Release log](https://new.sublimesecurity.com)
 
-Follow us on [Twitter](https://twitter.com/sublime_sec) for updates on new rules and detection capabilities, and star/watch this repo for updates and general availability.
-
-[Request early access to Sublime](https://sublimesecurity.com/platform)
+Follow us on [Twitter](https://twitter.com/sublime_sec) for updates on new rules and detection capabilities.

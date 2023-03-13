@@ -5,19 +5,23 @@ type: "rule"
 severity: "high"
 source: |
   type.inbound
-  and any(attachments, .size <= 15000 and
+  and any(attachments, .size <= 60000 and
       (
-          .file_extension in~ ("html", "htm") or
+          .file_extension in~ ("html", "htm", "shtml", "dhtml") or
           .file_extension in~ $file_extensions_common_archives or
           .file_type == "html"
       )
-      and any(beta.binexplode(.),
+      and any(file.explode(.),
           .scan.entropy.entropy >= 5
           and (
               all(["document", "write", "atob"], . in ..scan.javascript.identifiers)
               
               // usage: document['write'](atob)
-              or any(.scan.strings.strings, strings.ilike(., "*document*write*atob*"))
+              // usage: document.head.insertAdjacentHTML("beforeend", atob(...
+              or 
+                  any(.scan.strings.strings, strings.ilike(.,
+                      "*document*write*atob*",
+                      "*document*insertAdjacentHTML*atob*"))
           )
       )
   )

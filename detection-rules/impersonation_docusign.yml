@@ -1,22 +1,52 @@
-name: "Brand impersonation: Docusign"
+name: "Brand impersonation: DocuSign"
 description: |
-  Attack impersonating docusign brand.
+  Attack impersonating a DocuSign request for signature.
 references:
-  - "https://docusign.net"
+  - "https://playground.sublimesecurity.com?id=2d2c6472-fabb-4952-b902-573a6294aa2f"
 type: "rule"
 severity: "high"
 source: |
   type.inbound
   and (
-    (
-      sender.email.domain.root_domain not in ('docusign.net', 'docusign.com')
-      and strings.ilike(sender.email.email, '*docusign.net*', '*docusign.com*')
-    ) or (
-      sender.email.domain.root_domain not in ('docusign.net', 'docusign.com')
-      and strings.ilike(sender.display_name, '*docusign*')
-    )
+      // orgs can have docusign.company.com
+      strings.ilike(sender.email.email, '*docusign.net*', '*docusign.com*')
+
+      // if the above is true, you'll see a "via Docusign"
+      or strings.ilike(sender.display_name, '*docusign*')
+
+      // detects 1 character variations,
+      // such as DocuSlgn (with an "L" instead of an "I")
+      or strings.ilevenshtein(sender.display_name, "docusign") == 1
   )
-  and sender.email.email not in $recipient_emails
+
+  // identifies the main CTA in the email, eg "Review now" or "Review document"
+  // this should always be a known docusign domain,
+  // even with branded docusign subdomains
+  and any(body.links,
+    // we've observed invisible characters in the display name
+    // such as U+034f(look carefully): "Revi͏ew Now"
+    (
+        strings.ilevenshtein(.display_text, "Review Now") <= 3
+        or strings.icontains(.display_text, "Review")
+        or strings.icontains(.display_text, "Now")
+        or strings.contains(.display_text, "document")
+    )
+    and .href_url.domain.root_domain not in ("docusign.com","docusign.net")
+  )
+
+  and sender.email.domain.root_domain not in ('docusign.net', 'docusign.com')
+
+  // unsolicited
+  and (
+        (
+            sender.email.domain.root_domain in $free_email_providers
+            and sender.email.email not in $recipient_emails
+        )
+        or (
+            sender.email.domain.root_domain not in $free_email_providers
+            and sender.email.domain.domain not in $recipient_domains
+        )
+  )
 tags:
   - "Brand impersonation"
   - "DocuSign"

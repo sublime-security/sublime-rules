@@ -1,0 +1,65 @@
+name: "Attachment: HTML Attachment with Login Portal Indicators"
+description: |
+  Recursively scans files and archives to detect indicators of login portals implemented in HTML files. This is a known credential theft technique used by threat actors.
+references:
+  - "https://www.trustwave.com/en-us/resources/blogs/spiderlabs-blog/html-file-attachments-still-a-threat/"
+  - "https://app.any.run/tasks/6bd34bda-91ef-4d13-847c-81d7787dc763/"
+  - "https://playground.sublimesecurity.com?id=6cd813e4-085b-4229-ad15-d2194cdbb91b"
+type: "rule"
+severity: "medium"
+authors:
+  - twitter: "ajpc500"
+source: |
+  type.inbound 
+  
+  and any(attachments,
+      (
+          .file_extension in~ ("html", "htm", "shtml", "dhtml") or
+          .file_extension in~ $file_extensions_common_archives or
+          .file_type == "html"
+      )
+      and any(file.explode(.),
+      (
+          // suspicious strings found in javascript
+          length(filter(.scan.javascript.strings, strings.ilike(.,
+              "*password*", "*username*", "*login-form*", "*email-form*", "*Incorrect password. Please try again.*", "*Password Incomplete, please try again*"
+          ))) >= 3 or 
+          (
+              // suspicious strings found outside of javascript, but binexplode'd file still of HTML type
+              .flavors.mime == "text/html" and 
+              length(filter(.scan.strings.strings, strings.ilike(.,
+                  "*password*", "*username*", "*login-form*", "*email-form*", "*Incorrect password. Please try again.*", "*Password Incomplete, please try again*"
+              ))) >= 3
+          )
+      ) or 
+      //Known phishing obfuscation
+      (
+          length(
+              filter(
+                  .scan.strings.strings, strings.ilike(.,
+                      //Enter password  
+                      "*&#69;&#110;&#116;&#101;&#114;&#32;&#112;&#97;&#115;&#115;&#119;&#111;&#114;&#100*",
+                      //Forgotten my password
+                      "*&#70;&#111;&#114;&#103;&#111;&#116;&#116;&#101;&#110;&#32;&#109;&#121;&#32;&#112;&#97;&#115;&#115;&#119;&#111;&#114;&#100*",
+                      //Sign in
+                      "*&#83;&#105;&#103;&#110;&#32;&#105;&#110*"
+                  )
+              )
+          ) >= 2
+      )
+
+  ))
+  // Unsolicited
+  and (
+      (
+          sender.email.domain.root_domain in $free_email_providers
+          and sender.email.email not in $recipient_emails
+      )
+      or (
+          sender.email.domain.root_domain not in $free_email_providers
+          and sender.email.domain.domain not in $recipient_domains
+      )
+  )
+tags:
+  - "Suspicious attachment"
+  - "HTML smuggling"

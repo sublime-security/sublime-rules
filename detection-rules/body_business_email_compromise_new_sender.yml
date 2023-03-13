@@ -1,0 +1,29 @@
+name: "Body: Business Email Compromise (BEC) attempt from first-time sender"
+description: |
+    Detects potential Business Email Compromise (BEC) attacks by analyzing text within the email body from first-time senders.
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+
+  and any(ml.nlu_classifier(coalesce(
+    body.html.display_text, body.plain.raw)).intents,
+    .name in ("bec") and .confidence == "high"
+    )
+
+  // first-time sender
+  and (
+          (
+              sender.email.domain.root_domain in $free_email_providers
+              and sender.email.email not in $sender_emails
+          )
+          or (
+              sender.email.domain.root_domain not in $free_email_providers
+              and sender.email.domain.domain not in $sender_domains
+          )
+  )
+tags:
+  - "Machine Learning"
+  - "Natural Language Understanding"
+  - "Suspicious sender"
+  - "Business Email Compromise"
