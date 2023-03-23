@@ -1,0 +1,26 @@
+name: "Attachment: CVE-2023-21716 - Microsoft Office Remote Code Execution Vulnerability"
+description: |
+  Attachment contains an RTF file with a font table defining an excessive number of fonts, used to exploit CVE-2023-21716.
+references:
+  - "https://delivr.to/payloads?id=0a465e03-82a7-42c1-9ded-b0b6b046c86d"
+  - "https://msrc.microsoft.com/update-guide/vulnerability/CVE-2023-21716"
+  - "https://twitter.com/jduck/status/1632471544935923712"
+  - "https://github.com/gyaansastra/CVE-2023-21716"
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and any(attachments,
+      (
+          .file_extension in~ ("rtf", "doc", "docx")
+          or .file_extension in~ $file_extensions_common_archives
+          or .file_extension in~ $file_extensions_macros
+      )
+      and any(file.explode(.),
+          any(.scan.strings.strings, strings.ilike(., '*\fonttbl*'))
+          and length(filter(.scan.strings.strings, strings.ilike(.,'{\f*;}'))) > 10000
+      )
+  )
+tags: 
+  - "Office exploit"
+  - "Suspicious attachment"
