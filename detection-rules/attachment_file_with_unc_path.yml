@@ -1,0 +1,18 @@
+name: "Attachment: Exploitable file type with UNC path"
+description: |
+  Attached file contains a UNC path and is known to potentially relay NTLM password hashes. File extensions listed in this rule are confirmed to work on a patched Windows 11 system, as of April 2023.
+references:
+  - "https://github.com/Greenwolf/ntlm_theft"
+type: "rule"
+severity: "low"
+source: |
+  type.inbound 
+  and any(attachments, .file_extension in ("asx", "doc", "docx", "jnlp", "m3u", "pdf", "wax", "xls", "xlsx", "xml")
+      and any(file.explode(.), 
+          any(.scan.strings.strings, regex.icontains(., '\\\\([a-zA-Z0-9_%.$-]+)\\([a-zA-Z0-9_%.$-]+)')) // normal UNC paths
+          or any(.scan.strings.strings, regex.icontains(., '%5C%5C([a-zA-Z0-9_%.$-]+)%5C([a-zA-Z0-9_%.$-]+)')) // percent-encoded UNC paths
+      )
+  )
+tags: 
+  - "Suspicious attachment"
+  - "Windows exploit"
