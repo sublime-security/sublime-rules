@@ -1,0 +1,29 @@
+name: "Link: Encrypted zip (unsolicited)"
+description: |
+  Recursively scans linked files and archives to detect encrypted zip files. This is a known Qakbot malware delivery mechanism.
+references:
+  - "https://delivr.to/payloads?id=2f8af86e-4bf7-4b57-8ae3-3bb6b9ce21b6"
+type: "rule"
+severity: "high"
+source: |
+  type.inbound 
+  and any(body.links, 
+      any(beta.linkanalysis(.).files_downloaded,
+          (
+             .file_extension == "zip" 
+             and any(file.explode(.), any(.flavors.yara, . == 'encrypted_zip'))
+          )
+      )
+  )
+  and (
+      (
+          sender.email.domain.root_domain in $free_email_providers
+          and sender.email.email not in $recipient_emails
+      )
+      or (
+          sender.email.domain.root_domain not in $free_email_providers
+          and sender.email.domain.domain not in $recipient_domains
+      )
+  )
+tags: 
+  - "Suspicious attachment"
