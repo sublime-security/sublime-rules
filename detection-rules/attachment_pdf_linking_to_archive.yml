@@ -1,0 +1,32 @@
+name: "Attachment: Adobe branded PDF with link to archive"
+description: |
+  Attached PDF contains Qakbot string indicators and a link to an archive. This has been seen in the wild.
+references:
+  - "https://twitter.com/cryptolaemus1/status/1649091718552379392"
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and any(attachments, .file_extension == "pdf"
+          and any(file.explode(.),
+              any(.scan.pdf.urls, strings.ilike (.url, "*zip", "*iso"))
+      )
+          and any(file.explode(.),
+              all(.scan.strings.strings, strings.ilike (., "*protected*", "*adobe*"))
+      )
+  )
+  
+  and (
+          (
+              sender.email.domain.root_domain in $free_email_providers
+              and sender.email.email not in $sender_emails
+          )
+          or (
+              sender.email.domain.root_domain not in $free_email_providers
+              and sender.email.domain.domain not in $sender_domains
+          )
+  )
+tags: 
+  - "Qakbot"
+  - "Suspicious link"
+  - "Suspicious attachment"
