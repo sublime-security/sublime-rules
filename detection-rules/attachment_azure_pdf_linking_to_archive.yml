@@ -1,0 +1,34 @@
+name: "Attachment: Azure branded PDF with link to archive or PHP website"
+description: |
+  Attached PDF contains Qakbot string indicators for Azure impersonation, and a link. This has been seen in the wild.
+references:
+  - "https://twitter.com/Cryptolaemus1/status/1645754864394280961"
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and any(attachments, .file_extension == "pdf"
+          and any(file.explode(.),
+              any(.scan.pdf.urls, strings.ilike (.url, "*zip", "*php"))
+      )
+          and any(file.explode(.),
+              any(.scan.strings.strings, strings.ilike (., "*encrypted*"))
+      )
+          and any(file.explode(.),
+              strings.ilike(.scan.ocr.raw, "*azure*")
+      )
+  )
+  and (
+          (
+              sender.email.domain.root_domain in $free_email_providers
+              and sender.email.email not in $sender_emails
+          )
+          or (
+              sender.email.domain.root_domain not in $free_email_providers
+              and sender.email.domain.domain not in $sender_domains
+          )
+  )
+tags: 
+  - "Qakbot"
+  - "Suspicious attachment"
+  - "Suspicious link"
