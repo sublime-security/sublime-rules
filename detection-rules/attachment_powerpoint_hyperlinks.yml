@@ -1,0 +1,29 @@
+name: "Attachment: PowerPoint with suspicious hyperlink"
+description: |
+  Attached PowerPoint contains a suspicious hyperlink that can execute arbitrary code.
+references:
+  - "https://twitter.com/doc_guard/status/1570190610774257665"
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and any(attachments, (.file_extension in~ ("ppt", "pptx"))
+      and any(file.explode(.),
+          any(.scan.exiftool.fields, .key == "Hyperlinks" 
+              and (
+                  4 of (
+                      strings.ilike(.value, "*[Convert]::ToChar*"),
+                      strings.ilike(.value, "*vbs*"),
+                      strings.ilike(.value, "*[IO.File]::Create*"),
+                      strings.ilike(.value, "*[IO.File]::Exists*"),
+                      strings.ilike(.value, "*[io.FileOPtions]::DeleteOnClose*"),
+                      strings.ilike(.value, "*Net.WebClient*"),
+                      strings.ilike(.value, "*dll*"),
+                  )
+          )
+      )
+  ))
+tags: 
+  - "Suspicious attachment"
+  - "Suspicious link"
+  - "Office exploit"
