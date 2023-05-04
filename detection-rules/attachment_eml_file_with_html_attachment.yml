@@ -1,0 +1,38 @@
+name: "Attachment: EML file with HTML attachment (first-time sender)"
+description: |
+  Potential HTML smuggling via HTML file inside embedded rfc822 (eml)
+type: "query"
+severity: "low"
+source: |
+  type.inbound
+  // exclude bounce backs
+  and not strings.like(sender.email.local_part, "*postmaster*", "*mailer-daemon*", "*administrator*")
+  and not strings.istarts_with(subject.subject, "undeliverable")
+  and not any(attachments, .content_type == "message/delivery-status")
+  // if the "References" is in the body of the message, it's probably a bounce
+  and not any(headers.references,
+      strings.contains(body.html.display_text, .)
+  )
+  and any(attachments, .content_type == "message/rfc822"
+      and any(file.explode(.),
+          .flavors.mime == "text/html"
+          or .file_extension in ("htm", "html")
+          or "html_file" in .flavors.yara
+          or any(.scan.strings.strings, regex.contains(., "Content-Type: text/html"))
+      )
+  )
+  // first-time sender
+  and (
+    (
+      sender.email.domain.root_domain in $free_email_providers
+      and sender.email.email not in $sender_emails
+    )
+    or (
+      sender.email.domain.root_domain not in $free_email_providers
+      and sender.email.domain.domain not in $sender_domains
+    )
+  )
+tags:
+  - "Suspicious attachment"
+  - "HTML smuggling"
+  - "Attack surface reduction"

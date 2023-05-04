@@ -4,17 +4,28 @@ description: |
 type: "rule"
 severity: "high"
 source: |
-  type.inbound 
+  type.inbound
+
   and any(body.links, 
-      all([beta.linkanalysis(.)], (
-          .credphish.contains_login
-          or .credphish.contains_captcha
+   
+      // contains login or captcha
+      (
+          beta.linkanalysis(.).credphish.contains_login
+          or beta.linkanalysis(.).credphish.contains_captcha
       )
+
+      // either the original or the redirect is a free subdomain
       and (
-          .effective_url.domain.root_domain in $free_subdomain_hosts
-          or ..href_url.domain.root_domain in $free_subdomain_hosts
-      ))
+          beta.linkanalysis(.).effective_url.domain.root_domain in $free_subdomain_hosts
+          or .href_url.domain.root_domain in $free_subdomain_hosts
+      )
+
+      // exclude FP prone free subdomain hosts
+      // if it's a known brand impersonation, we'll detect it in other rules
+      and .href_url.domain.root_domain not in ("zendesk.com")
+      and beta.linkanalysis(.).effective_url.domain.root_domain not in ("zendesk.com")
   )
+
   // first-time sender
   and (
         (

@@ -1,0 +1,19 @@
+name: "Attachment: DocuSign image lure with no DocuSign domains in links"
+description: "Detects DocuSign phishing emails with image attachments and short message bodies."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and length(attachments) == 1
+  and length(body.links) < 5
+  and any(body.links, not strings.ilike(.href_url.domain.root_domain, "docusign.*"))
+  
+  and any(attachments, .file_extension in~ ('png','jpg','jpeg','bmp')
+      and any(file.explode(.),
+      any(.scan.strings.strings, strings.ilike(., "*docusign*"))
+       and any(.scan.strings.strings, strings.ilike(., "*review*", "*sign*"))
+      )
+  )
+tags:
+  - "Suspicious link"
+  - "Brand impersonation"

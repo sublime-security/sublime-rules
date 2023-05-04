@@ -4,15 +4,15 @@ Sublime Rules
 ==========
 by Sublime Security
 
-This repo contains open-source detection rules and queries for the [Sublime Platform](https://github.com/sublime-security/sublime-platform).
+This repo contains open-source rules for [Sublime](https://github.com/sublime-security/sublime-platform), a free and open platform for detecting and preventing email attacks like BEC, malware, and credential phishing.
 
 Examples
 ----------
 - [HTML smuggling](https://github.com/sublime-security/sublime-rules/search?q=html+smuggling)
-- [Encrypted zips](https://github.com/sublime-security/sublime-rules/blob/main/detection-rules/attachment_with_encrypted_zip_unsolicited.yml)
-- [High risk VBA macros](https://github.com/sublime-security/sublime-rules/blob/main/detection-rules/attachment_vba_macro_high_risk.yml)
+- [VIP / Executive impersonation](https://github.com/search?q=repo%3Asublime-security%2Fsublime-rules+%22vip+impersonation%22&type=code)
+- [Malicious OneNote files](https://github.com/search?q=repo%3Asublime-security%2Fsublime-rules+%22onenote%22&type=code)
 - [Malicious LNK files](https://github.com/sublime-security/sublime-rules/blob/main/detection-rules/attachment_lnk_file_with_embedded_content.yml)
-- [VIP / Executive impersonation](https://github.com/sublime-security/sublime-rules/blob/main/detection-rules/vip_impersonation_attack_surface_reduction.yml)
+- [Encrypted zips](https://github.com/sublime-security/sublime-rules/blob/main/detection-rules/attachment_with_encrypted_zip_unsolicited.yml)
 
 Community Rule Feeds
 ----------
@@ -22,11 +22,9 @@ Community Rule Feeds
 
 Learn more
 ----------
-- [Sublime home page](https://sublimesecurity.com)
-- [Sublime Platform overview](https://docs.sublimesecurity.com)
-- [Message Query Language (MQL) reference](https://docs.sublimesecurity.com/docs/message-query-language) - Sublime's DSL purpose-built for email analysis
+- [Blog](https://sublime.security/blog)
+- [Docs](https://docs.sublimesecurity.com)
+- [Message Query Language (MQL) reference](https://docs.sublimesecurity.com/docs/message-query-language)
 - [Release log](https://new.sublimesecurity.com)
 
-Follow us on [Twitter](https://twitter.com/sublime_sec) for updates on new rules and detection capabilities, and star/watch this repo for updates and general availability.
-
-[Request early access to Sublime](https://sublimesecurity.com/platform)
+Follow us on [Twitter](https://twitter.com/sublime_sec) for updates on new rules and detection capabilities.
