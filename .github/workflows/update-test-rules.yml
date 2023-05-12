@@ -1,0 +1,31 @@
+name: Update Test Rules
+
+on:
+  issue_comment:
+    types: [created]
+
+jobs:
+  update-branch:
+    name: Update test-rules Branch
+    runs-on: ubuntu-20.04
+    # https://docs.github.com/en/webhooks-and-events/webhooks/webhook-events-and-payloads#issue_comment
+    if: github.event.issue.pull_request && contains(github.event.comment.body, '/update=test-rules')
+    environment: test-rules
+
+    steps:
+      - name: Get PR branch
+        uses: xt0rted/pull-request-comment-branch@v1
+        id: comment-branch
+
+      - name: Checkout PR branch
+        uses: actions/checkout@v3
+        with:
+          ref: ${{ steps.comment-branch.outputs.head_ref }}
+
+      - name: Wait for Rule Validation Succeed
+        uses: lewagon/wait-on-check-action@v1.3.1
+        with:
+          ref: ${{ steps.comment-branch.outputs.head_ref }}
+          check-name: 'Run Rule Validation'
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          wait-interval: 10
