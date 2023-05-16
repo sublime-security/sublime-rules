@@ -1,0 +1,50 @@
+name: Remove from test-rules Branch
+
+on:
+  pull_request:
+    types: [ closed ]
+
+jobs:
+  remove-from-test-branch:
+    name: Remove from test-rules Branch
+    permissions:
+      contents: write
+      issues: read
+      pull-requests: read
+    runs-on: ubuntu-20.04
+    concurrency: test-rules
+
+    steps:
+      - name: Install yq
+        uses: mikefarah/yq@v4.33.3
+
+      - name: Checkout test-rules
+        uses: actions/checkout@v3
+        with:
+          ref: test-rules
+          fetch-depth: 0
+          path: destination
+
+      - name: Clean Test Rules
+        run: |
+          export pr_num=${{ github.event.number }}
+          
+          echo "Removing rules from PR#$pr_num" > message.txt
+          echo "" >> message.txt
+          
+          cd destination
+          files=$(ls **/*.yml)
+          for file in $files; do
+            file_pr_num=$(yq '.testing_pr' $file)
+            if [[ "$pr_num" = "$file_pr_num" ]]; then
+              rm $file
+            fi
+          done
+
+          git add -A
+          
+          git config --global user.name 'Sublime Rule Testing Bot'
+          git config --global user.email 'hello@sublimesecurity.com'
+          
+          git commit --allow-empty -F ../message.txt
+          git push origin test-rules

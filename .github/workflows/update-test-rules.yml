@@ -1,12 +1,12 @@
-name: Update Test Rules
+name: Add to test-rules Branch
 
 on:
   issue_comment:
     types: [created]
 
 jobs:
-  update-branch:
-    name: Update test-rules Branch
+  pre-checks:
+    name: Initial Checks
     permissions:
       contents: read
       issues: read
@@ -15,7 +15,53 @@ jobs:
     runs-on: ubuntu-20.04
     # https://docs.github.com/en/webhooks-and-events/webhooks/webhook-events-and-payloads#issue_comment
     if: github.event.issue.pull_request && contains(github.event.comment.body, '/update-test-rules')
+
+    steps:
+      # This isn't our only gating, but it's a convenient first restriction.
+      # The GitHub token can't have expanded permissions like reading private org or team info, so this requires org
+      # members to be public (most of us are).
+      # TheModdingInquisition/actions-team-membership@v1.0 could be used for a team check, but we'd need to create a PAT for it.
+      - name: Check if commentor is organization member
+        id: is_organization_member
+        uses: jamessingleton/is-organization-member@1.0.0
+        with:
+          organization: sublime-security
+          username: ${{ github.event.comment.user.login }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Fail if not organization member
+        if: |
+          steps.is_organization_member.outputs.result == false
+        run: exit 1
+
+      - name: Fail if PR closed
+        if: |
+          github.event.issue.closed_at
+        run: exit 1
+
+      - name: Get PR branch
+        uses: alessbell/pull-request-comment-branch@v1.1 # Fork of xt0rted/pull-request-comment-branch, see https://github.com/xt0rted/pull-request-comment-branch/issues/322
+        id: comment-branch
+
+      - name: Wait for Rule Validation Succeed
+        uses: lewagon/wait-on-check-action@v1.3.1
+        with:
+          ref: ${{ steps.comment-branch.outputs.head_sha }}
+          check-name: 'Run Rule Validation'
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          wait-interval: 10
+
+  add-to-test-branch:
+    name: Add to test-rules Branch
+    needs: pre-checks
+    permissions:
+      contents: write
+      issues: read
+      pull-requests: read
+      checks: read
+    runs-on: ubuntu-20.04
     environment: test-rules
+    concurrency: test-rules
 
     steps:
       - name: Get PR branch
@@ -28,11 +74,68 @@ jobs:
           repository: ${{ steps.comment-branch.outputs.head_owner }}/${{ steps.comment-branch.outputs.head_repo }}
           ref: ${{ steps.comment-branch.outputs.head_ref }}
           fetch-depth: 0
+          path: source
 
-      - name: Wait for Rule Validation Succeed
-        uses: lewagon/wait-on-check-action@v1.3.1
+      - name: Install yq
+        uses: mikefarah/yq@v4.33.3
+
+      - name: Checkout test-rules
+        uses: actions/checkout@v3
         with:
-          ref: ${{ steps.comment-branch.outputs.head_ref }}
-          check-name: 'Run Rule Validation'
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
-          wait-interval: 10
+          ref: test-rules
+          path: destination
+
+      - name: Synchronize Test Rules
+        run: |
+          export pr_num=${{ github.event.issue.number }}
+          
+          # Delete any files already referencing this PR. If they're no longer included in the PR this will remove them,
+          # if they're still included we'll add them back below.
+          files=$(ls destination/**/*.yml)
+          for file in $files; do
+            file_pr_num=$(yq '.testing_pr' $file)
+            if [[ "$pr_num" = "$file_pr_num" ]]; then
+              rm $file
+            fi
+          done
+          
+          # This workflow is trigerred from an issue comment so we don't automatically have context on what changed in the PR
+          curl -L \
+            -o pr_files.json \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}"\
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            https://api.github.com/repos/sublime-security/sublime-rules/pulls/$pr_num/files
+          
+          # Any files added/changed/modified will be copied to test-rules
+          files_changed=$(jq -r '.[] | select(.status == "added" or .status == "modified" or .status == "changed") | .filename' pr_files.json)
+          
+          # Used to testing_sha key in the rule. If the PR is updated multiple times without changing all files, we'll
+          # always use the latest sha.
+          export sha=${{ steps.comment-branch.outputs.head_sha }}
+          
+          # Copy any file that was added/changed/modified to the destination git folder (we could do this with git checkout
+          # but it doesn't seem any simpler). And then add testing metadata.
+          # If multiple PRs modify the same file, only one can be tested. This is solveable, but not something we see often.
+          for file in $files_changed; do
+            cp source/$file destination/$file
+            yq -i '.testing_pr = env(pr_num)' destination/$file
+            yq -i '.testing_sha = env(sha)' destination/$file
+          done
+          
+          echo "Sync from PR#$pr_num" > message.txt
+          echo "" >> message.txt
+          echo "${{ github.event.issue.title }} by @${{ github.event.issue.user.login }}" >> message.txt
+          echo "${{ github.event.issue.pull_request.html_url }}" >> message.txt
+          echo "Source SHA $sha" >> message.txt
+          echo "Triggered by @${{ github.event.comment.user.login }}" >> message.txt
+          echo "${{ github.event.comment.body }}" | awk '/\/update-test-rules/ {p=1; next} p && NF' >> message.txt
+          
+          cd destination
+          git add -A
+          
+          git config --global user.name 'Sublime Rule Testing Bot'
+          git config --global user.email 'hello@sublimesecurity.com'
+          
+          git commit --allow-empty -F ../message.txt
+          git push origin test-rules
