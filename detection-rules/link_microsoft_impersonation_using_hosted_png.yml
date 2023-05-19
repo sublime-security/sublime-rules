@@ -1,0 +1,41 @@
+name: "Link: Microsoft impersonation using hosted png with suspicious link"
+description: "Detects emails containing a link to a microsoft hosted logo and the display name and displayurl text is in all caps
+  and an NLU request from first time sender."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+
+  // display name is in all caps
+  and regex.match(sender.display_name, '[A-Z ]+')
+
+  // the sender is not microsoft
+  and sender.email.domain.root_domain not in~ ('microsoft.com', 'microsoftsupport.com', 'office.com')
+
+  // logo hosted on microsoft.com
+  and any(body.links, regex.icontains(.display_url.url, '.{0,50}microsoft\.com\/.{0,70}logo.{0,25}\.png'))
+
+  // and at least one link display text is in all caps
+  and any(body.links, regex.icontains(.display_text, '[VIEW|CLICK|DOWNLOAD|CHECK]'))
+
+  // request being made
+  and any(ml.nlu_classifier(body.html.inner_text).entities, .name == "request")
+
+  // sender domain matches no body domains
+  and not any(body.links, .href_url.domain.root_domain == sender.email.domain.root_domain and .href_url.domain.root_domain not in $tranco_1m)
+
+  // first-time sender
+  and (
+    (
+      sender.email.domain.root_domain in $free_email_providers
+      and sender.email.email not in $sender_emails
+    )
+    or (
+      sender.email.domain.root_domain not in $free_email_providers
+      and sender.email.domain.domain not in $sender_domains
+    )
+  )
+tags:
+  - "Brand impersonation"
+  - "Suspicious link"
+  - "Natural Language Understanding"
