@@ -1,0 +1,30 @@
+name: "Impersonation: Human Resources with link or attachment and engaging language"
+description: "Detects messages impersonating HR that contain at least 1 link or 1 attachment with engaging language in the body from a first-time sender."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and (
+    sender.email.domain.domain not in $org_domains
+    and regex.icontains(sender.display_name, "human resources|hr depart(ment)?|employee relations")
+  )
+  and (
+      length(body.links) > 0 or length(attachments) > 0
+  )
+  
+  // Request and Urgency 
+  and any(ml.nlu_classifier(body.html.inner_text).entities, .name == "request")
+  and any(ml.nlu_classifier(body.html.inner_text).entities, .name == "urgency")
+  
+  and (
+    (
+      sender.email.domain.root_domain in $free_email_providers
+      and sender.email.email not in $sender_emails
+    )
+    or (
+      sender.email.domain.root_domain not in $free_email_providers
+      and sender.email.domain.domain not in $sender_domains
+    )
+  )
+tags:
+  - "Department impersonation"
