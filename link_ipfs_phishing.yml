@@ -9,17 +9,38 @@ severity: "medium"
 source: |
   type.inbound
 
-  // Any body link domains contain "ipfs"
-  and any(body.links, strings.icontains(.href_url.domain.domain, "ipfs")
+  and any(body.links,
+    // Any body link domains contain "ipfs"
+    strings.icontains(.href_url.domain.domain, "ipfs")
   
-    // Or we didn't submit the URL, and the url contains ipfs and is not common or in org_domains
-  or (beta.linkanalysis(.).submitted == false) and any(body.links, strings.icontains(.href_url.url, "ipfs")
-      and .href_url.domain.domain not in $free_file_hosts and
-          .href_url.domain.domain not in $free_subdomain_hosts and
-          .href_url.domain.domain not in $tranco_1m and
-          .href_url.domain.domain not in $umbrella_1m and
-          .href_url.domain.domain not in $org_domains
+    // Or we didn't submit the URL, and the url contains ipfs and is not common
+    or (
+        beta.linkanalysis(.).submitted == false
+        and strings.icontains(.href_url.url, "ipfs")
+        and .href_url.domain.domain not in $org_domains
+        and (
+            (
+                // don't include high rep domains
+                .href_url.domain.domain not in $tranco_1m
+                and .href_url.domain.domain not in $umbrella_1m
+            )
+            // if it's in Tranco or Umbrella, still include it if it's one of these
+            or .href_url.domain.domain in $free_file_hosts
+            or .href_url.domain.root_domain in $free_subdomain_hosts
+        )
       )
+  )
+
+  // unsolicited
+  and (
+        (
+            sender.email.domain.root_domain in $free_email_providers
+            and sender.email.email not in $recipient_emails
+        )
+        or (
+            sender.email.domain.root_domain not in $free_email_providers
+            and sender.email.domain.domain not in $recipient_domains
+        )
   )
 tags:
   - "Suspicious link"
