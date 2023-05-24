@@ -6,11 +6,19 @@ references:
 type: "rule"
 severity: "medium"
 source: |
-  type.inbound 
-  and (
-    any(body.links, strings.icontains(.href_url.url, "ipfs"))
-    or any(body.links, .href_url.domain.root_domain in $url_shorteners
-        and strings.icontains(beta.linkanalysis(.).effective_url.url, "ipfs"))
+  type.inbound
+
+  // Any body link domains contain "ipfs"
+  and any(body.links, strings.icontains(.href_url.domain.domain, "ipfs")
+  
+    // Or we didn't submit the URL, and the url contains ipfs and is not common or in org_domains
+      or (beta.linkanalysis(.).submitted == false) and any(body.links, strings.icontains(.href_url.url, "ipfs")
+      and .href_url.domain.domain not in $free_file_hosts and
+          .href_url.domain.domain not in $free_subdomain_hosts and
+          .href_url.domain.domain not in $tranco_1m and
+          .href_url.domain.domain not in $umbrella_1m and
+          .href_url.domain.domain not in $org_domains
+      )
   )
 tags:
   - "Suspicious link"
