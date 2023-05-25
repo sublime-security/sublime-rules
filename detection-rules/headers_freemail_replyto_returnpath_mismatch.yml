@@ -1,0 +1,25 @@
+name: "BEC: Freemail Reply-to or Return-path sender mismatch and NLU BEC intent"
+description: "Detects messages with a NLU BEC intent with medium or high confidence,
+  validates reply-to domains or return path domain are not free email providers
+  and the sender domain is not freemail"
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and any(ml.nlu_classifier(coalesce(
+    body.html.display_text, body.plain.raw)).intents,
+    .name in ("bec") and .confidence in ("medium", "high")
+  )
+  and (
+    headers.return_path.domain.root_domain in $free_email_providers
+    or (
+      length(headers.reply_to) > 0
+      and all(headers.reply_to,
+        .email.domain.root_domain in $free_email_providers)
+    )
+  )
+  and sender.email.domain.root_domain not in $free_email_providers
+tags:
+  - "Suspicious sender"
+  - "Business Email Compromise"
+  - "Natural Language Understanding"
