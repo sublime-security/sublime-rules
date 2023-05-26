@@ -1,0 +1,22 @@
+name: "Link: Microsoft Dynamics 365 form phishing"
+description: |
+  Email body is suspicious, and links to a Microsoft Dynamics form. Known phishing tactic.
+references:
+  - "https://cofense.com/blog/compromised-microsoft-dynamic-365-customer-voice-account-used-for-phishing-attack/"
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and any(ml.nlu_classifier(body.plain.raw).intents,
+      .name != "benign"
+  )
+  and any(body.links, 
+      beta.linkanalysis(.).effective_url.domain.domain == "customervoice.microsoft.com"
+      and any(beta.linkanalysis(.).redirect_history, .domain.domain == "ncv.microsoft.com")
+      // confirm it is a form
+      and any(beta.linkanalysis(.).final_dom.links, .href_url.domain.domain == "cdn.forms.office.net")
+  )
+tags: 
+  - "Suspicious links"
+  - "Suspicious body"
+  - "Natural Language Understanding"
