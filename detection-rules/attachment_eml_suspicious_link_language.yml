@@ -1,6 +1,6 @@
-name: "Attachment: EML with suspicious link & engaging language"
+name: "Attachment: EML with suspicious link & engaging language (unsolicited)"
 description: |
-  Attached EML uses engaging language and links to a file sharing or free subdomain link.
+  Attached EML uses engaging language and links to a file sharing or free subdomain link from an unsolicited sender.
 type: "rule"
 severity: "medium"
 source: |
@@ -27,6 +27,8 @@ source: |
   // engaging language in the original body
   and any(ml.nlu_classifier(body.html.display_text).entities, .name == "request")
   and any(ml.nlu_classifier(body.html.display_text).entities, .name == "urgency")
+  // any non-benign intent with any confidence
+  and any(ml.nlu_classifier(body.html.display_text).intents, .name != "benign")
 
   // exclude bounce backs & read receipts
   and not any(attachments, .content_type == "message/delivery-status")
@@ -34,6 +36,18 @@ source: |
   // if the "References" is in the body of the message, it's probably a bounce
   and not any(headers.references,
       strings.contains(body.html.display_text, .)
+  )
+
+  // unsolicited
+  and (
+          (
+              sender.email.domain.root_domain in $free_email_providers
+              and sender.email.email not in $recipient_emails
+          )
+          or (
+              sender.email.domain.root_domain not in $free_email_providers
+              and sender.email.domain.domain not in $recipient_domains
+          )
   )
 tags: 
   - "Suspicious attachment"
