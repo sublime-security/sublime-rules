@@ -5,30 +5,32 @@ type: "rule"
 severity: "medium"
 source: |
   type.inbound
-  
+
   and any(attachments, .content_type == "message/rfc822"
       and any(file.explode(.),
           any(.scan.url.urls,
               .domain.domain in $free_file_hosts or
               .domain.root_domain in $free_subdomain_hosts
           )
-  
-          and any(.scan.url.urls,
-              any(ml.nlu_classifier(
-                  beta.linkanalysis(.).final_dom.display_text).intents,
-                      .name != "benign"
-                  )
+
+          // ideally we have the full raw string instead of 
+          // an array, hopefully we can switch to that soon
+          and any(.scan.strings.strings,
+              any(ml.nlu_classifier(.).intents, 
+                  .name != "benign" and
+                  .confidence in ("medium", "high")
               )
+          )
         )
   )
-  
+
   // engaging language in the original body
   and any(ml.nlu_classifier(body.html.display_text).entities, .name == "request")
   and any(ml.nlu_classifier(body.html.display_text).entities, .name == "urgency")
-  
+
   // exclude bounce backs & read receipts
   and not any(attachments, .content_type == "message/delivery-status")
-  
+
   // if the "References" is in the body of the message, it's probably a bounce
   and not any(headers.references,
       strings.contains(body.html.display_text, .)
