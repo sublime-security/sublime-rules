@@ -1,0 +1,25 @@
+name: "Attachment: EML with file sharing link & suspicious language"
+description: |
+  Attached EML links to a file sharing link that contains suspicious language.
+references:
+  
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  // exclude bounce backs & read receipts
+  and not any(attachments, .content_type == "message/delivery-status")
+  // if the "References" is in the body of the message, it's probably a bounce
+  and not any(headers.references,
+      strings.contains(body.html.display_text, .)
+  )
+  and any(attachments, .content_type == "message/rfc822"
+      and any(file.explode(.),
+          any(.scan.url.urls, .domain.root_domain in $free_file_hosts)
+          and any(.scan.url.urls, any(ml.nlu_classifier(beta.linkanalysis(.).final_dom.display_text).intents, .name != "benign" and .confidence in ("medium", "high")))
+      )
+  )
+tags: 
+  - "Suspicious attachment"
+  - "Suspicious link"
+  - "Natural Language Understanding"
