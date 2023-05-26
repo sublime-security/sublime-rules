@@ -1,0 +1,22 @@
+name: "Attachment: Hyperlinked false attachment image lure"
+description: |
+  Detects emails containing a hyperlinked small image file that portrays itself as a file attachment.
+references:
+  
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and length(body.links) > 0
+  and any(body.links, regex.icontains(.display_text, '(graphical|png|jpeg|jpg)'))
+  and any(attachments, .file_extension in~ ('png','jpg','jpeg') and (.size < 20000)
+    and any(file.explode(.),
+        ( 
+            ( .scan.exiftool.image_height < 150 and
+             regex.icontains(.scan.ocr.raw, '.{0,30}\.[a-z]{2,3}.{0,10}\d{2}\s?(k|m)b$'))
+        )
+    )
+  )
+  
+tags: 
+  - "Suspicious link"
