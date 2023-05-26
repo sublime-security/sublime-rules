@@ -11,11 +11,56 @@ source: |
       sender.display_name =~ "paypal"
       or strings.ilevenshtein(sender.display_name, 'paypal') <= 1
       or strings.ilike(sender.email.domain.domain, '*paypal*')
+
+      or any(attachments, .file_type == "pdf"
+          and beta.logo_detect(.).brand.name == "PayPal"
+          and any(file.explode(.),
+              any(.scan.strings.strings, strings.ilike(., "*PayPal*"))
+              and any(.scan.strings.strings,
+                  strings.ilike(.,
+                      "*invoice*",
+                      "*transaction*",
+                      "*bitcoin*",
+                      "*dear customer*",
+                  )
+              )
+          )
+      )
   )
-  and sender.email.domain.root_domain not in~ ('paypal.com', 'paypal.ch', 'paypal.nl', 'paypal.co.uk', 'google.com', 'q4inc.com',
-    'paypal.com.au', 'paypal.se', 'paypal.be', 'paypal.de', 'paypal.dk', 'paypal.pl', 'paypal.es', 'paypal.ca', 'paypal.fr', 
-    'synchronyfinancial.com', 'synchronybank.com', 'xoom.com', 'paypal-experience.com')
-  and sender.email.email not in $recipient_emails
+
+  and sender.email.domain.root_domain not in~ (
+      'paypal.com',
+      'paypal.ch',
+      'paypal.nl',
+      'paypal.co.uk',
+      'google.com',
+      'q4inc.com',
+      'paypal.com.au',
+      'paypal.se',
+      'paypal.be',
+      'paypal.de',
+      'paypal.dk',
+      'paypal.pl',
+      'paypal.es',
+      'paypal.ca',
+      'paypal.fr',
+      'synchronyfinancial.com',
+      'synchronybank.com',
+      'xoom.com',
+      'paypal-experience.com'
+  )
+
+  // unsolicited
+  and (
+          (
+              sender.email.domain.root_domain in $free_email_providers
+              and sender.email.email not in $recipient_emails
+          )
+          or (
+              sender.email.domain.root_domain not in $free_email_providers
+              and sender.email.domain.domain not in $recipient_domains
+          )
+  )
 tags:
   - "Brand impersonation"
   - "Suspicious sender"
