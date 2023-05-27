@@ -28,12 +28,32 @@ source: |
 
   // Microsoft logo
   and any(attachments,
-      beta.logo_detect(.).brand.name in ("Microsoft", "Office365", "Outlook")
+      .file_type in ('png', 'jpeg', 'jpg', 'bmp')
+      and beta.logo_detect(.).brand.name in ("Microsoft", "Office365", "Outlook")
   )
 
   // suspicious content
-  and strings.ilike(body.plain.raw, "*password*", "*document*", "*voicemail*", "*cache*", "*fax*")
-  and strings.ilike(body.plain.raw, "*terminated*", "*review*", "*expire*", "*click*", "*view*")
+  and strings.ilike(body.plain.raw, "*password*", "*document*", "*voicemail*", "*cache*", "*fax*", "*storage*", "*quota*")
+  and strings.ilike(body.plain.raw, "*terminated*", "*review*", "*expire*", "*click*", "*view*", "*exceed*", "*clear*")
+
+  and (
+      any(ml.nlu_classifier(body.html.inner_text).intents,
+          .name == "cred_theft"
+      )
+
+      or any(attachments,
+          .file_type in ('png', 'jpeg', 'jpg', 'bmp')
+          and any(file.explode(.),
+              any(ml.nlu_classifier(.scan.ocr.raw).intents,
+                  .name == "cred_theft"
+              )
+          )
+      )
+
+      or any(ml.nlu_classifier(body.html.inner_text).entities,
+          .name == "urgency"
+      )
+  )
 
   and sender.email.domain.root_domain not in $org_domains
 
