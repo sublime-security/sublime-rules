@@ -1,0 +1,43 @@
+name: "Brand impersonation: Dropbox"
+description: |
+  Impersonation of Dropbox, a file sharing service.
+references:
+  
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and (
+      strings.ilike(sender.display_name, '*dropbox*')
+      or strings.ilevenshtein(sender.display_name, 'dropbox') <= 1
+      or strings.ilike(sender.email.domain.domain, '*dropbox*')
+  )
+  and any(body.links, not strings.ilike(.href_url.domain.root_domain, "dropbox.*"))
+  and (
+      sender.email.domain.root_domain not in~ ('dropbox.com')
+      or (
+          (
+              any(headers.hops, .authentication_results.dmarc == "fail")
+              or any(distinct(headers.hops, .received_spf.verdict is not null), strings.ilike(.received_spf.verdict, "*fail"))
+          )
+          and any(attachments, .file_type in~ ('png','jpg','jpeg','bmp')
+              and any(file.explode(.),
+                  any(.scan.strings.strings, strings.ilike(., "*dropbox*"))
+              )
+          )
+      )
+  )
+  // first-time sender
+  and (
+          (
+              sender.email.domain.root_domain in $free_email_providers
+              and sender.email.email not in $sender_emails
+          )
+          or (
+              sender.email.domain.root_domain not in $free_email_providers
+              and sender.email.domain.domain not in $sender_domains
+          )
+  )
+tags: 
+  - "Brand impersonation"
+  - "Suspicious sender"
