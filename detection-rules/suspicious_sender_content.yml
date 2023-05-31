@@ -1,0 +1,36 @@
+name: "Suspicious sender name and content"
+description: |
+  Sender display name contains unusual characters, and message content flags NLU.
+references:
+  
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and regex.contains(sender.display_name, '(=?UTF-8?|[%!#*/\\;])')
+  and (
+      any(ml.nlu_classifier(
+              coalesce(body.html.display_text, body.plain.raw)).intents, .name != "benign")
+      or any(ml.nlu_classifier(
+              coalesce(body.html.display_text, body.plain.raw)).entities, .name == "financial")
+      or any(ml.nlu_classifier(
+              coalesce(body.html.display_text, body.plain.raw)).entities, .name == "urgency")
+      or any(ml.nlu_classifier(
+              coalesce(body.html.display_text, body.plain.raw)).entities, .name == "request")
+      or any(attachments, 
+          any(file.explode(.), 
+              any(ml.nlu_classifier(.scan.ocr.raw).intents, .name != "benign")
+              or any(ml.nlu_classifier(.scan.ocr.raw).entities, .name == "financial")
+              or any(ml.nlu_classifier(.scan.ocr.raw).entities, .name == "urgency")
+              or any(ml.nlu_classifier(.scan.ocr.raw).entities, .name == "request")
+          )
+      )
+      or any(attachments,
+        .file_type in ('png', 'jpeg', 'jpg', 'bmp', 'pdf')
+        and beta.logo_detect(.).brand.name is not null
+      )
+  )
+tags: 
+  - "Suspicious sender"
+  - "Suspicious content"
+  - "Natural Language Understanding"
