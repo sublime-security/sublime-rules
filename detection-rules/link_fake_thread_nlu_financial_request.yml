@@ -1,0 +1,12 @@
+name: "Fake message thread with a suspicious link and engaging language from an unknown sender"
+description: "Detects fake message threads with suspicious links and financial request language"
+type: "rule"
+severity: "medium"
+source: "type.inbound \n\n// suspicious link\nand any(body.links,\n  .href_url.domain.root_domain not in $tranco_1m and\n  .href_url.domain.domain not in $umbrella_1m\n)\n\n// fake thread check\nand (\n    strings.istarts_with(subject.subject, \"RE:\") \n    or strings.istarts_with(subject.subject, \"FWD:\")\n)\n\n// Check for the Presence of References or In-Reply-To properties\nand (\n    length(headers.references) == 0\n    or not any(headers.hops, any(.fields, strings.ilike(.name, \"In-Reply-To\")))\n)\n\n// sender's domain is not in body, and body has > 0 links\nand length(body.links) > 0\nand sender.email.domain.root_domain not in $free_email_providers\nand not any(body.links, .href_url.domain.root_domain == sender.email.domain.root_domain)\n\n// unusual sender (email address rarely sends to your organization)\nand sender.email.email not in $sender_emails\n\n// unusual sender domain (domain rarely sends to your organization)\nand sender.email.domain.domain not in $sender_domains\n\nand 2 of (\n  // language attempting to engage\n  any(ml.nlu_classifier(body.html.inner_text).entities, .name == \"request\"),\n\n  // financial request\n  any(ml.nlu_classifier(body.html.inner_text).entities, .name == \"financial\"),\n\n  // urgency request\n  any(ml.nlu_classifier(body.html.inner_text).entities, .name == \"urgency\"),\n\n  // commonly abused sender TLD\n  strings.ilike(sender.email.domain.tld, \"*.jp\"),\n\n  // known suspicious pattern in the URL path\n  any(body.links, regex.match(.href_url.path, '\\/[a-z]{3}\\d[a-z]')),\n\n  // link display text is in all caps\n  any(body.links, regex.match(.display_text, '[A-Z ]+')),\n)\n"
+tags:
+  - "Suspicious link"
+  - "Fake Message Thread"
+  - "Natural Language Understanding"
+  - "Machine Learning"
+testing_pr: 466
+testing_sha: cdd0318e5acb45d9b96e2bce71be024d43225293
