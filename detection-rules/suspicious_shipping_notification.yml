@@ -1,0 +1,27 @@
+name: "Fake shipping notification with suspicious language"
+description: |
+  Body contains keywords for shipping, contains suspicious language, and addresses the recipient by their email, which is an indicator of phishing and/or spam.
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  // contains at least 1 link
+  and length(body.links) > 0
+
+  and 3 of (
+      strings.ilike(coalesce(body.html.display_text, body.plain.raw), "*(1)*"),
+      strings.ilike(coalesce(body.html.display_text, body.plain.raw), "*waiting for delivery*"),
+      strings.ilike(coalesce(body.html.display_text, body.plain.raw), "*delivery missed*"),
+      strings.ilike(coalesce(body.html.display_text, body.plain.raw), "*tracking number*")
+  )
+
+  // urgent/time-sensitive language
+  and any(ml.nlu_classifier(coalesce(body.html.display_text, body.plain.raw)).entities, .name == "urgency")
+
+  // email is not personalized with recipients name
+  and any(recipients.to, any(ml.nlu_classifier(coalesce(body.html.display_text, body.plain.raw)).entities, .text == ..email.local_part))
+tags:
+  - "Natural Language Understanding"
+  - "Suspicious body"
+testing_pr: 490
+testing_sha: 5a51117ec82ce68cc34cf0d22ccea6d1779ab04f
