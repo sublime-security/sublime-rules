@@ -4,16 +4,29 @@ type: "rule"
 severity: "medium"
 source: |
   type.inbound
-  and length(filter(attachments, .file_type not in~ ('png', 'jpeg', 'jpg', 'bmp'))) == 0 
-  and any(body.links, not strings.ilike(.href_url.domain.root_domain, "docusign.*"))
-  and any(attachments,
-       beta.logo_detect(.).brand.confidence in ("medium", "high")
-       and beta.logo_detect(.).brand.name == "DocuSign"
-       and any(file.explode(.),
+  and (
+    // All attachments are image files
+    length(filter(attachments, .file_type not in~ ('png', 'jpeg', 'jpg', 'bmp'))) == 0
+    // And Logo detect found a DocuSign Logo with high confidence
+    and any(attachments,
+        any(beta.logo_detect(.).brands, .name == "DocuSign" and .confidence == "high")
+        // Suspicious strings were found
+        and any(file.explode(.),
             any(.scan.strings.strings, regex.icontains(.,
-                 "review", "[^d][^o][^c][^u]sign", "important edocs", "completed document"))
-       )
-  )
+                "review", "[^d][^o][^c][^u]sign", "important edocs", "completed document"))
+        )
+    )
+    // or the logo was detected in a screenshot of the message itself
+  or (
+    any(beta.logo_detect(beta.message_screenshot()).brands,
+        .name == "DocuSign" and .confidence == "high")
+    and any(file.explode(beta.message_screenshot()),
+        any(.scan.strings.strings, regex.icontains(.,
+            "review", "[^d][^o][^c][^u]sign", "important edocs", "completed document"))
+        )
+      )
+    )
+
   and (
           (
               sender.email.domain.root_domain in $free_email_providers
@@ -23,6 +36,8 @@ source: |
               sender.email.domain.root_domain not in $free_email_providers
               and sender.email.domain.domain not in $sender_domains
           )
+          or
+               any(distinct(headers.hops, .authentication_results.dmarc is not null), strings.ilike(.authentication_results.dmarc, "*fail"))
   )
 tags:
   - "Suspicious link"
