@@ -1,0 +1,70 @@
+name: "Suspicious Request for Purchase or Quote (RFP|RFQ) from suspicious sender"
+description: |
+  RFQ/RFP scams involve fraudulent emails posing as legitimate requests for quotations or purchases, often sent by scammers impersonating reputable organizations. These scams aim to deceive recipients into providing sensitive information or conducting unauthorized transactions, often leading to financial loss, or data leakage.
+references:
+  
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound 
+  and 1 of (
+      (
+          (
+              length(recipients.to) == 0 or 
+              all(recipients.to, .display_name == "Undisclosed recipients")
+          )
+          and length(recipients.cc) == 0
+          and length(recipients.bcc) == 0
+      ),
+      (
+          strings.istarts_with(subject.subject, "RE:")
+          and (length(headers.references) == 0
+          or not any(headers.hops, any(.fields, strings.ilike(.name, "In-Reply-To"))))
+      ),
+      (
+          (
+              sender.email.domain.root_domain in $free_email_providers
+              and sender.email.email not in $recipient_emails
+          )
+          or 
+          (
+              sender.email.domain.root_domain not in $free_email_providers
+              and sender.email.domain.domain not in $recipient_domains
+          )
+      )
+  )
+  
+  and 2 of (
+      (
+          regex.icontains(coalesce(body.html.display_text, body.plain.raw), '(discuss|purchas).{0,15}purchas(e|ing)')
+      ),
+      (
+          regex.icontains(coalesce(body.html.display_text, body.plain.raw), '(sign(ed?)|view).{0,10}(purchase order)|Request for a Quot(e|ation)')
+      ),
+      (
+          regex.icontains(coalesce(body.html.display_text, body.plain.raw), '(please|kindly).{0,30}quote')
+      ),
+      (
+          regex.icontains(subject.subject, '(request for (purchase|quot(e|ation))|\bRFQ\b|\bRFP\b)')
+      ),
+      (
+          any(attachments, regex.icontains(.file_name, "Quot(e|ation)"))
+      ),
+      (
+          any(ml.nlu_classifier(coalesce(
+              body.html.display_text, body.plain.raw)).entities, .name == "request") 
+      and 
+          any(ml.nlu_classifier(coalesce(
+              body.html.display_text, body.plain.raw)).entities,.name == "urgency")
+      ),
+      (
+          any(ml.nlu_classifier(coalesce(
+              body.html.display_text, body.plain.raw)).tags,.name == "purchase_order" and .confidence == "high")
+      )
+  )
+tags: 
+  - "Suspicious sender"
+  - "Fraud"
+  - "RFQ"
+  - "RFP"
+  - "Natural Language Understanding"
