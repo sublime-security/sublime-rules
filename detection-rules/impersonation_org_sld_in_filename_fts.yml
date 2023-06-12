@@ -1,0 +1,29 @@
+name: "Impersonation: Organizational SLD found in attachment file name from FTS"
+type: "query"
+description: |
+  Attachment name contains an organizational SLD.
+  And the sender's domain is not in org domains and first time sender.
+source: |
+  type.inbound
+  and (
+    any(attachments,
+      any($org_slds, strings.contains(..file_name, .))
+    )
+    and sender.email.domain.root_domain not in $org_domains
+  )
+  and (
+    (
+      sender.email.domain.root_domain in $free_email_providers
+      and sender.email.email not in $sender_emails
+    )
+    or (
+      sender.email.domain.root_domain not in $free_email_providers
+      and sender.email.domain.domain not in $sender_domains
+    )
+  )
+severity: "low"
+tags:
+  - "Organization impersonation"
+  - "Suspicious attachment"
+testing_pr: 265
+testing_sha: 6fb8ab0128033cf8aadcbb9d67d70d076484080b
