@@ -1,0 +1,37 @@
+name: "Attachment: HTML file with reference to recipient and suspicious patterns"
+description: |
+  Attached HTML file contains references to the recipients email address, indicative of credential phishing, and suspicious Javascript patterns.
+references:
+  
+type: "rule"
+severity: "high"
+source: |
+  type.inbound 
+  and any(attachments, 
+      (
+          .content_type == "text/html"
+          or .file_extension in~ ("html", "htm", "shtml", "dhtml")
+          or .file_type == "html"
+      )
+      and any(file.explode(.), .flavors.mime in~ ("text/html", "text/plain")
+          and any(recipients.to, any(..scan.strings.strings, strings.icontains(., ..email.email)))
+      )
+      and any(file.explode(.),
+          (
+              any(.flavors.yara, . == "javascript_file")
+              // common indicator of HTML smuggling
+              and length(filter(.scan.javascript.identifiers, strings.ilike(., "_0x*"))) > 50
+          )
+          or
+          (   
+              // javascript that doesn't get pulled out properly
+              .flavors.mime == "text/plain" and strings.ilike(.file_name, "script*")
+              // common indicator of HTML smuggling
+              and length(filter(.scan.strings.strings, regex.imatch(., ".*_0x.*"))) > 50
+          )
+      )
+  )
+tags: 
+  - "HTML smuggling"
+  - "Suspicious attachments"
+  - "Credential phishing"
