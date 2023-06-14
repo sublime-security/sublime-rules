@@ -1,0 +1,28 @@
+name: "Stripe Invoice Abuse"
+description: |
+  A fraudulent invoice/receipt found in the body of the message sent by exploiting Stripe's invoicing service.
+  Callback Phishing is an attempt by an attacker to solicit the victim (recipient) to call a phone number. 
+  The resulting interaction could lead to a multitude of attacks ranging from Financial theft, Remote Access Trojan (RAT) Installation or Ransomware Deployment.
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound 
+  and length(attachments) == 2
+  and sender.email.domain.root_domain == "stripe.com"
+  and any(headers.hops, .authentication_results.dmarc == "pass")
+  
+  and any(attachments, .file_extension == "pdf" 
+      and any(file.explode(.),
+              length(filter(.scan.strings.strings, strings.ilike(.,
+                  "*Btc Purchase*",
+                  "*suspicious activity*",
+                  "*get in touch with us straight once*",
+                  "*your phone number*",
+                  "*due deducted*",
+                  "*merchant security service center*",
+              ))) >= 4
+      )
+  )
+tags: 
+  - "Callback Phishing"
+  - "Customer service fraud"
