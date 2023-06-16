@@ -1,0 +1,77 @@
+name: Remove Stale from test-rules Branch
+# This exists because the 'Remove from test-rules Branch' workflow won't work on PRs opened from a fork because it
+# won't have permissions. This will just retroactively clean anything by running every few minutes and removing anything
+# that doesn't reference an open PR.
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch: {}
+
+jobs:
+  remove-stale:
+    runs-on: ubuntu-20.04
+    permissions:
+      contents: write
+      pull-requests: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+        with:
+          ref: "test-rules"
+          path: destination
+
+      - name: Get Open PRs
+        id: open_prs
+        uses: actions/github-script@v4
+        with:
+          script: |
+            github.pulls.list({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open'
+            }).then((result) => {
+              const openPRs = result.data.map(pr => pr.number);
+              console.log(`::set-output name=open_prs::${openPRs.join(',')}`);
+            });
+
+      - name: Delete stale test files
+        env:
+          OPEN_PRS: ${{ steps.open_prs.outputs.open_prs }}
+        run: |
+          echo "Scheduled cleanup" > message.txt
+          echo "" >> message.txt
+          
+          cd destination
+          files=$(ls **/*.yml) || true
+
+          for file in $files; do
+            file_pr_num=$(yq '.testing_pr' $file)            
+            in_open_pr=false
+          
+            IFS=',' read -ra PR_ARRAY <<< "$OPEN_PRS"
+            for pr_num in "${PR_ARRAY[@]}"; do
+              if [[ "$pr_num" = "$file_pr_num" ]]; then
+                in_open_pr=true
+              fi
+            done
+          
+            if [[ "$in_open_pr" = "false" ]]; then
+                rm $file
+                echo "Removed $pr_num" >> ../message.txt
+            fi
+          done
+          
+          if [[ -z $(git status --porcelain) ]]; then
+            echo "Nothing to do"
+            exit 0
+          fi
+          
+          git add -A
+          
+          git config --global user.name 'Sublime Rule Testing Bot'
+          git config --global user.email 'hello@sublimesecurity.com'
+          
+          git commit --allow-empty -F ../message.txt
+          git push origin test-rules
+
