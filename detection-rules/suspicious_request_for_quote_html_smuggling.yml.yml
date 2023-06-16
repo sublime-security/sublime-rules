@@ -1,0 +1,16 @@
+name: "Request for Quote or Purchase (RFQ|RFP) with HTML smuggling attachment"
+description: |
+  RFQ/RFP scams involve fraudulent emails posing as legitimate requests for quotations or purchases, often sent by scammers impersonating reputable organizations.
+  These scams aim to deceive recipients into providing sensitive information or conducting unauthorized transactions, often leading to financial loss, or data leakage.
+references:
+type: "rule"
+severity: "high"
+source: "type.inbound\n\n// RFP/RFQ language\nand 1 of (\n    (\n        regex.icontains(coalesce(body.html.display_text, body.plain.raw), '(discuss.{0,15}purchas(e|ing))')\n    ),\n    (\n        regex.icontains(coalesce(body.html.display_text, body.plain.raw), '(sign(ed?)|view).{0,10}(purchase order)|Request for a Quot(e|ation)')\n    ),\n    (\n        regex.icontains(coalesce(body.html.display_text, body.plain.raw), '(please|kindly).{0,30}quote')\n    ),\n    (\n        regex.icontains(subject.subject, '(request for (purchase|quot(e|ation))|\\bRFQ\\b|\\bRFP\\b)')\n    ),\n    (\n        any(attachments, regex.icontains(.file_name, \"(purchase.?order|Quot(e|ation))\"))\n    ),\n    (\n        any(ml.nlu_classifier(coalesce(\n            body.html.display_text, body.plain.raw)).entities, .name == \"request\") \n        and \n        any(ml.nlu_classifier(coalesce(\n            body.html.display_text, body.plain.raw)).entities,.name == \"urgency\")\n    ),\n    (\n        any(ml.nlu_classifier(coalesce(\n            body.html.display_text, body.plain.raw)).tags,.name == \"purchase_order\" and .confidence == \"high\")\n    )\n)\n\n// HTML smuggling\nand any(attachments, \n    (\n        .file_extension in~ (\"html\", \"htm\", \"shtml\", \"dhtml\") or\n        .file_extension in~ $file_extensions_common_archives or\n        .file_type == \"html\"\n    )\n    and any(file.explode(.),\n        (\n            length(filter(.scan.javascript.identifiers, strings.like (., \"document\", \"write\", \"atob\"))) == 3\n            // usage: document['write'](atob)\n            or any(.scan.strings.strings, strings.ilike(., \"*document*write*atob*\"))\n            // usage: some_var = atob();\n            or any(.scan.strings.strings, strings.ilike(., \"*=*atob*;\"))\n            // usage: obfuscating \"atob\"\n            or any(.scan.javascript.identifiers, strings.ilike(., '*ato\\u0062*'))\n            // usage: document.head.insertAdjacentHTML(\"beforeend\", atob(...\n            or \n                any(.scan.strings.strings, strings.ilike(.,\n                    \"*document*write*atob*\",\n                    \"*document*insertAdjacentHTML*atob*\"))\n        )\n    )\n)\n"
+tags:
+  - "RFP"
+  - "RFQ"
+  - "Suspicious attachment"
+  - "HTML smuggling"
+  - "Natural Language Understanding"
+testing_pr: 542
+testing_sha: 4854743e48b0fe76efbece75596374a711cd243c
