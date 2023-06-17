@@ -1,0 +1,40 @@
+name: "Attachment: Embedded VBScript in MHT file (unsolicited)"
+description: |
+  MHT files can be used to run VBScript, which can run malicious code.
+references:
+  - "https://delivr.to/payloads?id=edc7744f-78bc-4c18-9554-58c35ba9aca5"
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+
+  and any(attachments,
+      (
+          .file_extension =~ "mht" or
+          .file_extension in~ $file_extensions_common_archives
+      )
+
+      // ensure there's an mht file (if it's in an archive)
+      and any(file.explode(.), .file_extension =~ "mht")
+
+      and any(file.explode(.),
+          any(.scan.html.scripts, .language == "VBScript")
+      )
+  )
+
+  // unsolicited
+  and (
+          (
+              sender.email.domain.root_domain in $free_email_providers
+              and sender.email.email not in $recipient_emails
+          )
+          or (
+              sender.email.domain.root_domain not in $free_email_providers
+              and sender.email.domain.domain not in $recipient_domains
+          )
+  )
+tags:
+  - "Suspicious attachment"
+  - "Malware"
+testing_pr: 546
+testing_sha: 3a34e3fff2550e81b1fe50bcde36bbaa17890149
