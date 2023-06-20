@@ -1,0 +1,45 @@
+name: "Attachment: Microsoft image with QR code"
+description: |
+  Detects messages using Microsoft image based lures, referencing a QR code from an Unsolicited sender. These messages often lead users to phishing sites or initiate unwanted downloads upon scanning.
+references:
+  
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and any(attachments, .file_type  in~ ('png', 'jpeg', 'jpg', 'bmp'))
+  and any(attachments, 
+          .file_type in~ ('bmp', 'png', 'jpg', 'jpeg')
+          and any(beta.logo_detect(.).brands, .name in~ ("Microsoft", "Office365"))
+      )
+  and any(attachments,
+      .file_type in~ ('bmp', 'png', 'jpg', 'jpeg')
+      and (
+          any(file.explode(.),
+              any(.scan.strings.strings, regex.icontains(.,  'scan|camera'))   
+              and any(.scan.strings.strings, regex.icontains(.,  '\bQR\b|Q\.R\.|barcode'))
+      )
+  )   
+  
+  )
+  and (
+      not any(headers.hops, .authentication_results.compauth.verdict is not null
+      and .authentication_results.compauth.verdict == "pass"
+      and sender.email.domain.domain == "microsoft.com")
+  )
+  // unsolicited
+  and (
+      (
+          sender.email.domain.root_domain in $free_email_providers
+          and sender.email.email not in $recipient_emails
+      )
+      or (
+          sender.email.domain.root_domain not in $free_email_providers
+          and sender.email.domain.domain not in $recipient_domains
+      )
+  )
+  
+tags: 
+  - "Suspicious attachment"
+  - "Brand impersonation"
+  - "QR code"
