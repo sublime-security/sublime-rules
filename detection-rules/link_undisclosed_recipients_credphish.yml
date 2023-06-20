@@ -1,0 +1,28 @@
+name: "Link: Credential Phishing link with Undisclosed Recipients"
+description: |
+  This rule detects messages with "Undisclosed Recipients" that contain a link to a credential phishing page. 
+references:
+  
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  // No Recipients
+    and (
+        length(recipients.to) == 0
+        or all(recipients.to, .display_name == "Undisclosed recipients")
+    )
+    and length(recipients.cc) == 0
+    and length(recipients.bcc) == 0
+  
+  and (
+      any(body.links,
+          any([beta.linkanalysis(.)],
+              .credphish.disposition == "phishing"
+              and .credphish.confidence in ("medium", "high")
+          )
+      )
+  )
+tags: 
+  - "Suspicious headers"
+  - "Suspicious link"
