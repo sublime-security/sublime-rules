@@ -1,0 +1,15 @@
+name: "Attachment: PDF with suspicious language and redirect to suspicious file type"
+description: |
+  Attached PDF contains credential theft language, and links to an open redirect to a suspicious file type. This has been observed in-the-wild as a Qakbot technique.
+references:
+  - "https://delivr.to/payloads?id=b2288482-916a-4484-8a0b-bd3b33d93b11"
+type: "rule"
+severity: "high"
+source: "type.inbound \nand any(attachments, .file_type == \"pdf\"\nand any(file.explode(.), \n        any(ml.nlu_classifier(.scan.ocr.raw).intents, \n            .name == \"cred_theft\" and .confidence in~ (\"medium\", \"high\")\n        )\n        and any(.scan.url.urls, \n            strings.icontains(beta.linkanalysis(.).final_dom.display_text, \"Redirect Notice\")\n            and (\n                strings.contains(beta.linkanalysis(.).final_dom.display_text, \".zip\")\n                or strings.contains(beta.linkanalysis(.).final_dom.display_text, \".php\")\n            )\n        )\n    )\n)\n"
+tags:
+  - "Natural Language Understanding"
+  - "Suspicious attachment"
+  - "Suspicious link"
+  - "QakBot"
+testing_pr: 566
+testing_sha: 8291dc6f2d85c04181b6a650f259bdcab93a860b
