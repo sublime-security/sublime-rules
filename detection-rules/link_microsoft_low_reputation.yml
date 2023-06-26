@@ -1,0 +1,91 @@
+name: "Brand impersonation: Microsoft with low reputation links"
+description: "Detects low reputation links with Microsoft specific indicators in the body."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  // suspicious link
+  and any(body.links,
+      (
+          .href_url.domain.domain not in $tranco_1m or
+          .href_url.domain.domain in $free_file_hosts or
+          .href_url.domain.root_domain in $free_subdomain_hosts or
+          .href_url.domain.domain in $url_shorteners or
+
+          // mass mailer link, masks the actual URL
+          .href_url.domain.root_domain in (
+              "hubspotlinks.com",
+              "mandrillapp.com",
+              "sendgrid.net",
+          )
+      )
+      
+      // exclude sources of potential FPs
+      and .href_url.domain.root_domain not in ("svc.ms", "sharepoint.com", "1drv.ms")
+  )
+
+  // not a reply
+  and (
+      length(headers.references) == 0
+      or not any(headers.hops, any(.fields, strings.ilike(.name, "In-Reply-To")))
+  )
+
+  // Microsoft logo
+  and any(attachments,
+      .file_type in ('png', 'jpeg', 'jpg', 'bmp')
+      and any(ml.logo_detect(.).brands, .name in ("Microsoft", "Office365", "Outlook"))
+  )
+
+  // suspicious content
+  and (
+      (
+          strings.ilike(body.plain.raw, "*password*", "*document*", "*voicemail*", "*cache*", "*fax*", "*storage*", "*quota*")
+          and strings.ilike(body.plain.raw, "*terminated*", "*review*", "*expire*", "*click*", "*view*", "*exceed*", "*clear*", "*only works*")
+      )
+      or (
+          any(attachments,
+          .file_type in ('png', 'jpeg', 'jpg', 'bmp')
+          and any(file.explode(.),
+              strings.ilike(.scan.ocr.raw, "*password*", "*document*", "*voicemail*", "*cache*", "*fax*", "*storage*", "*quota*")
+              and strings.ilike(.scan.ocr.raw, "*terminated*", "*review*", "*expire*", "*click*", "*view*", "*exceed*", "*clear*", "*only works*")
+              )
+          )
+      )
+  )
+
+  and (
+      any(ml.nlu_classifier(body.html.inner_text).intents,
+          .name == "cred_theft" and .confidence in~ ("medium", "high")
+      )
+
+      or any(attachments,
+          .file_type in ('png', 'jpeg', 'jpg', 'bmp')
+          and any(file.explode(.),
+              any(ml.nlu_classifier(.scan.ocr.raw).intents,
+                  .name == "cred_theft"
+              )
+          )
+      )
+
+      or any(ml.nlu_classifier(body.html.inner_text).entities,
+          .name == "urgency"
+      )
+  )
+
+  and sender.email.domain.root_domain not in $org_domains
+
+  and sender.email.domain.root_domain not in (
+      "bing.com",
+      "microsoft.com",
+      "microsoftonline.com",
+      "microsoftsupport.com",
+      "microsoft365.com",
+      "office.com",
+      "onedrive.com",
+      "sharepointonline.com",
+      "yammer.com",
+  )
+tags:
+  - "Suspicious link"
+  - "Brand impersonation"
+  - "Computer Vision"
