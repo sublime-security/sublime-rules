@@ -1,0 +1,54 @@
+name: "Suspicious Sender originating from a VPS provider"
+description: |
+  This rule detects messages with specific characteristics indicating they are sent from a Virtual Private Server (VPS) provider. VPS providers offer flexible and anonymous hosting services, making them attractive to malicious actors who want to send malicious emails or engage in other illicit activities.  It also requires at least 1 suspicious sending techniques. 
+references:
+  
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and 1 of (
+  
+      // recipient == sender
+      (
+          any(recipients.to, .email.email == sender.email.email)
+      ),
+      (
+          // sender domain is in org domains
+          sender.email.domain.root_domain in $org_domains
+      ),
+      (
+          // recipients undisclosed
+          (
+              length(recipients.to) == 0
+              or all(recipients.to, .display_name == "Undisclosed recipients")
+          )
+          and length(recipients.cc) == 0
+          and length(recipients.bcc) == 0
+      ),
+          // sender is freemail, reply-to does not match sender, and no one in your org has communicated with the reply-to
+      (
+          sender.email.domain.root_domain in $free_email_providers
+          and any(headers.reply_to, .email.email != sender.email.email)
+          and any(headers.reply_to, .email.email not in $recipient_emails)
+      )
+  )
+  
+  // vps provider in first hop
+  and any(headers.hops, .index ==0
+      and any(.fields, .name == "Received" and (
+        strings.contains(.value, "by.rootlayer.net") or
+        strings.contains(.value, "by.vultr.com") or
+        strings.contains(.value, "by.linode.com") or
+        strings.contains(.value, "by.digitalocean.com") or
+        strings.contains(.value, "by.ovh.com") or
+        strings.contains(.value, "by.hetzner.com") or
+        strings.contains(.value, "by.upcloud.com") or
+        regex.icontains(.value, '\bvps\b')
+        )
+      )
+  )
+tags: 
+  - "Suspicious sender"
+  - "Suspicious headers"
+  - "VPS"
