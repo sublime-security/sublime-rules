@@ -1,0 +1,45 @@
+name: "Microsoft Device Code Phishing"
+description: |
+  An attacker may generate a user code and send it to a target mailbox. With an appropriate lure, the targeted user may action the device code login and provide an attacker with the means to take over their account.
+
+  This rule looks for the presence of the Microsoft device login portal link, as well as mentions of 'device code' or a 9 character alphanumeric device code value.
+type: "rule"
+authors:
+  - twitter: "ajpc500"
+references:
+  - "https://aadinternals.com/post/phishing/"
+  - "https://0xboku.com/2021/07/12/ArtOfDeviceCodePhish.html"
+  - "https://www.inversecos.com/2022/12/how-to-detect-malicious-oauth-device.html"
+severity: "medium"
+source: |
+  type.inbound
+
+  // Not from MS as the device code will be generated and sent by the attacker
+  and sender.email.domain.root_domain not in~ ("microsoft.com", "microsoftonline.com")
+
+  // Link to the device code MS pages
+  and any(body.links, (
+      .href_url.url == "https://microsoft.com/devicelogin" or
+      .href_url.url == "https://login.microsoftonline.com/common/oauth2/deviceauth")
+  )
+
+  // Body text references device codes
+  and (
+      strings.icontains(body.html.display_text, "device code") or 
+      // A nine character string containing a combination of letters and characters
+      regex.icontains(body.html.display_text, '[\W]([A-Z0-9]{9})[\W]')
+  )
+
+  // Unsolicited
+  and (
+    (
+        sender.email.domain.root_domain in $free_email_providers
+        and sender.email.email not in $recipient_emails
+    )
+    or (
+        sender.email.domain.root_domain not in $free_email_providers
+        and sender.email.domain.domain not in $recipient_domains
+    )
+  )
+tags:
+  - "Suspicious link"

@@ -1,23 +1,33 @@
 name: "Attachment: HTML smuggling with atob and high entropy"
 description: |
   Recursively scans files and archives to detect HTML smuggling techniques.
+references:
+  - "https://delivr.to/payloads?id=7dbf0d83-1557-4345-bf67-d18c4256b0c1"
 type: "rule"
 severity: "high"
 source: |
   type.inbound
-  and any(attachments, .size <= 15000 and
+  and any(attachments, .size <= 60000 and
       (
           .file_extension in~ ("html", "htm", "shtml", "dhtml") or
           .file_extension in~ $file_extensions_common_archives or
           .file_type == "html"
       )
-      and any(beta.binexplode(.),
+      and any(file.explode(.),
           .scan.entropy.entropy >= 5
           and (
-              all(["document", "write", "atob"], . in ..scan.javascript.identifiers)
-              
+              length(filter(.scan.javascript.identifiers, strings.like (., "document", "write", "atob"))) == 3
               // usage: document['write'](atob)
               or any(.scan.strings.strings, strings.ilike(., "*document*write*atob*"))
+              // usage: some_var = atob();
+              or any(.scan.strings.strings, strings.ilike(., "*=*atob*;"))
+              // usage: obfuscating "atob"
+              or any(.scan.javascript.identifiers, strings.ilike(., '*ato\u0062*'))
+              // usage: document.head.insertAdjacentHTML("beforeend", atob(...
+              or 
+                  any(.scan.strings.strings, strings.ilike(.,
+                      "*document*write*atob*",
+                      "*document*insertAdjacentHTML*atob*"))
           )
       )
   )

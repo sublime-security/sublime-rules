@@ -9,14 +9,17 @@ type: "rule"
 severity: "low"
 source: |
   type.inbound
+  and not any(headers.hops, any(.fields, .name == 'X-Amazon-Mail-Relay-Type' and .value == "notification"))
   and (
-      strings.ilike(sender.display_name, '*amazon.com*','*amazon pay*','*amazon marketplace*')
+      regex.icontains(sender.display_name, '\b[aaa𝝰aａ𝑎𝗮𝕒𝖆𝓪𝚊𝞪аɑα𝔞𝒂𝘢𝛂⍺𝒶𝙖𝜶𝛼𝐚𝖺]maz[o0]n\s?(pay|marketplace|\.com)')
       or strings.ilevenshtein(sender.display_name, 'amazon.com') <= 1
       or strings.ilevenshtein(sender.display_name, 'amazon pay') <= 1
       or strings.ilevenshtein(sender.display_name, 'amazon marketplace') <= 1
+      or (strings.ilevenshtein(sender.display_name, 'amazon') <= 1 and sender.email.domain.root_domain in $free_email_providers)
   )
   and sender.email.domain.root_domain not in~ (
     'amazon.com',
+    'amazon.com.au',
     'amazon.co.uk',
     'amazon.de',
     'amazon.es',
@@ -36,8 +39,10 @@ source: |
     'amazon.com.tr',
     'amazonpay.in',
     'amazonpay.com',
+    'synchronybank.com',
   )
   and sender.email.email not in $recipient_emails
+  and sender.email.domain.domain not in $org_domains
 tags:
   - "Brand impersonation"
   - "Suspicious sender"
