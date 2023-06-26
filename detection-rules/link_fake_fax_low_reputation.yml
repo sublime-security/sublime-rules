@@ -1,0 +1,72 @@
+name: "Brand Impersonation: Fake fax with low reputation link"
+description: "Detects messages with low reputation links, presence of brand logos and mentions of \"fax\" in subject, sender or body from a first-time sender. \n"
+references:
+  - "https://www.hoxhunt.com/blog/fax-phishing"
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and 0 < length(body.links) < 5
+  and sender.email.domain.root_domain not in $org_domains
+  and any(body.links,
+      (
+          .href_url.domain.domain not in $tranco_1m or
+          .href_url.domain.domain in $free_file_hosts or
+          .href_url.domain.root_domain in $free_subdomain_hosts or
+          .href_url.domain.domain in $url_shorteners or
+
+          // mass mailer link, masks the actual URL
+          .href_url.domain.root_domain in (
+              "hubspotlinks.com",
+              "mandrillapp.com",
+              "sendgrid.net",
+          )
+      )
+  )
+
+  // any brand logo detected
+  and (
+      any(attachments,
+          .file_type in ('png', 'jpeg', 'jpg', 'bmp')
+          and any(ml.logo_detect(.).brands, .name is not null)
+      )
+      or any(ml.logo_detect(beta.message_screenshot()).brands,
+          .name is not null)
+  )
+
+  // Subject or sender contains fax
+  and (
+      strings.icontains(subject.subject, "fax") or
+      strings.icontains(sender.display_name, "fax")
+  )
+
+  // suspicious content
+  and (
+          strings.ilike(body.plain.raw, "*fax*")
+      or (
+          any(attachments,
+              .file_type in ('png', 'jpeg', 'jpg', 'bmp')
+              and any(file.explode(.),
+                  strings.ilike(.scan.ocr.raw, "*fax*")
+              )
+          )
+      )
+  )
+
+  // first time sender
+  and (
+          (
+              sender.email.domain.root_domain in $free_email_providers
+              and sender.email.email not in $sender_emails
+          )
+          or (
+              sender.email.domain.root_domain not in $free_email_providers
+              and sender.email.domain.domain not in $sender_domains
+          )
+  )
+tags:
+  - "Brand impersonation"
+  - "Suspicious content"
+  - "Suspicious link"
+testing_pr: 573
+testing_sha: ec560e8b7d5c53f360694642cf36420eb6cfc1a0
