@@ -1,7 +1,8 @@
 name: "Link: Multi-Factor Authentication phishing via QR code"
 description: |
-  This rule detects the verbiage related to Multi-factor authentication in the subject, body or attachments. The rule also checks for the presence of a QR code with a URL
-  that contains the recipients email address, from an unsolicited sender.
+  This rule detects the verbiage related to Multi-factor authentication in the subject, body or attachments. The rule also checks for the presence of a QR code with a URL that contains the recipients email address, from an unsolicited sender.
+references:
+  
 type: "rule"
 severity: "medium"
 source: |
@@ -9,16 +10,10 @@ source: |
   
   // body html, plain.raw subject or any attachments contain QR|2fa|MFA|Multi factor authentiation
   
-  and 1 of (
-      (
-          regex.icontains(subject.subject, '(\b2fa\b|\bQ.?R\.?\s?\b|MFA|Muti[ -]?Factor Auth(entication)?)')
-      ),
-      (
-          regex.icontains(body.html.display_text, '(\b2fa\b|\bQ.?R\.?\s?\b|MFA|Muti[ -]?Factor Auth(entication)?)')
-      ),
-      (
-          regex.icontains(body.plain.raw, '(\b2fa\b|\bQ.?R\.?\s?\b|MFA|Muti[ -]?Factor Auth(entication)?)')
-      ),
+  and (
+      regex.icontains(subject.subject, '(\b2fa\b|\bQ.?R\.?\s?\b|MFA|Muti[ -]?Factor Auth(entication)?)') or
+      regex.icontains(body.html.display_text, '(\b2fa\b|\bQ.?R\.?\s?\b|MFA|Muti[ -]?Factor Auth(entication)?)') or
+      regex.icontains(body.plain.raw, '(\b2fa\b|\bQ.?R\.?\s?\b|MFA|Muti[ -]?Factor Auth(entication)?)') or
       (
           any(attachments,
               .file_type in~ ('bmp', 'png', 'jpg', 'jpeg', 'gif')
@@ -31,18 +26,17 @@ source: |
   )
   
   // QR code is present in attachment & recipient email address is present in the URL, a common tactic used in credential phishing attacks
-  and any(attachments,
+  and (
+      any(attachments,
       .file_type in~ ('bmp', 'png', 'jpg', 'jpeg', 'gif')
           and any(file.explode(.), .scan.qr.data is not null
           and any(recipients.to, strings.icontains(..scan.qr.data, .email.email))
-      )
-  
-  // QR code is present in-line & recipient email address is present in the URL, a common tactic used in credential phishing attacks
-      or (
-          any(file.explode(beta.message_screenshot()), .scan.qr.data is not null 
-              and any(recipients.to, strings.icontains(..scan.qr.data, .email.email))
           )
       )
+      or (
+          any(file.explode(beta.message_screenshot()), .scan.qr.data is not null 
+              and any(recipients.to, strings.icontains(..scan.qr.data, .email.email)))
+          )
   )
   
   // unsolicited
@@ -56,6 +50,7 @@ source: |
               and sender.email.domain.domain not in $recipient_domains
           )
   )
+  
 tags: 
   - "QR code"
   - "Suspicious Link"
