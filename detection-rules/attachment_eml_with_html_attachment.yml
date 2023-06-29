@@ -1,6 +1,8 @@
 name: "Attachment: EML file with HTML attachment"
 description: |
-  Detects HTML files in EML attachments to reduce HTML smuggling attack surface.
+  Detects HTML files in EML attachments from unsolicited senders.
+
+  Reduces attack surface against HTML smuggling.
 type: "rule"
 severity: "medium"
 source: |
@@ -40,7 +42,17 @@ source: |
       strings.contains(body.html.display_text, .)
   )
 
-  // to add later - high risk sender
+  // unsolicited
+  and (
+          (
+              sender.email.domain.root_domain in $free_email_providers
+              and sender.email.email not in $recipient_emails
+          )
+          or (
+              sender.email.domain.root_domain not in $free_email_providers
+              and sender.email.domain.domain not in $recipient_domains
+          )
+  )
 tags:
   - "Suspicious attachment"
   - "HTML smuggling"
