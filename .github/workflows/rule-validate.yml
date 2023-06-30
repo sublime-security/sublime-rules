@@ -37,6 +37,20 @@ jobs:
             fi
           done
 
+      - name: Validate Insights and Signals
+        run: |
+          for f in {insights,signals}/**/*.yml
+          do
+            echo "Processing $f"
+            http_code=$(yq eval 'del(.type) | .source = "length([\n\n" + .source + "\n]) >= 0"' "$f" -o=json | curl -H "Content-Type: application/json" -X POST --data-binary @- -o response.txt -w "%{http_code}" --silent https://playground.sublimesecurity.com/v1/rules/validate)
+            echo '' >> response.txt
+            cat response.txt
+            if [[ "$http_code" != "200" ]]; then
+              echo "Unexpected response $http_code"
+              exit 1
+            fi
+          done
+
       - name: Verify no .yaml files exist
         run: |
           ! /bin/sh -c 'ls **/*.yaml'
