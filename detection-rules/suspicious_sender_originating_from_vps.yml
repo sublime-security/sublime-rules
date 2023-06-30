@@ -4,26 +4,19 @@ type: "rule"
 severity: "medium"
 source: |
   type.inbound
-  and 1 of (
-
-          // recipient == sender
+  and (
+      any(recipients.to, .email.email == sender.email.email) or
+      sender.email.domain.root_domain in $org_domains or
+      // recipients undisclosed
       (
-          any(recipients.to, .email.email == sender.email.email)
-      ),
-      (
-          // sender domain is in org domains
-          sender.email.domain.root_domain in $org_domains
-      ),
-      (
-          // recipients undisclosed
           (
               length(recipients.to) == 0
               or all(recipients.to, .display_name == "Undisclosed recipients")
           )
           and length(recipients.cc) == 0
           and length(recipients.bcc) == 0
-      ),
-          // sender is freemail, reply-to does not match sender, and no one in your org has communicated with the reply-to
+      ) or
+      // sender is freemail, reply-to does not match sender, and no one in your org has communicated with the reply-to
       (
           sender.email.domain.root_domain in $free_email_providers
           and any(headers.reply_to, .email.email != sender.email.email)
@@ -33,16 +26,17 @@ source: |
 
   // vps provider in first hop
   and any(headers.hops, .index ==0
-      and any(.fields, .name == "Received" and (
-        strings.contains(.value, "by.rootlayer.net") or
-        strings.contains(.value, "by.vultr.com") or
-        strings.contains(.value, "by.linode.com") or
-        strings.contains(.value, "by.digitalocean.com") or
-        strings.contains(.value, "by.ovh.com") or
-        strings.contains(.value, "by.hetzner.com") or
-        strings.contains(.value, "by.upcloud.com") or
-        regex.icontains(.value, '\bvps\b')
-        )
+      and any(.fields, .name == "Received"
+          and (
+              strings.contains(.value, "by.rootlayer.net") or
+              strings.contains(.value, "by.vultr.com") or
+              strings.contains(.value, "by.linode.com") or
+              strings.contains(.value, "by.digitalocean.com") or
+              strings.contains(.value, "by.ovh.com") or
+              strings.contains(.value, "by.hetzner.com") or
+              strings.contains(.value, "by.upcloud.com") or
+              regex.icontains(.value, '\bvps\b')
+          )
       )
   )
 tags:
@@ -50,4 +44,4 @@ tags:
   - "Suspicious headers"
   - "VPS"
 testing_pr: 569
-testing_sha: 0707d3a7b9426ea7d2efe66522b4d245520da791
+testing_sha: f8331de0ca488bc3d5d3068920c308d6a7236a8a
