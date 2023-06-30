@@ -7,26 +7,19 @@ type: "rule"
 severity: "medium"
 source: |
   type.inbound
-  and 1 of (
-  
-          // recipient == sender
+  and (
+      any(recipients.to, .email.email == sender.email.email) or
+      sender.email.domain.root_domain in $org_domains or
+      // recipients undisclosed
       (
-          any(recipients.to, .email.email == sender.email.email)
-      ),
-      (
-          // sender domain is in org domains
-          sender.email.domain.root_domain in $org_domains
-      ),
-      (
-          // recipients undisclosed
           (
               length(recipients.to) == 0
               or all(recipients.to, .display_name == "Undisclosed recipients")
           )
           and length(recipients.cc) == 0
           and length(recipients.bcc) == 0
-      ),
-          // sender is freemail, reply-to does not match sender, and no one in your org has communicated with the reply-to
+      ) or
+      // sender is freemail, reply-to does not match sender, and no one in your org has communicated with the reply-to
       (
           sender.email.domain.root_domain in $free_email_providers
           and any(headers.reply_to, .email.email != sender.email.email)
