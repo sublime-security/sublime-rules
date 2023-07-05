@@ -1,18 +1,48 @@
-name: "Body: Microsoft logo and Bing open redirect"
+name: "Body: Microsoft logo or Suspicious Language and Bing open redirect"
 description: |
-  Email contains a Microsoft logo and use of the Bing open redirect. This has been exploited in the wild to impersonate Microsoft.
+  Email contains a Microsoft logo or suspicious terms and use of the Bing open redirect. This has been exploited in the wild to impersonate Microsoft.
 type: "rule"
 severity: "high"
 source: |
   type.inbound
-  
+
   // Microsoft logo
   and (
       any(attachments,
           .file_type in ('png', 'jpeg', 'jpg', 'bmp')
-          and any(ml.logo_detect(.).brands, .name in ("Microsoft", "Office365", "Outlook"))
+          and any(ml.logo_detect(.).brands, .name in ("Microsoft", "Microsoft Sharepoint", "Office365", "Outlook"))
       )
-      or any(ml.logo_detect(beta.message_screenshot()).brands, .name in ("Microsoft", "Office365", "Outlook"))
+      or any(ml.logo_detect(beta.message_screenshot()).brands, .name in ("Microsoft", "Microsoft Sharepoint", "Office365", "Outlook"))
+      or 
+      any(attachments,
+          .file_type in~ ('bmp', 'png', 'jpg', 'jpeg')
+          and (
+              any(file.explode(.),
+                  length(filter(.scan.strings.strings, strings.ilike(.,
+                      "*password*",
+                      "*unread messages*",
+                      "*Shared Documents*",
+                      "*expiration*",
+                      "*office*",
+                      "*expire*",
+                      "*expiring*",
+                      "*kindly*",
+                      "*renew*",
+                      "*review",
+                      "*emails failed*",
+                      "*kicked out*",
+                      "*prevented*",
+                      "*storage quota*",
+                      "*required now",
+                      "*cache*",
+                      "*qr code*",
+                      "*barcode*",
+                      "*security update*",
+                      "*quarantine*"
+                  ))) >= 2
+              ) 
+          )
+      )
   )
   
   // Bing redirect
@@ -29,7 +59,7 @@ source: |
       "office.com",
       "onedrive.com",
       "sharepointonline.com",
-      "yammer.com",
+      "yammer.com"
   )
 tags: 
   - "Suspicious content"
