@@ -1,39 +1,12 @@
-name: "Body: Microsoft logo and Bing open redirect"
+name: "Body: Microsoft logo or Suspicious Language and Bing open redirect"
 description: |
-  Email contains a Microsoft logo and use of the Bing open redirect. This has been exploited in the wild to impersonate Microsoft.
+  Email contains a Microsoft logo or suspicious terms and use of the Bing open redirect. This has been exploited in the wild to impersonate Microsoft.
 type: "rule"
 severity: "high"
-source: |
-  type.inbound
-
-  // Microsoft logo
-  and (
-      any(attachments,
-          .file_type in ('png', 'jpeg', 'jpg', 'bmp')
-          and any(ml.logo_detect(.).brands, .name in ("Microsoft", "Office365", "Outlook"))
-      )
-      or any(ml.logo_detect(beta.message_screenshot()).brands, .name in ("Microsoft", "Office365", "Outlook"))
-  )
-
-  // Bing redirect
-  and any(body.links, .href_url.domain.root_domain == 'bing.com' and .href_url.path =~ '/ck/a')
-
-  and sender.email.domain.root_domain not in $org_domains
-
-  and sender.email.domain.root_domain not in (
-      "bing.com",
-      "microsoft.com",
-      "microsoftonline.com",
-      "microsoftsupport.com",
-      "microsoft365.com",
-      "office.com",
-      "onedrive.com",
-      "sharepointonline.com",
-      "yammer.com",
-  )
+source: "type.inbound\n\n// Microsoft logo\nand (\n    any(attachments,\n        .file_type in ('png', 'jpeg', 'jpg', 'bmp')\n        and any(ml.logo_detect(.).brands, .name in (\"Microsoft\", \"Microsoft Sharepoint\", \"Office365\", \"Outlook\"))\n    )\n    or any(ml.logo_detect(beta.message_screenshot()).brands, .name in (\"Microsoft\", \"Microsoft Sharepoint\", \"Office365\", \"Outlook\"))\n    or \n    any(attachments,\n        .file_type in~ ('bmp', 'png', 'jpg', 'jpeg')\n        and (\n            any(file.explode(.),\n                length(filter(.scan.strings.strings, strings.ilike(.,\n                    \"*password*\",\n                    \"*unread messages*\",\n                    \"*Shared Documents*\",\n                    \"*expiration*\",\n                    \"*office*\",\n                    \"*expire*\",\n                    \"*expiring*\",\n                    \"*kindly*\",\n                    \"*renew*\",\n                    \"*review\",\n                    \"*emails failed*\",\n                    \"*kicked out*\",\n                    \"*prevented*\",\n                    \"*storage quota*\",\n                    \"*required now\",\n                    \"*cache*\",\n                    \"*qr code*\",\n                    \"*barcode*\",\n                    \"*security update*\",\n                    \"*quarantine*\"\n                ))) >= 2\n            ) \n        )\n    )\n)\n\n// Bing redirect\nand any(body.links, .href_url.domain.root_domain == 'bing.com' and .href_url.path =~ '/ck/a')\n\nand sender.email.domain.root_domain not in $org_domains\n\nand sender.email.domain.root_domain not in (\n    \"bing.com\",\n    \"microsoft.com\",\n    \"microsoftonline.com\",\n    \"microsoftsupport.com\",\n    \"microsoft365.com\",\n    \"office.com\",\n    \"onedrive.com\",\n    \"sharepointonline.com\",\n    \"yammer.com\"\n)\n"
 tags:
   - "Suspicious content"
   - "Brand impersonation"
   - "Suspicious link"
 testing_pr: 589
-testing_sha: dce13a0b23f90bb144f98d71b5f80557b5bb45ba
+testing_sha: 89988e07e67c09b84661b24a673824d8e3cc3cea
