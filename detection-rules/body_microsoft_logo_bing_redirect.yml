@@ -1,0 +1,66 @@
+name: "Body: Microsoft logo or Suspicious Language and Bing open redirect"
+description: |
+  Email contains a Microsoft logo or suspicious terms and use of the Bing open redirect. This has been exploited in the wild to impersonate Microsoft.
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+
+  // Microsoft logo
+  and (
+      any(attachments,
+          .file_type in ('png', 'jpeg', 'jpg', 'bmp')
+          and any(ml.logo_detect(.).brands, strings.starts_with(.name, "Microsoft"))
+      )
+      or 
+      any(attachments,
+          .file_type in~ ('bmp', 'png', 'jpg', 'jpeg')
+          and (
+              any(file.explode(.),
+                  length(filter(.scan.strings.strings, strings.ilike(.,
+                      "*password*",
+                      "*unread messages*",
+                      "*Shared Documents*",
+                      "*expiration*",
+                      "*office*",
+                      "*expire*",
+                      "*expiring*",
+                      "*kindly*",
+                      "*renew*",
+                      "*review",
+                      "*emails failed*",
+                      "*kicked out*",
+                      "*prevented*",
+                      "*storage quota*",
+                      "*required now",
+                      "*cache*",
+                      "*qr code*",
+                      "*barcode*",
+                      "*security update*",
+                      "*quarantine*"
+                  ))) >= 2
+              ) 
+          )
+      )
+  )
+  
+  // Bing redirect
+  and any(body.links, .href_url.domain.root_domain == 'bing.com' and .href_url.path =~ '/ck/a')
+  
+  and sender.email.domain.root_domain not in $org_domains
+  
+  and sender.email.domain.root_domain not in (
+      "bing.com",
+      "microsoft.com",
+      "microsoftonline.com",
+      "microsoftsupport.com",
+      "microsoft365.com",
+      "office.com",
+      "onedrive.com",
+      "sharepointonline.com",
+      "yammer.com"
+  )
+tags: 
+  - "Suspicious content"
+  - "Brand impersonation"
+  - "Suspicious link"
