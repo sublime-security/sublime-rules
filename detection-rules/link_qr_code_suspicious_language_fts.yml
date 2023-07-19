@@ -1,0 +1,52 @@
+name: "Link: QR Code with suspicious language (first-time sender) "
+description: |
+  This rule analyzes image attachments for QR Codes that contain URLs including the recipient's email address. It ensures that the URLs do not link to any organizational domains.
+  Additionally, it examines the email body using Natural Language Processing to detect credential phishing language.In cases of null bodies,
+  the rule is conditioned to check the image for any suspicious terms.
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  
+  // check image attachments for QR code, will want to add message.screenshot functionality here when it's ready
+  and any(attachments,
+      .file_type in~ ('bmp', 'png', 'jpg', 'jpeg', 'gif')
+      and any(file.explode(.), .scan.qr.type == "url"
+  
+          // recipient email address is present in the URL, a common tactic used in credential phishing attacks and the url is not in $org_domains
+          and any(recipients.to, strings.icontains(..scan.qr.data, .email.email))
+          and .scan.qr.url.domain.root_domain not in $org_domains
+      )
+  )
+  
+  // NLU has identified cred_theft language with high confidence
+  and (
+      any(ml.nlu_classifier(coalesce(body.html.display_text, body.plain.raw)).intents, .name == "cred_theft" and .confidence == "high")
+      or
+      // the attachment contains suspicious strings
+      (
+          any(attachments,
+              .file_type in~ ('bmp', 'png', 'jpg', 'jpeg', 'gif', 'pdf')
+              and any(file.explode(.), 
+                  any(.scan.strings.strings, regex.icontains(.,
+                    '(\b2fa\b|\bQ.?R\.?\s?\b|MFA|Muti[ -]?Factor Auth(entication)?)'))
+              )
+          )
+      )
+  )
+  
+  // first-time sender
+  and (
+            (
+                sender.email.domain.root_domain in $free_email_providers
+                and sender.email.email not in $sender_emails
+            )
+            or (
+                sender.email.domain.root_domain not in $free_email_providers
+                and sender.email.domain.domain not in $sender_domains
+            )
+  )
+tags: 
+  - "Suspicious Link"
+  - "Natural Language Understanding"
+  - "QR code"
