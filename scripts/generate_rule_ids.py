@@ -2,7 +2,7 @@ import os
 import yaml
 import uuid
 
-RULE_DIRS = ['detection-rules', 'discovery-rules']
+RULE_DIRS = ['detection-rules']
 
 
 def _uuid_from_string(string):
@@ -39,7 +39,9 @@ def generate_rule_ids():
 
                         # Generate a UUID from the file path and write it to the file
                         feed_rule_id = str(_uuid_from_string(full_file_path))
-                        write_buffer = 'id: "{}"\n'.format(feed_rule_id) + contents
+                        if not contents.endswith('\n'):
+                            contents += '\n'
+                        write_buffer = '{}id: "{}"\n'.format(contents, feed_rule_id)
                         with open(full_file_path, 'w') as f:
                             f.write(write_buffer)
                     except yaml.YAMLError as e:
