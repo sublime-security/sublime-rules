@@ -1,0 +1,12 @@
+name: "Suspicious newly registered reply-to domain with engaging financial or urgent language"
+description: "Detects messages from a mismatched newly registered Reply-to domain that contain a financial or urgent request, or a request and \nan NLU tag with medium to high confidence, from first time sender. This technique is typically observed in Vendor impersonation.\n"
+type: "rule"
+severity: "medium"
+source: "type.inbound\n\nand any(headers.reply_to,\n  // mismatched reply-to and sender domain\n  .email.domain.root_domain != sender.email.domain.root_domain\n\n  // newly registered reply-to domain\n  and beta.whois(.email.domain).days_old <= 30\n)\n     \n// request is being made\nand any(ml.nlu_classifier(body.current_thread.text).entities, .name == \"request\" \n)\n\n// there's financial/urgency OR a tag of medium/high confidence\nand (\n  (\n      any(ml.nlu_classifier(body.current_thread.text).entities, .name == \"financial\") \n      or any(ml.nlu_classifier(body.current_thread.text).entities, .name == \"urgency\")\n  )\n  \n  or any(ml.nlu_classifier(body.current_thread.text).tags,\n      .name is not null and .confidence in (\"medium\", \"high\")\n  )\n)\n\n// first-time sender\nand (\n        (\n            sender.email.domain.root_domain in $free_email_providers\n            and sender.email.email not in $sender_emails\n        )\n        or (\n            sender.email.domain.root_domain not in $free_email_providers\n            and sender.email.domain.domain not in $sender_domains\n        )\n)\n"
+tags:
+  - "Vendor impersonation"
+  - "Natural Language Understanding"
+  - "New domain"
+id: "db4d9bb3-0eca-5525-9a99-7c1c773b580f"
+testing_pr: 615
+testing_sha: 894b9d3638379502d7a84ba147714dd213e0f594

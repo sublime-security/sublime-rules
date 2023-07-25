@@ -1,0 +1,38 @@
+name: "Callback Phishing NLU body or attachment from first-time sender"
+description: |
+  Detects callback scams by analyzing text within images of receipts or invoices from first time senders.
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and (
+    any(attachments,
+        .file_type in ("png", "jpg", "pdf")
+        and any(file.explode(.),
+                any(ml.nlu_classifier(.scan.ocr.raw).intents,
+                    .name == "callback_scam" and .confidence == "high"
+                )
+        )
+    )
+    or any(ml.nlu_classifier(body.current_thread.text).intents,
+           .name in ("callback_scam") and .confidence == "high"
+    )
+  )
+  and (
+    (
+      sender.email.domain.root_domain in $free_email_providers
+      and sender.email.email not in $sender_emails
+    )
+    or (
+      sender.email.domain.root_domain not in $free_email_providers
+      and sender.email.domain.domain not in $sender_domains
+    )
+  )
+tags:
+  - "Machine Learning"
+  - "Customer service fraud"
+  - "Natural Language Understanding"
+  - "Callback Phishing"
+id: "b93c6f94-c9a3-587a-8eb5-6856754f8222"
+testing_pr: 615
+testing_sha: 894b9d3638379502d7a84ba147714dd213e0f594

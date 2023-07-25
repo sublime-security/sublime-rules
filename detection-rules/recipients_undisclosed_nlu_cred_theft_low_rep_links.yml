@@ -1,0 +1,13 @@
+name: "Suspicious Recipients pattern with NLU credential theft indicators"
+description: "Detects messages with undisclosed recipients (likely all bcc) and NLU identified a credential theft intent with medium to high confidence from a suspicious low reputation link domain"
+type: "rule"
+severity: "medium"
+source: "type.inbound\nand (\n    length(recipients.to) == 0\n    or all(recipients.to, .display_name == \"Undisclosed recipients\")\n)\nand length(recipients.cc) == 0\nand length(recipients.bcc) == 0\nand any(body.links, .href_url.domain.domain not in $tranco_1m)\n\nand (\n    any(body.links, regex.icontains(.display_text,\n        '(view|click|download|goto)?(attachment|download|file|online|document)s?')\n      or all(body.links, regex.contains(.display_text, \"^[A-Z ]+$\"))\n    )\n)\n\nand any(ml.nlu_classifier(body.current_thread.text).intents, \n      .name in (\"cred_theft\")\n      and .confidence in (\"medium\", \"high\")\n)\n"
+tags:
+  - "Suspicious sender"
+  - "Suspicious headers"
+  - "Suspicious link"
+  - "Natural Language Understanding"
+id: "8e121c3e-b9cf-5aa3-b799-e025a69b7d8c"
+testing_pr: 615
+testing_sha: 894b9d3638379502d7a84ba147714dd213e0f594
