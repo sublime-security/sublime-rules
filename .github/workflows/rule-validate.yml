@@ -91,6 +91,16 @@ jobs:
           git commit -m "Auto add rule ID"
           git push origin ${{ github.head_ref }}
 
+      - name: Get the head ref (eg branch)
+        id: get_head
+        run: git rev-parse HEAD > sha.txt
+
+      - name: Upload SHA for later job
+        uses: actions/upload-artifact@v3
+        with:
+          name: sha
+          path: sha.txt
+
   # When the rule-ids job adds a commit, GitHub won't trigger actions on the auto commit. Various alternatives
   # were explored, but all run into issues when dealing with forks (well we'll see if this does too).
   set-checks:
@@ -104,9 +114,15 @@ jobs:
       checks: write
 
     steps:
+
+      - name: Download SHA from Previous Job
+        uses: actions/download-artifact@v3
+        with:
+          name: sha
+
       - name: Get the head ref (eg branch)
         id: get_head
-        run: echo "##[set-output name=HEAD;]$(echo ${git rev-parse HEAD})"
+        run: echo "##[set-output name=HEAD;]$(echo ${cat sha.txt})"
 
       - name: "Create a check run"
         uses: actions/github-script@v6
