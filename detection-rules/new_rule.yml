@@ -1,0 +1,29 @@
+name: "Attachment: Any HTML file within archive (unsolicited)"
+description: |
+  Recursively scans archives to detect HTML files from unsolicited senders. 
+
+  HTML files can be used for HTML smuggling and embedded in archives to evade detection.
+references:
+  - "https://twitter.com/executemalware/status/1537569201577156611"
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and any(attachments,
+      .file_extension in~ $file_extensions_common_archives
+      and any(file.explode(.), .depth > 0
+          and .file_extension in~ ("html", "htm"))
+  )
+  and (
+          (
+              sender.email.domain.root_domain in $free_email_providers
+              and sender.email.email not in $recipient_emails
+          )
+          or (
+              sender.email.domain.root_domain not in $free_email_providers
+              and sender.email.domain.domain not in $recipient_domains
+          )
+  )
+tags:
+  - "Suspicious attachment"
+  - "Attack surface reduction"
