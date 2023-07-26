@@ -1,9 +1,8 @@
 name: Auto Add Rule ID
 
 on:
-#  pull_request:
-#    branches: [ "**" ]
-  workflow_dispatch: {}
+  pull_request:
+    branches: [ "**" ]
 
 concurrency:
   group: rule-ids-${{ github.ref }}
@@ -14,7 +13,7 @@ jobs:
     runs-on: ubuntu-20.04
 
     permissions:
-      contents: write
+      pull-requests: write
 
     steps:
       - name: Checkout
@@ -32,15 +31,13 @@ jobs:
           pip install -r scripts/generate-rule-ids/requirements.txt
           python scripts/generate-rule-ids/main.py
 
-      - name: Commit & Push Results, if needed
-        run: |
-          if [ -z "$(git status --porcelain)" ]; then 
-            echo "No files changed, nothing to do"
-            exit 0
-          fi
-  
-          git config user.name 'ID Generator'
-          git config user.email 'hello@sublimesecurity.com'
-          git add -A
-          git commit -m "Auto add rule ID"
-          git push origin ${{ github.head_ref }}
+      - name: Comment PR
+        uses: thollander/actions-comment-pull-request@v2
+        with:
+          comment_tag: set-rule-id
+          mode: upsert
+          message: |
+            Friendly robot here. Rule IDs allow us to track a rule even if the name or file name change. Please commit
+            the suggested change.            
+            
+            p.s. The recommended/normal flow is just to submit a PR without `id` set and let this comment happen.
