@@ -1,0 +1,30 @@
+name: "Attachment: Dropbox image lure with no Dropbox domains in links"
+description: "Detects Dropbox phishing emails with no dropbox links with image attachments from first time sender."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and length(filter(attachments, .file_type not in~ ('png', 'jpeg', 'jpg', 'bmp'))) == 0 
+  and any(body.links, not strings.ilike(.href_url.domain.root_domain, "dropbox.*"))
+  
+  and any(attachments, .file_type in~ ('png','jpg','jpeg','bmp')
+      and any(file.explode(.),
+      any(.scan.strings.strings, strings.ilike(., "*dropbox*"))
+       and any(.scan.strings.strings, strings.ilike(., "*review*", "*sign*"))
+      )
+  )
+
+  and (
+          (
+              sender.email.domain.root_domain in $free_email_providers
+              and sender.email.email not in $sender_emails
+          )
+          or (
+              sender.email.domain.root_domain not in $free_email_providers
+              and sender.email.domain.domain not in $sender_domains
+          )
+  )
+tags:
+  - "Suspicious link"
+  - "Brand impersonation"
+id: "500eee2d-d793-5450-a87f-825ce27c897d"

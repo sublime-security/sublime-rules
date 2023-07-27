@@ -1,27 +1,89 @@
-name: "Attachment: Office365 image"
+name: "Attachment: Office365 image (unsolicited)"
 description: |
   Looks for messages with an image attachment that contains words related to Microsoft, Office365, and passwords.
 type: "rule"
 severity: "medium"
-authors:
-  - twitter: "vector_sec"
 source: |
   type.inbound
-  and length(body.html.inner_text) < 100
-  and any(attachments, .file_extension in~ ('png','jpg','jpeg')
-      and any(beta.binexplode(.),
-          (
-              (
-                  any(.scan.strings.strings, strings.ilike(., "*microsoft*", "*office365*", "*office*")) and
-                  any(.scan.strings.strings, strings.ilike(., "*password*", "*expire*", "*expiry*"))
-              )
-          or
-              (
-                  strings.ilike(.scan.ocr.raw, "*microsoft*", "*office365*", "*office*") and
-                  strings.ilike(.scan.ocr.raw, "*password*", "*expire*", "*expiry*")
-              )
-          )
+  and length(filter(attachments, .file_type not in~ ('png', 'jpeg', 'jpg', 'bmp'))) == 0
+  and (
+      any(attachments, 
+          .file_type in~ ('bmp', 'png', 'jpg', 'jpeg')
+          and any(ml.logo_detect(.).brands, strings.starts_with(.name, "Microsoft"))
+      )
+      or any(attachments, 
+          .file_type in~ ('bmp', 'png', 'jpg', 'jpeg')
+          and any(file.explode(.),
+              strings.ilike(.scan.ocr.raw, "*microsoft*", "*office"))
+      )
+  )
+  and any(attachments,
+      .file_type in~ ('bmp', 'png', 'jpg', 'jpeg')
+      and (
+          any(file.explode(.),
+              length(filter(.scan.strings.strings, strings.ilike(.,
+              "*password*",
+              "*unread messages*",
+              "*Shared Documents*",
+              "*expiration*",
+              "*office*",
+              "*expire*",
+              "*expiring*",
+              "*kindly*",
+              "*renew*",
+              "*review",
+              "*emails failed*",
+              "*kicked out*",
+              "*prevented*",
+              "*storage quota*",
+              "*required now",
+              "*cache*",
+              "*qr code*",
+              "*barcode*",
+              "*security update*"
+              ))) >= 2     
+      ) 
+  )
+  or (
+          any(file.explode(.),
+              length(filter(["password",
+              "unread messages",
+              "Shared Documents",
+              "expiration",
+              "office",
+              "expire",
+              "expiring",
+              "kindly",
+              "renew",
+              "review",
+              "emails failed",
+              "kicked out",
+              "prevented",
+              "storage quota",
+              "required now",
+              "cache",
+              "qr code",
+              "security update"], strings.icontains(..scan.ocr.raw, .))) >= 2   
+      )
+  )    
+
+  )
+  and (
+      not any(headers.hops, .authentication_results.compauth.verdict is not null
+      and .authentication_results.compauth.verdict == "pass"
+      and sender.email.domain.domain in ("microsoft.com", "sharepointonline.com"))
+  )
+  // unsolicited
+  and (
+      (
+          sender.email.domain.root_domain in $free_email_providers
+          and sender.email.email not in $recipient_emails
+      )
+      or (
+          sender.email.domain.root_domain not in $free_email_providers
+          and sender.email.domain.domain not in $recipient_domains
       )
   )
 tags:
   - "Suspicious attachment"
+id: "edce0229-5e8f-5359-a5c8-36570840049f"

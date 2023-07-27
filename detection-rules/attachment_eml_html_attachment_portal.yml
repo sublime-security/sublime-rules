@@ -1,0 +1,52 @@
+name: "Attachment: EML file contains HTML attachment with login portal indicators"
+description: |
+  Attached EML file contains an HTML attachment with suspicious login indicators. Known credential theft technique.
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  // exclude bounce backs & read receipts
+  and not strings.like(sender.email.local_part, "*postmaster*", "*mailer-daemon*", "*administrator*")
+  and not regex.icontains(subject.subject, "^(undeliverable|read:)")
+  and not any(attachments, .content_type == "message/delivery-status")
+  // if the "References" is in the body of the message, it's probably a bounce
+  and not any(headers.references,
+      strings.contains(body.html.display_text, .)
+  )
+  and any(attachments, .content_type == "message/rfc822"
+      and any(file.explode(.),
+          (
+            // suspicious strings found in javascript
+            length(filter(.scan.javascript.strings, strings.ilike(.,
+                "*username*", "*login-form*", "*email-form*", "*Incorrect password. Please try again.*", "*Password Incomplete, please try again*"
+            ))) >= 3 or 
+            (
+                // suspicious strings found outside of javascript, but binexplode'd file still of HTML type
+                .flavors.mime in~ ("text/html", "text/plain") and 
+                length(filter(.scan.strings.strings, strings.ilike(.,
+                    "*username*", "*login-form*", "*email-form*", "*Incorrect password. Please try again.*", "*Password Incomplete, please try again*"
+                ))) >= 3
+            )
+        ) or 
+        //Known phishing obfuscation
+        (
+            length(
+                filter(
+                    .scan.strings.strings, strings.ilike(.,
+                        //Enter password  
+                        "*&#69;&#110;&#116;&#101;&#114;&#32;&#112;&#97;&#115;&#115;&#119;&#111;&#114;&#100*",
+                        //Forgotten my password
+                        "*&#70;&#111;&#114;&#103;&#111;&#116;&#116;&#101;&#110;&#32;&#109;&#121;&#32;&#112;&#97;&#115;&#115;&#119;&#111;&#114;&#100*",
+                        //Sign in
+                        "*&#83;&#105;&#103;&#110;&#32;&#105;&#110*"
+                    )
+                )
+            ) >= 2
+        )
+      )
+  )
+tags: 
+  - "Suspicious attachment"
+  - "HTML smuggling"
+  - "Credential phishing"
+id: "6e4df158-6498-572b-9448-a343c531e5f9"

@@ -2,14 +2,14 @@ name: Rules PR CI
 
 on:
   push:
-    branches: [ "main" ]
-  pull_request:
+    branches: [ "main", "test-rules" ]
+  pull_request_target:
     branches: [ "**" ]
   workflow_dispatch: {}
 
 concurrency:
-  group: ${{ github.ref }}
-  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+  group: ${{ github.head_ref }}
+  cancel-in-progress: true
 
 jobs:
   tests:
@@ -22,11 +22,133 @@ jobs:
 
       - name: Checkout
         uses: actions/checkout@v3
+        with:
+          ref: ${{ github.head_ref }}
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
 
       - name: Validate Rules
         run: |
           for f in *-rules/*.yml
           do
             echo "Processing $f"
-            yq -o=json eval 'del(.type)' "$f" | curl -H "Content-Type: application/json" -X POST --data-binary @- --fail --silent https://sandbox.sublimesecurity.com/v1/rules/validate
+            http_code=$(yq -o=json eval 'del(.type)' "$f" | curl -H "Content-Type: application/json" -X POST --data-binary @- -o response.txt -w "%{http_code}" --silent https://playground.sublimesecurity.com/v1/rules/validate)
+            echo '' >> response.txt
+            cat response.txt
+            if [[ "$http_code" != "200" ]]; then
+              echo "Unexpected response $http_code"
+              exit 1
+            fi
           done
+
+      - name: Validate Insights and Signals
+        run: |
+          for f in {insights,signals}/**/*.yml
+          do
+            echo "Processing $f"
+            http_code=$(yq eval 'del(.type) | .source = "length([\n\n" + .source + "\n]) >= 0"' "$f" -o=json | curl -H "Content-Type: application/json" -X POST --data-binary @- -o response.txt -w "%{http_code}" --silent https://playground.sublimesecurity.com/v1/rules/validate)
+            echo '' >> response.txt
+            cat response.txt
+            if [[ "$http_code" != "200" ]]; then
+              echo "Unexpected response $http_code"
+              exit 1
+            fi
+          done
+
+      - name: Verify no .yaml files exist
+        run: |
+          ! /bin/sh -c 'ls **/*.yaml'
+
+  rule-ids:
+    name: Add Rule IDs & Validate Uniqueness
+    runs-on: ubuntu-20.04
+
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+        with:
+          ref: ${{ github.head_ref }}
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Add Rule IDs as Needed & Check for Duplicates
+        run: |
+          pip install -r scripts/generate-rule-ids/requirements.txt
+          python scripts/generate-rule-ids/main.py
+
+      - name: Commit & Push Results, if needed
+        run: |
+          if [ -z "$(git status --porcelain)" ]; then 
+            echo "No files changed, nothing to do"
+            exit 0
+          fi
+          
+          git config user.name 'ID Generator'
+          git config user.email 'hello@sublimesecurity.com'
+          git add -A
+          git commit -m "Auto add rule ID"
+          git push origin ${{ github.head_ref }}
+
+      - name: Get the head ref (eg branch)
+        id: get_head
+        run: git rev-parse HEAD > sha.txt
+
+      - name: Upload SHA for later job
+        uses: actions/upload-artifact@v3
+        with:
+          name: sha
+          path: sha.txt
+
+  # When the rule-ids job adds a commit, GitHub won't trigger actions on the auto commit. Various alternatives
+  # were explored, but all run into issues when dealing with forks (well we'll see if this does too).
+  set-checks:
+    name: Set GH Checks Status
+    runs-on: ubuntu-20.04
+    # Both must complete successfully. We assume that rule-ids does not break our rule validation (if we're not confident
+    # we can change the ordering.
+    needs: [rule-ids, tests]
+
+    permissions:
+      checks: write
+
+    steps:
+
+      - name: Download SHA from Previous Job
+        uses: actions/download-artifact@v3
+        with:
+          name: sha
+
+      - name: Get the head ref (eg branch)
+        id: get_head
+        run: echo "##[set-output name=HEAD;]$(cat sha.txt)"
+
+      - name: "Create a check run"
+        uses: actions/github-script@v6
+        env:
+          parameter_url: '${{ github.event.pull_request.html_url }}'
+        with:
+          debug: ${{ secrets.ACTIONS_STEP_DEBUG || false }}
+          script: |
+            // any JavaScript code can go here, you can use Node JS APIs too.
+            // Docs: https://docs.github.com/en/rest/checks/runs#create-a-check-run
+            // Rest: https://octokit.github.io/rest.js/v18#checks-create
+            await github.rest.checks.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              head_sha: "${{ steps.get_head.outputs.HEAD }}",
+              name: "Rule Tests and ID Updated",
+              status: "completed",
+              conclusion: "success",
+              details_url: process.env.parameter_url,
+              output: {
+                title: "Rule Tests and ID Generation",
+                summary: "Rule Tests and ID Generation",
+                text: "Rule Tests and ID Generation",
+              },
+            });

@@ -1,0 +1,42 @@
+name: "Body HTML: Callback Phishing solicitation"
+description: |
+  A fraudulent invoice/receipt found in the html body of the message.
+  Callback Phishing is an attempt by an attacker to solicit the victim (recipient) to call a phone number. 
+  The resulting interaction could lead to a multitude of attacks ranging from Financial theft, Remote Access Trojan (RAT) Installation or Ransomware Deployment.
+type: "rule"
+severity: "medium"
+source: |
+   type.inbound
+   and length(attachments) == 0
+   and (
+         (       
+               sender.email.domain.root_domain in $free_email_providers
+               and sender.email.email not in $recipient_emails
+           )
+           or (
+               sender.email.domain.root_domain not in $free_email_providers
+               and sender.email.domain.domain not in $recipient_domains
+           )
+       )
+     
+   and sender.email.domain.root_domain in $free_email_providers
+   and any([body.html.inner_text], strings.ilike(., "*mcafee*", "*norton*", "*geek squad*", "*paypal*", "*ebay*", "*symantec*", "*best buy*", "*lifelock*"))
+   and any([body.html.inner_text], strings.ilike(., "*+1*"))
+
+    and 4 of (
+        strings.ilike(body.html.inner_text, '*purchase*'),
+        strings.ilike(body.html.inner_text, '*subscription*'),
+        strings.ilike(body.html.inner_text, '*antivirus*'),
+        strings.ilike(body.html.inner_text, '*order*'),
+        strings.ilike(body.html.inner_text, '*support*'),
+        strings.ilike(body.html.inner_text, '*receipt*'),
+        strings.ilike(body.html.inner_text, '*invoice*'),
+        strings.ilike(body.html.inner_text, '*call*'),
+        strings.ilike(body.html.inner_text, '*cancel*'),
+        strings.ilike(body.html.inner_text, '*renew*'),
+        strings.ilike(body.html.inner_text, '*refund*')
+     )
+tags:
+  - "Callback Phishing"
+  - "Customer service fraud"
+id: "afe5dec2-1ec0-505e-b5dd-768144d71bec"
