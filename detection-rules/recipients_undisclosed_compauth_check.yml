@@ -1,5 +1,5 @@
-name: "Suspicious Recipients pattern with no Compauth pass"
-description: "Detects messages with undisclosed recipients (likely all bcc) and Compauth verdict is not 'pass'"
+name: "Suspicious Recipients pattern with no Compauth pass and suspicious content"
+description: "Detects messages with undisclosed recipients (likely all bcc), where the Compauth verdict is not 'pass', and ML has identified suspicious language or credential phishing links."
 type: "rule"
 severity: "medium"
 source: |
@@ -10,12 +10,32 @@ source: |
   )
   and length(recipients.cc) == 0
   and length(recipients.bcc) == 0
-  and (
-      any(headers.hops,
-          .authentication_results.compauth.verdict is not null
-          and .authentication_results.compauth.verdict not in ("pass", "softpass")
+  and 2 of (
+      (
+          any(headers.hops,
+             .authentication_results.compauth.verdict is not null
+             and .authentication_results.compauth.verdict not in ("pass", "softpass")
+          )
+      ),
+      (
+          any(ml.nlu_classifier(coalesce(
+              body.html.display_text, body.plain.raw)).intents, 
+              .name in ("bec", "cred_theft")
+              and .confidence == "high"
+          )
+      ),
+      (
+          any(body.links, 
+              any([beta.linkanalysis(.)],
+              .credphish.disposition == "phishing"
+              and .credphish.confidence in ("high")
+              )   
+          )
       )
   )
 tags:
   - "Suspicious sender"
   - "Suspicious headers"
+  - "Natural Language Understanding"
+  - "Machine Learning"
+id: "34fb65f6-03e8-5752-b602-4f294172b5db"

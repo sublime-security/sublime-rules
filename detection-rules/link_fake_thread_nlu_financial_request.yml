@@ -11,15 +11,18 @@ source: |
     .href_url.domain.domain not in $umbrella_1m
   )
 
-  // mailer is not null
-  and headers.mailer is not null
-
   // fake thread check
-  and strings.istarts_with(subject.subject, "RE:")
+  and (
+      strings.istarts_with(subject.subject, "RE:") 
+      or strings.istarts_with(subject.subject, "FWD:")
+  )
 
   // Check for the Presence of References or In-Reply-To properties
   and (
-      length(headers.references) == 0
+      (
+          length(headers.references) == 0
+          and headers.in_reply_to is null
+      )
       or not any(headers.hops, any(.fields, strings.ilike(.name, "In-Reply-To")))
   )
 
@@ -44,6 +47,9 @@ source: |
     // urgency request
     any(ml.nlu_classifier(body.html.inner_text).entities, .name == "urgency"),
 
+    // cred_theft detection
+    any(ml.nlu_classifier(body.html.inner_text).intents, .name == "cred_theft" and .confidence in~ ("medium", "high")),
+
     // commonly abused sender TLD
     strings.ilike(sender.email.domain.tld, "*.jp"),
 
@@ -52,9 +58,13 @@ source: |
 
     // link display text is in all caps
     any(body.links, regex.match(.display_text, '[A-Z ]+')),
+
+    // sender domain matches no body domains
+    all(body.links, .href_url.domain.root_domain != sender.email.domain.root_domain),
   )
 tags:
   - "Suspicious link"
   - "Fake Message Thread"
   - "Natural Language Understanding"
   - "Machine Learning"
+id: "8fd0e211-285d-5cbd-9c11-868c0501b526"
