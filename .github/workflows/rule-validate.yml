@@ -61,6 +61,13 @@ jobs:
   rule-ids:
     name: Add Rule IDs & Validate Uniqueness
     runs-on: ubuntu-20.04
+    # Require tests to complete first. This handles a couple things:
+    # 1) In the case tests fail, the user will presumably push another commit. Making tests pass first ensures they
+    # don't have to pull/rebase in this case.
+    # 2) If tests fail and a new commit is pushed, the test failure won't show up under Checks at the bottom of the PR.
+    # The failure would still show next to the commit, but that may not be where people are used to looking.
+    # And this job is fast so doing it in sequence isn't a big deal.
+    needs: [ tests ]
 
     permissions:
       contents: write
@@ -110,9 +117,9 @@ jobs:
   set-checks:
     name: Set GH Checks Status
     runs-on: ubuntu-20.04
-    # Both must complete successfully. We assume that rule-ids does not break our rule validation (if we're not confident
-    # we can change the ordering.
-    needs: [rule-ids, tests]
+    # rule-ids depends on tests. That does mean we're modifying rules post testing, but adding the `id` field is pretty
+    # safe.
+    needs: [rule-ids]
 
     permissions:
       checks: write
