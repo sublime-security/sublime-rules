@@ -1,0 +1,39 @@
+name: "Brand impersonation: Microsoft quarantine release notification"
+description: |
+  Message contains credential theft language and references to the Microsoft Exchange quarantine, but did not come from Microsoft.
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and length(filter(attachments, .file_type not in~ ('png', 'jpeg', 'jpg', 'bmp', 'gif'))) == 0 
+  and any(attachments,
+      any(file.explode(.),
+          any(ml.nlu_classifier(.scan.ocr.raw).intents, .name == "cred_theft" and .confidence != "low")
+          and any(ml.nlu_classifier(.scan.ocr.raw).entities, .name == "urgency")
+      )
+       and any(file.explode(.),
+          3 of (
+              any(.scan.strings.strings, strings.icontains(., "review")),
+              any(.scan.strings.strings, strings.icontains(., "release")),
+              any(.scan.strings.strings, strings.icontains(., "quarantine")),
+              any(.scan.strings.strings, strings.icontains(., "messages")),
+              any(ml.logo_detect(..).brands, strings.starts_with(.name, "Microsoft"))
+          )
+      )
+  )
+  and sender.email.domain.root_domain not in (
+      "bing.com",
+      "microsoft.com",
+      "microsoftonline.com",
+      "microsoftsupport.com",
+      "microsoft365.com",
+      "office.com",
+      "onedrive.com",
+      "sharepointonline.com",
+      "yammer.com",
+  )
+tags: 
+  - "Brand impersonation"
+  - "Suspicious content"
+  - "Natural Language Understanding"
+id: "185db6b3-b35c-578d-bd9f-dab0703288fe"
