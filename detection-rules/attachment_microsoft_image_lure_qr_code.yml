@@ -1,14 +1,16 @@
 name: "Brand impersonation: Microsoft (QR code)"
 description: |
-  Detects messages using Microsoft image based lures, referencing a QR code from an Unsolicited sender.
-  These messages often lead users to phishing sites or initiate unwanted downloads.
+  Detects messages using Microsoft image based lures, referencing or including a QR code from an Unsolicited sender. These messages often lead users to phishing sites or initiate unwanted downloads.
 type: "rule"
 severity: "medium"
 source: |
   type.inbound
-  and any(attachments, 
+  and (
+      any(attachments, 
           .file_type in~ ('bmp', 'png', 'jpg', 'jpeg')
-          and any(ml.logo_detect(.).brands, .name in~ ("Microsoft", "Office365"))
+          and any(ml.logo_detect(.).brands, strings.starts_with(.name, "Microsoft"))
+      )
+      or any(ml.logo_detect(beta.message_screenshot()).brands, strings.starts_with(.name, "Microsoft"))
   )
   and any(attachments,
       .file_type in~ ('bmp', 'png', 'jpg', 'jpeg')
@@ -17,6 +19,12 @@ source: |
               any(.scan.strings.strings, regex.icontains(.,  'scan|camera'))   
               and any(.scan.strings.strings, regex.icontains(.,  '\bQR\b|Q\.R\.|barcode'))
           )
+          or (
+              any(file.explode(.), .scan.qr.type == "url"
+                  // recipient email address is present in the URL, a common tactic used in credential phishing attacks 
+                  and any(recipients.to, strings.icontains(..scan.qr.data, .email.email))
+              )
+          )   
       )
   )
   and (
@@ -37,8 +45,8 @@ source: |
           and sender.email.domain.domain not in $recipient_domains
       )
   )
-  
 tags: 
   - "Suspicious attachment"
   - "Brand impersonation"
   - "QR code"
+id: "ed0f772a-6543-5947-80d1-55a11ea63074"
