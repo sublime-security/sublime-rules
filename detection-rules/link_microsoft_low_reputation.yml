@@ -16,12 +16,12 @@ source: |
           .href_url.domain.root_domain in (
               "hubspotlinks.com",
               "mandrillapp.com",
-              "sendgrid.net",
+              "sendgrid.net"
           )
       )
       
       // exclude sources of potential FPs
-      and .href_url.domain.root_domain not in ("svc.ms", "sharepoint.com")
+      and .href_url.domain.root_domain not in ("svc.ms", "sharepoint.com", "1drv.ms")
   )
 
   // not a reply
@@ -31,23 +31,29 @@ source: |
   )
 
   // Microsoft logo
-  and any(attachments,
-      .file_type in ('png', 'jpeg', 'jpg', 'bmp')
-      and any(beta.logo_detect(.).brands, .name in ("Microsoft", "Office365", "Outlook"))
+
+  and (
+      any(attachments,
+          .file_type in ('png', 'jpeg', 'jpg', 'bmp')
+          and any(ml.logo_detect(.).brands, strings.starts_with(.name, "Microsoft"))
+      )
+      or any(ml.logo_detect(beta.message_screenshot()).brands,
+          strings.starts_with(.name, "Microsoft")
+      )
   )
 
   // suspicious content
   and (
       (
-          strings.ilike(body.plain.raw, "*password*", "*document*", "*voicemail*", "*cache*", "*fax*", "*storage*", "*quota*")
-          and strings.ilike(body.plain.raw, "*terminated*", "*review*", "*expire*", "*click*", "*view*", "*exceed*", "*clear*", "*only works*")
+          strings.ilike(body.plain.raw, "*password*", "*document*", "*voicemail*", "*cache*", "*fax*", "*storage*", "*quota*", "*messages*")
+          and strings.ilike(body.plain.raw, "*terminated*", "*review*", "*expire*", "*click*", "*view*", "*exceed*", "*clear*", "*only works*", "*failed*", "*deleted*")
       )
       or (
           any(attachments,
           .file_type in ('png', 'jpeg', 'jpg', 'bmp')
           and any(file.explode(.),
-              strings.ilike(.scan.ocr.raw, "*password*", "*document*", "*voicemail*", "*cache*", "*fax*", "*storage*", "*quota*")
-              and strings.ilike(.scan.ocr.raw, "*terminated*", "*review*", "*expire*", "*click*", "*view*", "*exceed*", "*clear*", "*only works*")
+              strings.ilike(.scan.ocr.raw, "*password*", "*document*", "*voicemail*", "*cache*", "*fax*", "*storage*", "*quota*", "*messages*")
+              and strings.ilike(.scan.ocr.raw, "*terminated*", "*review*", "*expire*", "*click*", "*view*", "*exceed*", "*clear*", "*only works*", "*failed*", "*deleted*")
               )
           )
       )
@@ -83,9 +89,11 @@ source: |
       "office.com",
       "onedrive.com",
       "sharepointonline.com",
-      "yammer.com",
+      "yammer.com"
   )
+
 tags:
   - "Suspicious link"
   - "Brand impersonation"
   - "Computer Vision"
+id: "b59201b6-f253-55a6-9c0a-e1500a32a751"
