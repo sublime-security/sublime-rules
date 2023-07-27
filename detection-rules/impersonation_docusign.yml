@@ -27,7 +27,7 @@ source: |
     // such as U+034f(look carefully): "Revi͏ew Now"
     (
         strings.ilevenshtein(.display_text, "Review Now") <= 3
-        or strings.icontains(.display_text, "Review")
+        or (strings.icontains(.display_text, "Review") and not strings.icontains(.display_text, "Review Us"))
         or strings.icontains(.display_text, "Now")
         or strings.contains(.display_text, "document")
     )
@@ -41,6 +41,16 @@ source: |
             strings.ilike(.authentication_results.dmarc, "*fail")
         )
       )
+  // adding negation for messages originating from docusigns api
+  // and the sender.display.name contains "via"
+  and not (
+        any(headers.hops,
+            any(.fields, .name == "X-Api-Host" and
+                strings.ends_with(.value, "docusign.net")
+            )
+        ) 
+        and strings.contains(sender.display_name, "via")
+    )
   // unsolicited
   and (
         (
@@ -55,3 +65,4 @@ source: |
 tags:
   - "Brand impersonation"
   - "DocuSign"
+id: "4d29235c-08b9-5f9b-950e-60b05c4691fb"

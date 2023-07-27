@@ -1,0 +1,50 @@
+name: "Link: IPFS"
+description: "Detects messages containing links that have 'ipfs' in the domain, or unanalyzed links
+  that contain 'ipfs' in the url. IPFS has been recently observed hosting phishing sites."
+references:
+  - "https://securelist.com/ipfs-phishing/109158/"
+  - "https://docs.ipfs.tech/how-to/address-ipfs-on-web/"
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+
+  and any(body.links,
+    // Any body link domains contain "ipfs"
+    strings.icontains(.href_url.domain.domain, "ipfs")
+  
+    // Or the path contains ipfs anchored to a leading or trailing '-', '/', '.'
+    or (
+        regex.icontains(.href_url.query_params, '[\.-/]ipfs|ipfs[\.-/]')
+        and .href_url.domain.domain not in $org_domains
+        and (
+            (
+                // don't include high rep domains
+                .href_url.domain.domain not in $tranco_1m
+                and .href_url.domain.domain not in $umbrella_1m
+            )
+            // if it's in Tranco or Umbrella, still include it if it's one of these
+            or .href_url.domain.domain in $free_file_hosts
+            or .href_url.domain.root_domain in $free_subdomain_hosts
+        )
+      )
+  )
+
+  // adding negation block for legitimate domains with ipfs in their name
+
+  and not sender.email.domain.domain in ("shipfsl.com")
+
+  // unsolicited
+  and (
+        (
+            sender.email.domain.root_domain in $free_email_providers
+            and sender.email.email not in $recipient_emails
+        )
+        or (
+            sender.email.domain.root_domain not in $free_email_providers
+            and sender.email.domain.domain not in $recipient_domains
+        )
+  )
+tags:
+  - "Suspicious link"
+id: "19fa6442-83b9-5479-ba04-61906b595929"
