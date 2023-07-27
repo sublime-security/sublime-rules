@@ -26,6 +26,16 @@ jobs:
           ref: ${{ github.head_ref }}
           repository: ${{ github.event.pull_request.head.repo.full_name }}
 
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Add Rule IDs as Needed & Check for Duplicates
+        # Run before testing, just in case this could invalidate the rule itself
+        run: |
+          pip install -r scripts/generate-rule-ids/requirements.txt
+          python scripts/generate-rule-ids/main.py
+
       - name: Validate Rules
         run: |
           for f in *-rules/*.yml
@@ -58,37 +68,6 @@ jobs:
         run: |
           ! /bin/sh -c 'ls **/*.yaml'
 
-  rule-ids:
-    name: Add Rule IDs & Validate Uniqueness
-    runs-on: ubuntu-20.04
-    # Require tests to complete first. This handles a couple things:
-    # 1) In the case tests fail, the user will presumably push another commit. Making tests pass first ensures they
-    # don't have to pull/rebase in this case.
-    # 2) If tests fail and a new commit is pushed, the test failure won't show up under Checks at the bottom of the PR.
-    # The failure would still show next to the commit, but that may not be where people are used to looking.
-    # And this job is fast so doing it in sequence isn't a big deal.
-    needs: [ tests ]
-
-    permissions:
-      contents: write
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v3
-        with:
-          ref: ${{ github.head_ref }}
-          repository: ${{ github.event.pull_request.head.repo.full_name }}
-          fetch-depth: 0
-
-      - uses: actions/setup-python@v4
-        with:
-          python-version: '3.10'
-
-      - name: Add Rule IDs as Needed & Check for Duplicates
-        run: |
-          pip install -r scripts/generate-rule-ids/requirements.txt
-          python scripts/generate-rule-ids/main.py
-
       - name: Commit & Push Results, if needed
         run: |
           if [ -z "$(git status --porcelain)" ]; then 
@@ -102,39 +81,14 @@ jobs:
           git commit -m "Auto add rule ID"
           git push origin ${{ github.head_ref }}
 
-      - name: Get the head ref (eg branch)
+      - name: Get the head SHA
         id: get_head
-        run: git rev-parse HEAD > sha.txt
+        run: echo "##[set-output name=HEAD;]$(git rev-parse HEAD)"
 
-      - name: Upload SHA for later job
-        uses: actions/upload-artifact@v3
-        with:
-          name: sha
-          path: sha.txt
-
-  # When the rule-ids job adds a commit, GitHub won't trigger actions on the auto commit. Various alternatives
-  # were explored, but all run into issues when dealing with forks (well we'll see if this does too).
-  set-checks:
-    name: Set GH Checks Status
-    runs-on: ubuntu-20.04
-    # rule-ids depends on tests. That does mean we're modifying rules post testing, but adding the `id` field is pretty
-    # safe.
-    needs: [rule-ids]
-
-    permissions:
-      checks: write
-
-    steps:
-
-      - name: Download SHA from Previous Job
-        uses: actions/download-artifact@v3
-        with:
-          name: sha
-
-      - name: Get the head ref (eg branch)
-        id: get_head
-        run: echo "##[set-output name=HEAD;]$(cat sha.txt)"
-
+      # When we add a commit, GitHub won't trigger actions on the auto commit, so we're missing a required check on the
+      # HEAD commit.
+      # Various alternatives were explored, but all run into issues when dealing with forks. This sets a "Check" for
+      # the latest commit, and we can depend on that as a required check.
       - name: "Create a check run"
         uses: actions/github-script@v6
         env:
