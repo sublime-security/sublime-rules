@@ -1,0 +1,24 @@
+name: "BEC with unusual Reply-to or Return-path mismatch"
+description: "Detects an unusual header mismatch where the sender is not a freemail address, but the reply-to or return-path are. NLU also detects a BEC intent with medium or high confidence."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and any(ml.nlu_classifier(coalesce(
+    body.html.display_text, body.plain.raw)).intents,
+    .name in ("bec") and .confidence in ("medium", "high")
+  )
+  and (
+    headers.return_path.domain.root_domain in $free_email_providers
+    or (
+      length(headers.reply_to) > 0
+      and all(headers.reply_to,
+        .email.domain.root_domain in $free_email_providers)
+    )
+  )
+  and sender.email.domain.root_domain not in $free_email_providers
+tags:
+  - "Suspicious sender"
+  - "Business Email Compromise"
+  - "Natural Language Understanding"
+id: "83e5e2df-7049-5990-b20d-1ff6bc6fd6f0"

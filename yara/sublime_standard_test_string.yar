@@ -7,5 +7,5 @@ rule SublimeStandardTestString {
       $test_string = "Sublime-Standard-Test-String"
 
    condition:
-      $test_string
+      $test_string at 0
 }

@@ -1,6 +1,8 @@
 name: "Attachment: HTML smuggling with atob and high entropy"
 description: |
   Recursively scans files and archives to detect HTML smuggling techniques.
+references:
+  - "https://delivr.to/payloads?id=7dbf0d83-1557-4345-bf67-d18c4256b0c1"
 type: "rule"
 severity: "high"
 source: |
@@ -11,12 +13,16 @@ source: |
           .file_extension in~ $file_extensions_common_archives or
           .file_type == "html"
       )
-      and any(beta.binexplode(.),
+      and any(file.explode(.),
           .scan.entropy.entropy >= 5
           and (
-              all(["document", "write", "atob"], . in ..scan.javascript.identifiers)
-              
+              length(filter(.scan.javascript.identifiers, strings.like (., "document", "write", "atob"))) == 3
               // usage: document['write'](atob)
+              or any(.scan.strings.strings, strings.ilike(., "*document*write*atob*"))
+              // usage: some_var = atob();
+              or any(.scan.strings.strings, strings.ilike(., "*=*atob*;"))
+              // usage: obfuscating "atob"
+              or any(.scan.javascript.identifiers, strings.ilike(., '*ato\u0062*'))
               // usage: document.head.insertAdjacentHTML("beforeend", atob(...
               or 
                   any(.scan.strings.strings, strings.ilike(.,
@@ -28,3 +34,4 @@ source: |
 tags:
   - "Suspicious attachment"
   - "HTML smuggling"
+id: "03fcac11-ffc9-5a9c-9e1e-c866e683b48e"

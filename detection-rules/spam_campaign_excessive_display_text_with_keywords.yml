@@ -1,0 +1,30 @@
+name: "Spam: Campaign with excessive display-text and keywords found"
+type: "rule"
+description: |
+  Detects affiliate marketing spam where any link contains display-text greater than 3000 chars and specific values found. 
+references: 
+  - "https://playground.sublimesecurity.com?id=aa90e106-fa06-43f2-aa85-50d69591e073" 
+source: |
+  type.inbound
+  and length(body.links) > 0
+  and (
+    any(body.links, length(.display_text) >3000)
+  )
+  and any(
+    body.links, regex.icontains(.display_text, '(\bPassword:)', 'Hi.{0,5}Welcome\b')
+  )
+  // first-time sender
+  and (
+          (
+              sender.email.domain.root_domain in $free_email_providers
+              and sender.email.email not in $sender_emails
+          )
+          or (
+              sender.email.domain.root_domain not in $free_email_providers
+              and sender.email.domain.domain not in $sender_domains
+          )
+      )
+severity: "low"
+tags:
+  - "Spam"
+id: "140e46a1-c8a6-530a-ad88-21b7e4b4b02f"
