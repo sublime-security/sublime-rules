@@ -4,14 +4,19 @@ type: "rule"
 severity: "medium"
 source: |
   type.inbound
-  and length(filter(attachments, .file_type not in~ ('png', 'jpeg', 'jpg', 'bmp'))) == 0 
+  and length(filter(attachments, .file_type not in~ ('png', 'jpeg', 'jpg', 'bmp', 'gif'))) == 0 
   and any(body.links, not strings.ilike(.href_url.domain.root_domain, "docusign.*"))
   and any(attachments,
-       any(ml.logo_detect(.).brands, .name == "DocuSign" and .confidence in ("medium", "high"))
+      (
+          any(ml.logo_detect(.).brands, .name == "DocuSign" and .confidence in ("medium", "high"))
+          or any(file.explode(.),
+              any(ml.nlu_classifier(.scan.ocr.raw).intents, .name == "cred_theft" and .confidence != "low")
+          )
+      )
        and any(file.explode(.),
             any(.scan.strings.strings, regex.icontains(.,
-                 "review", "[^d][^o][^c][^u]sign", "important edocs", "completed document"))
-       )
+                 "review document", "[^d][^o][^c][^u]sign", "important edocs", "completed document"))
+      )
   )
   and (
           (
@@ -27,3 +32,4 @@ tags:
   - "Suspicious link"
   - "Brand impersonation"
   - "Computer Vision"
+id: "814a5694-d626-5bf4-a1ba-a1dbcb625279"
