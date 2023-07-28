@@ -15,6 +15,9 @@ jobs:
   tests:
     name: Run Rule Validation
     runs-on: ubuntu-20.04
+    permissions:
+      contents: write
+      checks: write
 
     steps:
       - name: Set up yq
@@ -25,6 +28,16 @@ jobs:
         with:
           ref: ${{ github.head_ref }}
           repository: ${{ github.event.pull_request.head.repo.full_name }}
+
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Add Rule IDs as Needed & Check for Duplicates
+        # Run before testing, just in case this could invalidate the rule itself
+        run: |
+          pip install -r scripts/generate-rule-ids/requirements.txt
+          python scripts/generate-rule-ids/main.py
 
       - name: Validate Rules
         run: |
@@ -58,30 +71,6 @@ jobs:
         run: |
           ! /bin/sh -c 'ls **/*.yaml'
 
-  rule-ids:
-    name: Add Rule IDs & Validate Uniqueness
-    runs-on: ubuntu-20.04
-
-    permissions:
-      contents: write
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v3
-        with:
-          ref: ${{ github.head_ref }}
-          repository: ${{ github.event.pull_request.head.repo.full_name }}
-          fetch-depth: 0
-
-      - uses: actions/setup-python@v4
-        with:
-          python-version: '3.10'
-
-      - name: Add Rule IDs as Needed & Check for Duplicates
-        run: |
-          pip install -r scripts/generate-rule-ids/requirements.txt
-          python scripts/generate-rule-ids/main.py
-
       - name: Commit & Push Results, if needed
         run: |
           if [ -z "$(git status --porcelain)" ]; then 
@@ -95,41 +84,17 @@ jobs:
           git commit -m "Auto add rule ID"
           git push origin ${{ github.head_ref }}
 
-      - name: Get the head ref (eg branch)
+      - name: Get the head SHA
         id: get_head
-        run: git rev-parse HEAD > sha.txt
+        run: echo "##[set-output name=HEAD;]$(git rev-parse HEAD)"
 
-      - name: Upload SHA for later job
-        uses: actions/upload-artifact@v3
-        with:
-          name: sha
-          path: sha.txt
-
-  # When the rule-ids job adds a commit, GitHub won't trigger actions on the auto commit. Various alternatives
-  # were explored, but all run into issues when dealing with forks (well we'll see if this does too).
-  set-checks:
-    name: Set GH Checks Status
-    runs-on: ubuntu-20.04
-    # Both must complete successfully. We assume that rule-ids does not break our rule validation (if we're not confident
-    # we can change the ordering.
-    needs: [rule-ids, tests]
-
-    permissions:
-      checks: write
-
-    steps:
-
-      - name: Download SHA from Previous Job
-        uses: actions/download-artifact@v3
-        with:
-          name: sha
-
-      - name: Get the head ref (eg branch)
-        id: get_head
-        run: echo "##[set-output name=HEAD;]$(cat sha.txt)"
-
+      # When we add a commit, GitHub won't trigger actions on the auto commit, so we're missing a required check on the
+      # HEAD commit.
+      # Various alternatives were explored, but all run into issues when dealing with forks. This sets a "Check" for
+      # the latest commit, and we can depend on that as a required check.
       - name: "Create a check run"
         uses: actions/github-script@v6
+        if: github.event_name == 'pull_request_target'
         env:
           parameter_url: '${{ github.event.pull_request.html_url }}'
         with:
