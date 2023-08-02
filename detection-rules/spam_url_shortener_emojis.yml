@@ -1,0 +1,42 @@
+name: "Spam: URL shortener with short body content and emojis"
+type: "rule"
+description: |
+  Detects spam from freemail senders, where the majority of the body is a URL shortener and emojis.
+source: |
+  type.inbound
+
+  // sender is a freemail
+  and sender.email.domain.root_domain in $free_email_providers
+
+  // has a URL shortener
+  and any(body.links,
+      .href_url.domain.root_domain in $url_shorteners
+  )
+
+  // short body, basically just the URL
+  and length(body.plain.raw) < 100
+
+  // has an emoji in the subject or body
+  and (
+      regex.contains(body.plain.raw, '[\x{1F300}-\x{1F5FF}\x{1F600}-\x{1F64F}\x{1F680}-\x{1F6FF}\x{1F700}-\x{1F77F}\x{1F780}-\x{1F7FF}\x{1F900}-\x{1F9FF}\x{2600}-\x{26FF}\x{2700}-\x{27BF}\x{2300}-\x{23FF}]')
+      or regex.contains(subject.subject, '[\x{1F300}-\x{1F5FF}\x{1F600}-\x{1F64F}\x{1F680}-\x{1F6FF}\x{1F700}-\x{1F77F}\x{1F780}-\x{1F7FF}\x{1F900}-\x{1F9FF}\x{2600}-\x{26FF}\x{2700}-\x{27BF}\x{2300}-\x{23FF}]')
+
+  )
+
+  // first-time sender
+  and (
+            (
+                sender.email.domain.root_domain in $free_email_providers
+                and sender.email.email not in $sender_emails
+            )
+            or (
+                sender.email.domain.root_domain not in $free_email_providers
+                and sender.email.domain.domain not in $sender_domains
+            )
+  )
+severity: "low"
+tags:
+  - "Spam"
+id: "b7797e4c-f2d7-5330-8a16-7123fe9bb6a8"
+testing_pr: 630
+testing_sha: 88e8d95838430af3db728b4b401da4a49addc03d
