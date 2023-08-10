@@ -1,0 +1,28 @@
+name: "Body: Business Email Compromise (BEC) with out of band pivot"
+description: |
+   Detects potential Business Email Compromise (BEC) attacks by analyzing text within the email body looking specifically for language attempting to pivot the victim out of the protected email ecosystem as well as other suspicious indicators.
+  
+references:
+  
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and length(body.current_thread.text) < 500
+  and regex.icontains(body.current_thread.text,
+                      "personal email|(whatsapp|cell(phone)?).{0,8}(#|number)"
+  )
+  and (
+    any(ml.nlu_classifier(body.current_thread.text).entities,
+        .name == "urgency" or .name == "request"
+    )
+    or any(ml.nlu_classifier(body.current_thread.text).intents, .name == "bec")
+    or headers.mailer == "Mail.Ru Mailer 1.0"
+    or sender.email.domain.root_domain in $disposable_email_providers
+    or (
+      regex.icontains(sender.email.local_part, "management|ceo|webmail|office|director|executive|cfo|VP")
+      and sender.email.domain.root_domain in $free_email_providers
+    )
+  )
+tags: 
+  
