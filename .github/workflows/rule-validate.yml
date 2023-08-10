@@ -8,7 +8,9 @@ on:
   workflow_dispatch: {}
 
 concurrency:
-  group: ${{ github.head_ref }}
+  # For pull_request_target workflows we want to use head_ref -- the branch triggering the workflow. Otherwise,
+  # use ref, which is the branch for a push event.
+  group: ${{ github.event_name == 'pull_request_target' && github.head_ref || github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -97,6 +99,11 @@ jobs:
       - name: "Create a check run"
         uses: actions/github-script@v6
         if: github.event_name == 'pull_request_target'
+        retries: 3
+        # Default includes 422 which GitHub returns when it doesn't know about the head_sha we set the status for.
+        # This occurs when the previous push succeeds, but the checks/pull request component of GitHub isn't yet aware
+        # of the new commit. This isn't the common case, but it comes up enough to be annoying.
+        retry-exempt-status-codes: 400, 401, 403, 404
         env:
           parameter_url: '${{ github.event.pull_request.html_url }}'
         with:
