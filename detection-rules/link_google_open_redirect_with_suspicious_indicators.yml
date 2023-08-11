@@ -1,0 +1,63 @@
+name: "Open Redirect: Google.com with suspicious indicators"
+description: |
+  This rule examines messages containing image attachments that utilize Google's open redirect (Google.com/url..). To enhance accuracy and minimize false positives, the rule conducts additional assessments for suspicious indicators, as indicated in the comments.
+references:
+  
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  // All attachments are images
+  and length(attachments) > 0
+  and all(attachments, .file_type in ('png', 'jpg', 'bmp'))
+  and sender.email.domain.root_domain not in $org_domains
+  
+  // not a reply
+  and (
+    length(headers.references) == 0
+    or not any(headers.hops, any(.fields, strings.ilike(.name, "In-Reply-To")))
+  )
+  // With a Google Redirect
+  and any(body.links,
+          .href_url.domain.root_domain == "google.com"
+          and .href_url.path == "/url"
+          and regex.contains(.href_url.query_params, "hl=.{2}&q=http(s)?://")
+  )
+  // Not a google logo
+  and 2 of (
+    any(attachments,
+        .file_type in ('png', 'jpg', 'bmp')
+        and (
+          any(ml.logo_detect(.).brands, not strings.starts_with(.name, "Google"))
+          or any(ml.logo_detect(beta.message_screenshot()).brands,
+                 not strings.starts_with(.name, "Google")
+          )
+        )
+    ),
+    (
+      any(ml.nlu_classifier(body.html.inner_text).intents,
+          .name == "cred_theft" and .confidence in~ ("medium", "high")
+      )
+    ),
+    (
+      any(attachments,
+          .file_type in ('png', 'jpg', 'bmp')
+          and any(file.explode(.),
+                  any(ml.nlu_classifier(.scan.ocr.raw).intents, .name == "cred_theft")
+          )
+      )
+    ),
+    (any(ml.nlu_classifier(body.html.inner_text).entities, .name == "urgency")),
+    // White font is found in html raw
+    (
+      length(body.html.display_text) > 100
+      and regex.icontains(body.html.raw,
+                          '<div style="color: #fff(fff)?.[^<]+<\/div><\/div><\/body><\/html>'
+      )
+    )
+  
+    //Newly crafted domains using .app matching this pattern observed 
+    or regex.icontains(sender.email.domain.domain, '[a-z]{3}\.\d{5,}[^\.]+\.app')
+  )
+tags: 
+  
