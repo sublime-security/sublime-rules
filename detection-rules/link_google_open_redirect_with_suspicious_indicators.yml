@@ -1,0 +1,22 @@
+name: "Open Redirect: Google domain with /url path and suspicious indicators"
+description: "This rule examines messages containing image attachments that utilize Google's open redirect (Google.com/url..). \nTo enhance accuracy and minimize false positives, the rule conducts additional assessments for suspicious indicators, as indicated in the comments.\n"
+type: "rule"
+severity: "medium"
+source: "type.inbound\n// All attachments are images\nand length(attachments) > 0\nand all(attachments, .file_type in ('png', 'jpg', 'bmp'))\nand sender.email.domain.root_domain not in $org_domains\n\n// not a reply\nand (\n  length(headers.references) == 0\n  or not any(headers.hops, any(.fields, strings.ilike(.name, \"In-Reply-To\")))\n)\n// With a Google Redirect\nand any(body.links,\n        .href_url.domain.sld == \"google\"\n        and .href_url.path == \"/url\"\n        and regex.contains(.href_url.query_params, \"hl=.{2}&q=http(s)?://\")\n)\n// Not a google logo\nand 2 of (\n  any(attachments,\n      .file_type in ('png', 'jpg', 'bmp')\n      and (\n        any(ml.logo_detect(.).brands, not strings.starts_with(.name, \"Google\"))\n        or any(ml.logo_detect(beta.message_screenshot()).brands,\n               not strings.starts_with(.name, \"Google\")\n        )\n      )\n  ),\n  // Body analysis - NLU - Credential theft\n  (\n    any(ml.nlu_classifier(body.html.inner_text).intents,\n        .name == \"cred_theft\" and .confidence in~ (\"medium\", \"high\")\n    )\n  ),\n  // Image analysis - NLU - Credential theft language\n  (\n    any(attachments,\n        .file_type in ('png', 'jpg', 'bmp')\n        and any(file.explode(.),\n                any(ml.nlu_classifier(.scan.ocr.raw).intents, .name == \"cred_theft\")\n        )\n    )\n  ),\n  // Content analysis - Body - Urgency\n  (any(ml.nlu_classifier(body.html.inner_text).entities, .name == \"urgency\")\n  ),\n  \n  // White font is found in html raw\n  (\n    length(body.html.display_text) < 500\n    and regex.icontains(body.html.raw,\n                        '<div style=\"color: #fff(fff)?.[^<]+<\\/div><\\/div><\\/body><\\/html>$'\n    )\n  )\n\n  // domains using .app matching this pattern observed abusing google's redirect\n  or regex.icontains(sender.email.domain.domain, '[a-z]{3,}\\.\\d{5,}[^\\.]+\\.app$')\n)\n"
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Evasion"
+  - "Open redirect"
+detection_methods:
+  - "Computer Vision"
+  - "Content analysis"
+  - "File analysis"
+  - "Header analysis"
+  - "Natural Language Understanding"
+  - "Optical Character Recognition"
+  - "Sender analysis"
+  - "URL analysis"
+id: "fc5adf74-6a39-5285-9737-3539a0542313"
+testing_pr: 660
+testing_sha: d5e0ef9af17e267cf1da2db6804c4adcccb0f5ba
