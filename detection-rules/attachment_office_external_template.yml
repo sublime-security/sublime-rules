@@ -1,0 +1,31 @@
+name: "Attachment: Office document loading external template"
+description: |
+  Recursively scans archives and Office documents to detect external templates, this technique is used in vulnerabilities such as CVE-2022-30190 (Follina)
+references:
+  - "https://delivr.to/payloads?id=c7a7195e-0de3-428d-a32c-5fd59a3012da"
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and any(attachments,
+          (
+            // office files
+            .file_extension in~ $file_extensions_macros
+            or .file_extension in~ $file_extensions_common_archives
+          )
+          and file.oletools(.).indicators.external_relationships.risk == "high"
+          and any(file.oletools(.).relationships,
+                  .name == "attachedTemplate"
+                  and strings.starts_with(.target, "http")
+                  and not strings.contains(.target, "openxmlformats.org")
+          )
+  )
+attack_types:
+  - "Malware/Ransomware"
+tactics_and_techniques:
+  - "Evasion"
+detection_methods:
+  - "Archive analysis"
+  - "File analysis"
+  - "OLE analysis"
+  - "URL analysis"
