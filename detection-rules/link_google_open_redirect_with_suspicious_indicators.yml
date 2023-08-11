@@ -1,8 +1,7 @@
-name: "Open Redirect: Google.com with suspicious indicators"
+name: "Open Redirect: Google domain with /url path and suspicious indicators"
 description: |
-  This rule examines messages containing image attachments that utilize Google's open redirect (Google.com/url..). To enhance accuracy and minimize false positives, the rule conducts additional assessments for suspicious indicators, as indicated in the comments.
-references:
-  
+  This rule examines messages containing image attachments that utilize Google's open redirect (Google.com/url..). 
+  To enhance accuracy and minimize false positives, the rule conducts additional assessments for suspicious indicators, as indicated in the comments.
 type: "rule"
 severity: "medium"
 source: |
@@ -19,7 +18,7 @@ source: |
   )
   // With a Google Redirect
   and any(body.links,
-          .href_url.domain.root_domain == "google.com"
+          .href_url.domain.sld == "google"
           and .href_url.path == "/url"
           and regex.contains(.href_url.query_params, "hl=.{2}&q=http(s)?://")
   )
@@ -34,11 +33,13 @@ source: |
           )
         )
     ),
+    // Body analysis - NLU - Credential theft
     (
       any(ml.nlu_classifier(body.html.inner_text).intents,
           .name == "cred_theft" and .confidence in~ ("medium", "high")
       )
     ),
+    // Image analysis - NLU - Credential theft language
     (
       any(attachments,
           .file_type in ('png', 'jpg', 'bmp')
@@ -47,7 +48,10 @@ source: |
           )
       )
     ),
-    (any(ml.nlu_classifier(body.html.inner_text).entities, .name == "urgency")),
+    // Content analysis - Body - Urgency
+    (any(ml.nlu_classifier(body.html.inner_text).entities, .name == "urgency")
+    ),
+    
     // White font is found in html raw
     (
       length(body.html.display_text) > 100
@@ -56,8 +60,21 @@ source: |
       )
     )
   
-    //Newly crafted domains using .app matching this pattern observed 
+    // domains using .app matching this pattern observed abusing google's redirect
     or regex.icontains(sender.email.domain.domain, '[a-z]{3}\.\d{5,}[^\.]+\.app')
   )
-tags: 
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Evasion"
+  - "Open redirect"
+detection_methods:
+  - "Computer Vision"
+  - "Content analysis"
+  - "File analysis
+  - "Header analysis"
+  - "Natural Language Understanding"
+  - "Optical Character Recognition"
+  - "Sender analysis"
+  - "URL analysis"
   
