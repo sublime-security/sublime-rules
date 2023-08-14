@@ -3,18 +3,23 @@ name: Rules PR CI
 on:
   push:
     branches: [ "main", "test-rules" ]
-  pull_request:
+  pull_request_target:
     branches: [ "**" ]
   workflow_dispatch: {}
 
 concurrency:
-  group: ${{ github.ref }}
-  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+  # For pull_request_target workflows we want to use head_ref -- the branch triggering the workflow. Otherwise,
+  # use ref, which is the branch for a push event.
+  group: ${{ github.event_name == 'pull_request_target' && github.head_ref || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   tests:
     name: Run Rule Validation
     runs-on: ubuntu-20.04
+    permissions:
+      contents: write
+      checks: write
 
     steps:
       - name: Set up yq
@@ -22,6 +27,19 @@ jobs:
 
       - name: Checkout
         uses: actions/checkout@v3
+        with:
+          ref: ${{ github.head_ref }}
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Add Rule IDs as Needed & Check for Duplicates
+        # Run before testing, just in case this could invalidate the rule itself
+        run: |
+          pip install -r scripts/generate-rule-ids/requirements.txt
+          python scripts/generate-rule-ids/main.py
 
       - name: Validate Rules
         run: |
@@ -54,3 +72,57 @@ jobs:
       - name: Verify no .yaml files exist
         run: |
           ! /bin/sh -c 'ls **/*.yaml'
+
+      - name: Commit & Push Results, if needed
+        run: |
+          rm response.txt
+          
+          if [ -z "$(git status --porcelain)" ]; then 
+            echo "No files changed, nothing to do"
+            exit 0
+          fi
+          
+          git config user.name 'ID Generator'
+          git config user.email 'hello@sublimesecurity.com'
+          git add **/*.yml
+          git commit -m "Auto add rule ID"
+          git push origin ${{ github.head_ref }}
+
+      - name: Get the head SHA
+        id: get_head
+        run: echo "##[set-output name=HEAD;]$(git rev-parse HEAD)"
+
+      # When we add a commit, GitHub won't trigger actions on the auto commit, so we're missing a required check on the
+      # HEAD commit.
+      # Various alternatives were explored, but all run into issues when dealing with forks. This sets a "Check" for
+      # the latest commit, and we can depend on that as a required check.
+      - name: "Create a check run"
+        uses: actions/github-script@v6
+        if: github.event_name == 'pull_request_target'
+        env:
+          parameter_url: '${{ github.event.pull_request.html_url }}'
+        with:
+          debug: ${{ secrets.ACTIONS_STEP_DEBUG || false }}
+          retries: 3
+          # Default includes 422 which GitHub returns when it doesn't know about the head_sha we set the status for.
+          # This occurs when the previous push succeeds, but the checks/pull request component of GitHub isn't yet aware
+          # of the new commit. This isn't the common case, but it comes up enough to be annoying.
+          retry-exempt-status-codes: 400, 401, 403, 404
+          script: |
+            // any JavaScript code can go here, you can use Node JS APIs too.
+            // Docs: https://docs.github.com/en/rest/checks/runs#create-a-check-run
+            // Rest: https://octokit.github.io/rest.js/v18#checks-create
+            await github.rest.checks.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              head_sha: "${{ steps.get_head.outputs.HEAD }}",
+              name: "Rule Tests and ID Updated",
+              status: "completed",
+              conclusion: "success",
+              details_url: process.env.parameter_url,
+              output: {
+                title: "Rule Tests and ID Updated",
+                summary: "Rule Tests and ID Updated",
+                text: "Rule Tests and ID Updated",
+              },
+            });
