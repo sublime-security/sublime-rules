@@ -4,16 +4,20 @@ type: "rule"
 severity: "medium"
 source: |
   type.inbound
-  and any(ml.nlu_classifier(coalesce(
-    body.html.display_text, body.plain.raw)).intents,
-    .name in ("bec") and .confidence in ("medium", "high")
+  and any(ml.nlu_classifier(body.current_thread.text).intents,
+          .name in ("bec") and .confidence in ("medium", "high")
   )
   and (
     headers.return_path.domain.root_domain in $free_email_providers
     or (
       length(headers.reply_to) > 0
-      and all(headers.reply_to,
-        .email.domain.root_domain in $free_email_providers)
+      and all(headers.reply_to, .email.domain.root_domain in $free_email_providers)
+    )
+  )
+  and not (
+    sender.email.domain.root_domain == "paypal.com"
+    and any(distinct(headers.hops, .authentication_results.dmarc is not null),
+            strings.ilike(.authentication_results.dmarc, "*pass")
     )
   )
   and sender.email.domain.root_domain not in $free_email_providers
