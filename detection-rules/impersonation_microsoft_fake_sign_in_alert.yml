@@ -1,0 +1,21 @@
+name: "Brand impersonation: Microsoft fake sign-in alert"
+description: |
+  Detects messages impersonating Microsoft that mimic sign-in security alerts and attempt to solicit a response.
+type: "rule"
+severity: "medium"
+source: "type.inbound\n// Microsoft strings\nand (\n  strings.contains(subject.subject, \"Microsoft\")\n  or strings.contains(sender.display_name, \"Microsoft\")\n  or strings.contains(body.current_thread.text, \"Microsoft\")\n  or (\n\n    // or Microsoft Brand logo\n    any(attachments,\n        .file_type in ('png', 'jpeg', 'jpg', 'bmp')\n        and any(ml.logo_detect(.).brands, strings.starts_with(.name, \"Microsoft\"))\n    )\n  )\n)\n\n// Body contains Indicators of fake sign in notification\nand (\n  regex.contains(body.current_thread.text,\n                 '(Country.region:.{0,20}IP address:|Platform:.{0,20}Browser:)'\n  )\n  or regex.contains(body.current_thread.text, \"Unusual.{0,10}activity\")\n)\n\n\nand (\n\n  // If the sender is freemail\n  sender.email.domain.domain in $free_email_providers\n  or (\n  \n    // sender is not freemail, but the return path email or reply to email is  \n    sender.email.domain.domain not in $free_email_providers\n    and (\n      headers.return_path.domain.root_domain in $free_email_providers\n      or (\n        length(headers.reply_to) > 0\n        and (\n          all(headers.reply_to, .email.domain.root_domain in $free_email_providers)\n        )\n      )\n      or (\n\n        // if all replyto domain, return_path domain, sender domain mismatch\n        length(headers.reply_to) > 0\n        and all(headers.reply_to,\n                .email.domain.domain != headers.return_path.domain.domain\n                and headers.return_path.domain.domain != sender.email.domain.domain\n        )\n      )\n\n      // or the domain is less than 90 days old\n      or beta.whois(sender.email.domain).days_old <= 90\n      or (\n\n      // or Compauth verdict is not pass/softpass\n        any(headers.hops,\n            .authentication_results.compauth.verdict is not null\n            and .authentication_results.compauth.verdict not in (\"pass\", \"softpass\")\n        )\n      )\n    )\n  )\n)\nand sender.email.domain.root_domain not in (\n  \"bing.com\",\n  \"microsoft.com\",\n  \"microsoftonline.com\",\n  \"microsoftsupport.com\",\n  \"microsoft365.com\",\n  \"office.com\",\n  \"onedrive.com\",\n  \"sharepointonline.com\",\n  \"yammer.com\",\n)\n"
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Social engineering"
+detection_methods:
+  - "Computer Vision"
+  - "Content analysis"
+  - "File analysis"
+  - "Header analysis"
+  - "Sender analysis"
+  - "Whois"
+id: "3f4c9e7a-4d85-5bee-bc8c-3a737924c236"
+testing_pr: 661
+testing_sha: efa3425e014509cd8ac7e59987811eda8e6b11b0
