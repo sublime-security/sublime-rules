@@ -8,57 +8,51 @@ source: |
 
   // Microsoft logo
   and (
-      any(attachments,
-          .file_type in ('png', 'jpeg', 'jpg', 'bmp')
-          and any(ml.logo_detect(.).brands, strings.starts_with(.name, "Microsoft"))
-      )
-      or 
-      any(attachments,
-          .file_type in~ ('bmp', 'png', 'jpg', 'jpeg')
-          and (
-              any(file.explode(.),
-                  length(filter(.scan.strings.strings, strings.ilike(.,
-                      "*password*",
-                      "*unread messages*",
-                      "*Shared Documents*",
-                      "*expiration*",
-                      "*office*",
-                      "*expire*",
-                      "*expiring*",
-                      "*kindly*",
-                      "*renew*",
-                      "*review",
-                      "*emails failed*",
-                      "*kicked out*",
-                      "*prevented*",
-                      "*storage quota*",
-                      "*required now",
-                      "*cache*",
-                      "*qr code*",
-                      "*barcode*",
-                      "*security update*",
-                      "*quarantine*"
-                  ))) >= 2
-              ) 
+    any(attachments,
+        .file_type in ('png', 'jpeg', 'jpg', 'bmp')
+        and (
+          any(ml.logo_detect(.).brands, strings.starts_with(.name, "Microsoft"))
+          or any(file.explode(.),
+                2 of (
+                  strings.like(.scan.ocr.raw, "*password*"),
+                  strings.like(.scan.ocr.raw, "*unread messages*"),
+                  strings.like(.scan.ocr.raw, "*Shared Documents*"),
+                  strings.like(.scan.ocr.raw, "*expiration*"),
+                  strings.like(.scan.ocr.raw, "*office*"),
+                  strings.like(.scan.ocr.raw, "*expire*"),
+                  strings.like(.scan.ocr.raw, "*expiring*"),
+                  strings.like(.scan.ocr.raw, "*kindly*"),
+                  strings.like(.scan.ocr.raw, "*renew*"),
+                  strings.like(.scan.ocr.raw, "*review"),
+                  strings.like(.scan.ocr.raw, "*emails failed*"),
+                  strings.like(.scan.ocr.raw, "*kicked out*"),
+                  strings.like(.scan.ocr.raw, "*prevented*"),
+                  strings.like(.scan.ocr.raw, "*storage quota*"),
+                  strings.like(.scan.ocr.raw, "*required now"),
+                  strings.like(.scan.ocr.raw, "*cache*"),
+                  strings.like(.scan.ocr.raw, "*qr code*"),
+                  strings.like(.scan.ocr.raw, "*barcode*"),
+                  strings.like(.scan.ocr.raw, "*security update*"),
+                  strings.like(.scan.ocr.raw, "*quarantine*"),
+                )
           )
-      )
+        )
+    )
   )
 
   // Bing redirect
   and any(body.links, .href_url.domain.root_domain == 'bing.com' and .href_url.path =~ '/ck/a')
-
   and sender.email.domain.root_domain not in $org_domains
-
   and sender.email.domain.root_domain not in (
-      "bing.com",
-      "microsoft.com",
-      "microsoftonline.com",
-      "microsoftsupport.com",
-      "microsoft365.com",
-      "office.com",
-      "onedrive.com",
-      "sharepointonline.com",
-      "yammer.com"
+    "bing.com",
+    "microsoft.com",
+    "microsoftonline.com",
+    "microsoftsupport.com",
+    "microsoft365.com",
+    "office.com",
+    "onedrive.com",
+    "sharepointonline.com",
+    "yammer.com"
   )
 attack_types:
   - "BEC/Fraud"

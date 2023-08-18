@@ -26,51 +26,47 @@ source: |
           and any(file.explode(.),
                   (
                     // suspicious strings found in javascript
-                    length(filter(.scan.javascript.strings,
-                                  strings.ilike(.,
-                                                "*username*",
-                                                "*login-form*",
-                                                "*email-form*",
-                                                "*Incorrect password. Please try again.*",
-                                                "*Password Incomplete, please try again*"
-                                  )
-                           )
-                    )
-                    >= 3
-                    or (
-
-                      // suspicious strings found outside of javascript, but binexplode'd file still of HTML type
-                      .flavors.mime in~ ("text/html", "text/plain")
-                      and length(filter(.scan.strings.strings,
-                                        strings.ilike(.,
-                                                      "*username*",
-                                                      "*login-form*",
-                                                      "*email-form*",
-                                                      "*Incorrect password. Please try again.*",
-                                                      "*Password Incomplete, please try again*"
-                                        )
-                                 )
-                      )
-                      >= 3
+                    3 of (
+                      any(.scan.javascript.strings, strings.icontains(., "username")),
+                      any(.scan.javascript.strings, strings.icontains(., "login-form")),
+                      any(.scan.javascript.strings, strings.icontains(., "email-form")),
+                      any(.scan.javascript.strings,
+                          strings.icontains(., "Incorrect password. Please try again.")
+                      ),
+                      any(.scan.javascript.strings,
+                          strings.icontains(., "Password Incomplete, please try again")
+                      ),
                     )
                   )
-                  or 
+                  or (
 
-                  //Known phishing obfuscation
-                  (
-                    length(filter(.scan.strings.strings,
-                                  strings.ilike(.,
-                                                //Enter password  
-                                                "*&#69;&#110;&#116;&#101;&#114;&#32;&#112;&#97;&#115;&#115;&#119;&#111;&#114;&#100*",
-                                                //Forgotten my password
-                                                "*&#70;&#111;&#114;&#103;&#111;&#116;&#116;&#101;&#110;&#32;&#109;&#121;&#32;&#112;&#97;&#115;&#115;&#119;&#111;&#114;&#100*",
-                                                //Sign in
-                                                "*&#83;&#105;&#103;&#110;&#32;&#105;&#110*"
-                                  )
-                           )
+                    // suspicious strings found outside of javascript, but binexplode'd file still of HTML type
+                    .flavors.mime in~ ("text/html", "text/plain")
+                    and 3 of (
+                      any(.scan.strings.strings, strings.icontains(., "username")),
+                      any(.scan.strings.strings, strings.icontains(., "login-form")),
+                      any(.scan.strings.strings, strings.icontains(., "email-form")),
+                      any(.scan.strings.strings,
+                          strings.icontains(., "Incorrect password. Please try again.")
+                      ),
+                      any(.scan.strings.strings,
+                          strings.icontains(., "Password Incomplete, please try again")
+                      ),
                     )
-                    >= 2
                   )
+          )
+          //Known phishing obfuscation
+          or 2 of (
+            // Enter password
+            strings.icontains(.scan.ocr.raw,
+                              "&#69;&#110;&#116;&#101;&#114;&#32;&#112;&#97;&#115;&#115;&#119;&#111;&#114;&#100"
+            ),
+            // Forgotten my password
+            strings.icontains(.scan.ocr.raw,
+                              "&#70;&#111;&#114;&#103;&#111;&#116;&#116;&#101;&#110;&#32;&#109;&#121;&#32;&#112;&#97;&#115;&#115;&#119;&#111;&#114;&#100"
+            ),
+            // Sign in
+            strings.icontains(.scan.ocr.raw, "&#83;&#105;&#103;&#110;&#32;&#105;&#110")
           )
   )
 attack_types:

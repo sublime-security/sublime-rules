@@ -7,82 +7,54 @@ source: |
   type.inbound
   and length(filter(attachments, .file_type not in~ ('png', 'jpeg', 'jpg', 'bmp'))) == 0
   and (
-      any(attachments, 
-          .file_type in~ ('bmp', 'png', 'jpg', 'jpeg')
-          and any(ml.logo_detect(.).brands, strings.starts_with(.name, "Microsoft"))
-      )
-      or any(attachments, 
-          .file_type in~ ('bmp', 'png', 'jpg', 'jpeg')
-          and any(file.explode(.),
-              strings.ilike(.scan.ocr.raw, "*microsoft*", "*office"))
-      )
-  )
-  and any(attachments,
-      .file_type in~ ('bmp', 'png', 'jpg', 'jpeg')
-      and (
-          any(file.explode(.),
-              length(filter(.scan.strings.strings, strings.ilike(.,
-              "*password*",
-              "*unread messages*",
-              "*Shared Documents*",
-              "*expiration*",
-              "*office*",
-              "*expire*",
-              "*expiring*",
-              "*kindly*",
-              "*renew*",
-              "*review",
-              "*emails failed*",
-              "*kicked out*",
-              "*prevented*",
-              "*storage quota*",
-              "*required now",
-              "*cache*",
-              "*qr code*",
-              "*barcode*",
-              "*security update*"
-              ))) >= 2     
-      ) 
-  )
-  or (
-          any(file.explode(.),
-              length(filter(["password",
-              "unread messages",
-              "Shared Documents",
-              "expiration",
-              "office",
-              "expire",
-              "expiring",
-              "kindly",
-              "renew",
-              "review",
-              "emails failed",
-              "kicked out",
-              "prevented",
-              "storage quota",
-              "required now",
-              "cache",
-              "qr code",
-              "security update"], strings.icontains(..scan.ocr.raw, .))) >= 2   
-      )
-  )    
-
+    any(attachments,
+        .file_type in~ ('bmp', 'png', 'jpg', 'jpeg')
+        and (
+          any(ml.logo_detect(.).brands, strings.starts_with(.name, "Microsoft"))
+          or strings.ilike(.scan.ocr.raw, "*microsoft*", "*office")
+        )
+    )
+    and any(file.explode(.),
+            2 of (
+              strings.ilike(.scan.ocr.raw, "*password*"),
+              strings.ilike(.scan.ocr.raw, "*unread messages*"),
+              strings.ilike(.scan.ocr.raw, "*Shared Documents*"),
+              strings.ilike(.scan.ocr.raw, "*expiration*"),
+              strings.ilike(.scan.ocr.raw, "*office*"),
+              strings.ilike(.scan.ocr.raw, "*expire*"),
+              strings.ilike(.scan.ocr.raw, "*expiring*"),
+              strings.ilike(.scan.ocr.raw, "*kindly*"),
+              strings.ilike(.scan.ocr.raw, "*renew*"),
+              strings.ilike(.scan.ocr.raw, "*review"),
+              strings.ilike(.scan.ocr.raw, "*emails failed*"),
+              strings.ilike(.scan.ocr.raw, "*kicked out*"),
+              strings.ilike(.scan.ocr.raw, "*prevented*"),
+              strings.ilike(.scan.ocr.raw, "*storage quota*"),
+              strings.ilike(.scan.ocr.raw, "*required now"),
+              strings.ilike(.scan.ocr.raw, "*cache*"),
+              strings.ilike(.scan.ocr.raw, "*qr code*"),
+              strings.ilike(.scan.ocr.raw, "*barcode*"),
+              strings.ilike(.scan.ocr.raw, "*security update*"),
+            )
+    )
   )
   and (
-      not any(headers.hops, .authentication_results.compauth.verdict is not null
-      and .authentication_results.compauth.verdict == "pass"
-      and sender.email.domain.domain in ("microsoft.com", "sharepointonline.com"))
+    not any(headers.hops,
+            .authentication_results.compauth.verdict is not null
+            and .authentication_results.compauth.verdict == "pass"
+            and sender.email.domain.domain in ("microsoft.com", "sharepointonline.com")
+    )
   )
   // unsolicited
   and (
-      (
-          sender.email.domain.root_domain in $free_email_providers
-          and sender.email.email not in $recipient_emails
-      )
-      or (
-          sender.email.domain.root_domain not in $free_email_providers
-          and sender.email.domain.domain not in $recipient_domains
-      )
+    (
+      sender.email.domain.root_domain in $free_email_providers
+      and sender.email.email not in $recipient_emails
+    )
+    or (
+      sender.email.domain.root_domain not in $free_email_providers
+      and sender.email.domain.domain not in $recipient_domains
+    )
   )
 attack_types:
   - "Credential Phishing"

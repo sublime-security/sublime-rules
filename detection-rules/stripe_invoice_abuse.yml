@@ -6,22 +6,22 @@ description: |
 type: "rule"
 severity: "medium"
 source: |
-  type.inbound 
+  type.inbound
   and length(attachments) == 2
   and sender.email.domain.root_domain == "stripe.com"
   and any(headers.hops, .authentication_results.dmarc == "pass")
-
-  and any(attachments, .file_extension == "pdf" 
-      and any(file.explode(.),
-              length(filter(.scan.strings.strings, strings.ilike(.,
-                  "*Btc Purchase*",
-                  "*suspicious activity*",
-                  "*get in touch with us straight once*",
-                  "*your phone number*",
-                  "*due deducted*",
-                  "*merchant security service center*",
-              ))) >= 4
-      )
+  and any(attachments,
+          .file_extension == "pdf"
+          and any(file.explode(.),
+                  3 of (
+                    strings.ilike(.scan.ocr.raw, "*Btc Purchase*"),
+                    strings.ilike(.scan.ocr.raw, "*suspicious activity*"),
+                    strings.ilike(.scan.ocr.raw, "*get in touch with us straight once*"),
+                    strings.ilike(.scan.ocr.raw, "*your phone number*"),
+                    strings.ilike(.scan.ocr.raw, "*due deducted*"),
+                    strings.ilike(.scan.ocr.raw, "*merchant security service center*"),
+                  )
+          )
   )
 attack_types:
   - "BEC/Fraud"

@@ -4,25 +4,24 @@ type: "rule"
 severity: "medium"
 source: |
   type.inbound
-  and length(filter(attachments, .file_type not in~ ('png', 'jpeg', 'jpg', 'bmp'))) == 0 
+  and all(attachments, .file_type in~ ('png', 'jpeg', 'jpg', 'bmp'))
   and any(body.links, not strings.ilike(.href_url.domain.root_domain, "dropbox.*"))
-
-  and any(attachments, .file_type in~ ('png','jpg','jpeg','bmp')
-      and any(file.explode(.),
-      any(.scan.strings.strings, strings.ilike(., "*dropbox*"))
-       and any(.scan.strings.strings, strings.ilike(., "*review*", "*sign*"))
-      )
+  and any(attachments,
+          .file_type in~ ('png', 'jpg', 'jpeg', 'bmp')
+          and any(file.explode(.),
+                  strings.ilike(.scan.ocr.raw, "*dropbox*")
+                  and strings.ilike(.scan.ocr.raw, "*review*", "*sign*")
+          )
   )
-
   and (
-          (
-              sender.email.domain.root_domain in $free_email_providers
-              and sender.email.email not in $sender_emails
-          )
-          or (
-              sender.email.domain.root_domain not in $free_email_providers
-              and sender.email.domain.domain not in $sender_domains
-          )
+    (
+      sender.email.domain.root_domain in $free_email_providers
+      and sender.email.email not in $sender_emails
+    )
+    or (
+      sender.email.domain.root_domain not in $free_email_providers
+      and sender.email.domain.domain not in $sender_domains
+    )
   )
 attack_types:
   - "Credential Phishing"
