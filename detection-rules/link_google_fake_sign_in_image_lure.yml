@@ -6,33 +6,37 @@ severity: "high"
 source: |
   type.inbound
   and length(body.links) > 0
-  
+
   // Google Logo in Attachment
   and any(attachments,
-      .file_type in ('png', 'jpeg', 'jpg', 'bmp')
-      and any(ml.logo_detect(.).brands, .name in ("Google"))
+          .file_type in ('png', 'jpeg', 'jpg', 'bmp')
+          and any(ml.logo_detect(.).brands, .name in ("Google"))
   )
   and any(attachments,
-      .file_type in~ ('bmp', 'png', 'jpg', 'jpeg')
-      and (
-          any(file.explode(.),
-              // Fake activity warning
-              length(filter(.scan.strings.strings, strings.ilike(.,
-                  "*new sign-in*",
-                  "*google account*",
-                  "*secure your account*",
-                  "*check activity*"
-              ))) >= 3
+          .file_type in~ ('bmp', 'png', 'jpg', 'jpeg')
+          and (
+            any(file.explode(.),
+                // Fake activity warning
+                length(filter(.scan.strings.strings,
+                              strings.ilike(.,
+                                            "*new sign-in*",
+                                            "*google account*",
+                                            "*secure your account*",
+                                            "*check activity*"
+                              )
+                       )
+                )
+                >= 3
+            )
           )
-      )
   )
-  
+
   // legitimate sign-in warnings contains links to google, gmail or googleapis.com
   and (
-      not all(body.links,
-          .href_url.domain.root_domain in ("google.com", "gmail.com", "googleapis.com")
-          or .href_url.domain.root_domain is null
-      )
+    not all(body.links,
+            .href_url.domain.root_domain in ("google.com", "gmail.com", "googleapis.com")
+            or .href_url.domain.root_domain is null
+    )
   )
   and sender.email.domain.root_domain not in $org_domains
   and sender.email.domain.root_domain != "google.com"

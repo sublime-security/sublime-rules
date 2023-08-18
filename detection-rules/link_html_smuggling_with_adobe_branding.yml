@@ -9,32 +9,35 @@ severity: "high"
 source: |
   type.inbound
   and any(body.links,
-      // There are files downloaded
-      length(beta.linkanalysis(.).files_downloaded) > 0 and 
+          // There are files downloaded
+          length(beta.linkanalysis(.).files_downloaded)
+          > 0
+          and 
 
-      // Adobe branding
-      beta.linkanalysis(.).credphish.brand.name == "Adobe" and 
-      beta.linkanalysis(.).credphish.brand.confidence == "high" and 
+          // Adobe branding
+          beta.linkanalysis(.).credphish.brand.name
+          == "Adobe"
+          and beta.linkanalysis(.).credphish.brand.confidence == "high"
+          and 
 
-      // Qakbot text for user coercion
-      any(file.explode(beta.linkanalysis(.).screenshot),
-          all([
-              "the file is not displayed correctly",
-              "document password"
-          ], strings.icontains(..scan.ocr.raw, .))
-      )
+          // Qakbot text for user coercion
+          any(file.explode(beta.linkanalysis(.).screenshot),
+              all(["the file is not displayed correctly", "document password"],
+                  strings.icontains(..scan.ocr.raw, .)
+              )
+          )
   )
   // unsolicited
   and (
-          (
-              sender.email.domain.root_domain in $free_email_providers
-              and sender.email.email not in $recipient_emails
-          )
-          or (
-              sender.email.domain.root_domain not in $free_email_providers
-              and sender.email.domain.domain not in $recipient_domains
-          )
-  ) 
+    (
+      sender.email.domain.root_domain in $free_email_providers
+      and sender.email.email not in $recipient_emails
+    )
+    or (
+      sender.email.domain.root_domain not in $free_email_providers
+      and sender.email.domain.domain not in $recipient_domains
+    )
+  )
 tags:
   - "Malfam: QakBot"
 attack_types:
