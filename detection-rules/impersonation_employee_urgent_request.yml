@@ -8,14 +8,17 @@ severity: "medium"
 source: |
   type.inbound
   and sender.display_name in~ $org_display_names
-  and any([body.plain.raw, body.html.inner_text],
-          any(ml.nlu_classifier(.).intents, .name == "bec" and .confidence == "high")
-          or (
-            any(ml.nlu_classifier(.).entities, .name == "urgency")
-            and any(ml.nlu_classifier(.).entities, .name == "request")
-            and not any(ml.nlu_classifier(.).intents, .name == "benign" and .confidence == "high")
-            and not strings.istarts_with(subject.subject, "fwd:")
-          )
+  and (
+    any(ml.nlu_classifier(body.current_thread.text).intents, .name == "bec" and .confidence == "high")
+    or (
+      any(ml.nlu_classifier(body.current_thread.text).entities,
+          .name == "urgency" and .name == "request"
+      )
+      and not any(ml.nlu_classifier(body.current_thread.text).intents,
+                  .name == "benign" and .confidence == "high"
+      )
+      and not strings.istarts_with(subject.subject, "fwd:")
+    )
   )
 
   // first-time sender
