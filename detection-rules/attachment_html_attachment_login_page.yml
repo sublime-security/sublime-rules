@@ -20,47 +20,56 @@ source: |
           and any(file.explode(.),
                   (
                     // suspicious strings found in javascript
-                    length(filter(.scan.javascript.strings,
-                                  strings.ilike(.,
-                                                "*password*",
-                                                "*username*",
-                                                "*login-form*",
-                                                "*email-form*",
-                                                "*Incorrect password. Please try again.*",
-                                                "*Password Incomplete, please try again*"
-                                  )
-                           )
-                    ) >= 3
+                    3 of (
+                      any(.scan.javascript.strings, strings.ilike(., "*password*")),
+                      any(.scan.javascript.strings, strings.ilike(., "*username*")),
+                      any(.scan.javascript.strings, strings.ilike(., "*login-form*")),
+                      any(.scan.javascript.strings, strings.ilike(., "*email-form*")),
+                      any(.scan.javascript.strings,
+                          strings.ilike(., "*Incorrect password. Please try again.*")
+                      ),
+                      any(.scan.javascript.strings,
+                          strings.ilike(., "*Password Incomplete, please try again*")
+                      )
+                    )
                     or (
                       // suspicious strings found outside of javascript, but binexplode'd file still of HTML type
                       .flavors.mime in~ ("text/html", "text/plain")
-                      and length(filter(.scan.strings.strings,
-                                        strings.ilike(.,
-                                                      "*password*",
-                                                      "*username*",
-                                                      "*login-form*",
-                                                      "*email-form*",
-                                                      "*Incorrect password. Please try again.*",
-                                                      "*Password Incomplete, please try again*"
-                                        )
-                                 )
-                      ) >= 3
+                      and 3 of (
+                        any(.scan.strings.strings, strings.ilike(., "*password*")),
+                        any(.scan.strings.strings, strings.ilike(., "*username*")),
+                        any(.scan.strings.strings, strings.ilike(., "*login-form*")),
+                        any(.scan.strings.strings, strings.ilike(., "*email-form*")),
+                        any(.scan.strings.strings,
+                            strings.ilike(., "*Incorrect password. Please try again.*")
+                        ),
+                        any(.scan.strings.strings,
+                            strings.ilike(., "*Password Incomplete, please try again*")
+                        )
+                      )
                     )
                   )
                   or 
                   //Known phishing obfuscation
-                  (
-                    length(filter(.scan.strings.strings,
-                                  strings.ilike(.,
-                                                //Enter password  
-                                                "*&#69;&#110;&#116;&#101;&#114;&#32;&#112;&#97;&#115;&#115;&#119;&#111;&#114;&#100*",
-                                                //Forgotten my password
-                                                "*&#70;&#111;&#114;&#103;&#111;&#116;&#116;&#101;&#110;&#32;&#109;&#121;&#32;&#112;&#97;&#115;&#115;&#119;&#111;&#114;&#100*",
-                                                //Sign in
-                                                "*&#83;&#105;&#103;&#110;&#32;&#105;&#110*"
-                                  )
-                           )
-                    ) >= 2
+                  2 of (
+                    // Enter password
+                    any(.scan.strings.strings,
+                        strings.ilike(.,
+                                      "*&#69;&#110;&#116;&#101;&#114;&#32;&#112;&#97;&#115;&#115;&#119;&#111;&#114;&#100*"
+                        )
+                    ),
+
+                    // Forgotten my password
+                    any(.scan.strings.strings,
+                        strings.ilike(.,
+                                      "*&#70;&#111;&#114;&#103;&#111;&#116;&#116;&#101;&#110;&#32;&#109;&#121;&#32;&#112;&#97;&#115;&#115;&#119;&#111;&#114;&#100*"
+                        )
+                    ),
+
+                    // Sign in
+                    any(.scan.strings.strings,
+                        strings.ilike(., "*&#83;&#105;&#103;&#110;&#32;&#105;&#110*")
+                    )
                   )
           )
   )
