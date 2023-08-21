@@ -8,29 +8,34 @@ severity: "high"
 source: |
   type.inbound
   and any(attachments,
-      (
-          .file_extension in~ ("html", "htm", "shtml", "dhtml") or
-          .file_extension in~ $file_extensions_common_archives or
-          .file_type == "html"
-      )
-      and any(file.explode(.),
-          any(.scan.javascript.identifiers, strings.ilike(., 'click'))
-          and any(.scan.javascript.identifiers, strings.ilike(., 'addEventListener'))
-          and (
-              length(filter(.scan.javascript.identifiers, strings.like (., "document", "write", "atob"))) == 3
-              // usage: document['write'](atob)
-              or any(.scan.strings.strings, strings.ilike(., "*document*write*atob*"))
-              // usage: some_var = atob();
-              or any(.scan.strings.strings, strings.ilike(., "*=*atob*;"))
-              // usage: obfuscating "atob"
-              or any(.scan.javascript.identifiers, strings.ilike(., '*ato\u0062*'))
-              // usage: document.head.insertAdjacentHTML("beforeend", atob(...
-              or 
-                  any(.scan.strings.strings, strings.ilike(.,
-                      "*document*write*atob*",
-                      "*document*insertAdjacentHTML*atob*"))
+          (
+            .file_extension in~ ("html", "htm", "shtml", "dhtml")
+            or .file_extension in~ $file_extensions_common_archives
+            or .file_type == "html"
           )
-      )
+          and any(file.explode(.),
+                  any(.scan.javascript.identifiers, strings.ilike(., 'click'))
+                  and any(.scan.javascript.identifiers, strings.ilike(., 'addEventListener'))
+                  and (
+                    length(filter(.scan.javascript.identifiers,
+                                  strings.like(., "document", "write", "atob")
+                           )
+                    ) == 3
+                    // usage: document['write'](atob)
+                    or any(.scan.strings.strings, strings.ilike(., "*document*write*atob*"))
+                    // usage: some_var = atob();
+                    or any(.scan.strings.strings, strings.ilike(., "*=*atob*;"))
+                    // usage: obfuscating "atob"
+                    or any(.scan.javascript.identifiers, strings.ilike(., '*ato\u0062*'))
+                    // usage: document.head.insertAdjacentHTML("beforeend", atob(...
+                    or any(.scan.strings.strings,
+                           strings.ilike(.,
+                                         "*document*write*atob*",
+                                         "*document*insertAdjacentHTML*atob*"
+                           )
+                    )
+                  )
+          )
   )
 attack_types:
   - "Credential Phishing"
