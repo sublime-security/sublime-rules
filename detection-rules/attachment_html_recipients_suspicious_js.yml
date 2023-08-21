@@ -4,34 +4,43 @@ description: |
 type: "rule"
 severity: "high"
 source: |
-  type.inbound 
-  and any(attachments, 
-      (
-          .content_type == "text/html"
-          or .file_extension in~ ("html", "htm", "shtml", "dhtml")
-          or .file_type == "html"
-      )
-      and any(file.explode(.), .flavors.mime in~ ("text/html", "text/plain")
-          and any(recipients.to, any(..scan.strings.strings, strings.icontains(., ..email.email)))
-      )
-      and any(file.explode(.),
+  type.inbound
+  and any(attachments,
           (
-              any(.flavors.yara, . == "javascript_file")
-              // common indicator of HTML smuggling
-              and length(filter(.scan.javascript.identifiers, strings.ilike(., "_0x*"))) > 50
+            .content_type == "text/html"
+            or .file_extension in~ ("html", "htm", "shtml", "dhtml")
+            or .file_type == "html"
           )
-          or
-          (   
-              // javascript that doesn't get pulled out properly
-              .flavors.mime == "text/plain" and strings.ilike(.file_name, "script*")
-              // common indicator of HTML smuggling
-              and length(filter(.scan.strings.strings, regex.imatch(., ".*_0x.*"))) > 50
+          and any(file.explode(.),
+                  .flavors.mime in~ ("text/html", "text/plain")
+                  and any(recipients.to,
+                          any(..scan.strings.strings, strings.icontains(., ..email.email))
+                  )
           )
-      )
+          and any(file.explode(.),
+                  (
+                    any(.flavors.yara, . == "javascript_file")
+                    // common indicator of HTML smuggling
+                    and length(filter(.scan.javascript.identifiers, strings.ilike(., "_0x*"))) > 50
+                  )
+                  or (
+                    // javascript that doesn't get pulled out properly
+                    .flavors.mime == "text/plain"
+                    and strings.ilike(.file_name, "script*")
+                    // common indicator of HTML smuggling
+                    and length(filter(.scan.strings.strings, regex.imatch(., ".*_0x.*"))) > 50
+                  )
+          )
   )
-tags: 
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
   - "HTML smuggling"
-  - "Suspicious attachments"
-  - "Credential phishing"
-
+  - "Scripting"
+detection_methods:
+  - "Content analysis"
+  - "File analysis"
+  - "HTML analysis"
+  - "Javascript analysis"
+  - "YARA"
 id: "5333493d-48a8-532d-a621-d278a59bbf9b"

@@ -5,33 +5,40 @@ severity: "medium"
 source: |
   type.inbound
   and sender.email.domain.domain not in $org_domains
-  and regex.icontains(sender.display_name, '(\bh\W?r\W?\b|human resources|hr depart(ment)?|employee relations)')
-  
+  and regex.icontains(sender.display_name,
+                      '(\bh\W?r\W?\b|human resources|hr depart(ment)?|employee relations)'
+  )
   and (length(body.links) > 0 or length(attachments) > 0)
-  
+
   // Request and Urgency 
   and any(ml.nlu_classifier(body.html.inner_text).entities, .name == "request")
   and any(ml.nlu_classifier(body.html.inner_text).entities, .name == "urgency")
   and (
-          (
-              length(ml.nlu_classifier(body.html.inner_text).intents) > 0
-              and any(ml.nlu_classifier(body.html.inner_text).intents, .name != "benign")
-          )
-      or length(ml.nlu_classifier(body.html.inner_text).intents) == 0
+    (
+      length(ml.nlu_classifier(body.html.inner_text).intents) > 0
+      and any(ml.nlu_classifier(body.html.inner_text).intents, .name != "benign")
+    )
+    or length(ml.nlu_classifier(body.html.inner_text).intents) == 0
   )
-  
-  
   and (
-          (
-              sender.email.domain.root_domain in $free_email_providers
-              and sender.email.email not in $sender_emails
-          )
-    or 
-          (
-              sender.email.domain.root_domain not in $free_email_providers
-              and sender.email.domain.domain not in $sender_domains
-          )
+    (
+      sender.email.domain.root_domain in $free_email_providers
+      and sender.email.email not in $sender_emails
+    )
+    or (
+      sender.email.domain.root_domain not in $free_email_providers
+      and sender.email.domain.domain not in $sender_domains
+    )
   )
-tags:
-  - "Department impersonation"
+attack_types:
+  - "BEC/Fraud"
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Impersonation: Employee"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Header analysis"
+  - "Natural Language Understanding"
+  - "Sender analysis"
 id: "8c95a6a8-50d3-5697-a379-c00bda8e1922"

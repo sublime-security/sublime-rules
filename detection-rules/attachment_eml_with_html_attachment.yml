@@ -9,15 +9,16 @@ source: |
   type.inbound
 
   // has EML attachment
-  and any(attachments, .content_type == "message/rfc822"
-      and any(file.explode(.),
+  and any(attachments,
+          .content_type == "message/rfc822"
+          and any(file.explode(.),
 
-          // HTML file inside EML attachment
-          // we've seen files named ".htm.", which results in an empty
-          // .file_extension, so instead we look at .file_name
-          // they should be rare enough in EML attachments to not cause
-          // extraneous FPs
-          strings.ilike(.file_name, "*htm*")
+                  // HTML file inside EML attachment
+                  // we've seen files named ".htm.", which results in an empty
+                  // .file_extension, so instead we look at .file_name
+                  // they should be rare enough in EML attachments to not cause
+                  // extraneous FPs
+                  strings.ilike(.file_name, "*htm*")
 
           // optional: we can add additional signals here if necessary
           // identify at least one additional suspicious signal in the message
@@ -30,7 +31,7 @@ source: |
           //     // commonly abused sender TLD
           //     strings.ilike(sender.email.domain.tld, "*.jp")
           // )
-        )
+          )
   )
 
   // exclude bounce backs & read receipts
@@ -38,23 +39,31 @@ source: |
   and not regex.icontains(subject.subject, "^(undeliverable|read:)")
   and not any(attachments, .content_type == "message/delivery-status")
   // if the "References" is in the body of the message, it's probably a bounce
-  and not any(headers.references,
-      strings.contains(body.html.display_text, .)
-  )
+  and not any(headers.references, strings.contains(body.html.display_text, .))
 
   // unsolicited
   and (
-          (
-              sender.email.domain.root_domain in $free_email_providers
-              and sender.email.email not in $recipient_emails
-          )
-          or (
-              sender.email.domain.root_domain not in $free_email_providers
-              and sender.email.domain.domain not in $recipient_domains
-          )
+    (
+      sender.email.domain.root_domain in $free_email_providers
+      and sender.email.email not in $recipient_emails
+    )
+    or (
+      sender.email.domain.root_domain not in $free_email_providers
+      and sender.email.domain.domain not in $recipient_domains
+    )
   )
 tags:
-  - "Suspicious attachment"
-  - "HTML smuggling"
   - "Attack surface reduction"
+attack_types:
+  - "Credential Phishing"
+  - "Malware/Ransomware"
+tactics_and_techniques:
+  - "Evasion"
+  - "HTML smuggling"
+detection_methods:
+  - "Content analysis"
+  - "File analysis"
+  - "Header analysis"
+  - "HTML analysis"
+  - "Sender analysis"
 id: "c24fd191-1685-5cb8-83ef-618225401332"

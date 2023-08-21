@@ -10,57 +10,80 @@ severity: "medium"
 authors:
   - twitter: "ajpc500"
 source: |
-  type.inbound 
-  
+  type.inbound
   and any(attachments,
-      (
-          .file_extension in~ ("html", "htm", "shtml", "dhtml") or
-          .file_extension in~ $file_extensions_common_archives or
-          .file_type == "html"
-      )
-      and any(file.explode(.),
-      (
-          // suspicious strings found in javascript
-          length(filter(.scan.javascript.strings, strings.ilike(.,
-              "*password*", "*username*", "*login-form*", "*email-form*", "*Incorrect password. Please try again.*", "*Password Incomplete, please try again*"
-          ))) >= 3 or 
           (
-              // suspicious strings found outside of javascript, but binexplode'd file still of HTML type
-              .flavors.mime in~ ("text/html", "text/plain") and 
-              length(filter(.scan.strings.strings, strings.ilike(.,
-                  "*password*", "*username*", "*login-form*", "*email-form*", "*Incorrect password. Please try again.*", "*Password Incomplete, please try again*"
-              ))) >= 3
+            .file_extension in~ ("html", "htm", "shtml", "dhtml")
+            or .file_extension in~ $file_extensions_common_archives
+            or .file_type == "html"
           )
-      ) or 
-      //Known phishing obfuscation
-      (
-          length(
-              filter(
-                  .scan.strings.strings, strings.ilike(.,
-                      //Enter password  
-                      "*&#69;&#110;&#116;&#101;&#114;&#32;&#112;&#97;&#115;&#115;&#119;&#111;&#114;&#100*",
-                      //Forgotten my password
-                      "*&#70;&#111;&#114;&#103;&#111;&#116;&#116;&#101;&#110;&#32;&#109;&#121;&#32;&#112;&#97;&#115;&#115;&#119;&#111;&#114;&#100*",
-                      //Sign in
-                      "*&#83;&#105;&#103;&#110;&#32;&#105;&#110*"
+          and any(file.explode(.),
+                  (
+                    // suspicious strings found in javascript
+                    length(filter(.scan.javascript.strings,
+                                  strings.ilike(.,
+                                                "*password*",
+                                                "*username*",
+                                                "*login-form*",
+                                                "*email-form*",
+                                                "*Incorrect password. Please try again.*",
+                                                "*Password Incomplete, please try again*"
+                                  )
+                           )
+                    ) >= 3
+                    or (
+                      // suspicious strings found outside of javascript, but binexplode'd file still of HTML type
+                      .flavors.mime in~ ("text/html", "text/plain")
+                      and length(filter(.scan.strings.strings,
+                                        strings.ilike(.,
+                                                      "*password*",
+                                                      "*username*",
+                                                      "*login-form*",
+                                                      "*email-form*",
+                                                      "*Incorrect password. Please try again.*",
+                                                      "*Password Incomplete, please try again*"
+                                        )
+                                 )
+                      ) >= 3
+                    )
                   )
-              )
-          ) >= 2
-      )
-
-  ))
+                  or 
+                  //Known phishing obfuscation
+                  (
+                    length(filter(.scan.strings.strings,
+                                  strings.ilike(.,
+                                                //Enter password  
+                                                "*&#69;&#110;&#116;&#101;&#114;&#32;&#112;&#97;&#115;&#115;&#119;&#111;&#114;&#100*",
+                                                //Forgotten my password
+                                                "*&#70;&#111;&#114;&#103;&#111;&#116;&#116;&#101;&#110;&#32;&#109;&#121;&#32;&#112;&#97;&#115;&#115;&#119;&#111;&#114;&#100*",
+                                                //Sign in
+                                                "*&#83;&#105;&#103;&#110;&#32;&#105;&#110*"
+                                  )
+                           )
+                    ) >= 2
+                  )
+          )
+  )
   // Unsolicited
   and (
-      (
-          sender.email.domain.root_domain in $free_email_providers
-          and sender.email.email not in $recipient_emails
-      )
-      or (
-          sender.email.domain.root_domain not in $free_email_providers
-          and sender.email.domain.domain not in $recipient_domains
-      )
+    (
+      sender.email.domain.root_domain in $free_email_providers
+      and sender.email.email not in $recipient_emails
+    )
+    or (
+      sender.email.domain.root_domain not in $free_email_providers
+      and sender.email.domain.domain not in $recipient_domains
+    )
   )
-tags:
-  - "Suspicious attachment"
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
   - "HTML smuggling"
+  - "Scripting"
+detection_methods:
+  - "Archive analysis"
+  - "File analysis"
+  - "HTML analysis"
+  - "Javascript analysis"
+  - "Sender analysis"
 id: "3aabf4a7-fefa-5266-83fe-012002c9db4a"

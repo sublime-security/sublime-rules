@@ -6,15 +6,15 @@ type: "rule"
 severity: "medium"
 source: |
   type.inbound
-
   and any(headers.reply_to,
-    // mismatched reply-to and sender domain
-    .email.domain.root_domain != sender.email.domain.root_domain
+          // mismatched reply-to and sender domain
+          .email.domain.root_domain
+          != sender.email.domain.root_domain
 
-    // newly registered reply-to domain
-    and beta.whois(.email.domain).days_old <= 30
+          // newly registered reply-to domain
+          and beta.whois(.email.domain).days_old <= 30
   )
-       
+
   // request is being made
   and any(ml.nlu_classifier(body.current_thread.text).entities, .name == "request" 
   )
@@ -33,17 +33,24 @@ source: |
 
   // first-time sender
   and (
-          (
-              sender.email.domain.root_domain in $free_email_providers
-              and sender.email.email not in $sender_emails
-          )
-          or (
-              sender.email.domain.root_domain not in $free_email_providers
-              and sender.email.domain.domain not in $sender_domains
-          )
+    (
+      sender.email.domain.root_domain in $free_email_providers
+      and sender.email.email not in $sender_emails
+    )
+    or (
+      sender.email.domain.root_domain not in $free_email_providers
+      and sender.email.domain.domain not in $sender_domains
+    )
   )
-tags:
-  - "Vendor impersonation"
+attack_types:
+  - "BEC/Fraud"
+tactics_and_techniques:
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Header analysis"
   - "Natural Language Understanding"
-  - "New domain"
+  - "Sender analysis"
+  - "URL analysis"
+  - "Whois"
 id: "db4d9bb3-0eca-5525-9a99-7c1c773b580f"

@@ -8,19 +8,22 @@ severity: "medium"
 source: |
   type.inbound
   and any(attachments,
-      (
           (
+            (
               // office files
               .file_extension in~ $file_extensions_macros
               or .file_extension in~ $file_extensions_common_archives
+            )
+            and any(file.explode(.),
+                    .flavors.mime == "text/xml"
+                    and any(.scan.strings.strings, regex.icontains(., ".*Target.*http.*dotm.*"))
+            )
           )
-          and any(file.explode(.),
-              .flavors.mime == "text/xml" and
-              any(.scan.strings.strings, regex.icontains(., ".*Target.*http.*dotm.*"))
-          )
-      )
   )
-tags:
-  - "Suspicious attachment"
-  - "Office exploit"
+attack_types:
+  - "Malware/Ransomware"
+detection_methods:
+  - "Archive analysis"
+  - "File analysis"
+  - "URL analysis"
 id: "d9601104-c330-5995-9fae-4d30b969c081"

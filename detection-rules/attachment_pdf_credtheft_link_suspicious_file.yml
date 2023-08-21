@@ -6,24 +6,35 @@ references:
 type: "rule"
 severity: "high"
 source: |
-  type.inbound 
-  and any(attachments, .file_type == "pdf"
-  and any(file.explode(.), 
-          any(ml.nlu_classifier(.scan.ocr.raw).intents, 
-              .name == "cred_theft" and .confidence in~ ("medium", "high")
+  type.inbound
+  and any(attachments,
+          .file_type == "pdf"
+          and any(file.explode(.),
+                  any(ml.nlu_classifier(.scan.ocr.raw).intents,
+                      .name == "cred_theft" and .confidence in~ ("medium", "high")
+                  )
+                  and any(.scan.url.urls,
+                          strings.icontains(beta.linkanalysis(.).final_dom.display_text,
+                                            "Redirect Notice"
+                          )
+                          and (
+                            strings.contains(beta.linkanalysis(.).final_dom.display_text, ".zip")
+                            or strings.contains(beta.linkanalysis(.).final_dom.display_text, ".php")
+                          )
+                  )
           )
-          and any(.scan.url.urls, 
-              strings.icontains(beta.linkanalysis(.).final_dom.display_text, "Redirect Notice")
-              and (
-                  strings.contains(beta.linkanalysis(.).final_dom.display_text, ".zip")
-                  or strings.contains(beta.linkanalysis(.).final_dom.display_text, ".php")
-              )
-          )
-      )
   )
-tags: 
+tags:
+  - "Malfam: QakBot"
+attack_types:
+  - "Malware/Ransomware"
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Evasion"
+  - "PDF"
+detection_methods:
+  - "File analysis"
   - "Natural Language Understanding"
-  - "Suspicious attachment"
-  - "Suspicious link"
-  - "QakBot"
+  - "Optical Character Recognition"
+  - "URL analysis"
 id: "adda3c3f-8966-5f46-9924-234bbaee0a2c"
