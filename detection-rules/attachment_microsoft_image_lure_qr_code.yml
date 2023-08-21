@@ -6,44 +6,45 @@ severity: "medium"
 source: |
   type.inbound
   and (
-      any(attachments, 
-          .file_type in~ ('bmp', 'png', 'jpg', 'jpeg')
-          and any(ml.logo_detect(.).brands, strings.starts_with(.name, "Microsoft"))
-      )
-      or any(ml.logo_detect(beta.message_screenshot()).brands, strings.starts_with(.name, "Microsoft"))
+    any(attachments,
+        .file_type in~ ('bmp', 'png', 'jpg', 'jpeg')
+        and any(ml.logo_detect(.).brands, strings.starts_with(.name, "Microsoft"))
+    )
+    or any(ml.logo_detect(beta.message_screenshot()).brands, strings.starts_with(.name, "Microsoft"))
   )
   and any(attachments,
-      .file_type in~ ('bmp', 'png', 'jpg', 'jpeg')
-      and (
-          any(file.explode(.),
-              any(.scan.strings.strings, regex.icontains(.,  'scan|camera'))   
-              and any(.scan.strings.strings, regex.icontains(.,  '\bQR\b|Q\.R\.|barcode'))
-          )
-          or (
-              any(file.explode(.), .scan.qr.type == "url"
+          .file_type in~ ('bmp', 'png', 'jpg', 'jpeg')
+          and (
+            any(file.explode(.),
+                any(.scan.strings.strings, regex.icontains(., 'scan|camera'))
+                and any(.scan.strings.strings, regex.icontains(., '\bQR\b|Q\.R\.|barcode'))
+            )
+            or (
+              any(file.explode(.),
+                  .scan.qr.type == "url"
                   // recipient email address is present in the URL, a common tactic used in credential phishing attacks 
                   and any(recipients.to, strings.icontains(..scan.qr.data, .email.email))
               )
-          )   
-      )
+            )
+          )
   )
   and (
-      not any(headers.hops,
-          .authentication_results.compauth.verdict is not null
-          and .authentication_results.compauth.verdict == "pass"
-          and sender.email.domain.domain == "microsoft.com"
-      )
+    not any(headers.hops,
+            .authentication_results.compauth.verdict is not null
+            and .authentication_results.compauth.verdict == "pass"
+            and sender.email.domain.domain == "microsoft.com"
+    )
   )
   // unsolicited
   and (
-      (
-          sender.email.domain.root_domain in $free_email_providers
-          and sender.email.email not in $recipient_emails
-      )
-      or (
-          sender.email.domain.root_domain not in $free_email_providers
-          and sender.email.domain.domain not in $recipient_domains
-      )
+    (
+      sender.email.domain.root_domain in $free_email_providers
+      and sender.email.email not in $recipient_emails
+    )
+    or (
+      sender.email.domain.root_domain not in $free_email_providers
+      and sender.email.domain.domain not in $recipient_domains
+    )
   )
 attack_types:
   - "Credential Phishing"

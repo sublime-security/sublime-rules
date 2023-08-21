@@ -5,26 +5,25 @@ type: "rule"
 severity: "high"
 source: |
   type.inbound
+  and any(body.links,
 
-  and any(body.links, 
-   
-      // contains login or captcha
-      (
-          beta.linkanalysis(.).credphish.contains_login
-          or beta.linkanalysis(.).credphish.contains_captcha
-      )
+          // contains login or captcha
+          (
+            beta.linkanalysis(.).credphish.contains_login
+            or beta.linkanalysis(.).credphish.contains_captcha
+          )
 
-      // either the original or the redirect is a free subdomain
-      and (
-          beta.linkanalysis(.).effective_url.domain.root_domain in $free_subdomain_hosts
-          or .href_url.domain.root_domain in $free_subdomain_hosts
-      )
+          // either the original or the redirect is a free subdomain
+          and (
+            beta.linkanalysis(.).effective_url.domain.root_domain in $free_subdomain_hosts
+            or .href_url.domain.root_domain in $free_subdomain_hosts
+          )
 
-      // exclude FP prone free subdomain hosts
-      // if it's a known brand impersonation, we'll detect it in other rules
-      and .href_url.domain.root_domain not in ("zendesk.com")
-      and beta.linkanalysis(.).effective_url.domain.root_domain not in ("zendesk.com")
-      and beta.linkanalysis(.).effective_url.domain.domain not in ("login.squarespace.com")
+          // exclude FP prone free subdomain hosts
+          // if it's a known brand impersonation, we'll detect it in other rules
+          and .href_url.domain.root_domain not in ("zendesk.com")
+          and beta.linkanalysis(.).effective_url.domain.root_domain not in ("zendesk.com")
+          and beta.linkanalysis(.).effective_url.domain.domain not in ("login.squarespace.com")
   )
 
   // exclude FP prone senders
@@ -32,14 +31,14 @@ source: |
 
   // first-time sender
   and (
-        (
-            sender.email.domain.root_domain in $free_email_providers
-            and sender.email.email not in $sender_emails
-        )
-        or (
-            sender.email.domain.root_domain not in $free_email_providers
-            and sender.email.domain.domain not in $sender_domains
-        )
+    (
+      sender.email.domain.root_domain in $free_email_providers
+      and sender.email.email not in $sender_emails
+    )
+    or (
+      sender.email.domain.root_domain not in $free_email_providers
+      and sender.email.domain.domain not in $sender_domains
+    )
   )
 attack_types:
   - "Credential Phishing"

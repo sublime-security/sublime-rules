@@ -10,34 +10,28 @@ type: "rule"
 severity: "medium"
 source: |
   type.inbound
-
   and any(attachments,
-      (
-          .file_extension =~ "svg" or
-          .file_extension in $file_extensions_common_archives
-      )
-
-      and any(file.explode(.), .file_extension == "svg"
-
-          and any(.scan.xml.tags, . =~ "script")
-          // unclear if this is necessary, but it's been observed
-          // in all payloads we've seen, so we'll include it
-          // as an extra FP precaution
-          and any(.scan.strings.strings, strings.icontains(., "CDATA"))
-
-      )
+          (.file_extension =~ "svg" or .file_extension in $file_extensions_common_archives)
+          and any(file.explode(.),
+                  .file_extension == "svg"
+                  and any(.scan.xml.tags, . =~ "script")
+                  // unclear if this is necessary, but it's been observed
+                  // in all payloads we've seen, so we'll include it
+                  // as an extra FP precaution
+                  and any(.scan.strings.strings, strings.icontains(., "CDATA"))
+          )
   )
 
   // unsolicited
   and (
-          (
-              sender.email.domain.root_domain in $free_email_providers
-              and sender.email.email not in $recipient_emails
-          )
-          or (
-              sender.email.domain.root_domain not in $free_email_providers
-              and sender.email.domain.domain not in $recipient_domains
-          )
+    (
+      sender.email.domain.root_domain in $free_email_providers
+      and sender.email.email not in $recipient_emails
+    )
+    or (
+      sender.email.domain.root_domain not in $free_email_providers
+      and sender.email.domain.domain not in $recipient_domains
+    )
   )
 attack_types:
   - "Malware/Ransomware"

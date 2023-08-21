@@ -11,20 +11,20 @@ source: |
 
   // First-time sender
   and (
-          (
-              sender.email.domain.root_domain in $free_email_providers
-              and sender.email.email not in $sender_emails
-          )
-          or (
-              sender.email.domain.root_domain not in $free_email_providers
-              and sender.email.domain.domain not in $sender_domains
-          )
+    (
+      sender.email.domain.root_domain in $free_email_providers
+      and sender.email.email not in $sender_emails
+    )
+    or (
+      sender.email.domain.root_domain not in $free_email_providers
+      and sender.email.domain.domain not in $sender_domains
+    )
   )
 
   // Reply-to is a freemail sender but From is not
   and any(headers.reply_to,
-      .email.domain.domain in $free_email_providers
-      and not .email.domain.domain == sender.email.domain.domain
+          .email.domain.domain in $free_email_providers
+          and not .email.domain.domain == sender.email.domain.domain
   )
 
   // Exclude marketing emails
@@ -32,17 +32,18 @@ source: |
 
   // Check for Message Thread Indicators
   and (
-      strings.istarts_with(subject.subject, "RE:")
-      or any([body.plain.raw, body.html.display_text],
-          regex.icontains(.,"From:[ a-z0-9<>_@\\.]{0,80}Sent:[ a-z0-9<>_@\\.:]{0,40}To:[ a-z0-9<>_@\\.;]{0,300}(Cc:)?.{0,300}Subject:")
-      )
-
+    strings.istarts_with(subject.subject, "RE:")
+    or any([body.plain.raw, body.html.display_text],
+           regex.icontains(.,
+                           "From:[ a-z0-9<>_@\\.]{0,80}Sent:[ a-z0-9<>_@\\.:]{0,40}To:[ a-z0-9<>_@\\.;]{0,300}(Cc:)?.{0,300}Subject:"
+           )
+    )
   )
 
   // Check for the Presence of References or In-Reply-To properties
   and (
-      length(headers.references) == 0
-      or not any(headers.hops, any(.fields, strings.ilike(.name, "In-Reply-To")))
+    length(headers.references) == 0
+    or not any(headers.hops, any(.fields, strings.ilike(.name, "In-Reply-To")))
   )
 attack_types:
   - "BEC/Fraud"

@@ -6,45 +6,45 @@ type: "rule"
 severity: "medium"
 source: |
   type.inbound
-
   and any(headers.reply_to,
-    // mismatched reply-to and sender domain
-    .email.domain.root_domain != sender.email.domain.root_domain
+          // mismatched reply-to and sender domain
+          .email.domain.root_domain
+          != sender.email.domain.root_domain
 
-    // newly registered reply-to domain
-    and beta.whois(.email.domain).days_old <= 30
+          // newly registered reply-to domain
+          and beta.whois(.email.domain).days_old <= 30
   )
-       
+
   // request is being made
-  and any(ml.nlu_classifier(coalesce(
-    body.html.display_text, body.plain.raw)).entities, .name == "request" 
+  and any(ml.nlu_classifier(coalesce(body.html.display_text, body.plain.raw)).entities,
+          .name == "request"
   )
 
   // there's financial/urgency OR a tag of medium/high confidence
   and (
     (
-        any(ml.nlu_classifier(coalesce(
-            body.html.display_text, body.plain.raw)).entities, .name == "financial") 
-        or any(ml.nlu_classifier(coalesce(
-            body.html.display_text, body.plain.raw)).entities, .name == "urgency")
+      any(ml.nlu_classifier(coalesce(body.html.display_text, body.plain.raw)).entities,
+          .name == "financial"
+      )
+      or any(ml.nlu_classifier(coalesce(body.html.display_text, body.plain.raw)).entities,
+             .name == "urgency"
+      )
     )
-    
-    or any(ml.nlu_classifier(coalesce(
-       body.html.display_text, body.plain.raw)).tags,
-        .name is not null and .confidence in ("medium", "high")
+    or any(ml.nlu_classifier(coalesce(body.html.display_text, body.plain.raw)).tags,
+           .name is not null and .confidence in ("medium", "high")
     )
   )
 
   // first-time sender
   and (
-          (
-              sender.email.domain.root_domain in $free_email_providers
-              and sender.email.email not in $sender_emails
-          )
-          or (
-              sender.email.domain.root_domain not in $free_email_providers
-              and sender.email.domain.domain not in $sender_domains
-          )
+    (
+      sender.email.domain.root_domain in $free_email_providers
+      and sender.email.email not in $sender_emails
+    )
+    or (
+      sender.email.domain.root_domain not in $free_email_providers
+      and sender.email.domain.domain not in $sender_domains
+    )
   )
 attack_types:
   - "BEC/Fraud"

@@ -3,30 +3,24 @@ description: "Detects fake message threads with suspicious links and financial r
 type: "rule"
 severity: "medium"
 source: |
-  type.inbound 
+  type.inbound
 
   // suspicious link
   and any(body.links,
-    .href_url.domain.root_domain not in $tranco_1m and
-    .href_url.domain.domain not in $umbrella_1m
+          .href_url.domain.root_domain not in $tranco_1m
+          and .href_url.domain.domain not in $umbrella_1m
   )
 
   // fake thread check
-  and (
-      strings.istarts_with(subject.subject, "RE:") 
-      or strings.istarts_with(subject.subject, "FWD:")
-  )
+  and (strings.istarts_with(subject.subject, "RE:") or strings.istarts_with(subject.subject, "FWD:"))
 
   // Check for the Presence of References or In-Reply-To properties
   and (
-      (
-          length(headers.references) == 0
-          and headers.in_reply_to is null
-      )
-      or (
-          not any(headers.hops, any(.fields, strings.ilike(.name, "In-Reply-To")))
-          and not any(headers.hops, strings.ilike(.signature.headers, "*:reply-to"))
-      )
+    (length(headers.references) == 0 and headers.in_reply_to is null)
+    or (
+      not any(headers.hops, any(.fields, strings.ilike(.name, "In-Reply-To")))
+      and not any(headers.hops, strings.ilike(.signature.headers, "*:reply-to"))
+    )
   )
 
   // sender's domain is not in body, and body has > 0 links
@@ -39,7 +33,6 @@ source: |
 
   // unusual sender domain (domain rarely sends to your organization)
   and sender.email.domain.domain not in $sender_domains
-
   and 2 of (
     // language attempting to engage
     any(ml.nlu_classifier(body.html.inner_text).entities, .name == "request"),
@@ -51,7 +44,9 @@ source: |
     any(ml.nlu_classifier(body.html.inner_text).entities, .name == "urgency"),
 
     // cred_theft detection
-    any(ml.nlu_classifier(body.html.inner_text).intents, .name == "cred_theft" and .confidence in~ ("medium", "high")),
+    any(ml.nlu_classifier(body.html.inner_text).intents,
+        .name == "cred_theft" and .confidence in~ ("medium", "high")
+    ),
 
     // commonly abused sender TLD
     strings.ilike(sender.email.domain.tld, "*.jp"),

@@ -6,27 +6,22 @@ references:
 type: "rule"
 severity: "low"
 source: |
-  type.inbound 
+  type.inbound
   and any([body.html.display_text, body.plain.raw],
-  any(ml.nlu_classifier(.).intents,
-        .name == "extortion" and .confidence == "high"
-      )
-      and (
-        any(ml.nlu_classifier(.).entities, .name == "financial")
-      )
+          any(ml.nlu_classifier(.).intents, .name == "extortion" and .confidence == "high")
+          and (any(ml.nlu_classifier(.).entities, .name == "financial"))
   )
-
   and (
-          (
-              sender.email.domain.root_domain in $free_email_providers
-              and sender.email.email not in $sender_emails
-          )
-          or (
-              sender.email.domain.root_domain not in $free_email_providers
-              and sender.email.domain.domain not in $sender_domains
-          )
-          // many extortion emails spoof sender domains and fail sender authentication
-          or any(headers.hops, .authentication_results.dmarc == "fail")
+    (
+      sender.email.domain.root_domain in $free_email_providers
+      and sender.email.email not in $sender_emails
+    )
+    or (
+      sender.email.domain.root_domain not in $free_email_providers
+      and sender.email.domain.domain not in $sender_domains
+    )
+    // many extortion emails spoof sender domains and fail sender authentication
+    or any(headers.hops, .authentication_results.dmarc == "fail")
   )
 attack_types:
   - "Extortion"
