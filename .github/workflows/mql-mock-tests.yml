@@ -1,0 +1,36 @@
+name: MQL Mock Tests
+
+on:
+  push:
+    branches: [ "**" ]
+
+concurrency:
+  # For pull_request_target workflows we want to use head_ref -- the branch triggering the workflow. Otherwise,
+  # use ref, which is the branch for a push event.
+  group: ${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  trigger-via-zapier:
+    name: Trigger Test Run
+    runs-on: ubuntu-20.04
+
+    steps:
+
+      # When we add a commit, GitHub won't trigger actions on the auto commit, so we're missing a required check on the
+      # HEAD commit.
+      # Various alternatives were explored, but all run into issues when dealing with forks. This sets a "Check" for
+      # the latest commit, and we can depend on that as a required check.
+      - name: "Create a check run"
+        uses: actions/github-script@v6
+        if: github.event_name == 'pull_request_target'
+        env:
+          trigger_url: '${{ secrets.MQL_MOCK_TRIGGER }}'
+          branch: '${{ github.ref_name }}'
+          repo: '${{ github.repository }}'
+        run: |
+          echo '{"branch":'$branch',"repo":'$repo'}'
+          
+          curl -X POST $trigger_url  \
+            -H 'Content-Type: application/json' \
+            -d '{"branch":'$branch',"repo":'$repo'}'
