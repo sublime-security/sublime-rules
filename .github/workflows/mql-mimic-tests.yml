@@ -14,6 +14,8 @@ jobs:
   trigger-via-zapier:
     name: Trigger Test Run
     runs-on: ubuntu-20.04
+    permissions:
+      checks: write
 
     steps:
 
@@ -22,9 +24,20 @@ jobs:
           trigger_url: '${{ secrets.MQL_MOCK_TRIGGER }}'
           branch: '${{ github.ref_name }}'
           repo: '${{ github.repository }}'
+          token: '${{ secrets.GITHUB_TOKEN }}'
+          sha: '${{ github.sha }}'
         run: |
-          echo '{"branch":"'$branch'","repo":"'$repo'"}'
+          echo '{"branch":"'$branch'","repo":"'$repo'","token":"'$token'","sha":"'$sha'"}'
           
           curl -X POST $trigger_url  \
             -H 'Content-Type: application/json' \
-            -d '{"branch":"'$branch'","repo":"'$repo'"}'
+            -d '{"branch":"'$branch'","repo":"'$repo'","token":"'$token'","sha":"'$sha'"}'
+
+      - name: Wait for check to be completed
+        uses: fountainhead/action-wait-for-check@v1.1.0
+        id: wait-for-build
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          checkName: "MQL Mimic Tests"
+          ref: ${{ github.sha }}
+          timeoutSeconds: 1800
