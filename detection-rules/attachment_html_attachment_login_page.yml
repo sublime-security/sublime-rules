@@ -19,31 +19,28 @@ source: |
           )
           and any(file.explode(.),
                   // suspicious strings found in javascript
-                  3 of (
-                    any(.scan.javascript.strings, strings.ilike(., "*password*")),
-                    any(.scan.javascript.strings, strings.ilike(., "*username*")),
-                    any(.scan.javascript.strings, strings.ilike(., "*login-form*")),
-                    any(.scan.javascript.strings, strings.ilike(., "*email-form*")),
-                    any(.scan.javascript.strings,
-                        strings.ilike(., "*Incorrect password. Please try again.*")
-                    ),
-                    any(.scan.javascript.strings,
-                        strings.ilike(., "*Password Incomplete, please try again*")
+                  (
+                    length(filter(.scan.javascript.strings, strings.ilike(., "*password*", ))) >= 2
+                    and 2 of (
+                      any(.scan.javascript.strings, strings.ilike(., "*incorrect*")),
+                      any(.scan.javascript.strings, strings.ilike(., "*invalid*")),
+                      any(.scan.javascript.strings, strings.ilike(., "*login*")),
+                      any(.scan.javascript.strings, regex.icontains(., "sign.in")),
                     )
                   )
                   or (
                     // suspicious strings found outside of javascript, but binexplode'd file still of HTML type
-                    .flavors.mime in~ ("text/html", "text/plain")
-                    and 3 of (
-                      any(.scan.strings.strings, strings.ilike(., "*password*")),
-                      any(.scan.strings.strings, strings.ilike(., "*username*")),
-                      any(.scan.strings.strings, strings.ilike(., "*login-form*")),
-                      any(.scan.strings.strings, strings.ilike(., "*email-form*")),
+                    length(filter(.scan.strings.strings, strings.ilike(., "*password*", ))) >= 2
+                    and 2 of (
+                      any(.scan.strings.strings, strings.ilike(., "*incorrect*")),
+                      any(.scan.strings.strings, strings.ilike(., "*invalid*")),
+                      any(.scan.strings.strings, strings.ilike(., "*login*")),
+                      any(.scan.strings.strings, strings.ilike(., "*<script>*")),
+                      any(.scan.strings.strings, regex.icontains(., "sign.in")),
                       any(.scan.strings.strings,
-                          strings.ilike(., "*Incorrect password. Please try again.*")
-                      ),
-                      any(.scan.strings.strings,
-                          strings.ilike(., "*Password Incomplete, please try again*")
+                          regex.icontains(.,
+                                          '<title>.[^<]+(Payment|Invoice|Statement|Login|Microsoft|Email|Excel)'
+                          )
                       )
                     )
                   )
@@ -56,14 +53,14 @@ source: |
                                       "*&#69;&#110;&#116;&#101;&#114;&#32;&#112;&#97;&#115;&#115;&#119;&#111;&#114;&#100*"
                         )
                     ),
-
-                    // Forgotten my password
-                    any(.scan.strings.strings,
-                        strings.ilike(.,
+  
+                    // Forgotten my password  
+                    any(.scan.strings.strings,  
+                        strings.ilike(.,  
                                       "*&#70;&#111;&#114;&#103;&#111;&#116;&#116;&#101;&#110;&#32;&#109;&#121;&#32;&#112;&#97;&#115;&#115;&#119;&#111;&#114;&#100*"
                         )
                     ),
-
+  
                     // Sign in
                     any(.scan.strings.strings,
                         strings.ilike(., "*&#83;&#105;&#103;&#110;&#32;&#105;&#110*")
