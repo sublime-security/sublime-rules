@@ -33,31 +33,30 @@ source: |
 
   // unusual sender domain (domain rarely sends to your organization)
   and sender.email.domain.domain not in $sender_domains
-  and 3 of (
+  and 2 of (
     // language attempting to engage
-    (
-      any(ml.nlu_classifier(body.html.inner_text).entities, .name == "request")
-      and any(ml.nlu_classifier(body.html.inner_text).entities, .name == "urgency")
-    )
-    and 
-  
+    any(ml.nlu_classifier(body.html.inner_text).entities, .name == "request"),
+
     // financial request
     any(ml.nlu_classifier(body.html.inner_text).entities, .name == "financial"),
-  
-    // malicious intent detection
+
+    // urgency request
+    any(ml.nlu_classifier(body.html.inner_text).entities, .name == "urgency"),
+
+    // cred_theft detection
     any(ml.nlu_classifier(body.html.inner_text).intents,
-        .name != "benign" and .confidence in~ ("medium", "high")
+        .name == "cred_theft" and .confidence in~ ("medium", "high")
     ),
-  
+
     // commonly abused sender TLD
     strings.ilike(sender.email.domain.tld, "*.jp"),
-  
+
     // known suspicious pattern in the URL path
     any(body.links, regex.match(.href_url.path, '\/[a-z]{3}\d[a-z]')),
-  
+
     // link display text is in all caps
     any(body.links, regex.match(.display_text, '[A-Z ]+')),
-  
+
     // sender domain matches no body domains
     all(body.links, .href_url.domain.root_domain != sender.email.domain.root_domain),
   )
