@@ -1,0 +1,30 @@
+name: "Attachment: HTML smuggling with base64 obfuscated atob function "
+description: |
+  This rule identifies attachments that either have an HTML extension, lack any file extension, or possess an unrecognized file type, and are employing Base64 encoding to conceal JavaScript functions within HTML script tags. Such obfuscation tactics have been frequently observed in credential phishing campaigns.
+references:
+  
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and any(attachments,
+          (
+            .file_extension in~ ("html", "htm", "shtml", "dhtml")
+            or (
+              .file_extension is null
+              and .file_type == "unknown"
+              and .content_type == "application/octet-stream"
+              and .size < 100000000
+            )
+          )
+          and any(file.explode(.),
+  
+                  //base64 of atob(document.
+                  any(.scan.strings.strings, strings.contains(., "BhdG9iKGRvY3VtZW50Ln"))
+                  and any(.scan.strings.strings, strings.contains(., "data:text/javascript;base64"))
+                  // strings array is small
+                  and length(.scan.strings.strings) < 20
+          )
+  )
+tags: 
+  
