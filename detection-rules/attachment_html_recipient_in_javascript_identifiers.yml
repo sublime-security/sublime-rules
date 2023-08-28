@@ -1,0 +1,38 @@
+name: "Attachment: HTML file containing the recipients email in JavaScript strings"
+description: |
+  Attached HTML file contains the recipients email address within a section of javascript, indicative of credential phishing.
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and any(attachments,
+          (
+            .file_extension in~ ("html", "htm", "shtml", "dhtml")
+            or (
+              .file_extension is null
+              and .file_type == "unknown"
+              and .content_type == "application/octet-stream"
+              and .size < 100000000
+            )
+            or .file_extension in~ $file_extensions_common_archives
+            or .file_type == "html"
+          )
+          and any(file.explode(.),
+                  any(recipients.to,
+                      any(..scan.javascript.strings, strings.icontains(., ..email.email))
+                  )
+          )
+  )
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "HTML smuggling"
+  - "Scripting"
+detection_methods:
+  - "Archive analysis"
+  - "File analysis"
+  - "HTML analysis"
+  - "Javascript analysis"
+id: "1aff486b-527c-597c-9ca9-3be37210fd97"
+testing_pr: 734
+testing_sha: 43a54cc4f5935071eb72f644da6d19d2922c6169
