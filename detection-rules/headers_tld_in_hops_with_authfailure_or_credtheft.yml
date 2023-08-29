@@ -1,0 +1,28 @@
+name: "Suspicious TLD in headers with SPF/DMARC failures or high confidence credential theft"
+description: |
+  Flags inbound emails with suspicious TLDs in the headers, SPF/DMARC failures, or high-confidence credential theft indicators
+references:
+  
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and any(headers.domains, .tld in $suspicious_tlds)
+  // SPF Errors/Failures or DMARC Fail
+  and (
+    any(distinct(headers.hops, .received_spf.verdict is not null),
+        regex.icontains(.received_spf.verdict, "fail|error")
+        or any(distinct(headers.hops, .authentication_results.dmarc is not null),
+               strings.ilike(.authentication_results.dmarc, "*fail")
+  
+               // Or Cred_theft confidence High
+               or any(ml.nlu_classifier(body.current_thread.text).intents,
+                      .name in ("cred_theft") and .confidence == "high"
+               )
+        )
+    )
+  )
+  
+  
+tags: 
+  
