@@ -1,0 +1,54 @@
+name: "Link: Suspicious display name with suspicious attachment and short or no body text"
+description: |
+  This rule detects messages with anomalous display name lengths or the presence of emojis. It targets messages containing a limited range of body links, specifically fewer than five, and encompassing between one to three attachments, exclusively categorized as either images or unfamiliar file types. The rule checks for very short or null body content, or the entire content is a disclaimer.
+references:
+  
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and (
+    // suspicious display name length
+    length(sender.display_name) >= 30
+    // or emoji in display name
+    or regex.contains(sender.display_name,
+                      '[\x{1F300}-\x{1F5FF}\x{1F600}-\x{1F64F}\x{1F680}-\x{1F6FF}\x{1F700}-\x{1F77F}\x{1F780}-\x{1F7FF}\x{1F900}-\x{1F9FF}\x{2600}-\x{26FF}\x{2700}-\x{27BF}\x{2300}-\x{23FF}]'
+    )
+  )
+  
+  // less than 5 body links
+  and length(body.links) < 5
+  and (
+  0 < (length(attachments)) < 3
+    // all attachments are images, or unknown types and not 0 bytes and not an email
+    and all(attachments,
+            .file_type in $file_types_images
+            or .file_type == "unknown" and not .size == 0 and not .content_type == "message/rfc822"
+    )
+  )
+  and (
+      //body text is very short
+  0 <= (length(body.current_thread.text)) < 10  or (
+      length(body.current_thread.text) < 500
+      // or body is most likely all warning banner (text contains the sender and common warning banner language)
+      and strings.contains(body.current_thread.text, sender.email.email)
+      and regex.icontains(body.current_thread.text, "caution|sent from outside|you don't often")
+    )
+  
+    // or body is empty
+    or body.current_thread.text is null
+  )
+  // first time sender
+  and (
+    (
+      sender.email.domain.root_domain in $free_email_providers
+      and sender.email.email not in $sender_emails
+    )
+    or (
+      sender.email.domain.root_domain not in $free_email_providers
+      and sender.email.domain.domain not in $sender_domains
+    )
+  )
+  
+tags: 
+  
