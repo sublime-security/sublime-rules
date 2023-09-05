@@ -1,0 +1,37 @@
+name: "Suspicious QR Code"
+description: |
+  Sus QR Code | Description pending | adding bing redirect check
+references:
+  
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and 0 < length(attachments) < 3
+  and all(attachments,
+          .file_type in $file_types_images
+          and (
+            any(file.explode(.),
+                .scan.qr.type == "url"
+                and (
+                  any([beta.linkanalysis(.scan.qr.url)],
+                      .credphish.disposition == "phishing"
+                      or any(.redirect_history, .domain.tld == "ru")
+                      or .effective_url.domain.tld == "ru"
+                      or .effective_url.domain.root_domain in $abuse_ch_urlhaus_domains_trusted_reporters
+                      or any(.files_downloaded,
+                             .file_extension in $file_extensions_common_archives
+                             or .file_extension in $file_extensions_executables
+                      )
+                  )
+                  or (
+                    .scan.qr.url.domain.root_domain in $url_shorteners
+                    and not strings.starts_with(.scan.qr.url.url, 'https://goo.gl/maps')
+                  )
+                  or .scan.qr.url.domain.root_domain == 'bing.com' and .scan.qr.url.path =~ '/ck/a'
+                )
+            )
+          )
+  )
+tags: 
+  
