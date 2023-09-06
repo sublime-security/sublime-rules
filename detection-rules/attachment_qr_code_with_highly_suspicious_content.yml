@@ -9,6 +9,23 @@ severity: "high"
 source: |
   type.inbound
   and 0 < length(attachments) < 3
+  and not sender.email.domain.root_domain in $org_display_names
+  and (
+    any(distinct(headers.hops, .received_spf.verdict is not null),
+        regex.icontains(.received_spf.verdict, "error|fail")
+    )
+    or any(distinct(headers.hops, .authentication_results.dmarc is not null),
+           strings.ilike(.authentication_results.dmarc, "*fail")
+    )
+    or sender.email.domain.tld in ("jp", "ru", "xyz")
+    or sender.email.domain.root_domain in $free_email_providers
+    or any(headers.reply_to,
+           .email.email != sender.email.email and .email.email not in $sender_emails
+    )
+    or any(recipients.to, strings.icontains(sender.display_name, .email.domain.sld))
+    or length(body.current_thread.text) is null
+    or length(body.current_thread.text) < 60
+  )
   and all(attachments,
           .file_type in $file_types_images
           and (
@@ -29,10 +46,7 @@ source: |
                     .scan.qr.url.domain.root_domain in $url_shorteners
                     and not strings.starts_with(.scan.qr.url.url, 'https://goo.gl/maps')
                   )
-                  or (
-                      .scan.qr.url.domain.root_domain == 'bing.com'
-                      and .scan.qr.url.path =~ '/ck/a'
-                  )
+                  or .scan.qr.url.domain.root_domain == 'bing.com' and .scan.qr.url.path =~ '/ck/a'
                 )
             )
           )
