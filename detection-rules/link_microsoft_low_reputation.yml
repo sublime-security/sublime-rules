@@ -7,7 +7,7 @@ source: |
   // suspicious link
   and any(body.links,
           (
-            .href_url.domain.domain not in $tranco_1m
+            .href_url.domain.root_domain not in $tranco_1m
             or .href_url.domain.domain in $free_file_hosts
             or .href_url.domain.root_domain in $free_subdomain_hosts
             or .href_url.domain.domain in $url_shorteners
@@ -35,7 +35,7 @@ source: |
   // Microsoft logo
   and (
     any(attachments,
-        .file_type in ('png', 'jpeg', 'jpg', 'bmp')
+        .file_type in $file_types_images
         and any(ml.logo_detect(.).brands, strings.starts_with(.name, "Microsoft"))
     )
     or any(ml.logo_detect(beta.message_screenshot()).brands, strings.starts_with(.name, "Microsoft"))
@@ -69,7 +69,7 @@ source: |
     )
     or (
       any(attachments,
-          .file_type in ('png', 'jpeg', 'jpg', 'bmp')
+          .file_type in $file_types_images
           and any(file.explode(.),
                   strings.ilike(.scan.ocr.raw,
                                 "*password*",
@@ -102,12 +102,17 @@ source: |
         .name == "cred_theft" and .confidence in~ ("medium", "high")
     )
     or any(attachments,
-           .file_type in ('png', 'jpeg', 'jpg', 'bmp')
+           .file_type in $file_types_images
            and any(file.explode(.),
                    any(ml.nlu_classifier(.scan.ocr.raw).intents, .name == "cred_theft")
            )
     )
-    or any(ml.nlu_classifier(body.html.inner_text).entities, .name == "urgency")
+    or (
+      any(ml.nlu_classifier(body.html.inner_text).entities, .name == "urgency")
+      and not any(ml.nlu_classifier(body.current_thread.text).intents,
+                  .name == "benign" and .confidence == "high"
+      )
+    )
   )
   and sender.email.domain.root_domain not in $org_domains
   and sender.email.domain.root_domain not in (

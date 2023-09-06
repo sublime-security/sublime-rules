@@ -4,20 +4,18 @@ type: "rule"
 severity: "medium"
 source: |
   type.inbound
-  and length(filter(attachments, .file_type not in~ ('png', 'jpeg', 'jpg', 'bmp'))) == 0
+  and length(filter(attachments, .file_type not in $file_types_images)) == 0
   and length(body.links) > 0
   and all(body.links, .display_text is null)
   and any(attachments,
           any(ml.logo_detect(.).brands, .name == "Adobe" and .confidence in ("high"))
           and any(file.explode(.),
-                  any(.scan.strings.strings,
-                      strings.ilike(.,
-                                    "*review*",
-                                    "*sign*",
-                                    "*view*",
-                                    "*completed document*",
-                                    "*open agreement*"
-                      )
+                  strings.ilike(.scan.ocr.raw,
+                                "*review*",
+                                "*sign*",
+                                "*view*",
+                                "*completed document*",
+                                "*open agreement*"
                   )
           )
   )
