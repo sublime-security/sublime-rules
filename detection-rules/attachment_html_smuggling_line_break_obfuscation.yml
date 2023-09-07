@@ -1,10 +1,6 @@
-name: "Attachment: HTML smuggling with RC4 decryption"
+name: "Attachment: HTML smuggling with excessive line break obfuscation
 description: |
-  Potential HTML smuggling.
-  The RC4 algorithm is used within inline JavaScript to decrypt the payload on-the-fly.
-references:
-  - "https://delivr.to/payloads?id=0dcec496-0130-465c-bf3d-c9714e17d4d4"
-  - "https://playground.sublimesecurity.com?id=6b219754-2b0b-47c3-ba53-ec080d946499"
+  Credential Phishing attacks have been observed using excessive line breaks to obfuscate javascript functions within html files.
 type: "rule"
 severity: "high"
 source: |
@@ -16,7 +12,11 @@ source: |
             or .file_type == "html"
           )
           and any(file.explode(.),
-                  any(.scan.strings.strings, strings.ilike(., "*?[(?[?]+?[?])%256]*"))
+                  any(.scan.strings.strings,
+                  // return new line padded obfuscation 
+                      regex.contains(., '(\\r\\n\S{2}){50,}')
+                      and strings.contains(., 'decodeURIComponent')
+                  )
           )
   )
 attack_types:
@@ -33,4 +33,3 @@ detection_methods:
   - "File analysis"
   - "HTML analysis"
   - "Javascript analysis"
-id: "3a46d765-4b27-5026-9b8e-043e3817854b"
