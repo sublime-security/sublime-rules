@@ -4,34 +4,12 @@ type: "rule"
 severity: "medium"
 source: |
   type.inbound
-  // suspicious link
-  and any(body.links,
-          (
-            .href_url.domain.root_domain not in $tranco_1m
-            or .href_url.domain.domain in $free_file_hosts
-            or .href_url.domain.root_domain in $free_subdomain_hosts
-            or .href_url.domain.domain in $url_shorteners
-            or 
-
-            // mass mailer link, masks the actual URL
-            .href_url.domain.root_domain in ("hubspotlinks.com", "mandrillapp.com", "sendgrid.net")
-          )
-
-          // exclude sources of potential FPs
-          and .href_url.domain.root_domain not in (
-            "svc.ms",
-            "sharepoint.com",
-            "1drv.ms",
-            "microsoft.com"
-          )
-  )
-
   // not a reply
   and (
     length(headers.references) == 0
     or not any(headers.hops, any(.fields, strings.ilike(.name, "In-Reply-To")))
   )
-
+  
   // Microsoft logo
   and (
     any(attachments,
@@ -40,7 +18,7 @@ source: |
     )
     or any(ml.logo_detect(beta.message_screenshot()).brands, strings.starts_with(.name, "Microsoft"))
   )
-
+  
   // suspicious content
   and (
     (
@@ -104,19 +82,20 @@ source: |
     or any(attachments,
            .file_type in $file_types_images
            and any(file.explode(.),
-                   any(ml.nlu_classifier(.scan.ocr.raw).intents, .name == "cred_theft")
+                   any(ml.nlu_classifier(.scan.ocr.raw).intents, .name == "cred_theft" and .confidence != "low")
            )
     )
     or (
       any(ml.nlu_classifier(body.html.inner_text).entities, .name == "urgency")
-      and not any(ml.nlu_classifier(body.current_thread.text).intents,
-                  .name == "benign" and .confidence == "high"
+      and any(ml.nlu_classifier(body.current_thread.text).intents,
+                  .name != "benign"
       )
     )
   )
   and sender.email.domain.root_domain not in $org_domains
   and sender.email.domain.root_domain not in (
     "bing.com",
+    "cloudappsecurity.com",
     "microsoft.com",
     "microsoftonline.com",
     "microsoftsupport.com",
