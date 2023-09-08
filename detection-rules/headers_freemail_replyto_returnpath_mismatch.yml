@@ -21,6 +21,21 @@ source: |
     )
   )
   and sender.email.domain.root_domain not in $free_email_providers
+  
+  // negate gmail autoforwards
+  and not any([headers.return_path.email], strings.ilike(headers.return_path.local_part, "*+caf_=*"))
+  
+  // negate listservs
+  and not (
+    any(headers.hops, any(.fields, .name == "List-Unsubscribe"))
+    and strings.contains(sender.display_name, "via")
+  )
+  
+  // negate legit replies
+  and not (
+    length(headers.references) > 0
+    or any(headers.hops, any(.fields, strings.ilike(.name, "In-Reply-To")))
+  )
 attack_types:
   - "BEC/Fraud"
 tactics_and_techniques:
