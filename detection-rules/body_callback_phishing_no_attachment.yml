@@ -9,32 +9,50 @@ source: |
   type.inbound
   and length(attachments) == 0
   and (
-        (
-            sender.email.domain.root_domain in $free_email_providers
-            and sender.email.email not in $recipient_emails
-        )
-        or (
-            sender.email.domain.root_domain not in $free_email_providers
-            and sender.email.domain.domain not in $recipient_domains
-        )
+    (
+      sender.email.domain.root_domain in $free_email_providers
+      and sender.email.email not in $recipient_emails
+    )
+    or (
+      sender.email.domain.root_domain not in $free_email_providers
+      and sender.email.domain.domain not in $recipient_domains
+    )
   )
-
   and sender.email.domain.root_domain in $free_email_providers
-  and strings.ilike(body.plain.raw, "*mcafee*", "*norton*", "*geek squad*", "*paypal*",   "*ebay*", "*symantec*", "*best buy*", "*lifelock*")
-  and 4 of (
-     strings.ilike(body.plain.raw, '*purchase*'),
-     strings.ilike(body.plain.raw, '*subscription*'),
-     strings.ilike(body.plain.raw, '*antivirus*'),
-     strings.ilike(body.plain.raw, '*order*'),
-     strings.ilike(body.plain.raw, '*support*'),
-     strings.ilike(body.plain.raw, '*receipt*'),
-     strings.ilike(body.plain.raw, '*invoice*'),
-     strings.ilike(body.plain.raw, '*call*'),
-     strings.ilike(body.plain.raw, '*cancel*'),
-     strings.ilike(body.plain.raw, '*renew*'),
-     strings.ilike(body.plain.raw, '*refund*'),
-     strings.ilike(body.plain.raw, '*+1*')
+  and strings.ilike(body.current_thread.text,
+                    "*mcafee*",
+                    "*norton*",
+                    "*geek squad*",
+                    "*paypal*",
+                    "*ebay*",
+                    "*symantec*",
+                    "*best buy*",
+                    "*lifelock*"
   )
+  and length(body.current_thread.text) < 1500
+  and 3 of (
+    strings.ilike(body.current_thread.text, '*purchase*'),
+    strings.ilike(body.current_thread.text, '*payment*'),
+    strings.ilike(body.current_thread.text, '*transaction*'),
+    strings.ilike(body.current_thread.text, '*subscription*'),
+    strings.ilike(body.current_thread.text, '*antivirus*'),
+    strings.ilike(body.current_thread.text, '*order*'),
+    strings.ilike(body.current_thread.text, '*support*'),
+    strings.ilike(body.current_thread.text, '*help line*'),
+    strings.ilike(body.current_thread.text, '*receipt*'),
+    strings.ilike(body.current_thread.text, '*invoice*'),
+    strings.ilike(body.current_thread.text, '*call*'),
+    strings.ilike(body.current_thread.text, '*cancel*'),
+    strings.ilike(body.current_thread.text, '*renew*'),
+    strings.ilike(body.current_thread.text, '*refund*')
+  )
+  // phone number regex
+  and regex.icontains(body.current_thread.text, '\+?(\d{1}.)?\(?\d{3}?\)?.\d{3}.?\d{4}')
+  and sender.email.domain.root_domain not in (
+    // paypal domain
+    "xoom.com"
+  )
+  and not strings.ends_with(headers.message_id, "@shopify.com>")
 attack_types:
   - "Callback Phishing"
 tactics_and_techniques:

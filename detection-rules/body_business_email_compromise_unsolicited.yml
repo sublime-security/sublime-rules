@@ -5,38 +5,39 @@ type: "rule"
 severity: "medium"
 source: |
   type.inbound
-
-  and any(ml.nlu_classifier(coalesce(
-    body.html.display_text, body.plain.raw)).intents,
-    .name in ("bec") and .confidence == "high"
+  and any(ml.nlu_classifier(body.current_thread.text).intents,
+          .name in ("bec") and .confidence == "high"
   )
-
   and 1 of (
-      (
-          // mismatched From and Reply-to
-          length(headers.reply_to) > 0
-          and all(headers.reply_to, .email.domain.root_domain != sender.email.domain.root_domain)
-      ),
-      (
-          // DMARC failure
-          any(distinct(headers.hops, .authentication_results.dmarc is not null), strings.ilike(.authentication_results.dmarc, "*fail"))
-      ),
-      (
-          // SPF failure
-          any(distinct(headers.hops, .received_spf.verdict is not null), strings.ilike(.received_spf.verdict, "*fail"))
-      ),
+    (
+      // mismatched From and Reply-to
+      length(headers.reply_to) > 0
+      and all(headers.reply_to, .email.domain.root_domain != sender.email.domain.root_domain)
+    ),
+    (
+      // DMARC failure
+      any(distinct(headers.hops, .authentication_results.dmarc is not null),
+          strings.ilike(.authentication_results.dmarc, "*fail")
+      )
+    ),
+    (
+      // SPF failure
+      any(distinct(headers.hops, .received_spf.verdict is not null),
+          strings.ilike(.received_spf.verdict, "*fail")
+      )
+    ),
   )
 
   // unsolicited
   and (
-          (
-              sender.email.domain.root_domain in $free_email_providers
-              and sender.email.email not in $recipient_emails
-          )
-          or (
-              sender.email.domain.root_domain not in $free_email_providers
-              and sender.email.domain.domain not in $recipient_domains
-          )
+    (
+      sender.email.domain.root_domain in $free_email_providers
+      and sender.email.email not in $recipient_emails
+    )
+    or (
+      sender.email.domain.root_domain not in $free_email_providers
+      and sender.email.domain.domain not in $recipient_domains
+    )
   )
 attack_types:
   - "BEC/Fraud"

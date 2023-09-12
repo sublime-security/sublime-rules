@@ -5,22 +5,27 @@ type: "rule"
 severity: "medium"
 source: |
   type.inbound
-
-  and any(ml.nlu_classifier(coalesce(
-    body.html.display_text, body.plain.raw)).intents,
-    .name in ("bec") and .confidence == "high"
+  and any(ml.nlu_classifier(body.current_thread.text).intents,
+          .name in ("bec") and .confidence == "high"
+  )
+  // negating legit replies
+  and not (
+    strings.istarts_with(subject.subject, "RE:")
+    and (
+      length(headers.references) > 0
+      or any(headers.hops, any(.fields, strings.ilike(.name, "In-Reply-To")))
     )
-
+  )
   // first-time sender
   and (
-          (
-              sender.email.domain.root_domain in $free_email_providers
-              and sender.email.email not in $sender_emails
-          )
-          or (
-              sender.email.domain.root_domain not in $free_email_providers
-              and sender.email.domain.domain not in $sender_domains
-          )
+    (
+      sender.email.domain.root_domain in $free_email_providers
+      and sender.email.email not in $sender_emails
+    )
+    or (
+      sender.email.domain.root_domain not in $free_email_providers
+      and sender.email.domain.domain not in $sender_domains
+    )
   )
 attack_types:
   - "BEC/Fraud"

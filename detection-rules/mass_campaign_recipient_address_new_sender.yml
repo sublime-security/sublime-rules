@@ -10,7 +10,6 @@ type: "rule"
 severity: "medium"
 source: |
   type.inbound
-
   and length(recipients.to) + length(recipients.bcc) + length(recipients.cc) == 1
 
   // exclude To: Undisclosed recipients:;
@@ -19,35 +18,31 @@ source: |
 
   // first-time sender
   and (
-            (
-                sender.email.domain.root_domain in $free_email_providers
-                and sender.email.email not in $sender_emails
-            )
-            or (
-                sender.email.domain.root_domain not in $free_email_providers
-                and sender.email.domain.domain not in $sender_domains
-            )
+    (
+      sender.email.domain.root_domain in $free_email_providers
+      and sender.email.email not in $sender_emails
+    )
+    or (
+      sender.email.domain.root_domain not in $free_email_providers
+      and sender.email.domain.domain not in $sender_domains
+    )
   )
-
   and (
-      any(recipients.to,
-        strings.icontains(subject.subject, .email.email) or
-        strings.icontains(subject.subject, .email.local_part)
-      )
+    any(recipients.to,
+        strings.icontains(subject.subject, .email.email)
+        or strings.icontains(subject.subject, .email.local_part)
+    )
   )
   and any([body.html.inner_text, body.plain.raw],
-      any(recipients.to, strings.icontains(.., .email.email))
+          any(recipients.to, strings.icontains(.., .email.email))
   )
-  and any(body.links,
-      any(recipients.to, strings.icontains(..href_url.query_params, .email.email))
+  and any(body.links, any(recipients.to, strings.icontains(..href_url.query_params, .email.email)))
+  and any(ml.nlu_classifier(coalesce(body.html.display_text, body.plain.raw)).intents,
+          .name in ("cred_theft") and .confidence == "high"
   )
-
-  and any(ml.nlu_classifier(coalesce(
-    body.html.display_text, body.plain.raw)).intents,
-    .name in ("cred_theft") and .confidence == "high"
-  ) 
-
-  // we could add additional logic here, such as suspicious subject, url shortener, sus link, etc.
+  and any(ml.nlu_classifier(body.current_thread.text).intents,
+          .name in ("cred_theft") and .confidence == "high"
+  )
 attack_types:
   - "Credential Phishing"
 tactics_and_techniques:

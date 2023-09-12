@@ -5,28 +5,41 @@ type: "rule"
 severity: "medium"
 source: |
   type.inbound
-
-  and any(attachments, .content_type == "message/rfc822"
-      and any(file.explode(.),
-          any(.scan.url.urls,
-              .domain.domain in $free_file_hosts or
-              .domain.root_domain in $free_subdomain_hosts
+  and length(attachments) == 1
+  and any(attachments,
+          .content_type == "message/rfc822"
+          and any(file.explode(.),
+                  any(.scan.url.urls,
+                      (
+                        .domain.root_domain in $free_subdomain_hosts
+                        or .domain.root_domain in ("sharepoint.com")
+                        or .domain.root_domain not in $tranco_1m
+                      )
+                      and beta.linkanalysis(.).credphish.disposition == "phishing"
+                  )
           )
-          and any(.scan.url.urls,
-              beta.linkanalysis(.).credphish.disposition == "phishing"
-          )
-      )
   )
 
   // engaging language in the original body
   and any(ml.nlu_classifier(body.html.display_text).entities, .name == "request")
 
   // exclude bounce backs & read receipts
+  and not strings.like(sender.email.local_part, "*postmaster*", "*mailer-daemon*", "*administrator*")
+  and not regex.icontains(subject.subject, "^(undeliverable|read:)")
   and not any(attachments, .content_type == "message/delivery-status")
-
   // if the "References" is in the body of the message, it's probably a bounce
-  and not any(headers.references,
-      strings.contains(body.html.display_text, .)
+  and not any(headers.references, strings.contains(body.html.display_text, .))
+
+  // unsolicited
+  and (
+    (
+      sender.email.domain.root_domain in $free_email_providers
+      and sender.email.email not in $recipient_emails
+    )
+    or (
+      sender.email.domain.root_domain not in $free_email_providers
+      and sender.email.domain.domain not in $recipient_domains
+    )
   )
 attack_types:
   - "Credential Phishing"
