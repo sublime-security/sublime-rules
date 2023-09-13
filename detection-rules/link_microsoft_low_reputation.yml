@@ -3,7 +3,7 @@ description: "Detects low reputation links with Microsoft specific indicators in
 type: "rule"
 severity: "medium"
 source: |
-  type.inbound
+ type.inbound
   // suspicious link
   and any(body.links,
           (
@@ -12,32 +12,34 @@ source: |
             or .href_url.domain.root_domain in $free_subdomain_hosts
             or .href_url.domain.domain in $url_shorteners
             or 
-
+  
             // mass mailer link, masks the actual URL
             .href_url.domain.root_domain in ("hubspotlinks.com", "mandrillapp.com", "sendgrid.net")
-
+  
             // Google AMP redirect
-            or (
-            .href_url.domain.sld == "google"
-            and strings.starts_with(.href_url.path, "/amp/")
-            )
+            or (.href_url.domain.sld == "google" and strings.starts_with(.href_url.path, "/amp/"))
           )
-
+  
           // exclude sources of potential FPs
-          and .href_url.domain.root_domain not in (
-            "svc.ms",
-            "sharepoint.com",
-            "1drv.ms",
-            "microsoft.com"
+          and (
+            .href_url.domain.root_domain not in (
+              "svc.ms",
+              "sharepoint.com",
+              "1drv.ms",
+              "microsoft.com",
+              "aka.ms",
+              "msftauthimages.net"
+            )
+            or .href_url.domain.root_domain not in $org_domains
           )
   )
-
+  
   // not a reply
   and (
     length(headers.references) == 0
     or not any(headers.hops, any(.fields, strings.ilike(.name, "In-Reply-To")))
   )
-
+  
   // Microsoft logo
   and (
     any(attachments,
@@ -46,7 +48,7 @@ source: |
     )
     or any(ml.logo_detect(beta.message_screenshot()).brands, strings.starts_with(.name, "Microsoft"))
   )
-
+  
   // suspicious content
   and (
     (
@@ -104,13 +106,13 @@ source: |
     )
   )
   and (
-    any(ml.nlu_classifier(body.html.inner_text).intents,
+    any(ml.nlu_classifier(body.current_thread.text).intents,
         .name == "cred_theft" and .confidence in~ ("medium", "high")
     )
     or any(attachments,
            .file_type in $file_types_images
            and any(file.explode(.),
-                   any(ml.nlu_classifier(.scan.ocr.raw).intents, .name == "cred_theft")
+                   any(ml.nlu_classifier(.scan.ocr.raw).intents, .name == "cred_theft" and .confidence in ("medium", "high"))
            )
     )
     or (
@@ -131,6 +133,7 @@ source: |
     "sharepointonline.com",
     "yammer.com"
   )
+
 attack_types:
   - "Credential Phishing"
 tactics_and_techniques:
