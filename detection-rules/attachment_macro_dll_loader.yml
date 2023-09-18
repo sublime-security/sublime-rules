@@ -8,17 +8,19 @@ severity: "high"
 source: |
   type.inbound
   and any(attachments,
-          .file_extension == "zip"
-          and (
-            any(file.explode(.),
-                .scan.zip.encrypted == false
-                // zip contains a dll file
-                and any(.scan.zip.all_paths, strings.icontains(., "dll"))
-            )
-            and any(file.explode(.),
-                    // macro references a dll file
-                    any(.flavors.yara, strings.like(., "vb_file"))
-                    and any(.scan.strings.strings, strings.icontains(., "dll"))
+          (
+            .file_extension == "zip"
+            and (
+              any(file.explode(.),
+                  .scan.zip.encrypted == false
+                  // zip contains a dll file
+                  and any(.scan.zip.all_paths, strings.icontains(., "dll"))
+              )
+              and any(file.explode(.),
+                      // macro references a dll file
+                      any(.flavors.yara, strings.like(., "vb_file"))
+                      and any(.scan.strings.strings, strings.icontains(., "dll"))
+              )
             )
           )
           or any(file.explode(.), // fallback for encrypted zips
@@ -27,13 +29,13 @@ source: |
                  // zip contains a dll file
                  and any(.scan.zip.all_paths, strings.icontains(., "dll"))
           )
-          or any(attachments,
-                 .file_extension in~ $file_extensions_common_archives
-                 and any(file.explode(.),
-                         any(.flavors.yara, strings.like(., "vb_file"))
-                         and any(.scan.strings.strings, strings.ilike(., "*Lib*.dll*"))
-                 )
-                 and any(file.explode(.), strings.ilike(.file_extension, "dll"))
+          or (
+            .file_extension in~ $file_extensions_common_archives
+            and any(file.explode(.),
+                    any(.flavors.yara, strings.like(., "vb_file"))
+                    and any(.scan.strings.strings, strings.ilike(., "*Lib*.dll*"))
+            )
+            and any(file.explode(.), strings.ilike(.file_extension, "dll"))
           )
   )
 attack_types:
