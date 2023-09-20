@@ -1,0 +1,54 @@
+name: "Credential Phishing: Suspicious language, link, recipients and other indicators"
+description: |
+  The rule flags inbound messages with no visible recipients, contain all-caps text, and include links from certain free hosts. It also checks for signs of credential theft using machine learning classifiers and is from a first-time sender.
+references:
+  
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  
+  // no recipients defined
+  and (length(recipients.to) == 0 or all(recipients.to, .display_name == "Undisclosed recipients"))
+  and length(recipients.cc) == 0
+  and length(recipients.bcc) == 0
+  
+  and any(body.links,
+  
+          // suspicious link
+          // we've particularly seen 1drv.ms abused
+          // if using the full list causes FPs, we can reduce the 
+          // scope to a hard-coded list or add exclusions
+          (
+            .href_url.domain.domain in $free_file_hosts
+            or .href_url.domain.root_domain in $free_subdomain_hosts
+          )
+  
+          // link text is in all caps
+          and regex.match(.display_text, "[A-Z ]+")
+  )
+  
+  // any confidence cred_theft classification
+  and any(ml.nlu_classifier(body.current_thread.text).intents, .name == "cred_theft")
+  
+  // 'org' entity is in all caps
+  and any(ml.nlu_classifier(body.current_thread.text).entities,
+          .name == "org" and regex.match(.text, "[A-Z ]+")
+  )
+  
+  // subject is in all caps
+  and regex.match(subject.subject, "[A-Z ]+")
+  
+  // first-time sender
+  and (
+    (
+      sender.email.domain.root_domain in $free_email_providers
+      and sender.email.email not in $sender_emails
+    )
+    or (
+      sender.email.domain.root_domain not in $free_email_providers
+      and sender.email.domain.domain not in $sender_domains
+    )
+  )
+tags: 
+  
