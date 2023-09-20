@@ -7,7 +7,7 @@ source: |
   type.inbound
   and any(attachments,
           (
-            .file_extension in~ ("html", "htm", "shtml", "dhtml")
+            .file_extension in~ ("html", "htm", "shtml", "dhtml", "xhtml")
             or (
               .file_extension is null
               and .file_type == "unknown"
@@ -16,13 +16,18 @@ source: |
             )
             or .file_extension in~ $file_extensions_common_archives
             or .file_type == "html"
+            or .content_type == "text/html"
           )
           and any(file.explode(.),
                   // suspicious identifiers
-                  any(.scan.javascript.identifiers, strings.like(., "atob", "decrypt"))
+                  any([.scan.strings.strings, .scan.javascript.identifiers],
+                      any(., strings.like(., "*atob*", "*decrypt*"))
+                  )
                   // Recipients address found in javascript
-                  and any(recipients.to,
-                          any(..scan.javascript.strings, strings.icontains(., ..email.email))
+                  and any(file.explode(..),
+                          any(recipients.to,
+                              any(..scan.javascript.strings, strings.icontains(., ..email.email))
+                          )
                   )
           )
   ) 
