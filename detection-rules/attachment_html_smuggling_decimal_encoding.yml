@@ -1,0 +1,30 @@
+name: "Attachment: HTML smuggling with decimal encoding"
+description: |
+  Potential HTML smuggling attack based on large blocks of decimal encoding. Attackers often use decimal encoding as an obfuscation technique to bypass traditional email security measures. 
+references:
+  
+type: "rule"
+severity: ""
+source: |
+  type.inbound
+  and any(attachments,
+          (
+            .file_extension in~ ("html", "htm", "shtml", "dhtml", "xhtml")
+            or (
+              .file_extension is null
+              and .file_type == "unknown"
+              and .content_type == "application/octet-stream"
+            )
+            or .file_extension in~ $file_extensions_common_archives
+            or .file_type == "html"
+            or .content_type == "text/html"
+          )
+          and any(file.explode(.),
+                  // suspicious identifiers
+                  any(.scan.strings.strings,
+                      regex.contains(., '(\d{2,3},){60,}')
+                  )
+          )
+  )
+tags: 
+  
