@@ -1,13 +1,11 @@
-name: "QR Simplified"
+name: "Attachment: QR Code with suspicious indicators
 description: |
-  
-references:
-  
+  This rule detects a QR code in messages with 3 or less attachments where the senders display name contains the recipients SLD (Single Level Domain), or the recipients email is found in the body, or the entire body is null/empty. 
 type: "rule"
 severity: "high"
 source: |
   type.inbound
-  and 0 < length(attachments) < 3
+  and 0 < length(attachments) <= 3
   and not sender.email.domain.root_domain in $org_display_names
   and (
     any(recipients.to, strings.icontains(sender.display_name, .email.domain.sld))
@@ -18,5 +16,26 @@ source: |
   and any(attachments,
           .file_type in $file_types_images and (any(file.explode(.), .scan.qr.type == "url"))
   )
-tags: 
-  - "Potential Rule - Sam"
+
+ // sender profile is new or outlier
+  and (
+    profile.by_sender().prevalence in ("new", "outlier")
+    or (
+      profile.by_sender().any_malicious_messages
+      and not profile.by_sender().any_false_positives
+    )
+  )
+  
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "QR code"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Header analysis"
+  - "Computer Vision"
+  - "Natural Language Understanding"
+  - "QR code analysis"
+  - "Sender analysis"
+  - "URL analysis"
