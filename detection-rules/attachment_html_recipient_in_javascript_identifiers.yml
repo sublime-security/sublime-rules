@@ -5,39 +5,38 @@ type: "rule"
 severity: "high"
 source: |
   type.inbound
+  and any(attachments,
+          (
+            .file_extension in~ ("html", "htm", "shtml", "dhtml", "xhtml")
+            or (
+              .file_extension is null
+              and .file_type == "unknown"
+              and .content_type == "application/octet-stream"
+            )
+            or .file_extension in~ $file_extensions_common_archives
+            or .file_type == "html"
+            or .content_type == "text/html"
+          )
+          and any(file.explode(.),
+                  // suspicious identifiers
+                  any([.scan.strings.strings, .scan.javascript.identifiers],
+                      any(., strings.like(., "*atob*", "*decrypt*"))
+                  )
+          )
+          // Recipients address found in javascript
+          and any(file.explode(.),
+                  any(recipients.to,
+                      any(..scan.javascript.strings, strings.icontains(., ..email.email))
+                  )
   
-  // Negating Cisco Secure Email Encryption
-  and (
-    (
-      length(body.links) > 0
-      and not all(body.links, strings.ilike(.href_url.domain.domain, "res.cisco.com"))
-    )
-    or any(attachments,
-           (
-             .file_extension in~ ("html", "htm", "shtml", "dhtml", "xhtml")
-             or (
-               .file_extension is null
-               and .file_type == "unknown"
-               and .content_type == "application/octet-stream"
-             )
-             or .file_extension in~ $file_extensions_common_archives
-             or .file_type == "html"
-             or .content_type == "text/html"
-           )
-           and any(file.explode(.),
-                   // suspicious identifiers
-                   any([.scan.strings.strings, .scan.javascript.identifiers],
-                       any(., strings.like(., "*atob*", "*decrypt*"))
-                   )
-           )
-           // Recipients address found in javascript
-           and any(file.explode(.),
-                   any(recipients.to,
-                       any(..scan.javascript.strings, strings.icontains(., ..email.email))
-                   )
-           )
-    )
+                  // Negating Cisco Secure Email Encryption
+                  and not any(.scan.javascript.strings,
+                              strings.contains(., "Cisco Registered Envelope Service")
+                              and not strings.contains(., "https://res.cisco.com:443")
+                  )
+          )
   )
+
 attack_types:
   - "Credential Phishing"
 tactics_and_techniques:
