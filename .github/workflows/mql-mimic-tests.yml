@@ -1,0 +1,40 @@
+name: MQL Mimic Tests
+
+on:
+  push:
+    branches: [ "**" ]
+
+concurrency:
+  group: ${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  trigger-via-zapier:
+    name: Trigger Test Run
+    runs-on: ubuntu-20.04
+    permissions:
+      checks: write
+
+    steps:
+
+      - name: "Trigger MQL Mimic Tests"
+        env:
+          trigger_url: '${{ secrets.MQL_MOCK_TRIGGER }}'
+          branch: '${{ github.ref_name }}'
+          repo: '${{ github.repository }}'
+          token: '${{ secrets.GITHUB_TOKEN }}'
+          sha: '${{ github.sha }}'
+        run: |
+          curl -X POST $trigger_url  \
+            -H 'Content-Type: application/json' \
+            -d '{"branch":"'$branch'","repo":"'$repo'","token":"'$token'","sha":"'$sha'"}'
+
+      - name: Wait for check to be completed
+        uses: fountainhead/action-wait-for-check@v1.1.0
+        id: wait-for-build
+        # Wait for results so that the token remains valid while the test suite is executing and posting a check here.
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          checkName: "MQL Mimic Tests"
+          ref: ${{ github.sha }}
+          timeoutSeconds: 3600

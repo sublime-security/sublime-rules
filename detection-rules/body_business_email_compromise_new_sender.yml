@@ -1,30 +1,44 @@
 name: "Body: Business Email Compromise (BEC) attempt from first-time sender"
 description: |
-    Detects potential Business Email Compromise (BEC) attacks by analyzing text within the email body from first-time senders.
+  Detects potential Business Email Compromise (BEC) attacks by analyzing text within the email body from first-time senders.
 type: "rule"
 severity: "medium"
 source: |
   type.inbound
-
-  and any(ml.nlu_classifier(coalesce(
-    body.html.display_text, body.plain.raw)).intents,
-    .name in ("bec") and .confidence == "high"
+  and any(ml.nlu_classifier(body.current_thread.text).intents,
+          .name in ("bec") and .confidence == "high"
+  )
+  // negating legit replies
+  and not (
+    (
+      strings.istarts_with(subject.subject, "RE:")
+      // out of office auto-reply
+      // the NLU model will handle these better natively soon
+      or strings.istarts_with(subject.subject, "Automatic reply:")
     )
-
+    and (
+      length(headers.references) > 0
+      or any(headers.hops, any(.fields, strings.ilike(.name, "In-Reply-To")))
+    )
+  )
   // first-time sender
   and (
-          (
-              sender.email.domain.root_domain in $free_email_providers
-              and sender.email.email not in $sender_emails
-          )
-          or (
-              sender.email.domain.root_domain not in $free_email_providers
-              and sender.email.domain.domain not in $sender_domains
-          )
+    (
+      sender.email.domain.root_domain in $free_email_providers
+      and sender.email.email not in $sender_emails
+    )
+    or (
+      sender.email.domain.root_domain not in $free_email_providers
+      and sender.email.domain.domain not in $sender_domains
+    )
   )
-tags:
-  - "Machine Learning"
+attack_types:
+  - "BEC/Fraud"
+tactics_and_techniques:
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Header analysis"
   - "Natural Language Understanding"
-  - "Suspicious sender"
-  - "Business Email Compromise"
+  - "Sender analysis"
 id: "96d4c35a-ca53-559e-9db3-349dbbdffc20"

@@ -14,40 +14,47 @@ severity: "medium"
 source: |
   type.inbound
   and any(body.links,
-      any(beta.linkanalysis(.).files_downloaded,
-          any(file.explode(.),
-              (
-                  // look for files in encrypted zips.
-                  // if password cracking the zip wasn't
-                  // successful, our only opportunity to look
-                  // for suspicious file types is here under
-                  // .zip.attempted_files
-                  "encrypted_zip" in .flavors.yara
-
-                  and any(.scan.zip.attempted_files,
-                      strings.ilike(., "*.lnk", "*.js", "*.vba", "*.vbs", "*.vbe")
+          any(beta.linkanalysis(.).files_downloaded,
+              any(file.explode(.),
+                  (
+                    // look for files in encrypted zips.
+                    // if password cracking the zip wasn't
+                    // successful, our only opportunity to look
+                    // for suspicious file types is here under
+                    // .zip.attempted_files
+                    "encrypted_zip" in .flavors.yara
+                    and any(.scan.zip.attempted_files,
+                            strings.ilike(., "*.lnk", "*.js", "*.vba", "*.vbs", "*.vbe")
+                    )
                   )
+                  // for both non-encrypted zips and encrypted zips
+                  // that were successfully cracked
+                  or .file_extension in ("lnk", "js", "vba", "vbs", "vbe")
               )
-              // for both non-encrypted zips and encrypted zips
-              // that were successfully cracked
-              or .file_extension in ("lnk", "js", "vba", "vbs", "vbe")
           )
-      )
   )
   // unsolicited
   and (
-          (
-              sender.email.domain.root_domain in $free_email_providers
-              and sender.email.email not in $recipient_emails
-          )
-          or (
-              sender.email.domain.root_domain not in $free_email_providers
-              and sender.email.domain.domain not in $recipient_domains
-          )
+    (
+      sender.email.domain.root_domain in $free_email_providers
+      and sender.email.email not in $recipient_emails
+    )
+    or (
+      sender.email.domain.root_domain not in $free_email_providers
+      and sender.email.domain.domain not in $recipient_domains
+    )
   )
-
-tags:
-  - "HTML smuggling"
-  - "Suspicious link"
-  - "Malware"
+attack_types:
+  - "Malware/Ransomware"
+tactics_and_techniques:
+  - "Encryption"
+  - "Evasion"
+  - "LNK"
+  - "Social engineering"
+detection_methods:
+  - "Archive analysis"
+  - "File analysis"
+  - "Sender analysis"
+  - "URL analysis"
+  - "YARA"
 id: "67ae2152-ac52-52d4-bec2-6bbc4a488df9"

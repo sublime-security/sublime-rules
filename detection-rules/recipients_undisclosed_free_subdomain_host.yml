@@ -5,19 +5,35 @@ type: "rule"
 severity: "medium"
 source: |
   type.inbound
-  
-  and any(body.links, 
-      .href_url.domain.root_domain in $free_subdomain_hosts
-      and .href_url.domain.subdomain is not null
-      and .href_url.domain.subdomain != "www"
+  and any(body.links,
+          .href_url.domain.root_domain in $free_subdomain_hosts
+          and .href_url.domain.subdomain is not null
+          and .href_url.domain.subdomain != "www"
   )
-  and (
-      length(recipients.to) == 0
-      or all(recipients.to, .display_name == "Undisclosed recipients")
-  )
+  and (length(recipients.to) == 0 or all(recipients.to, .display_name == "Undisclosed recipients"))
   and length(recipients.cc) == 0
   and length(recipients.bcc) == 0
-tags: 
-  - "Suspicious link"
-  - "Suspicious headers"
+  
+  // negate listmailers & benign threads
+  and not (
+    any(headers.hops, any(.fields, .name == "List-Unsubscribe"))
+    or any(ml.nlu_classifier(body.current_thread.text).intents,
+           .name == "benign" and .confidence == "high"
+    )
+  )
+  and (
+    (
+      sender.email.domain.root_domain in $free_email_providers
+      and sender.email.email not in $sender_emails
+    )
+    or (
+      sender.email.domain.root_domain not in $free_email_providers
+      and sender.email.domain.domain not in $sender_domains
+    )
+  )
+tactics_and_techniques:
+  - "Free subdomain host"
+detection_methods:
+  - "Header analysis"
+  - "URL analysis"
 id: "c23d979d-de80-599d-b0ca-c7fef217885e"

@@ -9,45 +9,63 @@ source: |
   type.inbound
   
   // check image attachments for QR code, will want to add message.screenshot functionality here when it's ready
+  // and length(attachments) < 10
   and any(attachments,
-      .file_type in~ ('bmp', 'png', 'jpg', 'jpeg', 'gif')
-      and any(file.explode(.), .scan.qr.type == "url"
+          (.file_type in $file_types_images or .file_type == "pdf")
+          and any(file.explode(.),
+                  .scan.qr.type == "url"
   
-          // recipient email address is present in the URL, a common tactic used in credential phishing attacks and the url is not in $org_domains
-          and any(recipients.to, strings.icontains(..scan.qr.data, .email.email))
-          and .scan.qr.url.domain.root_domain not in $org_domains
-      )
+                  // recipient email address is present in the URL, a common tactic used in credential phishing attacks and the url is not in $org_domains
+                  and any(recipients.to,
+                          strings.icontains(..scan.qr.data, .email.email) and .email.domain.valid
+                  )
+                  and .scan.qr.url.domain.root_domain not in $org_domains
+          )
   )
   
   // NLU has identified cred_theft language with high confidence
   and (
-      any(ml.nlu_classifier(coalesce(body.html.display_text, body.plain.raw)).intents, .name == "cred_theft" and .confidence == "high")
-      or
-      // the attachment contains suspicious strings
-      (
-          any(attachments,
-              .file_type in~ ('bmp', 'png', 'jpg', 'jpeg', 'gif', 'pdf')
-              and any(file.explode(.), 
-                  any(.scan.strings.strings, regex.icontains(.,
-                    '(\b2fa\b|\bQ.?R\.?\s?\b|MFA|Muti[ -]?Factor Auth(entication)?)'))
-              )
+    any(ml.nlu_classifier(body.current_thread.text).intents,
+        .name == "cred_theft" and .confidence == "high"
+    )
+    or 
+    // the attachment contains suspicious strings
+    (
+      any(attachments,
+          (.file_type in $file_types_images or .file_type == "pdf")
+          and any(file.explode(.),
+                  any(.scan.strings.strings,
+                      regex.icontains(.,
+                                      '(\b2fa\b|\bQ.?R\.?\s?\b|MFA|Muti[ -]?Factor Auth(entication)?)'
+                      )
+                  )
           )
       )
+    )
   )
   
   // first-time sender
   and (
-            (
-                sender.email.domain.root_domain in $free_email_providers
-                and sender.email.email not in $sender_emails
-            )
-            or (
-                sender.email.domain.root_domain not in $free_email_providers
-                and sender.email.domain.domain not in $sender_domains
-            )
+    (
+      sender.email.domain.root_domain in $free_email_providers
+      and sender.email.email not in $sender_emails
+    )
+    or (
+      sender.email.domain.root_domain not in $free_email_providers
+      and sender.email.domain.domain not in $sender_domains
+    )
   )
-tags: 
-  - "Suspicious Link"
-  - "Natural Language Understanding"
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Impersonation: Brand"
   - "QR code"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Computer Vision"
+  - "Natural Language Understanding"
+  - "QR code analysis"
+  - "Sender analysis"
+  - "URL analysis"
 id: "25a84d1c-9578-53e3-98a7-ca9b43abb28b"

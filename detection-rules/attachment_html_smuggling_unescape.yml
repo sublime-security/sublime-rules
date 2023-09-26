@@ -6,17 +6,28 @@ references:
 type: "rule"
 severity: "high"
 source: |
-  type.inbound and
-  any(attachments,
-        (
-            .file_extension in~ ("html", "htm", "shtml", "dhtml") or
-            .file_extension in~ $file_extensions_common_archives or
-            .file_type == "html"
-        )
-        and any(file.explode(.),
-                any(.scan.javascript.identifiers, . == "unescape"))
+  type.inbound
+  and any(attachments,
+          (
+            .file_extension in~ ("html", "htm", "shtml", "dhtml")
+            or .file_extension in~ $file_extensions_common_archives
+            or .file_type == "html"
+          )
+          and any(file.explode(.),
+                  any(.scan.javascript.identifiers, . == "unescape")
+                  or any(.scan.strings.strings, regex.contains(., "document.write.{0,10}unescape"))
+          )
   )
-tags:
-  - "Suspicious attachment"
+attack_types:
+  - "Credential Phishing"
+  - "Malware/Ransomware"
+tactics_and_techniques:
+  - "Evasion"
   - "HTML smuggling"
+  - "Scripting"
+detection_methods:
+  - "Archive analysis"
+  - "File analysis"
+  - "HTML analysis"
+  - "Javascript analysis"
 id: "0b0fed36-735a-50f1-bf10-6673237a4623"

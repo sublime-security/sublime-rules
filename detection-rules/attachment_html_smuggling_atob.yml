@@ -7,31 +7,47 @@ type: "rule"
 severity: "high"
 source: |
   type.inbound
-  and any(attachments, .size <= 60000 and
-      (
-          .file_extension in~ ("html", "htm", "shtml", "dhtml") or
-          .file_extension in~ $file_extensions_common_archives or
-          .file_type == "html"
-      )
-      and any(file.explode(.),
-          .scan.entropy.entropy >= 5
-          and (
-              length(filter(.scan.javascript.identifiers, strings.like (., "document", "write", "atob"))) == 3
-              // usage: document['write'](atob)
-              or any(.scan.strings.strings, strings.ilike(., "*document*write*atob*"))
-              // usage: some_var = atob();
-              or any(.scan.strings.strings, strings.ilike(., "*=*atob*;"))
-              // usage: obfuscating "atob"
-              or any(.scan.javascript.identifiers, strings.ilike(., '*ato\u0062*'))
-              // usage: document.head.insertAdjacentHTML("beforeend", atob(...
-              or 
-                  any(.scan.strings.strings, strings.ilike(.,
-                      "*document*write*atob*",
-                      "*document*insertAdjacentHTML*atob*"))
+  and any(attachments,
+          (
+            .file_extension in~ ("html", "htm", "shtml", "dhtml")
+            or .file_extension in~ $file_extensions_common_archives
+            or .file_type == "html"
           )
-      )
+          and any(file.explode(.),
+                  .scan.entropy.entropy >= 5
+                  and (
+                    length(filter(.scan.javascript.identifiers,
+                                  strings.like(., "document", "write", "atob")
+                           )
+                    ) == 3
+                    // usage: document['write'](atob)
+                    or any(.scan.strings.strings, strings.ilike(., "*document*write*atob*"))
+                    // usage: some_var = atob();
+                    or any(.scan.strings.strings, strings.ilike(., "*=*atob*;"))
+                    // usage: obfuscating "atob"
+                    or any(.scan.javascript.identifiers, strings.ilike(., '*ato\u0062*'))
+                    // usage: document.head.insertAdjacentHTML("beforeend", atob(...
+                    or any(.scan.strings.strings,
+                           strings.ilike(.,
+                                         "*document*write*atob*",
+                                         "*document*insertAdjacentHTML*atob*"
+                           )
+                    )
+                  )
+          )
   )
-tags:
-  - "Suspicious attachment"
+attack_types:
+  - "Credential Phishing"
+  - "Malware/Ransomware"
+tactics_and_techniques:
   - "HTML smuggling"
+  - "Scripting"
+detection_methods:
+  - "Archive analysis"
+  - "Content analysis"
+  - "File analysis"
+  - "HTML analysis"
+  - "Javascript analysis"
+  - "Sender analysis"
+  - "URL analysis"
 id: "03fcac11-ffc9-5a9c-9e1e-c866e683b48e"

@@ -9,36 +9,44 @@ severity: "high"
 source: |
   type.inbound
   and any(body.links,
-      // There are files downloaded
-      length(beta.linkanalysis(.).files_downloaded) > 0 and 
+          // There are files downloaded
+          length(beta.linkanalysis(.).files_downloaded) > 0
+          and 
 
-      // Adobe branding
-      beta.linkanalysis(.).credphish.brand.name == "Adobe" and 
-      beta.linkanalysis(.).credphish.brand.confidence == "high" and 
+          // Adobe branding
+          beta.linkanalysis(.).credphish.brand.name == "Adobe"
+          and beta.linkanalysis(.).credphish.brand.confidence == "high"
+          and 
 
-      // Qakbot text for user coercion
-      any(file.explode(beta.linkanalysis(.).screenshot),
-          all([
-              "the file is not displayed correctly",
-              "document password"
-          ], strings.icontains(..scan.ocr.raw, .))
-      )
+          // Qakbot text for user coercion
+          any(file.explode(beta.linkanalysis(.).screenshot),
+              all(["the file is not displayed correctly", "document password"],
+                  strings.icontains(..scan.ocr.raw, .)
+              )
+          )
   )
   // unsolicited
   and (
-          (
-              sender.email.domain.root_domain in $free_email_providers
-              and sender.email.email not in $recipient_emails
-          )
-          or (
-              sender.email.domain.root_domain not in $free_email_providers
-              and sender.email.domain.domain not in $recipient_domains
-          )
-  ) 
+    (
+      sender.email.domain.root_domain in $free_email_providers
+      and sender.email.email not in $recipient_emails
+    )
+    or (
+      sender.email.domain.root_domain not in $free_email_providers
+      and sender.email.domain.domain not in $recipient_domains
+    )
+  )
 tags:
-  - "HTML smuggling"
-  - "Suspicious link"
-  - "Brand impersonation"
-  - "Malware"
-  - "QakBot"
+  - "Malfam: QakBot"
+attack_types:
+  - "Malware/Ransomware"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Social engineering"
+detection_methods:
+  - "File analysis"
+  - "Optical Character Recognition"
+  - "Sender analysis"
+  - "URL analysis"
+  - "URL screenshot"
 id: "e826c2cf-740c-5588-b0a1-8f45bb5baf47"
