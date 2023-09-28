@@ -35,7 +35,9 @@ jobs:
           for file in ${{ steps.changed-files.outputs.all_changed_and_modified_files }}; do
             echo "$file was changed"
             rule_id=$(yq '.id' $file)
-            [[ "$rule_id" = "null" ]] && echo "$file has no id yet" && exit 1
+            # This means we won't see new flags. PR CI won't run on the auto commit that adds the rule ID, so we'd need
+            # to move this into rules_validate.yml.
+            [[ "$rule_id" = "null" ]] && echo "$file has no id yet" && continue
             
             echo "$file has rule ID $rule_id"
             altered_rule_ids=$(echo "altered_rule_ids"",""$rule_id")
@@ -43,6 +45,8 @@ jobs:
       
           echo "Altered Ruled IDs: $altered_rule_ids"
           echo "##[set-output name=rule_ids;]$(echo $altered_rule_ids)"
+          # TODO: This doesn't solve for a modified rule_id. We could merge with any files known on 'main', but changing
+          # a rule ID is a separate problem.
 
       - name: "Trigger MQL Mimic Tests"
         env:
