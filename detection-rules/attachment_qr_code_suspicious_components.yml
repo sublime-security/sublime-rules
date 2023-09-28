@@ -4,68 +4,48 @@ description: |
 type: "rule"
 severity: "high"
 source: |
- type.inbound
-  and (
-    any(attachments,
-        .file_type in $file_types_images
-        and any(ml.logo_detect(.).brands, strings.starts_with(.name, "Microsoft"))
-    )
-    or any(ml.logo_detect(beta.message_screenshot()).brands, strings.starts_with(.name, "Microsoft"))
-  )
+  type.inbound
+  and 1 <= length(attachments) < 3
+  
+  // Inspects image attachments for QR codes
   and any(attachments,
           .file_type in $file_types_images
           and (
             any(file.explode(.),
-                regex.icontains(.scan.ocr.raw, 'scan|camera')
-                and regex.icontains(.scan.ocr.raw, '\bQR\b|Q\.R\.|barcode')
-            )
-            or (
-              any(file.explode(.),
-                  .scan.qr.type == "url"
-                  // recipient email address is present in the URL, a common tactic used in credential phishing attacks 
-                  and any(recipients.to,
-                          strings.icontains(..scan.qr.data, .email.email)
-                          
-                           // the recipients sld is in the senders display name
-                          or any(recipients.to,
-                              strings.icontains(sender.display_name, .email.domain.sld)
-                          )
-  
-                          // the recipient local is in the body  
-                          or any(recipients.to,
-                                 strings.icontains(body.current_thread.text, .email.local_part)
-                          )
-  
-                          // or the body is null 
-                          or body.current_thread.text is null
-                          or body.current_thread.text == ""
-  
-                          // or the subject contains authentication/urgency verbiage
-                          or regex.contains(subject.subject,
-                                            "(Authenticat(e|or|ion)|2fa|Multi.Factor|(qr|bar).code|action.require|alert|Att(n|ention):)"
-                          )
+                .scan.qr.type == "url"
+                and (
+                  // pass the QR URL to LinkAnalysis
+                  any([beta.linkanalysis(.scan.qr.url)],
+                      .credphish.disposition == "phishing"
+                      // any routing traverses via $suspicious_tld list
+                      or any(.redirect_history, .domain.tld in $suspicious_tlds)
+                      // effective destination in $suspicious_tld list
+                      or .effective_url.domain.tld in $suspicious_tlds
+                      // or the effective destination domain is in $abuse_ch_urlhaus_domains_trusted_reporters
+                      or .effective_url.domain.root_domain in $abuse_ch_urlhaus_domains_trusted_reporters
+                      // or any files downloaded are zips or executables
+                      or any(.files_downloaded,
+                             .file_extension in $file_extensions_common_archives
+                             or .file_extension in $file_extensions_executables
+                      )
                   )
-              )
+                  or (
+                    // or the QR code's root domain is a url_shortener
+                    .scan.qr.url.domain.root_domain in $url_shorteners
+                    // exclude google maps
+                    and not strings.starts_with(.scan.qr.url.url, 'https://goo.gl/maps')
+                  )
+                  // the QR code url is a bing open redirect
+                  or .scan.qr.url.domain.root_domain == 'bing.com' and .scan.qr.url.path =~ '/ck/a'
+                  or (
+                    // usap-dc open redirect
+                    .scan.qr.url.domain.root_domain == "usap-dc.org"
+                    and .scan.qr.url.path =~ "/tracker"
+                    and strings.starts_with(.scan.qr.url.query_params, "type=dataset&url=http")
+                  )
+                )
             )
           )
-  )
-  and (
-    not any(headers.hops,
-            .authentication_results.compauth.verdict is not null
-            and .authentication_results.compauth.verdict == "pass"
-            and sender.email.domain.domain == "microsoft.com"
-    )
-  )
-  // unsolicited
-  and (
-    (
-      sender.email.domain.root_domain in $free_email_providers
-      and sender.email.email not in $recipient_emails
-    )
-    or (
-      sender.email.domain.root_domain not in $free_email_providers
-      and sender.email.domain.domain not in $recipient_domains
-    )
   )
 
 attack_types:
