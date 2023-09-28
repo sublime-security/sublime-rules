@@ -1,8 +1,9 @@
 name: MQL Mimic Tests
 
 on:
-  push:
-    branches: [ "**" ]
+  pull_request:
+    branches:
+      - main
 
 concurrency:
   group: ${{ github.ref }}
@@ -14,8 +15,32 @@ jobs:
     runs-on: ubuntu-20.04
     permissions:
       checks: write
+      pull-requests: read
 
     steps:
+      - uses: actions/checkout@v4
+
+      - name: Get changed detection-rules
+        id: changed-files
+        uses: tj-actions/changed-files@v39
+        with:
+          files: "detection-rules/*"
+          recover_deleted_files: true
+
+      - name: "Find updated rule IDs"
+        id: find_ids
+        run: |
+          altered_rule_ids=""
+          
+          for file in ${{ steps.changed-files.outputs.all_changed_files }}; do
+            echo "$file was changed"
+            rule_id=$(yq '.id' $file)
+            echo "$file has rule ID $rule_id"
+            altered_ruled_ids=$(echo "$altered_ruled_ids"",""$rule_id")
+          done
+      
+          echo "Altered Ruled IDs: $altered_rule_ids"
+          echo "##[set-output name=rule_ids;]$(echo $altered_rule_ids)"
 
       - name: "Trigger MQL Mimic Tests"
         env:
@@ -24,6 +49,7 @@ jobs:
           repo: '${{ github.repository }}'
           token: '${{ secrets.GITHUB_TOKEN }}'
           sha: '${{ github.sha }}'
+          only_rule_ids: '${{ steps.find_ids.outputs.rule_ids }}'
         run: |
           curl -X POST $trigger_url  \
             -H 'Content-Type: application/json' \
