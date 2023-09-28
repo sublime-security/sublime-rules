@@ -1,0 +1,82 @@
+name: "Attachment: QR code with credential phishing indicators"
+description: |
+  Detects messages with between 1-3 attachments, that contain a QR code with multiple conditional checks. LinkAnalysis credential phishing conclusion, or the QR code url traverses suspicious infrastructure, or the final destination is in URLhaus, or downloads a zip or executable, or the leverages url shorteners or known QR abused openredirects.
+type: "rule"
+severity: "high"
+source: |
+ type.inbound
+  and (
+    any(attachments,
+        .file_type in $file_types_images
+        and any(ml.logo_detect(.).brands, strings.starts_with(.name, "Microsoft"))
+    )
+    or any(ml.logo_detect(beta.message_screenshot()).brands, strings.starts_with(.name, "Microsoft"))
+  )
+  and any(attachments,
+          .file_type in $file_types_images
+          and (
+            any(file.explode(.),
+                regex.icontains(.scan.ocr.raw, 'scan|camera')
+                and regex.icontains(.scan.ocr.raw, '\bQR\b|Q\.R\.|barcode')
+            )
+            or (
+              any(file.explode(.),
+                  .scan.qr.type == "url"
+                  // recipient email address is present in the URL, a common tactic used in credential phishing attacks 
+                  and any(recipients.to,
+                          strings.icontains(..scan.qr.data, .email.email)
+                          
+                           // the recipients sld is in the senders display name
+                          or any(recipients.to,
+                              strings.icontains(sender.display_name, .email.domain.sld)
+                          )
+  
+                          // the recipient local is in the body  
+                          or any(recipients.to,
+                                 strings.icontains(body.current_thread.text, .email.local_part)
+                          )
+  
+                          // or the body is null 
+                          or body.current_thread.text is null
+                          or body.current_thread.text == ""
+  
+                          // or the subject contains authentication/urgency verbiage
+                          or regex.contains(subject.subject,
+                                            "(Authenticat(e|or|ion)|2fa|Multi.Factor|(qr|bar).code|action.require|alert|Att(n|ention):)"
+                          )
+                  )
+              )
+            )
+          )
+  )
+  and (
+    not any(headers.hops,
+            .authentication_results.compauth.verdict is not null
+            and .authentication_results.compauth.verdict == "pass"
+            and sender.email.domain.domain == "microsoft.com"
+    )
+  )
+  // unsolicited
+  and (
+    (
+      sender.email.domain.root_domain in $free_email_providers
+      and sender.email.email not in $recipient_emails
+    )
+    or (
+      sender.email.domain.root_domain not in $free_email_providers
+      and sender.email.domain.domain not in $recipient_domains
+    )
+  )
+
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "QR code"
+  - "Social engineering"
+detection_methods:
+  - "Computer Vision"
+  - "Header analysis"
+  - "QR code analysis"
+  - "Sender analysis"
+id: "ed0f772a-6543-5947-80d1-55a11ea63074"
