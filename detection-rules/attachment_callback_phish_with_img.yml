@@ -1,0 +1,66 @@
+name: "Attachment: Callback Phishing solicitation via image file"
+description: "A fraudulent invoice/receipt found in an image attachment.\nCallback Phishing is an attempt by an attacker to solicit the victim (recipient) to call a phone number. \nThe resulting interaction could lead to a multitude of attacks ranging from Financial theft, Remote Access Trojan (RAT) Installation or Ransomware Deployment.\n"
+type: "rule"
+authors:
+  - twitter: "vector_sec"
+severity: "high"
+source: |
+  type.inbound
+  and (
+    not profile.by_sender().solicited
+    or (
+      profile.by_sender().any_messages_malicious_or_spam
+      and not profile.by_sender().any_false_positives
+    )
+  )
+  and sender.email.domain.root_domain in $free_email_providers
+  and any(attachments,
+          .file_type in $file_types_images
+          and any(file.explode(.),
+                  4 of (
+                    strings.icontains(.scan.ocr.raw, "purchase"),
+                    strings.icontains(.scan.ocr.raw, "subscription"),
+                    strings.icontains(.scan.ocr.raw, "antivirus"),
+                    strings.icontains(.scan.ocr.raw, "order"),
+                    strings.icontains(.scan.ocr.raw, "support"),
+                    strings.icontains(.scan.ocr.raw, "receipt"),
+                    strings.icontains(.scan.ocr.raw, "amount"),
+                    strings.icontains(.scan.ocr.raw, "charged"),
+                    strings.icontains(.scan.ocr.raw, "invoice"),
+                    strings.icontains(.scan.ocr.raw, "call"),
+                    strings.icontains(.scan.ocr.raw, "cancel"),
+                    strings.icontains(.scan.ocr.raw, "renew"),
+                    strings.icontains(.scan.ocr.raw, "refund"),
+                    strings.icontains(.scan.ocr.raw, "+1")
+                  )
+          )
+          and any(file.explode(.),
+                  strings.ilike(.scan.ocr.raw,
+                                "*geek squad*",
+                                "*lifelock*",
+                                "*best buy*",
+                                "*mcafee*",
+                                "*norton*",
+                                "*ebay*",
+                                "*paypal*",
+                                "*secure anywhere*"
+                  )
+          )
+  )
+attack_types:
+  - "Callback Phishing"
+tactics_and_techniques:
+  - "Evasion"
+  - "Free email provider"
+  - "Out of band pivot"
+  - "Social engineering"
+  - "Image as content"
+detection_methods:
+  - "Content analysis"
+  - "Optical Character Recognition"
+  - "Sender analysis"
+  - "URL analysis"
+  - "Computer Vision"
+id: "60acbb36-8ed1-562e-8027-260c2fdf0f04"
+testing_pr: 815
+testing_sha: aed114f25899ab2d1ff2b5519c78aa177a48fa26

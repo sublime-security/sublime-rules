@@ -9,89 +9,7 @@ type: "rule"
 severity: "medium"
 authors:
   - twitter: "ajpc500"
-source: |
-  type.inbound
-  and any(attachments,
-          (
-            .file_extension in~ ("html", "htm", "shtml", "dhtml")
-            or .file_extension in~ $file_extensions_common_archives
-            or .file_type == "html"
-          )
-          and any(file.explode(.),
-                  // suspicious strings found in javascript
-                  (
-                    length(filter(.scan.javascript.strings, strings.ilike(., "*password*", ))) >= 2
-                    and 2 of (
-                      any(.scan.javascript.strings, strings.ilike(., "*incorrect*")),
-                      any(.scan.javascript.strings, strings.ilike(., "*invalid*")),
-                      any(.scan.javascript.strings, strings.ilike(., "*login*")),
-                      any(.scan.javascript.strings, regex.icontains(., "sign.in")),
-                    )
-                  )
-                  or (
-                    // suspicious strings found outside of javascript, but binexplode'd file still of HTML type
-                    length(filter(.scan.strings.strings, strings.ilike(., "*password*", ))) >= 2
-                    and 2 of (
-                      any(.scan.strings.strings, strings.ilike(., "*incorrect*")),
-                      any(.scan.strings.strings, strings.ilike(., "*invalid*")),
-                      any(.scan.strings.strings, strings.ilike(., "*login*")),
-                      any(.scan.strings.strings, strings.ilike(., "*<script>*")),
-                      any(.scan.strings.strings, regex.icontains(., "sign.in")),
-                      any(.scan.strings.strings,
-                          regex.icontains(.,
-                                          '<title>.[^<]+(Payment|Invoice|Statement|Login|Microsoft|Email|Excel)'
-                          )
-                      )
-                    )
-                  )
-                  or
-                  //Known phishing obfuscation
-                  2 of (
-                    // Enter password
-                    any(.scan.strings.strings,
-                        strings.ilike(.,
-                                      "*&#69;&#110;&#116;&#101;&#114;&#32;&#112;&#97;&#115;&#115;&#119;&#111;&#114;&#100*"
-                        )
-                    ),
-
-                    // Forgotten my password
-                    any(.scan.strings.strings,
-                        strings.ilike(.,
-                                      "*&#70;&#111;&#114;&#103;&#111;&#116;&#116;&#101;&#110;&#32;&#109;&#121;&#32;&#112;&#97;&#115;&#115;&#119;&#111;&#114;&#100*"
-                        )
-                    ),
-
-                    // Sign in
-                    any(.scan.strings.strings,
-                        strings.ilike(., "*&#83;&#105;&#103;&#110;&#32;&#105;&#110*")
-                    )
-                  )
-          )
-  )
-  and (
-    (
-      // exclude internal mailers where there is no SPF configured.
-      // if the sender's root domain is an org domain, we
-      // ensure there's no SPF failures to protect against spoofs.
-      // we use root_domain because it's typically subdomains that are misconfigured
-      sender.email.domain.root_domain in $org_domains
-      and not any(distinct(headers.hops, .received_spf.verdict is not null),
-                  strings.ilike(.received_spf.verdict, "*fail")
-      )
-    )
-    or sender.email.domain.root_domain not in $org_domains
-  )
-  // Unsolicited
-  and (
-    (
-      sender.email.domain.root_domain in $free_email_providers
-      and sender.email.email not in $recipient_emails
-    )
-    or (
-      sender.email.domain.root_domain not in $free_email_providers
-      and sender.email.domain.domain not in $recipient_domains
-    )
-  )
+source: "type.inbound\nand any(attachments,\n        (\n          .file_extension in~ (\"html\", \"htm\", \"shtml\", \"dhtml\")\n          or .file_extension in~ $file_extensions_common_archives\n          or .file_type == \"html\"\n        )\n        and any(file.explode(.),\n                // suspicious strings found in javascript\n                (\n                  length(filter(.scan.javascript.strings, strings.ilike(., \"*password*\", ))) >= 2\n                  and 2 of (\n                    any(.scan.javascript.strings, strings.ilike(., \"*incorrect*\")),\n                    any(.scan.javascript.strings, strings.ilike(., \"*invalid*\")),\n                    any(.scan.javascript.strings, strings.ilike(., \"*login*\")),\n                    any(.scan.javascript.strings, regex.icontains(., \"sign.in\")),\n                  )\n                )\n                or (\n                  // suspicious strings found outside of javascript, but binexplode'd file still of HTML type\n                  length(filter(.scan.strings.strings, strings.ilike(., \"*password*\", ))) >= 2\n                  and 2 of (\n                    any(.scan.strings.strings, strings.ilike(., \"*incorrect*\")),\n                    any(.scan.strings.strings, strings.ilike(., \"*invalid*\")),\n                    any(.scan.strings.strings, strings.ilike(., \"*login*\")),\n                    any(.scan.strings.strings, strings.ilike(., \"*<script>*\")),\n                    any(.scan.strings.strings, regex.icontains(., \"sign.in\")),\n                    any(.scan.strings.strings,\n                        regex.icontains(.,\n                                        '<title>.[^<]+(Payment|Invoice|Statement|Login|Microsoft|Email|Excel)'\n                        )\n                    )\n                  )\n                )\n                or \n                //Known phishing obfuscation\n                2 of (\n                  // Enter password\n                  any(.scan.strings.strings,\n                      strings.ilike(.,\n                                    \"*&#69;&#110;&#116;&#101;&#114;&#32;&#112;&#97;&#115;&#115;&#119;&#111;&#114;&#100*\"\n                      )\n                  ),\n\n                  // Forgotten my password  \n                  any(.scan.strings.strings,  \n                      strings.ilike(.,  \n                                    \"*&#70;&#111;&#114;&#103;&#111;&#116;&#116;&#101;&#110;&#32;&#109;&#121;&#32;&#112;&#97;&#115;&#115;&#119;&#111;&#114;&#100*\"\n                      )\n                  ),\n\n                  // Sign in\n                  any(.scan.strings.strings,\n                      strings.ilike(., \"*&#83;&#105;&#103;&#110;&#32;&#105;&#110*\")\n                  )\n                )\n        )\n)\n// Unsolicited\nand (\n  not profile.by_sender().solicited\n  or (\n    profile.by_sender().any_messages_malicious_or_spam\n    and not profile.by_sender().any_false_positives\n  )\n)\n"
 attack_types:
   - "Credential Phishing"
 tactics_and_techniques:
@@ -104,5 +22,5 @@ detection_methods:
   - "Javascript analysis"
   - "Sender analysis"
 id: "3aabf4a7-fefa-5266-83fe-012002c9db4a"
-testing_pr: 730
-testing_sha: dce0d97bad4e06708cd4322d3acc5b9d0a81501f
+testing_pr: 815
+testing_sha: aed114f25899ab2d1ff2b5519c78aa177a48fa26

@@ -26,24 +26,10 @@ source: |
           )
   )
   and (
-    (
-      (
-        sender.email.domain.root_domain in $free_email_providers
-        and sender.email.email not in $sender_emails
-      )
-      or (
-        sender.email.domain.root_domain not in $free_email_providers
-        and sender.email.domain.domain not in $sender_domains
-      )
-    )
+    profile.by_sender().prevalence in ("new", "outlier")
     or (
-      sender.email.email in $sender_emails
-      and any(distinct(headers.hops, .received_spf.verdict is not null),
-              regex.icontains(.received_spf.verdict, "fail|error")
-              or any(distinct(headers.hops, .authentication_results.dmarc is not null),
-                     strings.ilike(.authentication_results.dmarc, "*fail")
-              )
-      )
+      profile.by_sender().any_messages_malicious_or_spam
+      and not profile.by_sender().any_false_positives
     )
   )
 attack_types:
@@ -60,5 +46,5 @@ detection_methods:
   - "Sender analysis"
   - "URL screenshot"
 id: "814a5694-d626-5bf4-a1ba-a1dbcb625279"
-testing_pr: 761
-testing_sha: 6513d69b03e871af705d1e93d672104ee05f1023
+testing_pr: 815
+testing_sha: aed114f25899ab2d1ff2b5519c78aa177a48fa26
