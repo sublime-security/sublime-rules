@@ -3,38 +3,7 @@ description: "Detects DocuSign phishing emails with no DocuSign links, a DocuSig
 type: "rule"
 severity: "high"
 source: |
-  type.inbound
-  and length(filter(attachments, .file_type not in $file_types_images)) == 0
-  and any(body.links, not strings.ilike(.href_url.domain.root_domain, "docusign.*"))
-  and any(attachments,
-          (
-            any(ml.logo_detect(.).brands, .name == "DocuSign" and .confidence in ("medium", "high"))
-            or any(file.explode(.),
-                   strings.ilike(.scan.ocr.raw, "*DocuSign*")
-                   and any(ml.nlu_classifier(.scan.ocr.raw).intents,
-                       .name == "cred_theft" and .confidence != "low"
-                   )
-            )
-          )
-          and any(file.explode(.),
-                  regex.icontains(.scan.ocr.raw,
-                                  "review document",
-                                  "[^d][^o][^c][^u]sign",
-                                  "important edocs",
-                                  "completed document"
-                  )
-          )
-  )
-  and (
-    (
-      sender.email.domain.root_domain in $free_email_providers
-      and sender.email.email not in $sender_emails
-    )
-    or (
-      sender.email.domain.root_domain not in $free_email_providers
-      and sender.email.domain.domain not in $sender_domains
-    )
-  )
+  false
 attack_types:
   - "Credential Phishing"
 tactics_and_techniques:
