@@ -1,0 +1,41 @@
+name: "Brand impersonation: Spotify"
+description: |
+  Impersonation of Spotify.
+references:
+  - "https://www.phishprotection.com/blog/the-latest-popular-service-to-serve-you-up-phishing-emails-spotify/"
+type: "rule"
+severity: "low"
+source: |
+  type.inbound
+  and (
+    strings.ilike(sender.display_name, '*spotify*')
+    or strings.ilevenshtein(sender.display_name, 'spotify') <= 1
+    or strings.ilike(sender.email.domain.domain, '*spotify*')
+  )
+  and sender.email.domain.root_domain not in~ (
+    'spotify.com',
+    'byspotify.com',
+    'echosign.com',
+    'fromspotify.com',
+    'anchor.fm'
+  )
+  and sender.email.domain.domain not in~ ('privaterelay.appleid.com')
+  // first-time sender
+  and (
+    profile.by_sender().prevalence in ("new", "outlier")
+    or (
+      profile.by_sender().any_messages_malicious_or_spam
+      and not profile.by_sender().any_false_positives
+    )
+  )
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Lookalike domain"
+  - "Social engineering"
+detection_methods:
+  - "Sender analysis"
+id: "70e80f91-179d-51dc-9bbd-75f1bc6f9bb3"
+testing_pr: 815
+testing_sha: aed114f25899ab2d1ff2b5519c78aa177a48fa26

@@ -1,0 +1,37 @@
+name: "Attachment with VBA macros from employee impersonation (unsolicited)"
+description: "Attachment contains a VBA macro from a sender your organization has never sent an email to.\n\nSender is using a display name that matches the display name of someone in \nyour organization.\n\nVBA macros are a common phishing technique used to deploy malware.\n"
+references:
+  - "https://threatpost.com/microsoft-outlook-users-targeted-by-gamaredons-new-vba-macro/156484/"
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and sender.display_name in $org_display_names
+  and any(attachments,
+          (
+            .file_extension in~ $file_extensions_macros
+            or .file_extension in~ $file_extensions_common_archives
+          )
+          and file.oletools(.).indicators.vba_macros.exists
+  )
+  and (
+    not profile.by_sender().solicited
+    or (
+      profile.by_sender().any_messages_malicious_or_spam
+      and not profile.by_sender().any_false_positives
+    )
+  )
+attack_types:
+  - "Malware/Ransomware"
+tactics_and_techniques:
+  - "Impersonation: Employee"
+  - "Macros"
+  - "Social engineering"
+detection_methods:
+  - "Archive analysis"
+  - "File analysis"
+  - "Macro analysis"
+  - "Sender analysis"
+id: "9b262123-9010-5245-89a7-9ebd75333b2a"
+testing_pr: 815
+testing_sha: aed114f25899ab2d1ff2b5519c78aa177a48fa26

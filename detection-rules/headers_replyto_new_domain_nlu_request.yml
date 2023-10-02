@@ -1,0 +1,47 @@
+name: "Suspicious newly registered reply-to domain with engaging financial or urgent language"
+description: "Detects messages from a mismatched newly registered Reply-to domain that contain a financial or urgent request, or a request and \nan NLU tag with medium to high confidence, from first time sender. This technique is typically observed in Vendor impersonation.\n"
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and any(headers.reply_to,
+          // mismatched reply-to and sender domain
+          .email.domain.root_domain != sender.email.domain.root_domain
+
+          // newly registered reply-to domain
+          and beta.whois(.email.domain).days_old <= 30
+  )
+
+  // request is being made
+  and any(ml.nlu_classifier(body.current_thread.text).entities, .name == "request")
+
+  // there's financial/urgency OR a tag of medium/high confidence
+  and (
+    any(ml.nlu_classifier(body.current_thread.text).entities, .name in ("financial", "urgency"))
+    or any(ml.nlu_classifier(body.current_thread.text).tags,
+           .name is not null and .confidence in ("medium", "high")
+    )
+  )
+
+  // first-time sender
+  and (
+    profile.by_sender().prevalence in ("new", "outlier")
+    or (
+      profile.by_sender().any_messages_malicious_or_spam
+      and not profile.by_sender().any_false_positives
+    )
+  )
+attack_types:
+  - "BEC/Fraud"
+tactics_and_techniques:
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Header analysis"
+  - "Natural Language Understanding"
+  - "Sender analysis"
+  - "URL analysis"
+  - "Whois"
+id: "db4d9bb3-0eca-5525-9a99-7c1c773b580f"
+testing_pr: 815
+testing_sha: aed114f25899ab2d1ff2b5519c78aa177a48fa26

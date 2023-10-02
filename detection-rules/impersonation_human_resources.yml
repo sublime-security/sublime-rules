@@ -1,0 +1,19 @@
+name: "Impersonation: Human Resources with link or attachment and engaging language"
+description: "Detects messages impersonating HR that contain at least 1 link or 1 attachment with engaging language in the body from a first-time sender."
+type: "rule"
+severity: "medium"
+source: "type.inbound\nand sender.email.domain.domain not in $org_domains\nand regex.icontains(sender.display_name,\n                    '(\\bh\\W?r\\W?\\b|human resources|hr depart(ment)?|employee relations)'\n)\nand (length(body.links) > 0 or length(attachments) > 0)\n\n// Request and Urgency \nand any(ml.nlu_classifier(body.current_thread.text).entities, .name == \"request\")\nand any(ml.nlu_classifier(body.current_thread.text).entities, .name == \"urgency\")\nand (\n  any(ml.nlu_classifier(body.current_thread.text).intents, .name != \"benign\")\n  and not length(ml.nlu_classifier(body.current_thread.text).intents) == 0\n)\nand (\n  profile.by_sender().prevalence in (\"new\", \"outlier\")\n  or (\n    profile.by_sender().any_messages_malicious_or_spam\n    and not profile.by_sender().any_false_positives\n  )\n)\n"
+attack_types:
+  - "BEC/Fraud"
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Impersonation: Employee"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Header analysis"
+  - "Natural Language Understanding"
+  - "Sender analysis"
+id: "8c95a6a8-50d3-5697-a379-c00bda8e1922"
+testing_pr: 815
+testing_sha: aed114f25899ab2d1ff2b5519c78aa177a48fa26

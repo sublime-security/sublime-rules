@@ -1,0 +1,45 @@
+name: "Employee Impersonation: Payroll Fraud"
+description: |
+  This rule detects messages impersonating employees, from unsolicited senders attempting to reroute payroll
+  or alter payment details.
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and sender.display_name in $org_display_names
+  and length(attachments) == 0
+  and length(body.plain.raw) < 300
+  and (
+    sender.email.domain.root_domain not in $org_domains
+    or sender.email.domain.root_domain in $free_email_providers
+  )
+  and 1 of (
+    regex.icontains(body.plain.raw,
+                    '(pay\s?(roll|check|date|day)|direct deposit|\bdd\b|gehalt|salario|salary)'
+    ),
+    regex.icontains(body.html.inner_text,
+                    '(pay\s?(roll|check|date|day)|direct deposit|\bdd\b|gehalt|salario|salary)'
+    ),
+    regex.icontains(subject.subject,
+                    '(pay\s?(roll|check|date|day)|direct deposit|\bdd\b|gehalt|salario|salary)'
+    )
+  )
+  and (
+    not profile.by_sender().solicited
+    or (
+      profile.by_sender().any_messages_malicious_or_spam
+      and not profile.by_sender().any_false_positives
+    )
+  )
+attack_types:
+  - "BEC/Fraud"
+tactics_and_techniques:
+  - "Impersonation: Employee"
+  - "Free email provider"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Sender analysis"
+id: "2beb7d85-dfe3-5ecc-9b2a-d7416a3ef992"
+testing_pr: 815
+testing_sha: aed114f25899ab2d1ff2b5519c78aa177a48fa26
