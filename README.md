@@ -28,3 +28,5 @@ Learn more
 - [Release log](https://new.sublimesecurity.com)
 
 Follow us on [Twitter](https://twitter.com/sublime_sec) for updates on new rules and detection capabilities.
+
+
