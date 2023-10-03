@@ -12,22 +12,20 @@ source: |
     or strings.ilevenshtein(sender.display_name, 'paypal') <= 1
     or strings.ilike(sender.email.domain.domain, '*paypal*')
     or any(attachments,
-           .file_type in ("pdf", "jpg", "jpeg", "png")
+           (.file_type in $file_types_images or .file_type == "pdf")
            and any(ml.logo_detect(.).brands, .name == "PayPal")
            and any(file.explode(.),
-                   any(.scan.strings.strings, strings.ilike(., "*PayPal*"))
-                   and any(.scan.strings.strings,
-                           strings.ilike(.,
-                                         "*invoice*",
-                                         "*transaction*",
-                                         "*bitcoin*",
-                                         "*dear customer*",
-                           )
+                   strings.ilike(.scan.ocr.raw, "*PayPal*")
+                   and strings.ilike(.scan.ocr.raw,
+                                     "*invoice*",
+                                     "*transaction*",
+                                     "*bitcoin*",
+                                     "*dear customer*",
                    )
            )
     )
   )
-  and sender.email.domain.root_domain not in~ (
+  and sender.email.domain.root_domain not in (
     'paypal.com',
     'paypal.ch',
     'paypal.nl',
@@ -48,7 +46,11 @@ source: |
     'synchronybank.com',
     'xoom.com',
     'paypal-experience.com',
-    'paypalcorp.com'
+    'paypalcorp.com',
+    'paypal-customerfeedback.com',
+    'paypal-creditsurvey.com',
+    'paypal-prepaid.com',
+    'xoom.com'
   )
 
   // unsolicited
