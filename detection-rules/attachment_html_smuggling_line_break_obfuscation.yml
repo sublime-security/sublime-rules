@@ -1,8 +1,6 @@
-name: "Attachment: HTML smuggling with unescape"
+name: "Attachment: HTML smuggling with excessive line break obfuscation"
 description: |
-  Recursively scans files and archives to detect HTML smuggling techniques.
-references:
-  - "https://www.microsoft.com/security/blog/2021/11/11/html-smuggling-surges-highly-evasive-loader-technique-increasingly-used-in-banking-malware-targeted-attacks/"
+  Credential Phishing attacks have been observed using excessive line breaks to obfuscate javascript functions within html files.
 type: "rule"
 severity: "high"
 source: |
@@ -14,20 +12,25 @@ source: |
             or .file_type == "html"
           )
           and any(file.explode(.),
-                  any(.scan.javascript.identifiers, . == "unescape")
-                  or any(.scan.strings.strings, regex.contains(., "document.write.{0,10}unescape"))
+                  any(.scan.strings.strings,
+                  // return new line padded obfuscation 
+                      regex.contains(., '(\\r\\n\S{2}){50,}')
+                      and strings.contains(., 'decodeURIComponent')
+                  )
           )
   )
 attack_types:
   - "Credential Phishing"
   - "Malware/Ransomware"
 tactics_and_techniques:
+  - "Encryption"
   - "Evasion"
   - "HTML smuggling"
   - "Scripting"
 detection_methods:
   - "Archive analysis"
+  - "Content analysis"
   - "File analysis"
   - "HTML analysis"
   - "Javascript analysis"
-id: "0b0fed36-735a-50f1-bf10-6673237a4623"
+id: "7e901440-5751-5d94-8b2d-47eb3c0e2b9d"
