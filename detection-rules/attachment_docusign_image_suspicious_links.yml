@@ -27,12 +27,23 @@ source: |
   )
   and (
     (
-      sender.email.domain.root_domain in $free_email_providers
-      and sender.email.email not in $sender_emails
+      (
+        sender.email.domain.root_domain in $free_email_providers
+        and sender.email.email not in $sender_emails
+      )
+      or (
+        sender.email.domain.root_domain not in $free_email_providers
+        and sender.email.domain.domain not in $sender_domains
+      )
     )
     or (
-      sender.email.domain.root_domain not in $free_email_providers
-      and sender.email.domain.domain not in $sender_domains
+      sender.email.email in $sender_emails
+      and any(distinct(headers.hops, .received_spf.verdict is not null),
+              regex.icontains(.received_spf.verdict, "fail|error")
+              or any(distinct(headers.hops, .authentication_results.dmarc is not null),
+                     strings.ilike(.authentication_results.dmarc, "*fail")
+              )
+      )
     )
   )
 attack_types:
