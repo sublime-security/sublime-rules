@@ -26,24 +26,11 @@ source: |
           )
   )
   and (
-    (
-      (
-        sender.email.domain.root_domain in $free_email_providers
-        and sender.email.email not in $sender_emails
-      )
-      or (
-        sender.email.domain.root_domain not in $free_email_providers
-        and sender.email.domain.domain not in $sender_domains
-      )
-    )
+    profile.by_sender().prevalence in ("new", "outlier")
     or (
-      sender.email.email in $sender_emails
-      and any(distinct(headers.hops, .received_spf.verdict is not null),
-              regex.icontains(.received_spf.verdict, "fail|error")
-              or any(distinct(headers.hops, .authentication_results.dmarc is not null),
-                     strings.ilike(.authentication_results.dmarc, "*fail")
-              )
-      )
+      profile.by_sender().any_messages_malicious_or_spam
+      and not profile.by_sender().any_false_positives
+
     )
   )
 attack_types:
