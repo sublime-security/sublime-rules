@@ -1,6 +1,10 @@
-name: "Body: Advance Fee attempt from free  first-time sender"
+name: "Body: Advance Fee Fraud attempt from new sender"
 description: |
-  Detects potential Advance Fee attempts by analyzing text within the email body from first-time senders.
+  Advanced Fee Fraud (AFF) is a type of BEC/Fraud involving upfront fees for promised
+  future returns, such as lottery scams, inheritance payouts, and investment opportunities.
+  This rule identifies messages from Freemail domains or suspicious TLDS, including those
+  with suspicious reply-to addresses. It utilizes Natural Language Understanding to detect
+  AFF language in their contents.
 type: "rule"
 severity: "medium"
 source: |
@@ -19,6 +23,14 @@ source: |
   and any(ml.nlu_classifier(body.current_thread.text).tags,
           .name == "advance_fee" and .confidence in ("medium", "high")
   )
+  and (
+    profile.by_sender().prevalence in ("new", "outlier")
+    or (
+      profile.by_sender().any_messages_malicious_or_spam
+      and not profile.by_sender().any_false_positives
+    )
+  )
+
 attack_types:
   - "Advance Fee Fraud"
 tactics_and_techniques:
