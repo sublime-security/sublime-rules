@@ -6,9 +6,11 @@ type: "rule"
 severity: "medium"
 source: |
   type.inbound
-  // All attachments are images
-  and length(attachments) > 0
-  and all(attachments, .file_type in ('png', 'jpg', 'bmp'))
+  // All attachments are images or 0 attachments
+  and (
+    (length(attachments) > 0 and all(attachments, .file_type in $file_types_images))
+    or length(attachments) == 0
+  )
   and sender.email.domain.root_domain not in $org_domains
   
   // not a reply
@@ -25,7 +27,7 @@ source: |
   and 2 of (
     // Not a google logo
     any(attachments,
-        .file_type in ('png', 'jpg', 'bmp')
+        .file_type in $file_types_images
         and (
           any(ml.logo_detect(.).brands, not strings.starts_with(.name, "Google"))
           or any(ml.logo_detect(beta.message_screenshot()).brands,
@@ -42,7 +44,7 @@ source: |
     // Image analysis - NLU - Credential theft language
     (
       any(attachments,
-          .file_type in ('png', 'jpg', 'bmp')
+          .file_type in $file_types_images
           and any(file.explode(.),
                   any(ml.nlu_classifier(.scan.ocr.raw).intents, .name == "cred_theft")
           )
@@ -50,9 +52,9 @@ source: |
     ),
     // Content analysis - Body - Urgency
     (
-        any(ml.nlu_classifier(body.current_thread.text).entities, .name == "urgency")
+      any(ml.nlu_classifier(body.current_thread.text).entities, .name == "urgency")
     ),
-    
+  
     // White font is found in html raw
     (
       length(body.html.display_text) < 500

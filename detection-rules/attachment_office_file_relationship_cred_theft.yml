@@ -1,0 +1,43 @@
+name: "Attachment: Office file contains OLE relationship to credential phishing page"
+description: |
+  Office file OLE relationship link is a credential page, or contains credential phishing language.
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and any(attachments,
+          (
+            .file_extension in~ $file_extensions_macros
+            or (
+              .file_extension is null
+              and .file_type == "unknown"
+              and .content_type == "application/octet-stream"
+              and .size < 100000000
+            )
+          )
+          and any(file.oletools(.).relationships,
+                  any(ml.nlu_classifier(beta.linkanalysis(.target_url).final_dom.display_text).intents,
+                      .name == "cred_theft" and .confidence in ("medium", "high")
+                  )
+                  or beta.linkanalysis(.target_url).credphish.disposition == "phishing"
+          )
+  )
+  and (
+    profile.by_sender().prevalence in ("new", "outlier")
+    or (
+      profile.by_sender().any_messages_malicious_or_spam
+      and not profile.by_sender().any_false_positives
+    )
+  )
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Evasion"
+  - "Social engineering"
+detection_methods:
+  - "File analysis"
+  - "HTML analysis"
+  - "Natural Language Understanding"
+  - "OLE analysis"
+  - "URL analysis"
+id: "d55793d0-865e-53c4-ae51-f1b0fec50ec6"

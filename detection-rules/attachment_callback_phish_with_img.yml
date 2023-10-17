@@ -10,48 +10,46 @@ severity: "high"
 source: |
   type.inbound
   and (
-        (
-            sender.email.domain.root_domain in $free_email_providers
-            and sender.email.email not in $recipient_emails
-        )
-        or (
-            sender.email.domain.root_domain not in $free_email_providers
-            and sender.email.domain.domain not in $recipient_domains
-        )
+    not profile.by_sender().solicited
+    or (
+      profile.by_sender().any_messages_malicious_or_spam
+      and not profile.by_sender().any_false_positives
+    )
   )
-
   and sender.email.domain.root_domain in $free_email_providers
-  and any(attachments, .file_extension in~ ('png', 'jpg', 'jpeg')
-      and any(file.explode(.),
-          length(filter(.scan.strings.strings, strings.ilike(.,
-                "*purchase*",
-                "*subscription*",
-                "*antivirus*",
-                "*order*",
-                "*support*",
-                "*receipt*",
-                "*amount*",
-                "*charged*",
-                "*invoice*",
-                "*call*",
-                "*cancel*",
-                "*renew*",
-                "*refund*",
-                "*+1*"
-            ))) >= 4)
-
-      and any(file.explode(.),
-          length(filter(.scan.strings.strings, strings.ilike(.,
-                "*geek squad*",
-                "*lifelock*",
-                "*best buy*",
-                "*mcafee*",
-                "*norton*",
-                "*ebay*",
-                "*paypal*",
-                "*secure anywhere*"
-            ))) >=1)
-            )
+  and any(attachments,
+          .file_type in $file_types_images
+          and any(file.explode(.),
+                  4 of (
+                    strings.icontains(.scan.ocr.raw, "purchase"),
+                    strings.icontains(.scan.ocr.raw, "subscription"),
+                    strings.icontains(.scan.ocr.raw, "antivirus"),
+                    strings.icontains(.scan.ocr.raw, "order"),
+                    strings.icontains(.scan.ocr.raw, "support"),
+                    strings.icontains(.scan.ocr.raw, "receipt"),
+                    strings.icontains(.scan.ocr.raw, "amount"),
+                    strings.icontains(.scan.ocr.raw, "charged"),
+                    strings.icontains(.scan.ocr.raw, "invoice"),
+                    strings.icontains(.scan.ocr.raw, "call"),
+                    strings.icontains(.scan.ocr.raw, "cancel"),
+                    strings.icontains(.scan.ocr.raw, "renew"),
+                    strings.icontains(.scan.ocr.raw, "refund"),
+                    strings.icontains(.scan.ocr.raw, "+1")
+                  )
+          )
+          and any(file.explode(.),
+                  strings.ilike(.scan.ocr.raw,
+                                "*geek squad*",
+                                "*lifelock*",
+                                "*best buy*",
+                                "*mcafee*",
+                                "*norton*",
+                                "*ebay*",
+                                "*paypal*",
+                                "*secure anywhere*"
+                  )
+          )
+  )
 attack_types:
   - "Callback Phishing"
 tactics_and_techniques:

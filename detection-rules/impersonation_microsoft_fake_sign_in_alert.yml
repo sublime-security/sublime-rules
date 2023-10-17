@@ -13,15 +13,15 @@ source: |
     or strings.contains(sender.display_name, "Microsoft")
     or strings.contains(body.current_thread.text, "Microsoft")
     or (
-  
+
       // or Microsoft Brand logo
       any(attachments,
-          .file_type in ('png', 'jpeg', 'jpg', 'bmp')
+          .file_type in $file_types_images
           and any(ml.logo_detect(.).brands, strings.starts_with(.name, "Microsoft"))
       )
     )
   )
-  
+
   // Body contains Indicators of fake sign in notification
   and (
     regex.contains(body.current_thread.text,
@@ -29,23 +29,19 @@ source: |
     )
     or regex.contains(body.current_thread.text, "Unusual.{0,10}activity")
   )
-  
-  
   and (
 
     // If the sender is freemail
     sender.email.domain.domain in $free_email_providers
     or (
-    
+
       // sender is not freemail, but the return path email or reply to email is  
       sender.email.domain.domain not in $free_email_providers
       and (
         headers.return_path.domain.root_domain in $free_email_providers
         or (
           length(headers.reply_to) > 0
-          and (
-            all(headers.reply_to, .email.domain.root_domain in $free_email_providers)
-          )
+          and (all(headers.reply_to, .email.domain.root_domain in $free_email_providers))
         )
         or (
 
@@ -61,7 +57,7 @@ source: |
         or beta.whois(sender.email.domain).days_old <= 90
         or (
 
-        // or Compauth verdict is not pass/softpass
+          // or Compauth verdict is not pass/softpass
           any(headers.hops,
               .authentication_results.compauth.verdict is not null
               and .authentication_results.compauth.verdict not in ("pass", "softpass")

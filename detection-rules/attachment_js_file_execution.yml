@@ -4,25 +4,24 @@ description: |
 type: "rule"
 severity: "medium"
 source: |
-  type.inbound 
-  and any(attachments, .file_type in $file_extensions_common_archives
-      and any(beta.binexplode(.), 
-          any(.scan.javascript.identifiers, strings.ilike(., 'ActiveXObject', 'ShellExecute'))
-          or (length(.scan.javascript.strings) > 0
-            and all(.scan.javascript.strings, strings.ilike(., 'Shell.Application', '*.exe')))
-      )
+  type.inbound
+  and any(attachments,
+          .file_type in $file_extensions_common_archives
+          and any(beta.binexplode(.),
+                  any(.scan.javascript.identifiers, strings.ilike(., 'ActiveXObject', 'ShellExecute'))
+                  or (
+                    length(.scan.javascript.strings) > 0
+                    and all(.scan.javascript.strings, strings.ilike(., 'Shell.Application', '*.exe'))
+                  )
+          )
   )
-  // first-time sender
-   and (
-           (
-               sender.email.domain.root_domain in $free_email_providers
-               and sender.email.email not in $sender_emails
-           )
-           or (
-               sender.email.domain.root_domain not in $free_email_providers
-               and sender.email.domain.domain not in $sender_domains
-           )
-   )
+  and (
+    profile.by_sender().prevalence in ("new", "outlier")
+    or (
+      profile.by_sender().any_messages_malicious_or_spam
+      and not profile.by_sender().any_false_positives
+    )
+  )
 tags:
   - "Attack surface reduction"
 attack_types:

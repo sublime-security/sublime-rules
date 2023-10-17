@@ -11,31 +11,30 @@ severity: "high"
 authors:
   - twitter: "ajpc500"
 source: |
-  type.inbound 
+  type.inbound
   and (
-      (
-          sender.email.domain.root_domain in $free_email_providers
-          and sender.email.email not in $sender_emails
-      )
-      or (
-          sender.email.domain.root_domain not in $free_email_providers
-          and sender.email.domain.domain not in $sender_domains
-      )
+    profile.by_sender().prevalence in ("new", "outlier")
+    or (
+      profile.by_sender().any_messages_malicious_or_spam
+      and not profile.by_sender().any_false_positives
+    )
   )
-  and any(attachments, 
-      .file_extension in ("html", "htm") and 
-      any(file.explode(.), 
-          any(.scan.strings.strings, strings.ilike(.,
-              // Double Base64 encoded zips
-              "*VUVzREJCUUFBUUFJQ*",
-              "*VFc0RCQlFBQVFBSU*",
-              "*VRXNEQkJRQUFRQUlB*",
-              // Reversed base64 strings double encoded zips
-              "*QJFUUBFUUCJERzVUV*",
-              "*USBFVQBFlQCR0cFV*",
-              "*BlUQRFUQRJkQENXRV*"
+  and any(attachments,
+          .file_extension in ("html", "htm")
+          and any(file.explode(.),
+                  any(.scan.strings.strings,
+                      strings.ilike(.,
+                                    // Double Base64 encoded zips
+                                    "*VUVzREJCUUFBUUFJQ*",
+                                    "*VFc0RCQlFBQVFBSU*",
+                                    "*VRXNEQkJRQUFRQUlB*",
+                                    // Reversed base64 strings double encoded zips
+                                    "*QJFUUBFUUCJERzVUV*",
+                                    "*USBFVQBFlQCR0cFV*",
+                                    "*BlUQRFUQRJkQENXRV*"
+                      )
+                  )
           )
-      ))
   )
 tags:
   - "Malfam: QakBot"

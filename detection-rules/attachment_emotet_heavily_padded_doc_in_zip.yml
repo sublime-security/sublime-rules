@@ -8,23 +8,21 @@ type: "rule"
 severity: "high"
 source: |
   type.inbound
-  and any(attachments, 
-    .file_extension == "zip"
-    and any(file.explode(.), 
-      .depth == 0 and .size < 1000000
-      and not .depth > 0
-      and strings.ends_with(.scan.exiftool.zip_file_name, ".doc")
-      and .scan.exiftool.zip_uncompressed_size > 500000000
-    )
+  and any(attachments,
+          .file_extension == "zip"
+          and any(file.explode(.),
+                  .depth == 0
+                  and .size < 1000000
+                  and not .depth > 0
+                  and strings.ends_with(.scan.exiftool.zip_file_name, ".doc")
+                  and .scan.exiftool.zip_uncompressed_size > 500000000
+          )
   )
   and (
-    (
-      sender.email.domain.root_domain in $free_email_providers
-      and sender.email.email not in $sender_emails
-    )
+    profile.by_sender().prevalence in ("new", "outlier")
     or (
-      sender.email.domain.root_domain not in $free_email_providers
-      and sender.email.domain.domain not in $sender_domains
+      profile.by_sender().any_messages_malicious_or_spam
+      and not profile.by_sender().any_false_positives
     )
   )
 tags:
