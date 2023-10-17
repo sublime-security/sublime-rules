@@ -1,0 +1,27 @@
+name: "Body: Advance Fee attempt from free  first-time sender"
+description: |
+  Detects potential Advance Fee attempts by analyzing text within the email body from first-time senders.
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and sender.email.domain.domain in $free_email_providers
+  and any(ml.nlu_classifier(body.current_thread.text).tags,
+          .name == "advance_fee" and .confidence in ("medium", "high")
+  )
+  and (
+    profile.by_sender().prevalence in ("new", "outlier")
+    or (
+      profile.by_sender().any_messages_malicious_or_spam
+      and not profile.by_sender().any_false_positives
+    )
+  )
+attack_types:
+  - "Advance Fee Fraud"
+tactics_and_techniques:
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Header analysis"
+  - "Natural Language Understanding"
+  - "Sender analysis"
