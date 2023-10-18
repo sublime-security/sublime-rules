@@ -15,16 +15,13 @@ source: |
   and any(ml.nlu_classifier(body.current_thread.text).entities, .name == "urgency")
   and (
     any(ml.nlu_classifier(body.current_thread.text).intents, .name != "benign")
-    and not length(ml.nlu_classifier(body.current_thread.text).intents) == 0
+    or length(ml.nlu_classifier(body.current_thread.text).intents) == 0  // not benign but not malicious either
   )
   and (
-    (
-      sender.email.domain.root_domain in $free_email_providers
-      and sender.email.email not in $sender_emails
-    )
+    profile.by_sender().prevalence in ("new", "outlier")
     or (
-      sender.email.domain.root_domain not in $free_email_providers
-      and sender.email.domain.domain not in $sender_domains
+      profile.by_sender().any_messages_malicious_or_spam
+      and not profile.by_sender().any_false_positives
     )
   )
 attack_types:
