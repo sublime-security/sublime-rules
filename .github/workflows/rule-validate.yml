@@ -103,13 +103,13 @@ jobs:
       - name: Get base ref
         id: get_base_ref
         run: |
-          if [ ${{ github.event_name }} == 'pull_request_target' ]; then
+          if [[ "${{ github.event_name }}" == 'pull_request_target' ]]; then
             # Detect changes based on whatever we're merging into.
             echo "##[set-output name=ref;]${{ github.base_ref }}"
-          elif [ ${{ github.event_name }} == 'push' ]; then
+          elif [[ "${{ github.event_name }}" == 'push' ]]; then
             # Detect changes based on the previous commit
             echo "##[set-output name=ref;]$(git rev-parse HEAD^)"
-          elif [ ${{ github.event_name }} == 'workflow_dispatch' ]; then
+          elif [[ "${{ github.event_name }}" == 'workflow_dispatch' ]]; then
             # Run on a target, so run for all rules.
             echo "##[set-output name=run_all;]true"
           fi
@@ -141,25 +141,24 @@ jobs:
           for file in detection-rules/*.yml; do
             rule_id=$(yq '.id' $file)
           
-            if [ ${{ steps.get_base_ref.outputs.run_all }} = 'true' ]; then
+            if [[ "${{ steps.get_base_ref.outputs.run_all }}" == "true" ]]; then
               altered_rule_ids=$(echo "$rule_id"" ""$altered_rule_ids")
               continue
             fi
           
-            echo "$file has rule ID $rule_id"
             new_source=$(yq '.source' "$file")
             old_source=$(yq '.source' "sr-main/detection-rules/$rule_id.yml" || echo '')
             
             # We only need to care when rule source is changed. This will handle renames, tag changes, etc.
-            if [ "$new_source" != "$old_source" ]; then
-              echo "$file has altered source"
+            if [[ "$new_source" != "$old_source" ]]; then
+              echo "$file ($rule_id) has altered source"
               altered_rule_ids=$(echo "$rule_id"" ""$altered_rule_ids")
             fi
           done
           
           for file in ${{ steps.changed-files.outputs.deleted_files }}; do
             rule_id=$(yq '.id' $file)
-            echo "$file has rule ID $rule_id and was deleted"
+            echo "$file ($rule_id) was deleted"
             altered_rule_ids=$(echo "$rule_id"" ""$altered_rule_ids")
           done
           
