@@ -1,0 +1,37 @@
+name: "Fake Docusign PDF linking to New Domain <=3d"
+description: "This rule detects PDF files containing a Docusign logo linking to a newly created domain (Less than or equal to 3 days)"
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and any(attachments,
+          .file_type == "pdf"
+          and any(ml.logo_detect(.).brands, .name == "DocuSign")
+          and any(file.explode(.), any(.scan.pdf.urls, beta.whois(.domain).days_old <= 3))
+  )
+  and (
+    sender.email.domain.root_domain not in ('docusign.net', 'docusign.com')
+    // check for DMARC fail for spoofs
+    or any(distinct(headers.hops, .authentication_results.dmarc is not null),
+           strings.ilike(.authentication_results.dmarc, "*fail")
+    )
+  )
+  // and the sender.display.name contains "via"
+  and not (
+    any(headers.hops,
+        any(.fields, .name == "X-Api-Host" and strings.ends_with(.value, "docusign.net"))
+    )
+  )
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "PDF"
+  - "Social engineering"
+detection_methods:
+  - "Header analysis"
+  - "Sender analysis"
+  - "URL analysis"
+  - "File analysis"
+  - "Computer Vision"
+  - "Whois"
