@@ -9,13 +9,20 @@ source: |
           and any(ml.logo_detect(.).brands, .name == "DocuSign")
           and any(file.explode(.), any(.scan.pdf.urls, beta.whois(.domain).days_old <= 3))
   )
-  and (
-    sender.email.domain.root_domain not in ('docusign.net', 'docusign.com')
-    // check for DMARC fail for spoofs
-    or any(distinct(headers.hops, .authentication_results.dmarc is not null),
-           strings.ilike(.authentication_results.dmarc, "*fail")
+  // negate legitimate docusign infrastructure
+  and
+    (
+      (
+        sender.email.domain.root_domain in ('docusign.net', 'docusign.com')
+        and (
+          any(distinct(headers.hops, .authentication_results.dmarc is not null),
+              strings.ilike(.authentication_results.dmarc, "*fail")
+          )
+        )
+      )
+      or sender.email.domain.root_domain not in ('docusign.net', 'docusign.com')
     )
-  )
+    
   // excludes senders that contain "via" in the display name a resilient way
   and not (
     any(headers.hops,
