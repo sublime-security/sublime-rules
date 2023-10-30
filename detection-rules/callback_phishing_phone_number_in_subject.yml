@@ -3,19 +3,9 @@ description: |
   Detects phone number patterns in the subject and keywords associated with callback phishing brands from first-time senders.
 type: "rule"
 severity: "medium"
-source: |-
+source: |
   type.inbound
   and length(attachments) == 0
-  and (
-    (
-      sender.email.domain.root_domain in $free_email_providers
-      and sender.email.email not in $recipient_emails
-    )
-    or (
-      sender.email.domain.root_domain not in $free_email_providers
-      and sender.email.domain.domain not in $recipient_domains
-    )
-  )
   and (
     regex.contains(subject.subject, '\+\d{1,3}[0-9]{10}')
     or // +12028001238
@@ -30,21 +20,19 @@ source: |-
     ) // (202)-800-1238
   )
   and (
-    any([subject.subject],
-          strings.ilike(.,
-                      "*mcafee*",
-                      "*norton*",
-                      "*geek squad*",
-                      "*paypal*",
-                      "*ebay*",
-                      "*symantec*",
-                      "*best buy*",
-                      "*lifelock*",
-                      "*geeksquad*"
-          )
-      )
+    strings.ilike(subject.subject,
+                  "*mcafee*",
+                  "*norton*",
+                  "*geek squad*",
+                  "*paypal*",
+                  "*ebay*",
+                  "*symantec*",
+                  "*best buy*",
+                  "*lifelock*",
+                  "*geeksquad*"
+    )
     or any([body.html.inner_text],
-          strings.ilike(.,
+           strings.ilike(.,
                          "*mcafee*",
                          "*norton*",
                          "*geek squad*",
@@ -54,8 +42,18 @@ source: |-
                          "*best buy*",
                          "*lifelock*",
                          "*geeksquad*"
-          )
-      )
+           )
+    )
+  )
+  and (
+    (
+      sender.email.domain.root_domain in $free_email_providers
+      and sender.email.email not in $recipient_emails
+    )
+    or (
+      sender.email.domain.root_domain not in $free_email_providers
+      and sender.email.domain.domain not in $recipient_domains
+    )
   )
 attack_types:
   - "Callback Phishing"
