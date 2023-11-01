@@ -13,7 +13,9 @@ source: |
     )
     or any(attachments,
            .file_type in $file_types_images
-           and any(file.explode(.), strings.ilike(.scan.ocr.raw, "*microsoft*", "*office"))
+           and any(file.explode(.),
+                   strings.ilike(.scan.ocr.raw, "*microsoft*", "*office")
+           )
     )
   )
   and any(attachments,
@@ -40,18 +42,23 @@ source: |
                                   "security update",
                                   "invoice",
                                   "retrieve"
-
                                 ],
                                 strings.icontains(..scan.ocr.raw, .)
                          )
                   ) >= 2
+                  or any(ml.nlu_classifier(.scan.ocr.raw).intents,
+                         .name == "cred_theft" and .confidence == "high"
+                  )
           )
   )
   and (
     not any(headers.hops,
             .authentication_results.compauth.verdict is not null
             and .authentication_results.compauth.verdict == "pass"
-            and sender.email.domain.domain in ("microsoft.com", "sharepointonline.com")
+            and sender.email.domain.domain in (
+              "microsoft.com",
+              "sharepointonline.com"
+            )
     )
   )
   and (
@@ -60,6 +67,19 @@ source: |
       profile.by_sender().any_messages_malicious_or_spam
       and not profile.by_sender().any_false_positives
     )
+  )
+
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and (
+        any(distinct(headers.hops, .authentication_results.dmarc is not null),
+            strings.ilike(.authentication_results.dmarc, "*fail")
+        )
+      )
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
   )
 attack_types:
   - "Credential Phishing"
