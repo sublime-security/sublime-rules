@@ -10,7 +10,14 @@ type: "rule"
 severity: "medium"
 source: |
   type.inbound
-  and any(attachments, .file_extension in~ ('htm', 'html') or .file_type == "html")
+  and any(attachments,
+          (.file_extension in~ ('htm', 'html') or .file_type == "html")
+          
+          // negate cisco secure spawned HTML
+          and not regex.match(file.parse_html(.).raw,
+                              '<!-- saved from url=.{0,6}https://res.cisco.com:443 -->.*'
+          )
+  )
   and (
     profile.by_sender().prevalence in ("new", "outlier")
     or (
@@ -20,8 +27,7 @@ source: |
   )
 
   // negate highly trusted sender domains unless they fail DMARC authentication
-  and
-  (
+  and (
     (
       sender.email.domain.root_domain in $high_trust_sender_root_domains
       and (
@@ -33,14 +39,16 @@ source: |
     or sender.email.domain.root_domain not in $high_trust_sender_root_domains
   )
 
-  // Negating IPHMX.com used in a secure message delivery capacity 
-  and not strings.ends_with(headers.message_id, ".iphmx.com>")
-
   // exclude Proofpoint encryption emails
-  and any(headers.hops, .index == 0
-      and not any(.fields, strings.contains(.value, 'multipart/mixed; boundary="PROOFPOINT_BOUNDARY_1"')
-      )
+  and any(headers.hops,
+          .index == 0
+          and not any(.fields,
+                      strings.contains(.value,
+                                      'multipart/mixed; boundary="PROOFPOINT_BOUNDARY_1"'
+                      )
+          )
   )
+
 tags:
   - "Attack surface reduction"
 tactics_and_techniques:

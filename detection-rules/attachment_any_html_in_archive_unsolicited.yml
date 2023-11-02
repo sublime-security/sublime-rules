@@ -12,6 +12,11 @@ source: |
   and any(attachments,
           .file_extension in~ $file_extensions_common_archives
           and any(file.explode(.), .depth > 0 and .file_extension in~ ("html", "htm"))
+          
+          //negate cisco secure spawned HTML
+          and not regex.match(file.parse_html(.).raw,
+                                  '<!-- saved from url=.{0,6}https://res.cisco.com:443 -->.*'
+      )
   )
   and (
     not profile.by_sender().solicited
@@ -20,9 +25,6 @@ source: |
       and not profile.by_sender().any_false_positives
     )
   )
-
-  // Negating IPHMX.com used in a secure message delivery capacity 
-  and not strings.ends_with(headers.message_id, ".iphmx.com>")
 
   // exclude Proofpoint encryption emails
   and any(headers.hops, .index == 0
