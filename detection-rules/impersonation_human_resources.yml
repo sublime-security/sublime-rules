@@ -8,13 +8,28 @@ source: |
   and regex.icontains(sender.display_name,
                       '(\bh\W?r\W?\b|human resources|hr depart(ment)?|employee relations)'
   )
-  and  (0 < length(body.links) < 10 or length(attachments) > 0)
+  and (0 < length(body.links) < 10 or length(attachments) > 0)
+  
   // Request and Urgency
-  and any(ml.nlu_classifier(body.current_thread.text).entities, .name == "request")
-  and any(ml.nlu_classifier(body.current_thread.text).entities, .name == "urgency")
   and (
-    any(ml.nlu_classifier(body.current_thread.text).intents, .name != "benign")
-    or length(ml.nlu_classifier(body.current_thread.text).intents) == 0  // not benign but not malicious either
+    (
+      any(ml.nlu_classifier(body.current_thread.text).entities,
+          .name == "request"
+          and any(ml.nlu_classifier(body.current_thread.text).entities,
+                  .name == "urgency"
+          )
+      )
+      or any(ml.nlu_classifier(body.current_thread.text).intents,
+             .name in ("cred_theft")
+             and .confidence in ("medium", "high")
+             and (
+               any(ml.nlu_classifier(body.current_thread.text).intents,
+                   .name != "benign"
+               )
+               or length(ml.nlu_classifier(body.current_thread.text).intents) == 0 // not benign but not malicious either
+             )
+      )
+    )
   )
   and (
     profile.by_sender().prevalence in ("new", "outlier")
@@ -24,8 +39,7 @@ source: |
     )
   )
   // negate highly trusted sender domains unless they fail DMARC authentication
-  and
-  (
+  and (
     (
       sender.email.domain.root_domain in $high_trust_sender_root_domains
       and (
@@ -36,6 +50,7 @@ source: |
     )
     or sender.email.domain.root_domain not in $high_trust_sender_root_domains
   )
+  
 attack_types:
   - "BEC/Fraud"
   - "Credential Phishing"
