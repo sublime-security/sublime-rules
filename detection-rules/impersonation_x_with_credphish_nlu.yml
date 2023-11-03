@@ -1,0 +1,37 @@
+name: "X (Twitter) Impersonation with Credential Phishing motives"
+description: |
+  This rule is designed to identify impersonation attempts by analyzing the display name or sender's
+  local part for the solitary use of "X" provided the email doesn't originate from twitter.com or x.com.
+  Natural Language Understanding (NLU) is used to check for credential theft requiring a medium-to-high confidence level for flagging.
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and (sender.display_name =~ "x" or sender.email.local_part =~ "x")
+  and sender.email.domain.root_domain not in ("twitter.com", "x.com")
+  and (
+    any(attachments,
+        .file_type in~ $file_types_images
+        and any(file.explode(.),
+                any(ml.nlu_classifier(.scan.ocr.raw).intents,
+                    .name == "cred_theft" and .confidence != "low"
+                )
+        )
+    )
+    or any(ml.nlu_classifier(body.current_thread.text).intents,
+           .name == "cred_theft" and .confidence != "low"
+    )
+  )
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Social engineering"
+detection_methods:
+  - "Computer Vision"
+  - "File analysis"
+  - "Header analysis"
+  - "Optical Character Recognition"
+  - "Natural Language Understanding"
+  - "Sender analysis"
+id: "0b60dca6-db2d-5718-94d8-fdbfd06bd081"
