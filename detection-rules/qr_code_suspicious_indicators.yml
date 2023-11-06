@@ -9,7 +9,15 @@ source: |
     length(attachments) <= 3
     and (
       any(attachments,
-          .file_type in $file_types_images and any(file.explode(.), .scan.qr.type is not null)
+          .file_type in $file_types_images
+          and any(file.explode(.),
+                  .scan.qr.type is not null
+                  // exclude images taken with mobile cameras and screenshots from android
+                  and not any(.scan.exiftool.fields,
+                              .key == "Model"
+                              or .key == "Software" and strings.starts_with(.value, "Android")
+                  )
+          )
       )
       or (
         length(attachments) == 0
@@ -29,13 +37,10 @@ source: |
         and length(recipients.cc) == 0
         and length(recipients.bcc) == 0
       )
-      or any(file.explode(beta.message_screenshot()),
-             (
-               .scan.qr.url.domain.tld in $suspicious_tlds
-             )
-      )
+      or any(file.explode(beta.message_screenshot()), (.scan.qr.url.domain.tld in $suspicious_tlds))
       or any(attachments,
-             .file_type in $file_types_images and any(file.explode(.), .scan.qr.url.domain.tld in $suspicious_tlds)
+             .file_type in $file_types_images
+             and any(file.explode(.), .scan.qr.url.domain.tld in $suspicious_tlds)
       )
       or sender.email.domain.tld in $suspicious_tlds
     )
