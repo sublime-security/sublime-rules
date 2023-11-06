@@ -1,0 +1,94 @@
+name: "Request for Quote or Purchase (RFQ|RFP) with suspicious sender or recipient pattern"
+description: |
+  RFQ/RFP scams involve fraudulent emails posing as legitimate requests for quotations or purchases, often sent by scammers impersonating reputable organizations.
+  These scams aim to deceive recipients into providing sensitive information or conducting unauthorized transactions, often leading to financial loss, or data leakage.
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and (
+    (
+      length(recipients.to) == 0
+      or all(recipients.to,
+             .display_name == "Undisclosed recipients"
+             and length(recipients.cc) == 0
+             and length(recipients.bcc) == 0
+      )
+    )
+    or (
+      sender.email.domain.root_domain in $free_email_providers
+      and any(headers.reply_to, .email.email != sender.email.email)
+      and any(headers.reply_to, .email.email not in $recipient_emails)
+    )
+    or (
+      profile.by_sender().prevalence in ("new", "outlier")
+      or (
+        profile.by_sender().any_messages_malicious_or_spam
+        and not profile.by_sender().any_false_positives
+      )
+    )
+  )
+  and 2 of (
+    (
+      regex.icontains(coalesce(body.html.display_text, body.plain.raw),
+                      '(discuss.{0,15}purchas(e|ing))'
+      )
+    ),
+    (
+      regex.icontains(coalesce(body.html.display_text, body.plain.raw),
+                      '(sign(ed?)|view).{0,10}(purchase order)|Request for a Quot(e|ation)'
+      )
+    ),
+    (
+      regex.icontains(coalesce(body.html.display_text, body.plain.raw),
+                      '(please|kindly).{0,30}quote'
+      )
+    ),
+    (
+      regex.icontains(subject.subject,
+                      '(request for (purchase|quot(e|ation))|\bRFQ\b|\bRFP\b)'
+      )
+    ),
+    (
+      any(attachments,
+          regex.icontains(.file_name, "(purchase.?order|Quot(e|ation))")
+      )
+    ),
+    (
+      any(ml.nlu_classifier(coalesce(body.html.display_text, body.plain.raw)).entities,
+          .name == "request"
+      )
+      and any(ml.nlu_classifier(coalesce(body.html.display_text, body.plain.raw)).entities,
+              .name == "urgency"
+      )
+    ),
+    (
+      any(ml.nlu_classifier(coalesce(body.html.display_text, body.plain.raw)).tags,
+          .name == "purchase_order" and .confidence == "high"
+      )
+    )
+  )
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and (
+        any(distinct(headers.hops, .authentication_results.dmarc is not null),
+            strings.ilike(.authentication_results.dmarc, "*fail")
+        )
+      )
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+attack_types:
+  - "BEC/Fraud"
+tactics_and_techniques:
+  - "Evasion"
+  - "Free email provider"
+detection_methods:
+  - "Content analysis"
+  - "Natural Language Understanding"
+  - "URL analysis"
+id: "2ac0d329-c1fb-5c87-98dd-ea3e5b85377a"
+testing_pr: 921
+testing_sha: 4cb83c6542166ae10314906a40ec6ffdc1d27e65
