@@ -1,0 +1,32 @@
+name: "Link: File sharing link removed by provider"
+description: "This rule detects messages to file sharing hosts where the file or link has been removed by the provider. "
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  // No Recipients
+    and (
+        length(recipients.to) == 0
+        or all(recipients.to, .display_name == "Undisclosed recipients")
+    )
+    and length(recipients.cc) == 0
+    and length(recipients.bcc) == 0
+  
+  and (
+      any(body.links,
+          any(file.explode(beta.linkanalysis(.).screenshot),
+              any([
+                  "This shared file or folder link has been removed or is unavailable",
+                  "This transfer has been deleted and is not available anymore",
+                  "This item might not exist or is no longer available",
+                  "the file you have requested does not exist",
+                  "This file isn’t here anymore"
+              ], strings.icontains(..scan.ocr.raw, .))
+          )
+      )
+  )
+detection_methods:
+  - "Header analysis"
+  - "Optical Character Recognition"
+  - "URL analysis"
+  - "URL screenshot"
