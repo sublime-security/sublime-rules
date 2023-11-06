@@ -6,16 +6,26 @@ type: "rule"
 severity: "medium"
 source: |
   type.inbound
-  and 1 of (
+  and (
     (
-      (length(recipients.to) == 0 or all(recipients.to, .display_name == "Undisclosed recipients"))
-      and length(recipients.cc) == 0
-      and length(recipients.bcc) == 0
-    ),
-    (
+      length(recipients.to) == 0
+      or all(recipients.to,
+             .display_name == "Undisclosed recipients"
+             and length(recipients.cc) == 0
+             and length(recipients.bcc) == 0
+      )
+    )
+    or (
       sender.email.domain.root_domain in $free_email_providers
       and any(headers.reply_to, .email.email != sender.email.email)
       and any(headers.reply_to, .email.email not in $recipient_emails)
+    )
+    or (
+      profile.by_sender().prevalence in ("new", "outlier")
+      or (
+        profile.by_sender().any_messages_malicious_or_spam
+        and not profile.by_sender().any_false_positives
+      )
     )
   )
   and 2 of (
@@ -29,9 +39,21 @@ source: |
                       '(sign(ed?)|view).{0,10}(purchase order)|Request for a Quot(e|ation)'
       )
     ),
-    (regex.icontains(coalesce(body.html.display_text, body.plain.raw), '(please|kindly).{0,30}quote')),
-    (regex.icontains(subject.subject, '(request for (purchase|quot(e|ation))|\bRFQ\b|\bRFP\b)')),
-    (any(attachments, regex.icontains(.file_name, "(purchase.?order|Quot(e|ation))"))),
+    (
+      regex.icontains(coalesce(body.html.display_text, body.plain.raw),
+                      '(please|kindly).{0,30}quote'
+      )
+    ),
+    (
+      regex.icontains(subject.subject,
+                      '(request for (purchase|quot(e|ation))|\bRFQ\b|\bRFP\b)'
+      )
+    ),
+    (
+      any(attachments,
+          regex.icontains(.file_name, "(purchase.?order|Quot(e|ation))")
+      )
+    ),
     (
       any(ml.nlu_classifier(coalesce(body.html.display_text, body.plain.raw)).entities,
           .name == "request"
@@ -45,6 +67,18 @@ source: |
           .name == "purchase_order" and .confidence == "high"
       )
     )
+  )
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and (
+        any(distinct(headers.hops, .authentication_results.dmarc is not null),
+            strings.ilike(.authentication_results.dmarc, "*fail")
+        )
+      )
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
   )
 attack_types:
   - "BEC/Fraud"
