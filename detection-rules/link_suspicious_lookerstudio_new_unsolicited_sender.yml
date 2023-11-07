@@ -1,25 +1,22 @@
-name: "Credential phishing link (first-time sender)"
-description: |
-  Message contains a link to a credential phishing page from a first-time sender.
+name: "Suspicious link to Looker Studio (lookerstudio.google.com) from a new and unsolicited sender"
+description: "This rule detects messages containing links to lookerstudio with a non standard lookerstudio template from a new and unsolicited sender."
 type: "rule"
-severity: "high"
+severity: "medium"
 source: |
   type.inbound
-  and any(body.links,
-          beta.linkanalysis(.).credphish.disposition == "phishing"
-          and beta.linkanalysis(.).credphish.confidence in ("medium", "high")
+  and length(body.current_thread.text) < 800
+  and regex.icontains(body.current_thread.text,
+                      '(shared.{0,30}with you|View Document)'
   )
+  and any(body.links, .href_url.domain.domain == "lookerstudio.google.com")
+  
   and (
     profile.by_sender().prevalence in ("new", "outlier")
-    or (
-      profile.by_sender().any_messages_malicious_or_spam
-      and not profile.by_sender().any_false_positives
-    )
+    and not profile.by_sender().solicited
   )
-
+  
   // negate highly trusted sender domains unless they fail DMARC authentication
-  and
-  (
+  and (
     (
       sender.email.domain.root_domain in $high_trust_sender_root_domains
       and (
@@ -30,14 +27,13 @@ source: |
     )
     or sender.email.domain.root_domain not in $high_trust_sender_root_domains
   )
-
 attack_types:
   - "Credential Phishing"
 tactics_and_techniques:
+  - "Evasion"
   - "Social engineering"
 detection_methods:
-  - "Computer Vision"
+  - "Content analysis"
   - "Sender analysis"
   - "URL analysis"
-  - "URL screenshot"
-id: "a278012b-6c2b-5bca-b32c-f3663459bb1d"
+id: "dbb50cb4-171f-532b-b820-906be09d03d6"

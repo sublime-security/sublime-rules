@@ -1,0 +1,48 @@
+name: "Brand impersonation: Quickbooks"
+description: "Impersonation of the Quickbooks service from Intuit."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and (
+    (
+      strings.ilike(sender.display_name, '*quickbooks*')
+      or strings.ilevenshtein(sender.display_name, 'quickbooks') <= 1
+      or strings.ilike(sender.email.domain.domain, '*quickbooks*')
+    )
+    or strings.ilike(body.current_thread.text, "*invoice*")
+  )
+  and any(ml.logo_detect(beta.message_screenshot()).brands,
+          .name == "Quickbooks" and .confidence in ("medium", "high")
+  )
+  and sender.email.domain.root_domain not in~ ('intuit.com', 'turbotax.com', 'intuit.ca')
+  and (
+      not profile.by_sender().any_false_positives 
+      and not profile.by_sender().solicited
+  )
+
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and
+  (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and (
+        any(distinct(headers.hops, .authentication_results.dmarc is not null),
+            strings.ilike(.authentication_results.dmarc, "*fail")
+        )
+      )
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+attack_types:
+  - "Callback Phishing"
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Social engineering"
+detection_methods:
+  - "Computer Vision"
+  - "Content analysis"
+  - "Header analysis"
+  - "Sender analysis"
+id: "4fd791d1-a053-5c2d-80dd-c6dcdc112a62"

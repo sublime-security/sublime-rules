@@ -9,17 +9,23 @@ source: |
     length(attachments) <= 3
     and (
       any(attachments,
-          .file_type in $file_types_images and (any(file.explode(.), .scan.qr.type == "url"))
+          .file_type in $file_types_images
+          and any(file.explode(.),
+                  .scan.qr.type is not null
+                  // exclude images taken with mobile cameras and screenshots from android
+                  and not any(.scan.exiftool.fields,
+                              .key == "Model"
+                              or .key == "Software" and strings.starts_with(.value, "Android")
+                  )
+          )
       )
       or (
         length(attachments) == 0
-        and any(file.explode(beta.message_screenshot()), .scan.qr.type == "url")
+        and any(file.explode(beta.message_screenshot()), .scan.qr.type is not null)
       )
     )
-    and not sender.email.domain.root_domain in $org_display_names
     and (
       any(recipients.to, strings.icontains(sender.display_name, .email.domain.sld))
-      or any(recipients.to, strings.icontains(body.current_thread.text, .email.local_part))
       or length(body.current_thread.text) is null
       or body.current_thread.text == ""
       or regex.contains(subject.subject,
@@ -31,6 +37,12 @@ source: |
         and length(recipients.cc) == 0
         and length(recipients.bcc) == 0
       )
+      or any(file.explode(beta.message_screenshot()), (.scan.qr.url.domain.tld in $suspicious_tlds))
+      or any(attachments,
+             .file_type in $file_types_images
+             and any(file.explode(.), .scan.qr.url.domain.tld in $suspicious_tlds)
+      )
+      or sender.email.domain.tld in $suspicious_tlds
     )
   )
   
@@ -38,9 +50,22 @@ source: |
   and (
     profile.by_sender().prevalence in ("new", "outlier")
     or (
-        profile.by_sender().any_messages_malicious_or_spam
-        and not profile.by_sender().any_false_positives
+      profile.by_sender().any_messages_malicious_or_spam
+      and not profile.by_sender().any_false_positives
     )
+  )
+  
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and (
+        any(distinct(headers.hops, .authentication_results.dmarc is not null),
+            strings.ilike(.authentication_results.dmarc, "*fail")
+        )
+      )
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
   )
 
 attack_types:

@@ -8,9 +8,8 @@ source: |
   and regex.icontains(sender.display_name,
                       '(\bh\W?r\W?\b|human resources|hr depart(ment)?|employee relations)'
   )
-  and (length(body.links) > 0 or length(attachments) > 0)
-  
-  // Request and Urgency 
+  and  (0 < length(body.links) < 10 or length(attachments) > 0)
+  // Request and Urgency
   and any(ml.nlu_classifier(body.current_thread.text).entities, .name == "request")
   and any(ml.nlu_classifier(body.current_thread.text).entities, .name == "urgency")
   and (
@@ -23,6 +22,19 @@ source: |
       profile.by_sender().any_messages_malicious_or_spam
       and not profile.by_sender().any_false_positives
     )
+  )
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and
+  (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and (
+        any(distinct(headers.hops, .authentication_results.dmarc is not null),
+            strings.ilike(.authentication_results.dmarc, "*fail")
+        )
+      )
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
   )
 attack_types:
   - "BEC/Fraud"
