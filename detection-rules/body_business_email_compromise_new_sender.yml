@@ -1,0 +1,49 @@
+name: "Body: Business Email Compromise (BEC) attempt from first-time sender"
+description: |
+  Detects potential Business Email Compromise (BEC) attacks by analyzing text within the email body from first-time senders.
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and any(ml.nlu_classifier(body.current_thread.text).intents,
+          .name in ("bec") and .confidence == "high"
+  )
+  // negating legit replies
+  and not (
+    (
+      strings.istarts_with(subject.subject, "RE:")
+      // out of office auto-reply
+      // the NLU model will handle these better natively soon
+      or strings.istarts_with(subject.subject, "Automatic reply:")
+    )
+    and (
+      length(headers.references) > 0
+      or any(headers.hops, any(.fields, strings.ilike(.name, "In-Reply-To")))
+    )
+  )
+
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and
+  (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and (
+        any(distinct(headers.hops, .authentication_results.dmarc is not null),
+            strings.ilike(.authentication_results.dmarc, "*fail")
+        )
+      )
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+attack_types:
+  - "BEC/Fraud"
+tactics_and_techniques:
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Header analysis"
+  - "Natural Language Understanding"
+  - "Sender analysis"
+id: "96d4c35a-ca53-559e-9db3-349dbbdffc20"
+testing_pr: 929
+testing_sha: 281e0d8e786904133fa206db4c3e6507e6e0f154
