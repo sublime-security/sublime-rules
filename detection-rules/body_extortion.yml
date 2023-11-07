@@ -8,22 +8,18 @@ severity: "low"
 source: |
   type.inbound
   and (
-  any(ml.nlu_classifier(body.current_thread.text).intents,
-      .name == "extortion" and .confidence == "high"
-  )
-  and any(ml.nlu_classifier(body.current_thread.text).entities, .name == "financial")
+    any(ml.nlu_classifier(body.current_thread.text).intents,
+        .name == "extortion" and .confidence == "high"
+    )
+    and any(ml.nlu_classifier(body.current_thread.text).entities,
+            .name == "financial"
+    )
   )
   and (
     (
-      sender.email.domain.root_domain in $free_email_providers
-      and sender.email.email not in $sender_emails
+      not profile.by_sender().any_false_positives
+      and not profile.by_sender().solicited
     )
-    or (
-      sender.email.domain.root_domain not in $free_email_providers
-      and sender.email.domain.domain not in $sender_domains
-    )
-    // many extortion emails spoof sender domains and fail sender authentication
-    or any(headers.hops, .authentication_results.dmarc == "fail")
   )
 attack_types:
   - "Extortion"
