@@ -16,15 +16,20 @@ source: |
     )
   )
   and sender.email.domain.root_domain in $free_email_providers
-  and strings.ilike(body.current_thread.text,
-                    "*mcafee*",
-                    "*norton*",
-                    "*geek squad*",
-                    "*paypal*",
-                    "*ebay*",
-                    "*symantec*",
-                    "*best buy*",
-                    "*lifelock*"
+  and (
+    strings.ilike(body.current_thread.text,
+                  "*mcafee*",
+                  "*norton*",
+                  "*geek squad*",
+                  "*paypal*",
+                  "*ebay*",
+                  "*symantec*",
+                  "*best buy*",
+                  "*lifelock*"
+    )
+    or any(ml.logo_detect(beta.message_screenshot()).brands,
+           .name in ("PayPal", "Norton", "GeekSquad", "Ebay")
+    )
   )
   and length(body.current_thread.text) < 1500
   and 3 of (
@@ -44,12 +49,15 @@ source: |
     strings.ilike(body.current_thread.text, '*refund*')
   )
   // phone number regex
-  and regex.icontains(body.current_thread.text, '\+?(\d{1}.)?\(?\d{3}?\)?.\d{3}.?\d{4}')
+  and regex.icontains(body.current_thread.text,
+                      '\+?(\d{1}.)?\(?\d{3}?\)?.\d{3}.?\d{4}'
+  )
   and sender.email.domain.root_domain not in (
     // paypal domain
     "xoom.com"
   )
   and not strings.ends_with(headers.message_id, "@shopify.com>")
+
 attack_types:
   - "Callback Phishing"
 tactics_and_techniques:
