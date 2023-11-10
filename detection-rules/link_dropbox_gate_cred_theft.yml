@@ -1,0 +1,29 @@
+name: "Link: Secured Dropbox share with credential theft language"
+description: "File shared through Dropbox requires authentication to view, and the share comment contains credential theft language."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and sender.email.email == "no-reply@dropbox.com"
+  and any(distinct(headers.hops, .authentication_results.dmarc is not null),
+          not strings.ilike(.authentication_results.dmarc, "*fail")
+  )
+  and strings.ilike(subject.subject, "*shared*with you*")
+  and any(body.links,
+          .href_url.domain.root_domain == "dropbox.com"
+          and strings.icontains(beta.linkanalysis(.).final_dom.display_text,
+                                "we need to confirm your identity"
+          )
+  )
+  and any(ml.nlu_classifier(body.current_thread.text).intents, .name == "cred_theft" and .confidence == "high")
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Free file host"
+  - "Out of band pivot"
+  - "Social engineering"
+detection_methods:
+  - "Header analysis"
+  - "HTML analysis"
+  - "Natural Language Understanding"
+  - "URL analysis"
