@@ -14,10 +14,18 @@ source: |
            or 
  
            // mass mailer link, masks the actual URL
-           .href_url.domain.root_domain in ("hubspotlinks.com", "mandrillapp.com", "sendgrid.net")
+           .href_url.domain.root_domain in (
+             "hubspotlinks.com",
+             "mandrillapp.com",
+             "sendgrid.net",
+             "rs6.net"
+           )
  
            // Google AMP redirect
-           or (.href_url.domain.sld == "google" and strings.starts_with(.href_url.path, "/amp/"))
+           or (
+             .href_url.domain.sld == "google"
+             and strings.starts_with(.href_url.path, "/amp/")
+           )
          )
  
          // exclude sources of potential FPs
@@ -47,7 +55,9 @@ source: |
        .file_type in $file_types_images
        and any(ml.logo_detect(.).brands, strings.starts_with(.name, "Microsoft"))
    )
-   or any(ml.logo_detect(beta.message_screenshot()).brands, strings.starts_with(.name, "Microsoft"))
+   or any(ml.logo_detect(beta.message_screenshot()).brands,
+          strings.starts_with(.name, "Microsoft")
+   )
  )
  
  // suspicious content
@@ -105,7 +115,34 @@ source: |
          )
      )
    )
+   or (
+     any(file.explode(beta.message_screenshot()),
+                  strings.ilike(.scan.ocr.raw,
+                                "*password*",
+                                "*document*",
+                                "*voicemail*",
+                                "*cache*",
+                                "*fax*",
+                                "*storage*",
+                                "*quota*",
+                                "*messages*"
+                  )
+                  and strings.ilike(.scan.ocr.raw,
+                                    "*terminated*",
+                                    "*review*",
+                                    "*expire*",
+                                    "*click*",
+                                    "*view*",
+                                    "*exceed*",
+                                    "*clear*",
+                                    "*only works*",
+                                    "*failed*",
+                                    "*deleted*"
+                  )
+     )
+   )
  )
+ 
  and (
    any(ml.nlu_classifier(body.current_thread.text).intents,
        .name == "cred_theft" and .confidence in~ ("medium", "high")
@@ -136,20 +173,20 @@ source: |
    "sharepointonline.com",
    "yammer.com"
  )
+ 
+ // negate highly trusted sender domains unless they fail DMARC authentication
+ and (
+   (
+     sender.email.domain.root_domain in $high_trust_sender_root_domains
+     and (
+       any(distinct(headers.hops, .authentication_results.dmarc is not null),
+           strings.ilike(.authentication_results.dmarc, "*fail")
+       )
+     )
+   )
+   or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+ )
 
-   // negate highly trusted sender domains unless they fail DMARC authentication
-  and
-  (
-    (
-      sender.email.domain.root_domain in $high_trust_sender_root_domains
-      and (
-        any(distinct(headers.hops, .authentication_results.dmarc is not null),
-            strings.ilike(.authentication_results.dmarc, "*fail")
-        )
-      )
-    )
-    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
-  )
 
 attack_types:
   - "Credential Phishing"
