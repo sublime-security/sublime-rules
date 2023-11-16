@@ -12,15 +12,15 @@ severity: "medium"
 source: |
   type.inbound
   and sender.email.domain.domain in $org_domains
-
+  
   // doesn't match an org display name (generic)
   // we could make this more generic later
   and sender.display_name not in $org_display_names
   and any(headers.hops,
-
+  
           // find the hop Authentication-results for the org domain
           .authentication_results.dmarc_details.from.domain in $org_domains
-
+  
           // internal domain is spoofable
           and .authentication_results.dmarc == "none"
           and .authentication_results.spf == "none"
@@ -33,7 +33,7 @@ source: |
           .href_url.domain.root_domain not in $org_domains
           and (
             .href_url.domain.root_domain not in $tranco_1m
-            or .href_url.domain.domain in $free_file_hosts
+            or any([.href_url.domain.domain, .href_url.domain.root_domain], . in $free_file_hosts)
             or .href_url.domain.root_domain in $free_subdomain_hosts
             or .href_url.domain.domain in $url_shorteners
           )
@@ -52,10 +52,10 @@ source: |
       any(headers.domains,
           // it's not an org domain
           .root_domain not in $org_domains
-
+  
           // low reputation
           and .root_domain not in $alexa_1m
-
+  
           // no one has sent an email to it before
           and .root_domain not in $recipient_domains
       )
@@ -73,6 +73,7 @@ source: |
       )
     ),
   )
+
 tags:
   - "Attack surface reduction"
 attack_types:
