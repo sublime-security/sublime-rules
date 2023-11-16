@@ -7,13 +7,15 @@ severity: "medium"
 source: |
   type.inbound
   and sender.email.domain.root_domain != 'google.com'
-  and any(body.links, 
-    .href_url.domain.domain in $free_file_hosts
-    and not (
-        // negating Google Forms links
-        .href_url.domain.domain == "docs.google.com"
-        and strings.istarts_with(.href_url.path, "/forms/")
-    )
+  and any(body.links,
+          any([.href_url.domain.domain, .href_url.domain.root_domain],
+              . in $free_file_hosts
+          )
+          and not (
+            // negating Google Forms links
+            .href_url.domain.domain == "docs.google.com"
+            and strings.istarts_with(.href_url.path, "/forms/")
+          )
   )
   and regex.icontains(subject.subject, 'immediately', 'urgent')
   and any(ml.nlu_classifier(body.current_thread.text).intents, .name != "benign")
@@ -24,6 +26,7 @@ source: |
       and not profile.by_sender().any_false_positives
     )
   )
+
 attack_types:
   - "BEC/Fraud"
 tactics_and_techniques:
