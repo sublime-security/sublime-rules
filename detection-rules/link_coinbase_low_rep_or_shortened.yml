@@ -6,27 +6,29 @@ severity: "medium"
 source: |
   type.inbound
   and sender.email.domain.root_domain != "coinbase.com"
-
+  
   // more than 0 less than 5 links
   and 0 < length(body.links) < 5
-
+  
   // none of the links are to coinbase.com
   and all(body.links, .href_url.domain.root_domain != "coinbase.com")
-
+  
   // low rep or url shortened links found
   and any(body.links,
           .href_url.domain.domain in $url_shorteners
-
+  
           // exempting legitimate Google Maps shortener
           and (
             not strings.ilike(.href_url.url, "http?://goo.gl/maps*")
             or (
               .href_url.domain.domain not in $tranco_1m
-              or .href_url.domain.domain in $free_file_hosts
+              or any([.href_url.domain.domain, .href_url.domain.root_domain],
+                     . in $free_file_hosts
+              )
               or .href_url.domain.root_domain in $free_subdomain_hosts
               or .href_url.domain.domain in $url_shorteners
               or 
-
+  
               // mass mailer link, masks the actual URL
               .href_url.domain.root_domain in (
                 "hubspotlinks.com",
@@ -39,10 +41,12 @@ source: |
   // Coinbase logo
   and (
     any(attachments,
-        .file_type in $file_types_images and any(ml.logo_detect(.).brands, .name == "Coinbase")
+        .file_type in $file_types_images
+        and any(ml.logo_detect(.).brands, .name == "Coinbase")
     )
     or any(ml.logo_detect(beta.message_screenshot()).brands, .name == "Coinbase")
   )
+
 attack_types:
   - "Credential Phishing"
 tactics_and_techniques:
