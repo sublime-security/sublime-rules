@@ -1,0 +1,42 @@
+name: "Link: Free file host from freemail sender with NLU intent"
+description: "Detects free file host links sent by freemail senders with a short body and NLU indicators."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  
+  // short body
+  and length(body.plain.raw) < 500
+  
+  // NLU intent
+  and (
+    any(ml.nlu_classifier(body.plain.raw).intents, .name != "benign")
+    and length(ml.nlu_classifier(body.plain.raw).intents) > 0
+  )
+  
+  // free file host link
+  and any(body.links,
+          any([.href_url.domain.domain, .href_url.domain.root_domain],
+              . in $free_file_hosts
+          )
+  )
+  
+  // freemail sender
+  and sender.email.domain.root_domain in $free_email_providers
+  and (
+    not profile.by_sender().any_false_positives
+    and not profile.by_sender().solicited
+  )
+
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Free email provider"
+  - "Free file host"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Natural Language Understanding"
+  - "Sender analysis"
+  - "URL analysis"
+id: "569817fe-96b5-5c1d-96dc-30cd1cb9fd16"

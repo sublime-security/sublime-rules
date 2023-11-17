@@ -8,7 +8,9 @@ source: |
  and any(body.links,
          (
            .href_url.domain.root_domain not in $tranco_1m
-           or .href_url.domain.domain in $free_file_hosts
+           or any([.href_url.domain.domain, .href_url.domain.root_domain],
+                  . in $free_file_hosts
+           )
            or .href_url.domain.root_domain in $free_subdomain_hosts
            or .href_url.domain.domain in $url_shorteners
            or 
@@ -117,32 +119,31 @@ source: |
    )
    or (
      any(file.explode(beta.message_screenshot()),
-                  strings.ilike(.scan.ocr.raw,
-                                "*password*",
-                                "*document*",
-                                "*voicemail*",
-                                "*cache*",
-                                "*fax*",
-                                "*storage*",
-                                "*quota*",
-                                "*messages*"
-                  )
-                  and strings.ilike(.scan.ocr.raw,
-                                    "*terminated*",
-                                    "*review*",
-                                    "*expire*",
-                                    "*click*",
-                                    "*view*",
-                                    "*exceed*",
-                                    "*clear*",
-                                    "*only works*",
-                                    "*failed*",
-                                    "*deleted*"
-                  )
+         strings.ilike(.scan.ocr.raw,
+                       "*password*",
+                       "*document*",
+                       "*voicemail*",
+                       "*cache*",
+                       "*fax*",
+                       "*storage*",
+                       "*quota*",
+                       "*messages*"
+         )
+         and strings.ilike(.scan.ocr.raw,
+                           "*terminated*",
+                           "*review*",
+                           "*expire*",
+                           "*click*",
+                           "*view*",
+                           "*exceed*",
+                           "*clear*",
+                           "*only works*",
+                           "*failed*",
+                           "*deleted*"
+         )
      )
    )
  )
- 
  and (
    any(ml.nlu_classifier(body.current_thread.text).intents,
        .name == "cred_theft" and .confidence in~ ("medium", "high")
@@ -186,7 +187,6 @@ source: |
    )
    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
  )
-
 
 attack_types:
   - "Credential Phishing"
