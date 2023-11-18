@@ -3,8 +3,8 @@ description: "This rule checks for invoicing content from a sender, reply-to dom
 type: "rule"
 severity: "medium"
 source: |
+
   type.inbound
-  
   // reply to domain that's less than 30d old and doesn't match the sender
   and (
     (
@@ -17,7 +17,7 @@ source: |
   
     // or the return path or sender domain is less than 30d old 
     or beta.whois(headers.return_path.domain).days_old <= 30
-    or beta.whois(sender.email.domain).days_old <=30
+    or beta.whois(sender.email.domain).days_old <= 30
   )
   
   // invoicing with high confidence
@@ -63,7 +63,12 @@ source: |
   and regex.icontains(body.current_thread.text,
                       '\+?(\d{1}.)?\(?\d{3}?\)?.\d{3}.?\d{4}'
   )
-  
+  and (
+    not profile.by_sender().solicited
+    or profile.by_sender().any_messages_malicious_or_spam
+  )
+  and not profile.by_sender().any_false_positives
+
 attack_types:
   - "Callback Phishing"
 tactics_and_techniques:
