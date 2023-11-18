@@ -5,7 +5,7 @@ type: "rule"
 severity: "medium"
 source: |
   type.inbound
-  
+
   // no recipients defined
   and (
     length(recipients.to) == 0
@@ -14,32 +14,31 @@ source: |
   and length(recipients.cc) == 0
   and length(recipients.bcc) == 0
   and any(body.links,
-  
+
           // suspicious link
           // we've particularly seen 1drv.ms abused
           // if using the full list causes FPs, we can reduce the 
           // scope to a hard-coded list or add exclusions
           (
-            any([.href_url.domain.domain, .href_url.domain.root_domain],
-                . in $free_file_hosts
-            )
+            .href_url.domain.domain in $free_file_hosts
+            or .href_url.domain.root_domain in $free_file_hosts
             or .href_url.domain.root_domain in $free_subdomain_hosts
           )
-  
+
           // link text is in all caps
           and regex.match(.display_text, "[A-Z ]+")
   )
-  
+
   // any confidence cred_theft classification
   and any(ml.nlu_classifier(body.current_thread.text).intents,
           .name == "cred_theft"
   )
-  
+
   // 'org' entity is in all caps
   and any(ml.nlu_classifier(body.current_thread.text).entities,
           .name == "org" and regex.match(.text, "[A-Z ]+")
   )
-  
+
   // subject is in all caps
   and regex.match(subject.subject, "[A-Z ]+")
   and (
