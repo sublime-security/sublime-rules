@@ -1,0 +1,33 @@
+name: "Link: Contains recipient email address and traverses suspicious infrastructure"
+description: "Body link contains a recipient email address, contiunes to contain the address while redirecting, and traverses suspicious infrastructure, such as free subdomains and known suspicious TLDs."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  // body link contains a recipients email address
+  and any(body.links,
+          any(recipients.to,
+              strings.icontains(..href_url.query_params, .email.email)
+          )
+  )
+  and any(body.links,
+          any(recipients.to,
+          // effective URL contains a recipients email address
+              .email.email == beta.linkanalysis(..).effective_url.fragment
+          )
+          // more than 2 redirects
+          and length(beta.linkanalysis(.).redirect_history) > 2
+          // effective URL is a free subdomains
+          and beta.linkanalysis(.).effective_url.domain.root_domain in $free_subdomain_hosts
+          // traverses a suspicious TLD
+          and any(beta.linkanalysis(.).redirect_history, .domain.tld in $suspicious_tlds)
+  )
+attack_types:
+  - "Credential Phishing"
+  - "Malware/Ransomware"
+tactics_and_techniques:
+  - "Evasion"
+  - "Free subdomain host"
+detection_methods:
+  - "Header analysis"
+  - "URL analysis"
