@@ -5,12 +5,12 @@ type: "rule"
 severity: "medium"
 source: |
   type.inbound
-
+  
   // Sharepoint body content looks like this
   and strings.contains(body.current_thread.text, "shared a file with you")
   and strings.icontains(subject.subject, "shared")
   and any(ml.logo_detect(beta.message_screenshot()).brands, .name == "Microsoft")
-
+  
   // fake Sharepoint shares are easy to identify if there are any links
   // that don't point to microsoft[.]com or *.sharepoint[.]com
   and not all(body.links,
@@ -26,9 +26,11 @@ source: |
     "office.com",
     "onedrive.com",
     "sharepointonline.com",
-    "yammer.com"
+    "yammer.com",
+    //ignore microsoft privacy statement links
+    "aka.ms"
   )
-
+  
   // negate highly trusted sender domains unless they fail DMARC authentication
   and (
     (
@@ -51,6 +53,7 @@ source: |
       and not profile.by_sender().any_false_positives
     )
   )
+
 attack_types:
   - "Credential Phishing"
   - "Malware/Ransomware"
