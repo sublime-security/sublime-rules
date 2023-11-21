@@ -1,0 +1,49 @@
+name: "Body: Business Email Compromise (BEC) attempt with sender (from) and reply-to mismatch"
+description: |
+  Detects potential generic Business Email Compromise (BEC) scams by analyzing text within the email body from mismatched senders.
+type: "rule"
+severity: "low"
+source: |
+  type.inbound
+  // mismatched sender (From) and Reply-to + freemail
+  and any(headers.reply_to,
+          length(headers.reply_to) > 0
+          and all(headers.reply_to,
+                  .email.domain.root_domain != sender.email.domain.root_domain
+                  and .email.domain.root_domain in $free_email_providers
+          )
+  )
+
+  // use of honorific
+  and regex.icontains(body.current_thread.text,
+                      "(?:Mr.?|Mrs.?|Ms.?|Miss.?|Dr.?|Prof.?|Sir.?|Lady.?|Rev.?)[ \t]+"
+  )
+
+  // BEC-themed language
+  and (
+    any(ml.nlu_classifier(body.current_thread.text).intents, .name == "bec") and
+    any(ml.nlu_classifier(body.current_thread.text).entities, .name == "request"))
+  
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  any(headers.hops, .authentication_results.dmarc_details.failure_details.from.domain in $trusted_sender_domains)  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and (
+        any(distinct(headers.hops, .authentication_results.dmarc is not null),
+            strings.ilike(.authentication_results.dmarc, "*fail")
+        )
+      )
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+  and (
+    (
+      profile.by_sender().prevalence in ("new", "outlier")
+      and not profile.by_sender().solicited
+    )
+    or (
+      profile.by_sender().any_messages_malicious_or_spam
+      and not profile.by_sender().any_false_positives
+    )
+  )
+  and not profile.by_sender().any_false_positives
