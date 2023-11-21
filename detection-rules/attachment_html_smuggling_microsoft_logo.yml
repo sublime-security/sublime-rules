@@ -1,0 +1,68 @@
+name: "Attachment: Microsoft logo in HTML with suspicious indicators"
+description: |
+  Attached HTML file contains a Microsoft logo built at runtime or with SVG code, requiring the use of screenshots and logo detection. Javascript strings also contain the recipients email address.
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and (
+    any(attachments,
+        (
+          .file_extension in~ ("html", "htm", "shtml", "dhtml")
+          or .file_type == "html"
+          or .content_type == "text/html"
+        )
+        and any(file.explode(.),
+                any(ml.logo_detect(file.html_screenshot(..)).brands,
+                    .name == "Microsoft" and .confidence in ("medium", "high")
+                )
+                and any(.scan.url.urls, .domain.root_domain not in $org_domains)
+        )
+        and any(file.explode(.),
+                any(recipients.to,
+                    any(..scan.javascript.strings, strings.icontains(., ..email.email))
+                )
+        )
+    )
+    or any(attachments,
+           (.file_extension in~ $file_extensions_common_archives)
+           and any(file.explode(.),
+                   any(ml.logo_detect(file.html_screenshot(..)).brands,
+                       .name == "Microsoft" and .confidence in ("medium", "high")
+                   )
+                   and any(.scan.url.urls, .domain.root_domain not in $org_domains)
+           )
+           and any(file.explode(.),
+                   any(recipients.to,
+                       any(..scan.javascript.strings, strings.icontains(., ..email.email))
+                   )
+           )
+    )
+  )
+  and (
+    not profile.by_sender().solicited
+    or (
+      profile.by_sender().any_messages_malicious_or_spam
+      and not profile.by_sender().any_false_positives
+    )
+  )
+  // allow Microsoft domains just to be safe
+  and sender.email.domain.root_domain not in~ ('microsoft.com', 'microsoftsupport.com', 'office.com')
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Evasion"
+  - "HTML smuggling"
+  - "Impersonation: Brand"
+  - "Social engineering"
+detection_methods:
+  - "Archive analysis"
+  - "Computer Vision"
+  - "Content analysis"
+  - "File analysis"
+  - "Javascript analysis"
+  - "Sender analysis"
+  - "URL analysis"
+id: "9bf7c770-d55f-58d5-b875-cd9b7e0962e3"
+testing_pr: 842
+testing_sha: 704315af5cea1508193017dbb58645d6834b0777
