@@ -1,0 +1,67 @@
+name: "Callback Phishing via DocuSign comment"
+description: |
+  This rule inspects messages originating from legitimate DocuSign infrastructure, with a DocuSign logo that match Callback Phishing criteria, in the body, requiring at least one brand name, as well as 3 matching Callback Phishing terms and a phone number. 
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and length(attachments) == 0
+  
+  // Legitimate Docusign sending infratructure
+  and (
+      sender.email.domain.root_domain in ('docusign.net', 'docusign.com')
+    // check for DMARC fail for spoofs
+      and any(distinct(headers.hops, .authentication_results.dmarc is not null),
+              strings.ilike(.authentication_results.dmarc, "pass")
+      )
+    )
+  
+  // Docusign Logo 
+  and any(ml.logo_detect(beta.message_screenshot()).brands, .name == "DocuSign")
+  
+  // Callback Phishing
+  and strings.ilike(body.current_thread.text,
+                    "*mcafee*",
+                    "*norton*",
+                    "*geek squad*",
+                    "*paypal*",
+                    "*ebay*",
+                    "*symantec*",
+                    "*best buy*",
+                    "*lifelock*"
+  )
+  
+  and 3 of (
+    strings.ilike(body.current_thread.text, '*purchase*'),
+    strings.ilike(body.current_thread.text, '*payment*'),
+    strings.ilike(body.current_thread.text, '*transaction*'),
+    strings.ilike(body.current_thread.text, '*subscription*'),
+    strings.ilike(body.current_thread.text, '*antivirus*'),
+    strings.ilike(body.current_thread.text, '*order*'),
+    strings.ilike(body.current_thread.text, '*support*'),
+    strings.ilike(body.current_thread.text, '*help line*'),
+    strings.ilike(body.current_thread.text, '*receipt*'),
+    strings.ilike(body.current_thread.text, '*invoice*'),
+    strings.ilike(body.current_thread.text, '*call*'),
+    strings.ilike(body.current_thread.text, '*cancel*'),
+    strings.ilike(body.current_thread.text, '*renew*'),
+    strings.ilike(body.current_thread.text, '*refund*')
+  )
+  // phone number regex
+  and regex.icontains(body.current_thread.text, '\+?(\d{1}.)?\(?\d{3}?\)?.\d{3}.?\d{4}')
+
+attack_types:
+  - "Callback Phishing"
+tactics_and_techniques:
+  - "Evasion"
+  - "Impersonation: Brand"
+  - "Out of band pivot"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Computer Vision"
+  - "Header analysis"
+  - "Sender analysis"
+  - "URL analysis"
+  
+id: "48aec918-d1bb-511e-8eba-8c34a663f28c"
