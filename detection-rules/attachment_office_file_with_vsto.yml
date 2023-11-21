@@ -1,0 +1,61 @@
+name: "Attachment: Office Document with VSTO Add-in"
+description: |
+  Recursively scans files and archives to detect Office documents with VSTO Add-ins.
+type: "rule"
+references:
+  - "https://medium.com/@airlockdigital/make-phishing-great-again-vsto-office-files-are-the-new-macro-nightmare-e09fcadef010"
+severity: "high"
+authors:
+  - twitter: "vector_sec"
+source: |
+  type.inbound
+  and any(attachments,
+          (
+            .file_extension in~ $file_extensions_macros
+            or .file_extension in~ $file_extensions_common_archives
+            or (
+                .file_extension is null
+                and .file_type == "unknown"
+                and .content_type == "application/octet-stream"
+                and .size < 100000000
+              )
+          )
+          and any(file.explode(.),
+                  .file_extension in~ (
+                    "doc",
+                    "docm",
+                    "docx",
+                    "dot",
+                    "dotm",
+                    "xls",
+                    "xlsx",
+                    "xlsm",
+                    "xlm",
+                    "xlsb",
+                    "xlt",
+                    "xltm",
+                    "ppt",
+                    "pptx",
+                    "pptm",
+                    "ppsm"
+                  )
+                  and any(.scan.exiftool.fields,
+                          .key == "Tag_AssemblyLocation" and strings.ilike(.value, "*.vsto*")
+                          and not strings.ilike(.value, 'C:\Program Files*')
+                  )
+          )
+  )
+attack_types:
+  - "Malware/Ransomware"
+tactics_and_techniques:
+  - "Scripting"
+detection_methods:
+  - "Archive analysis"
+  - "Content analysis"
+  - "Exif analysis"
+  - "File analysis"
+  - "Sender analysis"
+  - "URL analysis"
+id: "27afa730-6dd5-58ec-9deb-ed5170de210d"
+testing_pr: 679
+testing_sha: 762894502b2b43e0f80c2f49fe85b09fa3c4c304
