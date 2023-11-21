@@ -13,6 +13,22 @@ source: |
   and (length(recipients.to) == 0 or all(recipients.to, .display_name == "Undisclosed recipients"))
   and length(recipients.cc) == 0
   and length(recipients.bcc) == 0
+  
+  // negate listmailers & benign threads
+  and not (
+    any(headers.hops, any(.fields, .name == "List-Unsubscribe"))
+    or any(ml.nlu_classifier(body.current_thread.text).intents,
+           .name == "benign" and .confidence == "high"
+    )
+  )
+  and (
+    profile.by_sender().prevalence in ("new", "outlier")
+    or profile.by_sender().any_messages_malicious_or_spam
+  )
+  and not profile.by_sender().any_false_positives
+  
+tags:
+  - "Attack surface reduction"
 tactics_and_techniques:
   - "Free subdomain host"
 detection_methods:

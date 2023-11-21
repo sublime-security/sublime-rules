@@ -19,11 +19,32 @@ source: |
     or strings.ilevenshtein(sender.display_name, 'chase sapphire') <= 2
     or strings.ilevenshtein(sender.display_name, 'chase card services') <= 2
     or strings.ilevenshtein(sender.display_name, 'united mileageplus') <= 2
-    or strings.ilevenshtein(sender.display_name, 'echase') <= 2
+    or strings.ilevenshtein(sender.display_name, 'echase') <= 1
   )
-  and sender.display_name not in ("Chaser")
-  and sender.email.domain.root_domain not in~ ('chase.com', 'united.com', 'transunion.com')
-  and sender.email.email not in $recipient_emails
+  and sender.display_name not in~ ("chaser", "case")
+  and sender.email.domain.root_domain not in~ ('chase.com', 'united.com', 'transunion.com', 'shopping-chase.com')
+  and (
+    profile.by_sender().prevalence in ("new", "outlier")
+    or (
+      profile.by_sender().any_messages_malicious_or_spam
+      and not profile.by_sender().any_false_positives
+    )
+  )
+
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and
+  (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and (
+        any(distinct(headers.hops, .authentication_results.dmarc is not null),
+            strings.ilike(.authentication_results.dmarc, "*fail")
+        )
+      )
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+
 attack_types:
   - "Credential Phishing"
 tactics_and_techniques:

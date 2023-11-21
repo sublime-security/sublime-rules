@@ -5,21 +5,47 @@ type: "rule"
 severity: "medium"
 source: |
   type.inbound
-  and any(ml.nlu_classifier(coalesce(body.html.display_text, body.plain.raw)).intents,
+  and any(ml.nlu_classifier(body.current_thread.text).intents,
           .name in ("bec") and .confidence == "high"
   )
-
-  // first-time sender
-  and (
+  // negating legit replies
+  and not (
     (
-      sender.email.domain.root_domain in $free_email_providers
-      and sender.email.email not in $sender_emails
+      strings.istarts_with(subject.subject, "RE:")
+      // out of office auto-reply
+      // the NLU model will handle these better natively soon
+      or strings.istarts_with(subject.subject, "Automatic reply:")
     )
-    or (
-      sender.email.domain.root_domain not in $free_email_providers
-      and sender.email.domain.domain not in $sender_domains
+    and (
+      length(headers.references) > 0
+      or any(headers.hops, any(.fields, strings.ilike(.name, "In-Reply-To")))
     )
   )
+  and (
+    (
+      profile.by_sender().prevalence in ("new", "outlier")
+      and not profile.by_sender().solicited
+    )
+    or (
+      profile.by_sender().any_messages_malicious_or_spam
+      and not profile.by_sender().any_false_positives
+    )
+  )
+
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and
+  (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and (
+        any(distinct(headers.hops, .authentication_results.dmarc is not null),
+            strings.ilike(.authentication_results.dmarc, "*fail")
+        )
+      )
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+
 attack_types:
   - "BEC/Fraud"
 tactics_and_techniques:

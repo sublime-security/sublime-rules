@@ -8,44 +8,28 @@ source: |
   type.inbound
   and any(headers.reply_to,
           // mismatched reply-to and sender domain
-          .email.domain.root_domain
-          != sender.email.domain.root_domain
-
+          .email.domain.root_domain != sender.email.domain.root_domain
           // newly registered reply-to domain
           and beta.whois(.email.domain).days_old <= 30
   )
-
   // request is being made
-  and any(ml.nlu_classifier(coalesce(body.html.display_text, body.plain.raw)).entities,
-          .name == "request"
-  )
-
+  and any(ml.nlu_classifier(body.current_thread.text).entities, .name == "request")
   // there's financial/urgency OR a tag of medium/high confidence
   and (
-    (
-      any(ml.nlu_classifier(coalesce(body.html.display_text, body.plain.raw)).entities,
-          .name == "financial"
-      )
-      or any(ml.nlu_classifier(coalesce(body.html.display_text, body.plain.raw)).entities,
-             .name == "urgency"
-      )
-    )
-    or any(ml.nlu_classifier(coalesce(body.html.display_text, body.plain.raw)).tags,
+    any(ml.nlu_classifier(body.current_thread.text).entities, .name in ("financial", "urgency"))
+    or any(ml.nlu_classifier(body.current_thread.text).tags,
            .name is not null and .confidence in ("medium", "high")
     )
   )
-
-  // first-time sender
   and (
-    (
-      sender.email.domain.root_domain in $free_email_providers
-      and sender.email.email not in $sender_emails
-    )
+    not profile.by_sender().solicited
     or (
-      sender.email.domain.root_domain not in $free_email_providers
-      and sender.email.domain.domain not in $sender_domains
+      profile.by_sender().any_messages_malicious_or_spam
+      and not profile.by_sender().any_false_positives
     )
   )
+  and not profile.by_sender().any_false_positives
+  
 attack_types:
   - "BEC/Fraud"
 tactics_and_techniques:

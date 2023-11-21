@@ -15,16 +15,11 @@ source: |
   // exclude To: Undisclosed recipients:;
   // since we won't have a valid recipient email
   and any(recipients.to, .email.domain.valid == true)
-
-  // first-time sender
   and (
-    (
-      sender.email.domain.root_domain in $free_email_providers
-      and sender.email.email not in $sender_emails
-    )
+    profile.by_sender().prevalence in ("new", "outlier")
     or (
-      sender.email.domain.root_domain not in $free_email_providers
-      and sender.email.domain.domain not in $sender_domains
+      profile.by_sender().any_messages_malicious_or_spam
+      and not profile.by_sender().any_false_positives
     )
   )
   and (
@@ -40,8 +35,9 @@ source: |
   and any(ml.nlu_classifier(coalesce(body.html.display_text, body.plain.raw)).intents,
           .name in ("cred_theft") and .confidence == "high"
   )
-
-  // we could add additional logic here, such as suspicious subject, url shortener, sus link, etc.
+  and any(ml.nlu_classifier(body.current_thread.text).intents,
+          .name in ("cred_theft") and .confidence == "high"
+  )
 attack_types:
   - "Credential Phishing"
 tactics_and_techniques:

@@ -24,24 +24,21 @@ source: |
                     // .zip.attempted_files
                     "encrypted_zip" in .flavors.yara
                     and any(.scan.zip.attempted_files,
-                            strings.ilike(., "*.lnk", "*.js", "*.vba", "*.vbs", "*.vbe")
+                            strings.ilike(., "*.???*.exe", "*.lnk", "*.js", "*.vba", "*.vbs", "*.vbe")
                     )
                   )
                   // for both non-encrypted zips and encrypted zips
                   // that were successfully cracked
                   or .file_extension in ("lnk", "js", "vba", "vbs", "vbe")
+                  or strings.ilike(.file_name, "*.???*.exe")
               )
           )
   )
-  // unsolicited
   and (
-    (
-      sender.email.domain.root_domain in $free_email_providers
-      and sender.email.email not in $recipient_emails
-    )
+    not profile.by_sender().solicited
     or (
-      sender.email.domain.root_domain not in $free_email_providers
-      and sender.email.domain.domain not in $recipient_domains
+      profile.by_sender().any_messages_malicious_or_spam
+      and not profile.by_sender().any_false_positives
     )
   )
 attack_types:

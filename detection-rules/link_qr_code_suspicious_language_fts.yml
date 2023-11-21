@@ -7,29 +7,32 @@ type: "rule"
 severity: "medium"
 source: |
   type.inbound
-
+  
   // check image attachments for QR code, will want to add message.screenshot functionality here when it's ready
+  // and length(attachments) < 10
   and any(attachments,
-          .file_type in~ ('bmp', 'png', 'jpg', 'jpeg', 'gif')
+          (.file_type in $file_types_images or .file_type == "pdf")
           and any(file.explode(.),
                   .scan.qr.type == "url"
-
+  
                   // recipient email address is present in the URL, a common tactic used in credential phishing attacks and the url is not in $org_domains
-                  and any(recipients.to, strings.icontains(..scan.qr.data, .email.email))
+                  and any(recipients.to,
+                          strings.icontains(..scan.qr.data, .email.email) and .email.domain.valid
+                  )
                   and .scan.qr.url.domain.root_domain not in $org_domains
           )
   )
-
+  
   // NLU has identified cred_theft language with high confidence
   and (
-    any(ml.nlu_classifier(coalesce(body.html.display_text, body.plain.raw)).intents,
+    any(ml.nlu_classifier(body.current_thread.text).intents,
         .name == "cred_theft" and .confidence == "high"
     )
     or 
     // the attachment contains suspicious strings
     (
       any(attachments,
-          .file_type in~ ('bmp', 'png', 'jpg', 'jpeg', 'gif', 'pdf')
+          (.file_type in $file_types_images or .file_type == "pdf")
           and any(file.explode(.),
                   any(.scan.strings.strings,
                       regex.icontains(.,
@@ -40,18 +43,29 @@ source: |
       )
     )
   )
-
-  // first-time sender
+  
   and (
-    (
-      sender.email.domain.root_domain in $free_email_providers
-      and sender.email.email not in $sender_emails
-    )
+    profile.by_sender().prevalence in ("new", "outlier")
     or (
-      sender.email.domain.root_domain not in $free_email_providers
-      and sender.email.domain.domain not in $sender_domains
+      profile.by_sender().any_messages_malicious_or_spam
+      and not profile.by_sender().any_false_positives
     )
   )
+
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and
+  (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and (
+        any(distinct(headers.hops, .authentication_results.dmarc is not null),
+            strings.ilike(.authentication_results.dmarc, "*fail")
+        )
+      )
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+
 attack_types:
   - "Credential Phishing"
 tactics_and_techniques:

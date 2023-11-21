@@ -18,61 +18,79 @@ source: |
             or .file_type == "html"
           )
           and any(file.explode(.),
+                  // suspicious strings found in javascript
                   (
-                    // suspicious strings found in javascript
-                    length(filter(.scan.javascript.strings,
-                                  strings.ilike(.,
-                                                "*password*",
-                                                "*username*",
-                                                "*login-form*",
-                                                "*email-form*",
-                                                "*Incorrect password. Please try again.*",
-                                                "*Password Incomplete, please try again*"
-                                  )
-                           )
-                    ) >= 3
-                    or (
-                      // suspicious strings found outside of javascript, but binexplode'd file still of HTML type
-                      .flavors.mime in~ ("text/html", "text/plain")
-                      and length(filter(.scan.strings.strings,
-                                        strings.ilike(.,
-                                                      "*password*",
-                                                      "*username*",
-                                                      "*login-form*",
-                                                      "*email-form*",
-                                                      "*Incorrect password. Please try again.*",
-                                                      "*Password Incomplete, please try again*"
-                                        )
-                                 )
-                      ) >= 3
+                    length(filter(.scan.javascript.strings, strings.ilike(., "*password*", ))) >= 2
+                    and 2 of (
+                      any(.scan.javascript.strings, strings.ilike(., "*incorrect*")),
+                      any(.scan.javascript.strings, strings.ilike(., "*invalid*")),
+                      any(.scan.javascript.strings, strings.ilike(., "*login*")),
+                      any(.scan.javascript.strings, regex.icontains(., "sign.in")),
+                    )
+                  )
+                  or (
+                    // suspicious strings found outside of javascript, but binexplode'd file still of HTML type
+                    length(filter(.scan.strings.strings, strings.ilike(., "*password*", ))) >= 2
+                    and 2 of (
+                      any(.scan.strings.strings, strings.ilike(., "*incorrect*")),
+                      any(.scan.strings.strings, strings.ilike(., "*invalid*")),
+                      any(.scan.strings.strings, strings.ilike(., "*login*")),
+                      any(.scan.strings.strings, strings.ilike(., "*<script>*")),
+                      any(.scan.strings.strings, regex.icontains(., "sign.in")),
+                      any(.scan.strings.strings,
+                          regex.icontains(.,
+                                          '<title>.[^<]+(Payment|Invoice|Statement|Login|Microsoft|Email|Excel)'
+                          )
+                      )
                     )
                   )
                   or 
                   //Known phishing obfuscation
-                  (
-                    length(filter(.scan.strings.strings,
-                                  strings.ilike(.,
-                                                //Enter password  
-                                                "*&#69;&#110;&#116;&#101;&#114;&#32;&#112;&#97;&#115;&#115;&#119;&#111;&#114;&#100*",
-                                                //Forgotten my password
-                                                "*&#70;&#111;&#114;&#103;&#111;&#116;&#116;&#101;&#110;&#32;&#109;&#121;&#32;&#112;&#97;&#115;&#115;&#119;&#111;&#114;&#100*",
-                                                //Sign in
-                                                "*&#83;&#105;&#103;&#110;&#32;&#105;&#110*"
-                                  )
-                           )
-                    ) >= 2
+                  2 of (
+                    // Enter password
+                    any(.scan.strings.strings,
+                        strings.ilike(.,
+                                      "*&#69;&#110;&#116;&#101;&#114;&#32;&#112;&#97;&#115;&#115;&#119;&#111;&#114;&#100*"
+                        )
+                    ),
+  
+                    // Forgotten my password  
+                    any(.scan.strings.strings,  
+                        strings.ilike(.,  
+                                      "*&#70;&#111;&#114;&#103;&#111;&#116;&#116;&#101;&#110;&#32;&#109;&#121;&#32;&#112;&#97;&#115;&#115;&#119;&#111;&#114;&#100*"
+                        )
+                    ),
+  
+                    // Sign in
+                    any(.scan.strings.strings,
+                        strings.ilike(., "*&#83;&#105;&#103;&#110;&#32;&#105;&#110*")
+                    )
                   )
           )
   )
-  // Unsolicited
+
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and
+  (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and (
+        any(distinct(headers.hops, .authentication_results.dmarc is not null),
+            strings.ilike(.authentication_results.dmarc, "*fail")
+        )
+      )
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+
   and (
     (
-      sender.email.domain.root_domain in $free_email_providers
-      and sender.email.email not in $recipient_emails
+      not profile.by_sender().solicited
+      and profile.by_sender().prevalence in ("new", "outlier")
     )
     or (
-      sender.email.domain.root_domain not in $free_email_providers
-      and sender.email.domain.domain not in $recipient_domains
+      profile.by_sender().any_messages_malicious_or_spam
+      and not profile.by_sender().any_false_positives
     )
   )
 attack_types:
