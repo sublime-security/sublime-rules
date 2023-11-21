@@ -15,21 +15,27 @@ source: |
                   // exclude images taken with mobile cameras and screenshots from android
                   and not any(.scan.exiftool.fields,
                               .key == "Model"
-                              or .key == "Software" and strings.starts_with(.value, "Android")
+                              or .key == "Software"
+                              and strings.starts_with(.value, "Android")
                   )
                   // exclude images taken with mobile cameras and screenshots from Apple
                   and not any(.scan.exiftool.fields,
-                              .key == "DeviceManufacturer" and .value == "Apple Computer Inc."
+                              .key == "DeviceManufacturer"
+                              and .value == "Apple Computer Inc."
                   )
           )
       )
       or (
         length(attachments) == 0
-        and any(file.explode(beta.message_screenshot()), .scan.qr.type is not null)
+        and any(file.explode(beta.message_screenshot()),
+                .scan.qr.type is not null and regex.contains(.scan.qr.data, '\.')
+        )
       )
     )
     and (
-      any(recipients.to, strings.icontains(sender.display_name, .email.domain.sld))
+      any(recipients.to,
+          strings.icontains(sender.display_name, .email.domain.sld)
+      )
       or length(body.current_thread.text) is null
       or body.current_thread.text == ""
       or regex.contains(subject.subject,
@@ -37,11 +43,16 @@ source: |
       )
       or (any(recipients.to, strings.icontains(subject.subject, .display_name)))
       or (
-        (length(recipients.to) == 0 or all(recipients.to, .display_name == "Undisclosed recipients"))
+        (
+          length(recipients.to) == 0
+          or all(recipients.to, .display_name == "Undisclosed recipients")
+        )
         and length(recipients.cc) == 0
         and length(recipients.bcc) == 0
       )
-      or any(file.explode(beta.message_screenshot()), (.scan.qr.url.domain.tld in $suspicious_tlds))
+      or any(file.explode(beta.message_screenshot()),
+             (.scan.qr.url.domain.tld in $suspicious_tlds)
+      )
       or any(attachments,
              .file_type in $file_types_images
              and any(file.explode(.), .scan.qr.url.domain.tld in $suspicious_tlds)

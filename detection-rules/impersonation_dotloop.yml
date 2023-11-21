@@ -1,16 +1,14 @@
-name: "Attachment: Any HTML file (first-time sender)"
-description: |
-  Potential HTML smuggling attacks from new senders.
-  Use if passing HTML files is not normal behavior in your environment.
-  This rule may be expanded to inspect HTML attachments for suspicious code.
-references:
-  - "https://ired.team/offensive-security/defense-evasion/file-smuggling-with-html-and-javascript"
-  - "https://sandbox.sublimesecurity.com?id=106315e9-166a-4e0f-946e-88ff6fd5f9fd"
+name: "Brand impersonation: Dotloop"
+description: "Impersonation of Dotloop, a real estate transaction management platform."
 type: "rule"
 severity: "medium"
 source: |
   type.inbound
-  and any(attachments, .file_extension in~ ('htm', 'html') or .file_type == "html")
+  and (
+    strings.ilike(sender.display_name, '*dotloop*')
+    or strings.ilike(sender.email.domain.domain, '*dotloop*')
+  )
+  and sender.email.domain.root_domain not in~ ('dotloop.com', 'showingtime.com')
   and (
     (
       profile.by_sender().prevalence in ("new", "outlier")
@@ -19,10 +17,9 @@ source: |
     or profile.by_sender().any_messages_malicious_or_spam
   )
   and not profile.by_sender().any_false_positives
-
+  
   // negate highly trusted sender domains unless they fail DMARC authentication
-  and
-  (
+  and (
     (
       sender.email.domain.root_domain in $high_trust_sender_root_domains
       and (
@@ -33,12 +30,12 @@ source: |
     )
     or sender.email.domain.root_domain not in $high_trust_sender_root_domains
   )
-
-tags:
-  - "Attack surface reduction"
+attack_types:
+  - "Credential Phishing"
 tactics_and_techniques:
-  - "HTML smuggling"
+  - "Impersonation: Brand"
+  - "Social engineering"
 detection_methods:
-  - "HTML analysis"
+  - "Header analysis"
   - "Sender analysis"
-id: "57a8f5c5-c4c4-5268-b452-e381dc64ea42"
+id: "f997581a-ca08-5b21-8a52-ee0ca78fcea5"
