@@ -1,36 +1,61 @@
 name: "Attachment: EML with link to credential phishing page"
 description: |
-  Attached EML links to a credential phishing site.
+  Attached EML links to a credential phishing site or exhibits unusual behavior such as multiple suspicious redirects.
 type: "rule"
 severity: "medium"
 source: |
   type.inbound
   and length(attachments) == 1
   and any(attachments,
-          .content_type == "message/rfc822"
+          (.content_type == "message/rfc822" or .file_extension =~ "eml")
+          and any(file.parse_eml(.).body.links,
+                  (
+                    beta.linkanalysis(., mode="aggressive").credphish.disposition == "phishing"
+                    and beta.linkanalysis(., mode="aggressive").credphish.confidence in (
+                      "medium",
+                      "high"
+                    )
+                  )
+
+                  // or any links in the final dom lead to a suspicious tld
+                  or any(beta.linkanalysis(.).final_dom.links,
+                         .href_url.domain.tld in $suspicious_tlds
+                         or beta.linkanalysis(.href_url).effective_url.domain.tld in $suspicious_tlds
+                  )
+
+                  // link redirects to a suspicious TLD
+                  or any(beta.linkanalysis(., mode="aggressive").redirect_history,
+                         .domain.tld in $suspicious_tlds
+                  )
+                  or (
+                    // suspicious redirects
+                    // 3 or more different domains with 2 or more different TLDs
+                    // careful because click trackers will always make this at least 2
+                    // different domains and not unlikely 2 or more TLDs
+                    length(distinct(map(beta.linkanalysis(., mode="aggressive").redirect_history,
+                                        .domain.tld
+                                    )
+                           )
+                    ) >= 2
+                    and length(distinct(map(beta.linkanalysis(.,
+                                                              mode="aggressive"
+                                            ).redirect_history,
+                                            .domain.domain
+                                        )
+                               )
+                    ) >= 3
+                  )
+          )
+          // engaging language in the original body or EML
           and (
-            any(file.explode(.),
-                any(.scan.url.urls,
-                    (
-                      (
-                        .domain.root_domain in $free_subdomain_hosts
-                        or .domain.root_domain in ("sharepoint.com")
-                        or .domain.root_domain not in $tranco_1m
-                      )
-                      and beta.linkanalysis(.).credphish.disposition == "phishing"
-                    )
-                    // or any links in the final dom lead to a suspicious tld
-                    or any(beta.linkanalysis(.).final_dom.links,
-                           beta.linkanalysis(.href_url).effective_url.domain.tld in $suspicious_tlds
-                    )
-                )
+            any(ml.nlu_classifier(body.html.display_text).entities,
+                .name == "request"
+            )
+            or any(ml.nlu_classifier(file.parse_eml(.).body.html.display_text).entities,
+                   .name == "request"
             )
           )
   )
-  
-  // engaging language in the original body
-  and any(ml.nlu_classifier(body.html.display_text).entities, .name == "request")
-  
   // exclude bounce backs & read receipts
   and not strings.like(sender.email.local_part,
                        "*postmaster*",
@@ -48,6 +73,7 @@ source: |
       and not profile.by_sender().any_false_positives
     )
   )
+  and not profile.by_sender().any_false_positives
 
 attack_types:
   - "Credential Phishing"
