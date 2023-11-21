@@ -1,0 +1,77 @@
+name: "Display name impersonation using recipient SLD (new sender)"
+description: |
+  The recipient domain's SLD is used in the sender's display name
+  in order to impersonate the organization. 
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and (
+    // recipient SLD is being impersonated in the subject + display name
+    (
+      // these are usually targeted with just 1 recipient,
+      // but sometimes they CC themselves or have a blank CC
+      length(recipients.to) + length(recipients.cc) + length(recipients.bcc) <= 2
+      and any(recipients.to,
+              // ensure that we're checking the org SLD
+              .email.domain.sld in $org_slds
+              and strings.icontains(sender.display_name, .email.domain.sld)
+      )
+    )
+    or (
+      // accounts for BCC'd messages where the recipients are empty
+      // if BCC, sometimes the recipient will be the attacker's email
+      length(recipients.to) + length(recipients.cc) + length(recipients.bcc) <= 2
+      and strings.icontains(sender.display_name, mailbox.email.domain.sld)
+    )
+  )
+
+  and (
+      // at least 1 link or non-image attachment
+      (
+        length(body.links) > 0
+        // these attacks all use compromosed senders, so we look for a domain
+        // that doesn't match the sender's domain to weed out legit messages
+        and any(body.links, .href_url.domain.root_domain != sender.email.domain.root_domain)
+      )
+      or length(filter(attachments, .file_type not in $file_types_images)) > 0
+  )
+
+  and not (
+    strings.contains(sender.display_name, "on behalf of")
+    and sender.email.domain.root_domain == "microsoftonline.com"
+  )
+
+  and all(recipients.to, .email.email != sender.email.email)
+
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and (
+        any(distinct(headers.hops, .authentication_results.dmarc is not null),
+            strings.ilike(.authentication_results.dmarc, "*fail")
+        )
+      )
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+  and (
+    (
+      profile.by_sender().prevalence in ("new", "outlier")
+      and not profile.by_sender().solicited
+    )
+    or (
+      profile.by_sender().any_messages_malicious_or_spam
+      and not profile.by_sender().any_false_positives
+    )
+  )
+  and not profile.by_sender().any_false_positives
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Social engineering"
+detection_methods:
+  - "Header analysis"
+  - "Sender analysis"
+id: "81a8ed12-0e26-5998-90ae-03334f358704"
