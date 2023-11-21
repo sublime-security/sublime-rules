@@ -12,7 +12,15 @@ source: |
   // Negate common marketing mailers
   and not regex.icontains(sender.display_name, 'HR (Events|Expert)')
   
-  and  (0 < length(body.links) < 10 or length(attachments) > 0)
+  and (
+    (0 < length(body.links) < 10 or length(attachments) > 0)
+    // mass-mailer infra abuse results in an inflated link count due to mailer templates that include links for unsubbing, changing preferences, etc.
+    // loosening the link count check as a result ensures we fire even with these conditions
+    or (
+      any(body.links, strings.ilike(.display_text, "*unsubscribe*", "update your preferences", "add us to your address book"))
+      and 0 < length(body.links) < 15
+    )
+  )
   // Request and Urgency
   and any(ml.nlu_classifier(body.current_thread.text).entities, .name == "request")
   and any(ml.nlu_classifier(body.current_thread.text).entities, .name == "urgency")
