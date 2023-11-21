@@ -9,20 +9,14 @@ authors:
   - twitter: "ajpc500"
 severity: "low"
 source: |
-  type.inbound 
-  and any(body.links, 
-    .href_url.domain.root_domain == "translate.goog"
-  )
+  type.inbound
+  and any(body.links, "google_translate_open_redirect" in .href_url.rewrite.encoders)
   and (
-    (
-        sender.email.domain.root_domain in $free_email_providers
-        and sender.email.email not in $recipient_emails
-    )
-    or (
-        sender.email.domain.root_domain not in $free_email_providers
-        and sender.email.domain.domain not in $recipient_domains
-    )
+    not profile.by_sender().solicited
+    or profile.by_sender().any_messages_malicious_or_spam
   )
+
+  and not profile.by_sender().any_false_positives
 tags:
   - "Attack surface reduction"
 attack_types:

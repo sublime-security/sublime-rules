@@ -6,21 +6,26 @@ severity: "medium"
 source: |
   type.inbound
   and (
-      strings.ilike(sender.display_name, '*barracuda*')
-      or strings.ilevenshtein(sender.display_name, 'barracuda') <= 1
-      or strings.ilike(sender.email.domain.domain, '*barracuda*')
+    strings.ilike(sender.display_name, '*barracuda*')
+    or strings.ilevenshtein(sender.display_name, 'barracuda') <= 1
+    or strings.ilike(sender.email.domain.domain, '*barracuda*')
   )
-  and sender.email.domain.root_domain not in ('barracuda.com', 'barracudamsp.com', 'barracudanetworks.com', 'netsuite.com')
-  // unsolicited
+  and sender.email.domain.root_domain not in (
+    'barracuda.com',
+    'barracudamsp.com',
+    'barracudanetworks.com',
+    'netsuite.com',
+
+    // hockey team
+    'sharkssports.net',
+    'sjbarracuda.com'
+  )
   and (
-        (
-            sender.email.domain.root_domain in $free_email_providers
-            and sender.email.email not in $recipient_emails
-        )
-        or (
-            sender.email.domain.root_domain not in $free_email_providers
-            and sender.email.domain.domain not in $recipient_domains
-        )
+    profile.by_sender().prevalence in ("new", "outlier")
+    or (
+      profile.by_sender().any_messages_malicious_or_spam
+      and not profile.by_sender().any_false_positives
+    )
   )
 attack_types:
   - "Credential Phishing"

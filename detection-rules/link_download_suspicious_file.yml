@@ -14,36 +14,32 @@ severity: "medium"
 source: |
   type.inbound
   and any(body.links,
-      any(beta.linkanalysis(.).files_downloaded,
-          any(file.explode(.),
-              (
-                  // look for files in encrypted zips.
-                  // if password cracking the zip wasn't
-                  // successful, our only opportunity to look
-                  // for suspicious file types is here under
-                  // .zip.attempted_files
-                  "encrypted_zip" in .flavors.yara
-
-                  and any(.scan.zip.attempted_files,
-                      strings.ilike(., "*.lnk", "*.js", "*.vba", "*.vbs", "*.vbe")
+          any(beta.linkanalysis(.).files_downloaded,
+              any(file.explode(.),
+                  (
+                    // look for files in encrypted zips.
+                    // if password cracking the zip wasn't
+                    // successful, our only opportunity to look
+                    // for suspicious file types is here under
+                    // .zip.attempted_files
+                    "encrypted_zip" in .flavors.yara
+                    and any(.scan.zip.attempted_files,
+                            strings.ilike(., "*.???*.exe", "*.lnk", "*.js", "*.vba", "*.vbs", "*.vbe")
+                    )
                   )
+                  // for both non-encrypted zips and encrypted zips
+                  // that were successfully cracked
+                  or .file_extension in ("lnk", "js", "vba", "vbs", "vbe")
+                  or strings.ilike(.file_name, "*.???*.exe")
               )
-              // for both non-encrypted zips and encrypted zips
-              // that were successfully cracked
-              or .file_extension in ("lnk", "js", "vba", "vbs", "vbe")
           )
-      )
   )
-  // unsolicited
   and (
-          (
-              sender.email.domain.root_domain in $free_email_providers
-              and sender.email.email not in $recipient_emails
-          )
-          or (
-              sender.email.domain.root_domain not in $free_email_providers
-              and sender.email.domain.domain not in $recipient_domains
-          )
+    not profile.by_sender().solicited
+    or (
+      profile.by_sender().any_messages_malicious_or_spam
+      and not profile.by_sender().any_false_positives
+    )
   )
 attack_types:
   - "Malware/Ransomware"

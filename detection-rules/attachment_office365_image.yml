@@ -1,88 +1,85 @@
-name: "Attachment: Office365 image (unsolicited)"
+name: "Attachment: Microsoft 365 Credential Phishing"
 description: |
   Looks for messages with an image attachment that contains words related to Microsoft, Office365, and passwords.
 type: "rule"
-severity: "medium"
+severity: "high"
 source: |
   type.inbound
-  and length(filter(attachments, .file_type not in~ ('png', 'jpeg', 'jpg', 'bmp'))) == 0
+  and length(filter(attachments, .file_type not in $file_types_images)) == 0
   and (
-      any(attachments, 
-          .file_type in~ ('bmp', 'png', 'jpg', 'jpeg')
-          and any(ml.logo_detect(.).brands, strings.starts_with(.name, "Microsoft"))
-      )
-      or any(attachments, 
-          .file_type in~ ('bmp', 'png', 'jpg', 'jpeg')
-          and any(file.explode(.),
-              strings.ilike(.scan.ocr.raw, "*microsoft*", "*office"))
-      )
+    any(attachments,
+        .file_type in $file_types_images
+        and any(ml.logo_detect(.).brands, strings.starts_with(.name, "Microsoft"))
+    )
+    or any(attachments,
+           .file_type in $file_types_images
+           and any(file.explode(.),
+                   strings.ilike(.scan.ocr.raw, "*microsoft*", "*office")
+           )
+    )
   )
   and any(attachments,
-      .file_type in~ ('bmp', 'png', 'jpg', 'jpeg')
-      and (
-          any(file.explode(.),
-              length(filter(.scan.strings.strings, strings.ilike(.,
-              "*password*",
-              "*unread messages*",
-              "*Shared Documents*",
-              "*expiration*",
-              "*office*",
-              "*expire*",
-              "*expiring*",
-              "*kindly*",
-              "*renew*",
-              "*review",
-              "*emails failed*",
-              "*kicked out*",
-              "*prevented*",
-              "*storage quota*",
-              "*required now",
-              "*cache*",
-              "*qr code*",
-              "*barcode*",
-              "*security update*"
-              ))) >= 2     
-      ) 
+          .file_type in $file_types_images
+          and any(file.explode(.),
+                  length(filter([
+                                  "password",
+                                  "unread messages",
+                                  "Shared Documents",
+                                  "expiration",
+                                  "office",
+                                  "expire",
+                                  "expiring",
+                                  "kindly",
+                                  "renew",
+                                  "review",
+                                  "emails failed",
+                                  "kicked out",
+                                  "prevented",
+                                  "storage",
+                                  "required now",
+                                  "cache",
+                                  "qr code",
+                                  "security update",
+                                  "invoice",
+                                  "retrieve"
+                                ],
+                                strings.icontains(..scan.ocr.raw, .)
+                         )
+                  ) >= 2
+                  or any(ml.nlu_classifier(.scan.ocr.raw).intents,
+                         .name == "cred_theft" and .confidence == "high"
+                  )
+          )
   )
-  or (
-          any(file.explode(.),
-              length(filter(["password",
-              "unread messages",
-              "Shared Documents",
-              "expiration",
-              "office",
-              "expire",
-              "expiring",
-              "kindly",
-              "renew",
-              "review",
-              "emails failed",
-              "kicked out",
-              "prevented",
-              "storage quota",
-              "required now",
-              "cache",
-              "qr code",
-              "security update"], strings.icontains(..scan.ocr.raw, .))) >= 2   
-      )
-  )    
+  and (
+    not any(headers.hops,
+            .authentication_results.compauth.verdict is not null
+            and .authentication_results.compauth.verdict == "pass"
+            and sender.email.domain.domain in (
+              "microsoft.com",
+              "sharepointonline.com"
+            )
+    )
+  )
+  and (
+    not profile.by_sender().solicited
+    or (
+      profile.by_sender().any_messages_malicious_or_spam
+      and not profile.by_sender().any_false_positives
+    )
+  )
 
-  )
+  // negate highly trusted sender domains unless they fail DMARC authentication
   and (
-      not any(headers.hops, .authentication_results.compauth.verdict is not null
-      and .authentication_results.compauth.verdict == "pass"
-      and sender.email.domain.domain in ("microsoft.com", "sharepointonline.com"))
-  )
-  // unsolicited
-  and (
-      (
-          sender.email.domain.root_domain in $free_email_providers
-          and sender.email.email not in $recipient_emails
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and (
+        any(distinct(headers.hops, .authentication_results.dmarc is not null),
+            strings.ilike(.authentication_results.dmarc, "*fail")
+        )
       )
-      or (
-          sender.email.domain.root_domain not in $free_email_providers
-          and sender.email.domain.domain not in $recipient_domains
-      )
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
   )
 attack_types:
   - "Credential Phishing"

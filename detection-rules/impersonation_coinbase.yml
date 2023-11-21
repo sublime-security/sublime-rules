@@ -9,24 +9,38 @@ severity: "high"
 source: |
   type.inbound
   and (
-      strings.ilike(sender.display_name, '*coinbase*') 
-      or strings.ilevenshtein(sender.display_name, 'coinbase') <= 1
-      or strings.ilike(sender.email.domain.domain, '*coinbase*')
+    strings.ilike(sender.display_name, '*coinbase*')
+    or strings.ilevenshtein(sender.display_name, 'coinbase') <= 1
+    or strings.ilike(sender.email.domain.domain, '*coinbase*')
   )
   and sender.email.domain.root_domain not in~ ('coinbase.com', 'q4inc.com')
   and (
-          // if this comes from a free email provider,
-          // flag if org has never sent an email to sender's email before
-          (
-              sender.email.domain.root_domain in $free_email_providers
-              and sender.email.email not in $recipient_emails
-          )
-          // if this comes from a custom domain,
-          // flag if org has never sent an email to sender's domain before
-          or (
-              sender.email.domain.root_domain not in $free_email_providers
-              and sender.email.domain.domain not in $recipient_domains
-          )
+    // if this comes from a free email provider,
+    // flag if org has never sent an email to sender's email before
+    (
+      sender.email.domain.root_domain in $free_email_providers
+      and sender.email.email not in $recipient_emails
+    )
+    // if this comes from a custom domain,
+    // flag if org has never sent an email to sender's domain before
+    or (
+      sender.email.domain.root_domain not in $free_email_providers
+      and sender.email.domain.domain not in $recipient_domains
+    )
+  )
+
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and
+  (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and (
+        any(distinct(headers.hops, .authentication_results.dmarc is not null),
+            strings.ilike(.authentication_results.dmarc, "*fail")
+        )
+      )
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
   )
 tags:
   - "Cryptocurrency"

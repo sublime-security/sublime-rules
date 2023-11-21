@@ -9,32 +9,36 @@ type: "rule"
 severity: "medium"
 source: |
   type.inbound
-  and strings.ilike(sender.display_name, "amazon*")
-  and any(attachments, .file_type in ("pdf", "jpg", "jpeg", "png")
-      and any(ml.logo_detect(.).brands, 
-          .name == "Amazon" and .confidence in~ ("medium", "high")
-      )
-      and (
-          any(file.explode(.),
-              any(ml.nlu_classifier(.scan.ocr.raw).intents,
-                .name != "benign" and .confidence == "high"
-              )
-          )
-          or any(ml.nlu_classifier(coalesce(body.html.display_text, body.plain.raw)).intents,
-              .name != "benign" and .confidence == "high"
+  and (
+      strings.ilike(sender.display_name, "amazon*")
+      or any(attachments, strings.icontains(.file_name, "amazon"))
+      or any(attachments,
+          (.file_type in $file_types_images or .file_type == "pdf")
+          and any(file.explode(.),
+              strings.icontains(.scan.ocr.raw, "amazon")
           )
       )
   )
-  // unsolicited
+  and any(attachments,
+          (.file_type in $file_types_images or .file_type == "pdf")
+          and any(ml.logo_detect(.).brands, .name == "Amazon" and .confidence in~ ("medium", "high"))
+          and (
+            any(file.explode(.),
+                any(ml.nlu_classifier(.scan.ocr.raw).intents,
+                    .name != "benign" and .confidence == "high"
+                )
+            )
+            or any(ml.nlu_classifier(coalesce(body.html.display_text, body.plain.raw)).intents,
+                   .name != "benign" and .confidence == "high"
+            )
+          )
+  )
   and (
-          (
-              sender.email.domain.root_domain in $free_email_providers
-              and sender.email.email not in $recipient_emails
-          )
-          or (
-              sender.email.domain.root_domain not in $free_email_providers
-              and sender.email.domain.domain not in $recipient_domains
-          )
+    not profile.by_sender().solicited
+    or (
+      profile.by_sender().any_messages_malicious_or_spam
+      and not profile.by_sender().any_false_positives
+    )
   )
   and sender.email.domain.root_domain not in~ (
     'amazon.com',

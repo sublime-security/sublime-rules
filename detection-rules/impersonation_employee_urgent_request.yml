@@ -7,32 +7,52 @@ type: "rule"
 severity: "medium"
 source: |
   type.inbound
-
   and sender.display_name in~ $org_display_names
-
-  and any([body.plain.raw, body.html.inner_text], 
-    any(ml.nlu_classifier(.).intents,
-      .name == "bec" and .confidence == "high"
+  and (
+    any(ml.nlu_classifier(body.current_thread.text).intents,
+        .name == "bec" and .confidence == "high"
     )
     or (
-      any(ml.nlu_classifier(.).entities, .name == "urgency")
-      and any(ml.nlu_classifier(.).entities, .name == "request")
-      and not any(ml.nlu_classifier(.).intents, .name == "benign" and .confidence == "high")
+      (
+        any(ml.nlu_classifier(body.current_thread.text).entities,
+            .name == "urgency"
+        )
+        and any(ml.nlu_classifier(body.current_thread.text).entities,
+                .name == "request"
+        )
+      )
+      and not any(ml.nlu_classifier(body.current_thread.text).intents,
+                  .name == "benign" and .confidence == "high"
+      )
+      // there are intents returned
+      and any(ml.nlu_classifier(body.current_thread.text).intents, true)
       and not strings.istarts_with(subject.subject, "fwd:")
     )
   )
-
-  // first-time sender
   and (
-          (
-              sender.email.domain.root_domain in $free_email_providers
-              and sender.email.email not in $sender_emails
-          )
-          or (
-              sender.email.domain.root_domain not in $free_email_providers
-              and sender.email.domain.domain not in $sender_domains
-          )
+    (
+      profile.by_sender().prevalence in ("new", "outlier")
+      and not profile.by_sender().solicited
+    )
+    or (
+      profile.by_sender().any_messages_malicious_or_spam
+      and not profile.by_sender().any_false_positives
+    )
   )
+  
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and (
+        any(distinct(headers.hops, .authentication_results.dmarc is not null),
+            strings.ilike(.authentication_results.dmarc, "*fail")
+        )
+      )
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+
 attack_types:
   - "BEC/Fraud"
 tactics_and_techniques:

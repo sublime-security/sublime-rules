@@ -9,24 +9,21 @@ severity: "high"
 source: |
   type.inbound
   and any(attachments,
-      (
-          .file_extension in~ $file_extensions_macros
-          or .file_extension in~ $file_extensions_common_archives
-      )
-      and any(file.explode(.),
-          strings.ilike(.scan.ocr.raw, "*please*enable*macros")
-          or any(.scan.strings.strings, strings.ilike(., "*please enable macros*"))
-      )
+          (
+            .file_extension in~ $file_extensions_macros
+            or .file_extension in~ $file_extensions_common_archives
+          )
+          and any(file.explode(.),
+                  strings.ilike(.scan.ocr.raw, "*please*enable*macros")
+                  or any(.scan.strings.strings, strings.ilike(., "*please enable macros*"))
+          )
   )
   and (
-      (
-          sender.email.domain.root_domain in $free_email_providers
-          and sender.email.email not in $recipient_emails
-      )
-      or (
-          sender.email.domain.root_domain not in $free_email_providers
-          and sender.email.domain.domain not in $recipient_domains
-      )
+    not profile.by_sender().solicited
+    or (
+      profile.by_sender().any_messages_malicious_or_spam
+      and not profile.by_sender().any_false_positives
+    )
   )
 attack_types:
   - "Malware/Ransomware"
