@@ -1,0 +1,64 @@
+name: "Impersonation: Human Resources with link or attachment and engaging language"
+description: "Detects messages impersonating HR that contain at least 1 link or 1 attachment with engaging language in the body from a first-time sender."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and sender.email.domain.domain not in $org_domains
+  and regex.icontains(sender.display_name,
+                      '(\bh\W?r\W?\b|human resources|hr depart(ment)?|employee relations)'
+  )
+
+  // Negate common marketing mailers
+  and not regex.icontains(sender.display_name, 'HR (Events|Expert)')
+
+  and (
+    (0 < length(body.links) < 10 or length(attachments) > 0)
+    // mass-mailer infra abuse results in an inflated link count due to mailer templates that include links for unsubbing, changing preferences, etc.
+    // loosening the link count check as a result ensures we fire even with these conditions
+    or (
+      any(body.links, strings.ilike(.display_text, "*unsubscribe*", "update your preferences", "add us to your address book"))
+      and 0 < length(body.links) < 15
+    )
+  )
+  // Request and Urgency
+  and any(ml.nlu_classifier(body.current_thread.text).entities, .name == "request")
+  and any(ml.nlu_classifier(body.current_thread.text).entities, .name == "urgency")
+  and (
+    any(ml.nlu_classifier(body.current_thread.text).intents, .name != "benign")
+    or length(ml.nlu_classifier(body.current_thread.text).intents) == 0  // not benign but not malicious either
+  )
+  and (
+    profile.by_sender().prevalence in ("new", "outlier")
+    or (
+      profile.by_sender().any_messages_malicious_or_spam
+      and not profile.by_sender().any_false_positives
+    )
+  )
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and
+  (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and (
+        any(distinct(headers.hops, .authentication_results.dmarc is not null),
+            strings.ilike(.authentication_results.dmarc, "*fail")
+        )
+      )
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+attack_types:
+  - "BEC/Fraud"
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Impersonation: Employee"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Header analysis"
+  - "Natural Language Understanding"
+  - "Sender analysis"
+id: "8c95a6a8-50d3-5697-a379-c00bda8e1922"
+testing_pr: 1006
+testing_sha: e7907bfcf7a8be55f0dd70341789a3f367e05dc6
