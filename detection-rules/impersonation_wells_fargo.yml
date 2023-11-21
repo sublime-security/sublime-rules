@@ -9,15 +9,39 @@ severity: "high"
 source: |
   type.inbound
   and (
-      sender.display_name =~ 'wells fargo'
-      or strings.ilevenshtein(sender.display_name, 'wells fargo') <= 1
-      or strings.ilike(sender.email.domain.domain, '*wellsfargo*')
-      or strings.ilike(subject.subject, '*wells fargo security*')
-      or strings.ilike(body.plain.raw, '*wells fargo security team*')
-      or strings.ilike(body.html.inner_text, '*wells fargo security team*')
+    sender.display_name =~ 'wells fargo'
+    or strings.ilevenshtein(sender.display_name, 'wells fargo') <= 1
+    or strings.ilike(sender.email.domain.domain, '*wellsfargo*')
+    or strings.ilike(subject.subject, '*wells fargo security*')
+    or strings.ilike(body.plain.raw, '*wells fargo security team*')
+    or strings.ilike(body.html.inner_text, '*wells fargo security team*')
   )
-  and sender.email.domain.root_domain not in~ ('wellsfargo.com', 'wellsfargoadvisors.com', 'transunion.com', 'wellsfargoemail.com', 'wellsfargorewards.com', 'comcast-spectacor.com', 'investordelivery.com', 'comcastspectacor.com')
+  and sender.email.domain.root_domain not in~ (
+    'wellsfargo.com',
+    'wellsfargoadvisors.com',
+    'transunion.com',
+    'wellsfargoemail.com',
+    'wellsfargorewards.com',
+    'comcast-spectacor.com',
+    'investordelivery.com',
+    'comcastspectacor.com'
+  )
   and sender.email.email not in $recipient_emails
+
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and
+  (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and (
+        any(distinct(headers.hops, .authentication_results.dmarc is not null),
+            strings.ilike(.authentication_results.dmarc, "*fail")
+        )
+      )
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+
 attack_types:
   - "Credential Phishing"
 tactics_and_techniques:

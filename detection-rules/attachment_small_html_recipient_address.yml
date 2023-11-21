@@ -1,0 +1,57 @@
+name: "Attachment: HTML smuggling containing recipient email address"
+description: "HTML attachment is small and contains a recipients email address."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and (
+    any(attachments,
+        (
+          .file_extension in~ ("html", "htm", "shtml", "dhtml")
+          or .file_type == "html"
+          or .content_type == "text/html"
+        )
+        and any(file.explode(.),
+                .size < 10000
+                and length(.scan.strings.strings) < 20
+                and any(recipients.to,
+                        any(..scan.strings.strings, strings.icontains(., ..email.email))
+                )
+        )
+    )
+    or any(attachments,
+           (.file_extension in~ $file_extensions_common_archives)
+           and any(file.explode(.),
+                   (
+                     .file_extension in~ ("html", "htm", "shtml", "dhtml")
+                     or ..file_type == "html"
+                     or ..content_type == "text/html"
+                   )
+                   and .size < 10000
+                   and length(.scan.strings.strings) < 20
+                   and any(recipients.to,
+                           any(..scan.strings.strings, strings.icontains(., ..email.email))
+                   )
+           )
+    )
+  )
+  // first-time sender
+  and (
+    profile.by_sender().prevalence in ("new", "outlier")
+    or (
+      profile.by_sender().any_messages_malicious_or_spam
+      and not profile.by_sender().any_false_positives
+    )
+  )
+attack_types:
+  - "Credential Phishing"
+  - "Malware/Ransomware"
+tactics_and_techniques:
+  - "Evasion"
+  - "HTML smuggling"
+  - "Scripting"
+detection_methods:
+  - "Archive analysis"
+  - "File analysis"
+  - "Sender analysis"
+id: "af32ff2f-1aa8-5a54-bc50-93648f17cfcd"

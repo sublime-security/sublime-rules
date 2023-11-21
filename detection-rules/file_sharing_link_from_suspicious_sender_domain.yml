@@ -5,18 +5,19 @@ type: "rule"
 severity: "medium"
 source: |
   type.inbound
-  and any(body.links, .href_url.domain.domain in $free_file_hosts)
+  and any(body.links,
+          .href_url.domain.domain in $free_file_hosts
+          or .href_url.domain.root_domain in $free_file_hosts
+  )
   and sender.email.domain.tld in $suspicious_tlds
   and (
-        (
-            sender.email.domain.root_domain in $free_email_providers
-            and sender.email.email not in $recipient_emails
-        )
-        or (
-            sender.email.domain.root_domain not in $free_email_providers
-            and sender.email.domain.domain not in $recipient_domains
-        )
+    not profile.by_sender().solicited
+    or (
+      profile.by_sender().any_messages_malicious_or_spam
+      and not profile.by_sender().any_false_positives
+    )
   )
+
 attack_types:
   - "Credential Phishing"
   - "Malware/Ransomware"

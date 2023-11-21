@@ -4,34 +4,47 @@ type: "rule"
 severity: "medium"
 source: |
   type.inbound
-  and (
-      length(recipients.to) == 0
-      or all(recipients.to, .display_name == "Undisclosed recipients")
-  )
+  and (length(recipients.to) == 0 or all(recipients.to, .display_name == "Undisclosed recipients"))
   and length(recipients.cc) == 0
   and length(recipients.bcc) == 0
   and 2 of (
-      (
-          any(headers.hops,
-             .authentication_results.compauth.verdict is not null
-             and .authentication_results.compauth.verdict not in ("pass", "softpass")
-          )
-      ),
-      (
-          any(ml.nlu_classifier(coalesce(
-              body.html.display_text, body.plain.raw)).intents, 
-              .name in ("bec", "cred_theft")
-              and .confidence == "high"
-          )
-      ),
-      (
-          any(body.links, 
-              any([beta.linkanalysis(.)],
-              .credphish.disposition == "phishing"
-              and .credphish.confidence in ("high")
-              )   
+    (
+      any(headers.hops,
+          .authentication_results.compauth.verdict is not null
+          and .authentication_results.compauth.verdict not in ("pass", "softpass")
+      )
+    ),
+    (
+      any(ml.nlu_classifier(body.current_thread.text).intents,
+          .name in ("bec", "cred_theft") and .confidence == "high"
+      )
+    ),
+    (
+      any(body.links,
+          any([beta.linkanalysis(.)],
+              .credphish.disposition == "phishing" and .credphish.confidence in ("high")
           )
       )
+    )
+  )
+  and (
+    profile.by_sender().prevalence in ("new", "outlier")
+    or (
+      profile.by_sender().any_messages_malicious_or_spam
+      and not profile.by_sender().any_false_positives
+    )
+  )
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and (
+        any(distinct(headers.hops, .authentication_results.dmarc is not null),
+            strings.ilike(.authentication_results.dmarc, "*fail")
+        )
+      )
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
   )
 detection_methods:
   - "Content analysis"
