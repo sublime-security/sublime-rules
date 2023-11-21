@@ -1,7 +1,7 @@
 name: "Attachment: HTML Smuggling with base64 source"
 description: |
   Potential HTML smuggling attacks from new senders.
-  This rule detects HTML files as attachments or within archives that contain base64 sources from new or outlier senders. 
+  This rule detects HTML files as attachments or within archives that contain base64 sources from new and unsolicited senders. 
 type: "rule"
 severity: "medium"
 source: |
@@ -35,13 +35,24 @@ source: |
            )
     )
   )
-  // first-time sender
   and (
     profile.by_sender().prevalence in ("new", "outlier")
-    or (
-      profile.by_sender().any_messages_malicious_or_spam
-      and not profile.by_sender().any_false_positives
+    and not profile.by_sender().solicited
+  )
+  
+  and not profile.by_sender().any_false_positives
+  
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and (
+        any(distinct(headers.hops, .authentication_results.dmarc is not null),
+            strings.ilike(.authentication_results.dmarc, "*fail")
+        )
+      )
     )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
   )
 attack_types:
   - "Credential Phishing"
