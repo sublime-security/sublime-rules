@@ -10,7 +10,7 @@ source: |
   and any(body.links,
           // Any body link domains contain "ipfs"
           strings.icontains(.href_url.domain.domain, "ipfs")
-
+  
           // Or the path contains ipfs anchored to a leading and trailing '-', '/', '.'
           or (
             regex.icontains(.href_url.query_params, '[\.-/]ipfs[\.-/]')
@@ -23,25 +23,23 @@ source: |
               )
               // if it's in Tranco or Umbrella, still include it if it's one of these
               or .href_url.domain.domain in $free_file_hosts
+              or .href_url.domain.root_domain in $free_file_hosts
               or .href_url.domain.root_domain in $free_subdomain_hosts
             )
           )
   )
-
+  
   // adding negation block for legitimate domains with ipfs in their name
   and not sender.email.domain.domain in ("shipfsl.com")
-
-  // unsolicited
+  
   and (
-    (
-      sender.email.domain.root_domain in $free_email_providers
-      and sender.email.email not in $recipient_emails
-    )
+    not profile.by_sender().solicited
     or (
-      sender.email.domain.root_domain not in $free_email_providers
-      and sender.email.domain.domain not in $recipient_domains
+      profile.by_sender().any_messages_malicious_or_spam
+      and not profile.by_sender().any_false_positives
     )
   )
+
 attack_types:
   - "Credential Phishing"
   - "Malware/Ransomware"

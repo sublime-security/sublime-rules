@@ -4,16 +4,11 @@ type: "rule"
 severity: "medium"
 source: |
   type.inbound
-
-  // suspicious link
-  and any(body.links,
-          .href_url.domain.root_domain not in $tranco_1m
-          and .href_url.domain.domain not in $umbrella_1m
-  )
-
+  and length(body.links) < 10
+  
   // fake thread check
   and (strings.istarts_with(subject.subject, "RE:") or strings.istarts_with(subject.subject, "FWD:"))
-
+  
   // Check for the Presence of References or In-Reply-To properties
   and (
     (length(headers.references) == 0 and headers.in_reply_to is null)
@@ -22,45 +17,53 @@ source: |
       and not any(headers.hops, strings.ilike(.signature.headers, "*:reply-to"))
     )
   )
-
+  
   // sender's domain is not in body, and body has > 0 links
   and length(body.links) > 0
   and sender.email.domain.root_domain not in $free_email_providers
   and not any(body.links, .href_url.domain.root_domain == sender.email.domain.root_domain)
-
+  
   // unusual sender (email address rarely sends to your organization)
   and sender.email.email not in $sender_emails
-
+  
   // unusual sender domain (domain rarely sends to your organization)
   and sender.email.domain.domain not in $sender_domains
-
-  // sender SLD matches no body SLDs
-  and all(body.links, .href_url.domain.sld != sender.email.domain.sld)
-
-  and 2 of (
+  and 4 of (
     // language attempting to engage
-    any(ml.nlu_classifier(body.html.inner_text).entities, .name == "request"),
-
-    // financial request
-    any(ml.nlu_classifier(body.html.inner_text).entities, .name == "financial"),
-
+    (
+      any(ml.nlu_classifier(body.current_thread.text).entities, .name == "request")
+      and any(ml.nlu_classifier(body.current_thread.text).entities, .name == "financial")
+    ),
+  
+    // invoicing language
+    any(ml.nlu_classifier(body.current_thread.text).tags, .name == "invoice"),
+  
     // urgency request
-    any(ml.nlu_classifier(body.html.inner_text).entities, .name == "urgency"),
-
+    any(ml.nlu_classifier(body.current_thread.text).entities, .name == "urgency"),
+  
     // cred_theft detection
-    any(ml.nlu_classifier(body.html.inner_text).intents,
+    any(ml.nlu_classifier(body.current_thread.text).intents,
         .name == "cred_theft" and .confidence in~ ("medium", "high")
     ),
-
+  
     // commonly abused sender TLD
     strings.ilike(sender.email.domain.tld, "*.jp"),
-
+  
+    // headers traverse abused TLD
+    any(headers.domains, strings.ilike(.tld, "*.jp")),
+  
     // known suspicious pattern in the URL path
     any(body.links, regex.match(.href_url.path, '\/[a-z]{3}\d[a-z]')),
-
+  
     // link display text is in all caps
     any(body.links, regex.match(.display_text, '[A-Z ]+')),
-
+  
+    // display name contains an email
+    regex.contains(sender.display_name, '[a-z0-9]+@[a-z]+'),
+  
+    // Sender domain is empty
+    sender.email.domain.domain == "",
+  
     // sender domain matches no body domains
     all(body.links, .href_url.domain.root_domain != sender.email.domain.root_domain),
   )

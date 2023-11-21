@@ -13,6 +13,11 @@ source: |
     or strings.ilike(sender.email.email, '*github*')
     or strings.ilevenshtein(sender.email.domain.sld, 'github') <= 1
   )
+  // negating listservs
+  and not (
+      any(headers.hops, any(.fields, .name == "List-Unsubscribe"))
+      and strings.contains(sender.display_name, "via")
+  )
   and sender.email.domain.root_domain not in (
     'github.com',
     'gitlab.com',
@@ -24,13 +29,10 @@ source: |
     'lithub.com'
   )
   and (
-    (
-      sender.email.domain.root_domain in $free_email_providers
-      and sender.email.email not in $recipient_emails
-    )
+    not profile.by_sender().solicited
     or (
-      sender.email.domain.root_domain not in $free_email_providers
-      and sender.email.domain.domain not in $recipient_domains
+      profile.by_sender().any_messages_malicious_or_spam
+      and not profile.by_sender().any_false_positives
     )
   )
 attack_types:
