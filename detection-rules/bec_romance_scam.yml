@@ -1,0 +1,53 @@
+name: "BEC/Fraud: Romance Scam"
+description: "This rule detects messages attempting to initiate a Romance scam. The rule leverage tells such as undisclosed recipients, freemail emails in the body and common scam phrasing. Romance scams are deceptive schemes where scammers establish false romantic intentions towards individuals to gain their trust and eventually exploit them financially."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  
+  // no links
+  and (
+    length(body.links) == 0
+  
+    // or 1 link and link mismatch
+    or (
+      length(body.links) == 1
+      and sender.email.domain.root_domain not in $free_email_providers
+      and all(body.links,
+              .href_url.domain.root_domain != sender.email.domain.root_domain
+      )
+    )
+  )
+  
+  // no attachments
+  and length(attachments) == 0
+  
+  // honorific 
+  and regex.icontains(sender.display_name,
+                      '(?:Mr|Mrs|Ms|Miss|Dr|Prof|Sir|Lady|Rev)\.?[ \t]+'
+  )
+  
+  // And an email is found in the body, and a freemail domain is found also
+  and (
+    regex.contains(body.current_thread.text,
+                   "[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}"
+    )
+    and any($free_email_providers, strings.icontains(body.current_thread.text, .))
+  )
+  
+  // common scammy phrases
+  and regex.icontains(body.current_thread.text,
+                      "(?i)(I am|My name is) .* (from|staying in) .+\\.",
+                      "(?i).*(years old|cm|kg).*\\.",
+                      "(?i).*(photo|pictures|sexy).*\\.",
+                      "(?i).*(email|contact me|write to me|reply to me) at .*@.*\\."
+  )
+  
+attack_types:
+  - "BEC/Fraud"
+tactics_and_techniques:
+  - "Free email provider"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Header analysis"
