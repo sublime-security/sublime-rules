@@ -5,7 +5,7 @@ type: "rule"
 severity: "medium"
 source: |
   type.inbound
-
+  
   // mismatched sender (From) and Reply-to + freemail
   and any(headers.reply_to,
           length(headers.reply_to) > 0
@@ -14,33 +14,36 @@ source: |
                   and .email.domain.root_domain in $free_email_providers
           )
   )
-
+  
   // use of honorific
   and regex.icontains(body.current_thread.text,
-                      "(?:Mr.?|Mrs.?|Ms.?|Miss.?|Dr.?|Prof.?|Sir.?|Lady.?|Rev.?)[ \t]+"
+                      '(?:Mr|Mrs|Ms|Miss|Dr|Prof|Sir|Lady|Rev)\.?[ \t]+'
   )
-
+  
   // mention of covid or an interational organization
   and regex.icontains(body.current_thread.text,
-                      "(?i)international\\ court\\ of\\ justice",
-                      "(?i)international\\ monetary\\ fund",
-                      "(?i)united\\ nations",
-                      "(?i)western\\ union",
-                      "(?i)world\\ bank",
-                      "(?i)world\\ health\\ organization",
-                      "(?i)interpol",
-                      "(?i)treasury",
-                      "(?i)\\bFEMA\\b",
-                      "(?i)Covid\\-19",
+                      'international (court of justice|monetary fund)',
+                      'united nations',
+                      'western union',
+                      'world bank',
+                      'world health organization',
+                      'interpol',
+                      'treasury',
+                      'FEMA',
   )
-
+  
+  // and mention of covid in subject or body
+  and any([body.current_thread.text, subject.subject],
+          regex.icontains(., 'covid(.0,5}19)?\b')
+  )
+  
   // urgent financial requests
   and 2 of (
     any(ml.nlu_classifier(body.html.display_text).entities, .name == "urgency"),
     any(ml.nlu_classifier(body.html.display_text).entities, .name == "request"),
     any(ml.nlu_classifier(body.html.display_text).entities, .name == "financial")
   )
-
+  
   // negate highly trusted sender domains unless they fail DMARC authentication
   and (
     (
@@ -64,7 +67,6 @@ source: |
     )
   )
   and not profile.by_sender().any_false_positives
-
 attack_types:
   - "BEC/Fraud"
 tactics_and_techniques:
