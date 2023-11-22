@@ -1,0 +1,80 @@
+name: "COVID-19 themed fraud with sender and reply-to mismatch"
+description: |
+  Detects potential COVID-19 themed BEC/Fraud scams by analyzing text within the email body for mentions of COVID-19 assistance from mismatched senders and other suspicious language.
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  
+  // mismatched sender (From) and Reply-to + freemail
+  and any(headers.reply_to,
+          length(headers.reply_to) > 0
+          and all(headers.reply_to,
+                  .email.domain.root_domain != sender.email.domain.root_domain
+                  and .email.domain.root_domain in $free_email_providers
+          )
+  )
+  
+  // use of honorific
+  and regex.icontains(body.current_thread.text,
+                      '(?:Mr|Mrs|Ms|Miss|Dr|Prof|Sir|Lady|Rev)\.?[ \t]+'
+  )
+  
+  // mention of covid or an interational organization
+  and regex.icontains(body.current_thread.text,
+                      'international (court of justice|monetary fund)',
+                      'united nations',
+                      'western union',
+                      'world bank',
+                      'world health organization',
+                      'interpol',
+                      'treasury',
+                      'FEMA',
+  )
+  
+  // and mention of covid in subject or body
+  and any([body.current_thread.text, subject.subject],
+          regex.icontains(., 'covid(.0,5}19)?\b')
+  )
+  
+  // urgent financial requests
+  and 2 of (
+    any(ml.nlu_classifier(body.html.display_text).entities, .name == "urgency"),
+    any(ml.nlu_classifier(body.html.display_text).entities, .name == "request"),
+    any(ml.nlu_classifier(body.html.display_text).entities, .name == "financial")
+  )
+  
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and (
+        any(distinct(headers.hops, .authentication_results.dmarc is not null),
+            strings.ilike(.authentication_results.dmarc, "*fail")
+        )
+      )
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+  and (
+    (
+      profile.by_sender().prevalence in ("new", "outlier")
+      and not profile.by_sender().solicited
+    )
+    or (
+      profile.by_sender().any_messages_malicious_or_spam
+      and not profile.by_sender().any_false_positives
+    )
+  )
+  and not profile.by_sender().any_false_positives
+attack_types:
+  - "BEC/Fraud"
+tactics_and_techniques:
+  - "Free email provider"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Header analysis"
+  - "Natual language Understanding"
+  - "Sender analysis"
+id: "a16480ef-07b8-5962-933a-9dbdfc5560d6"
