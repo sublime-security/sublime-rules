@@ -1,12 +1,12 @@
 name: "Attachment: HTML smuggling - QR Code with suspicious links"
-description: "This rule detects messages with HTML attachments containing QR codes that contains suspicious links or traverse suspicious infrastructure or leverage open_redirects. "
+description: "This rule detects messages with HTML attachments containing QR codes"
 type: "rule"
 severity: "high"
 source: |
   type.inbound
   and 1 <= length(attachments) < 3
   
-  // Inspects image attachments for QR codes
+  // inspects HTML attachments for QR codes
   and any(attachments,
           (
             .file_extension in~ ("html", "htm", "shtml", "dhtml", "xhtml")
@@ -20,65 +20,41 @@ source: |
             or .content_type == "text/html"
           )
           and any(file.explode(file.html_screenshot(.)),
-                  .scan.qr.type is not null
-                  and regex.contains(.scan.qr.data, '\.')
-                  and (
-                    // pass the QR URL to LinkAnalysis
-                    any([beta.linkanalysis(.scan.qr.url)],
-                        .credphish.disposition == "phishing"
-  
-                        // any routing traverses via $suspicious_tld list
-                        or any(.redirect_history, .domain.tld in $suspicious_tlds)
-  
-                        // effective destination in $suspicious_tld list
-                        or .effective_url.domain.tld in $suspicious_tlds
-  
-                        // or the effective destination domain is in $abuse_ch_urlhaus_domains_trusted_reporters
-                        or .effective_url.domain.root_domain in $abuse_ch_urlhaus_domains_trusted_reporters
-  
-                        // or any files downloaded are zips or executables
-                        or any(.files_downloaded,
-                               .file_extension in $file_extensions_common_archives
-                               or .file_extension in $file_extensions_executables
-                        )
-                    )
-                    or (
-                      (
-                        any(.scan.qr.url.rewrite.encoders,
-                            strings.contains(., "open_redirect")
-                        )
-                      )
-                      or 
-                      // or the QR code's root domain is a url_shortener
-                      (
-                        .scan.qr.url.domain.root_domain in $url_shorteners
-  
-                        // exclude google maps
-                        and not strings.starts_with(.scan.qr.url.url,
-                                                    'https://goo.gl/maps'
-                        )
-                      )
-                      or (
-  
-                        // usap-dc open redirect
-                        .scan.qr.url.domain.root_domain == "usap-dc.org"
-                        and .scan.qr.url.path =~ "/tracker"
-                        and strings.starts_with(.scan.qr.url.query_params,
-                                                "type=dataset&url=http"
-                        )
-                      )
-                    )
-                  )
+                  // any URL
+                  beta.linkanalysis(.scan.qr.url).submitted
+                  // currently we won't pick it up as a URL if it's
+                  // not prefaced with a scheme. this is not very strong,
+                  // but it's unlikely to cause FPs for this rule
+                  or regex.contains(.scan.qr.data, '\.')
           )
   )
+  
+  // negate highly trusted sender domains unless they fail DMARC authentication
   and (
-    profile.by_sender().prevalence in ("new", "outlier")
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and (
+        any(distinct(headers.hops, .authentication_results.dmarc is not null),
+            strings.ilike(.authentication_results.dmarc, "*fail")
+        )
+      )
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+  and (
+    (
+      (
+        profile.by_sender().prevalence in ("new", "outlier")
+        or profile.by_sender().days_known < 7
+      )
+      and not profile.by_sender().solicited
+    )
     or (
       profile.by_sender().any_messages_malicious_or_spam
       and not profile.by_sender().any_false_positives
     )
   )
-
+  and not profile.by_sender().any_false_positives
 attack_types:
   - "Credential Phishing"
 tactics_and_techniques:
