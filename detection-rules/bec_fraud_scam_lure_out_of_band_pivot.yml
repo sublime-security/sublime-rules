@@ -1,0 +1,57 @@
+name: "BEC/Fraud: Scam Lure with freemail pivot"
+description: "This message detects BEC/Fraud Lure's attempting to solicit the victim to pivot out of band via a freemail address in the body."
+type: "rule"
+severity: "low"
+source: |
+  type.inbound
+  
+  // body is short
+  and length(body.current_thread.text) < 800
+  
+  // one recipient
+  and length(recipients.to) == 1
+  
+  // all recipients are the sender
+  and all(recipients.to, .email.email == sender.email.email)
+  
+  // not an org domain
+  and all(recipients.to, .email.domain.root_domain not in $org_domains)
+  
+  // one link
+  and length(body.links) ==1
+  
+  // links don't match sender
+  and all(body.links, .href_url.domain.root_domain != sender.email.domain.root_domain)
+  
+  // scam indicators
+  and regex.icontains(body.current_thread.text, '((?:Mr|Mrs|Ms|Miss|Dr|Prof|Sir|Lady|Rev)\.?[ \t]+)|(sir|madam|kindly)'
+    )
+  
+  // body contains an email address to a freemail provider
+  and (
+    regex.contains(body.current_thread.text, "[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}")
+    and any($free_email_providers, strings.icontains(body.current_thread.text, .))
+  )
+  
+  // new and unsolicited and no malicious or FP's
+  and (
+    (
+      (profile.by_sender().prevalence in ("new", "outlier") or profile.by_sender().days_known < 7)
+      and not profile.by_sender().solicited
+    )
+    or (
+      profile.by_sender().any_messages_malicious_or_spam
+      and not profile.by_sender().any_false_positives
+    )
+  )
+  and not profile.by_sender().any_false_positives
+attack_types:
+  - "BEC/Fraud"
+tactics_and_techniques:
+  - "Free email provider"
+  - "Out of band pivot"
+detection_methods:
+  - "Content analysis"
+  - "Header analysis"
+  - "Sender analysis"
+id: "898c769f-45a4-5561-8d51-be765addcf1d"
