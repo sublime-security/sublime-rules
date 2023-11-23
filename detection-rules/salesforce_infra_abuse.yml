@@ -8,21 +8,9 @@ source: |
   // we look at the return-path because many times in the abuse
   // we've seen, the From is a custom domain
   and headers.return_path.domain.root_domain == "salesforce.com"
-  and (
-    // if the From is a custom domain, check that it's an unknown sender
-    // otherwise, it should be from salesforce
-    sender.email.domain.domain == "salesforce.com"
-    or (
-      (
-        profile.by_sender().prevalence in ("new", "common")
-        and not profile.by_sender().solicited
-      )
-      or (
-        profile.by_sender().any_messages_malicious_or_spam
-        and not profile.by_sender().any_false_positives
-      )
-    )
-  )
+
+  // legit salesforce email addresses that haven't been observed to be abused
+  and sender.email.email not in ("support@salesforce.com")
   and length(attachments) == 0
   and length(body.links) > 0
   and any(ml.nlu_classifier(body.current_thread.text).intents,
@@ -228,6 +216,35 @@ source: |
                     "your password has been compromised",
     ),
     any($suspicious_subjects, strings.icontains(subject.subject, .))
+  )
+  and (
+    // if the From is a custom domain, check that it's an unknown sender
+    // otherwise, it should be from salesforce
+    sender.email.domain.domain == "salesforce.com"
+    or (
+      (
+        (
+          profile.by_sender().prevalence in ("new", "outlier")
+          and not profile.by_sender().solicited
+        )
+        or (
+          profile.by_sender().any_messages_malicious_or_spam
+          and not profile.by_sender().any_false_positives
+        )
+      )
+      // negate highly trusted sender domains unless they fail DMARC authentication
+      and (
+        (
+          sender.email.domain.root_domain in $high_trust_sender_root_domains
+          and (
+            any(distinct(headers.hops, .authentication_results.dmarc is not null),
+                strings.ilike(.authentication_results.dmarc, "*fail")
+            )
+          )
+        )
+        or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+      )
+    )
   )
 attack_types:
   - "Credential Phishing"
