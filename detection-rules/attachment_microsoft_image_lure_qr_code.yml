@@ -7,11 +7,16 @@ source: |
   type.inbound
   and (
     any(attachments,
-        (.file_type in $file_types_images or .file_type == "pdf")
+        (
+          .file_type in $file_types_images
+          or .file_type == "pdf"
+          or .file_type in~ $file_extensions_macros
+        )
         and any(ml.logo_detect(.).brands, strings.starts_with(.name, "Microsoft"))
     )
-    or any(ml.logo_detect(beta.message_screenshot()).brands, strings.starts_with(.name, "Microsoft"))
-    or (any(attachments, .file_type in~ $file_extensions_macros))
+    or any(ml.logo_detect(beta.message_screenshot()).brands,
+           strings.starts_with(.name, "Microsoft")
+    )
   )
   and any(attachments,
           (
@@ -30,15 +35,19 @@ source: |
                   // recipient email address is present in the URL, a common tactic used in credential phishing attacks 
                   and any(recipients.to,
                           strings.icontains(..scan.qr.data, .email.email)
-                          
-                           // the recipients sld is in the senders display name
+  
+                          // the recipients sld is in the senders display name
                           or any(recipients.to,
-                              strings.icontains(sender.display_name, .email.domain.sld)
+                                 strings.icontains(sender.display_name,
+                                                   .email.domain.sld
+                                 )
                           )
   
                           // the recipient local is in the body  
                           or any(recipients.to,
-                                 strings.icontains(body.current_thread.text, .email.local_part)
+                                 strings.icontains(body.current_thread.text,
+                                                   .email.local_part
+                                 )
                           )
   
                           // or the body is null 
