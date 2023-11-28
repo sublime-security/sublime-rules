@@ -12,11 +12,14 @@ source: |
           .file_type in $file_types_images
           and any(file.explode(.),
                   .scan.qr.type is not null
+                  and regex.contains(.scan.qr.data, '\.')
                   // exclude images taken with mobile cameras and screenshots from android
                   and not any(.scan.exiftool.fields,
                               .key == "Model"
-                              or .key == "Software"
-                              and strings.starts_with(.value, "Android")
+                              or (
+                                .key == "Software"
+                                and strings.starts_with(.value, "Android")
+                              )
                   )
                   // exclude images taken with mobile cameras and screenshots from Apple
                   and not any(.scan.exiftool.fields,
@@ -28,7 +31,10 @@ source: |
       or (
         length(attachments) == 0
         and any(file.explode(beta.message_screenshot()),
-                .scan.qr.type is not null and regex.contains(.scan.qr.data, '\.')
+                .scan.exiftool.image_height < 2000
+                and .scan.exiftool.image_width < 2000
+                and .scan.qr.type is not null
+                and regex.contains(.scan.qr.data, '\.')
         )
       )
     )
