@@ -1,10 +1,15 @@
-name: "Credential phishing: Engaging language and other indicators (first-time sender)"
-description: |
-  Message contains various suspicious indicators as well as engaging language resembling credential theft from a first-time sender.
+name: "Suspicious message with unscannable Cloudflare link"
+description: "This rule detects messages with unscannable links to cloudflare infrastructure with suspicious indicators in the subject or display name from a new and unsolicited sender."
 type: "rule"
 severity: "medium"
 source: |
   type.inbound
+  and ( // sender domain matches no body domains
+    length(body.links) > 0
+    and all(body.links, .href_url.domain.root_domain != sender.email.domain.root_domain)
+  )
+  
+  // suspicious subject or display name
   and (
     regex.icontains(subject.subject,
                     "termination.*notice",
@@ -128,76 +133,9 @@ source: |
                     "will.be.suspended",
                     "your (customer )?account .as",
                     "your.office.365",
-                    "your.online.access",
-                    // https://github.com/sublime-security/static-files/blob/master/suspicious_subjects.txt
-                    "account has been limited",
-                    "action required",
-                    "almost full",
-                    "apd notifi cation",
-                    "are you at your desk",
-                    "are you available",
-                    "attached file to docusign",
-                    "banking is temporarily unavailable",
-                    "bankofamerica",
-                    "closing statement invoice",
-                    "completed: docusign",
-                    "de-activation of",
-                    "delivery attempt",
-                    "delivery stopped for shipment",
-                    "detected suspicious",
-                    "detected suspicious actvity",
-                    "docu sign",
-                    "document for you",
-                    "document has been sent to you via docusign",
-                    "document is ready for signature",
-                    "docusign",
-                    "encrypted message",
-                    "failed delivery",
-                    "fedex tracking",
-                    "file was shared",
-                    "freefax",
-                    "fwd: due invoice paid",
-                    "has shared",
-                    "inbox is full",
-                    "invitation to comment",
-                    "invitation to edit",
-                    "invoice due",
-                    "left you a message",
-                    "message from",
-                    "new message",
-                    "new voicemail",
-                    "on desk",
-                    "out of space",
-                    "password reset",
-                    "payment status",
-                    "quick reply",
-                    "re: w-2",
-                    "required",
-                    "required: completed docusign",
-                    "remittance",
-                    "ringcentral",
-                    "scanned image",
-                    "secured files",
-                    "secured pdf",
-                    "security alert",
-                    "new sign-in",
-                    "new sign in",
-                    "sign-in attempt",
-                    "sign in attempt",
-                    "staff review",
-                    "suspicious activity",
-                    "unrecognized login attempt",
-                    "upgrade immediately",
-                    "urgent",
-                    "wants to share",
-                    "w2",
-                    "you have notifications pending",
-                    "your account",
-                    "your amazon order",
-                    "your document settlement",
-                    "your order with amazon",
-                    "your password has been compromised",
+                    "your.online.access"
     )
+    or any($suspicious_subjects, strings.icontains(subject.subject, .))
     or regex.icontains(sender.display_name,
                        "Admin",
                        "Administrator",
@@ -223,7 +161,7 @@ source: |
                        "Fax",
                        "Free",
                        "Gift",
-                       "HR",
+                       "/bHR/b",
                        "Helpdesk",
                        "Human Resources",
                        "Immediate",
@@ -256,6 +194,7 @@ source: |
                        "Secretary",
                        "Security",
                        "Service",
+                       "Signature",
                        "Storage",
                        "Support",
                        "Sweepstakes",
@@ -273,62 +212,16 @@ source: |
                        "Winner",
     )
   )
-  and (
-    4 of (
-      any(recipients.to,
-          .email.domain.valid
-          and strings.icontains(body.current_thread.text, .email.email)
-      ),
-      any(ml.nlu_classifier(body.current_thread.text).intents,
-          .name == "cred_theft" and .confidence in ("medium", "high")
-      ),
-      any(ml.nlu_classifier(body.current_thread.text).entities,
-          .name == "request"
-      ),
-      (
-        // freemail providers should never be sending this type of email
-        sender.email.domain.domain in $free_email_providers
   
-        // if not freemail, it's suspicious if the sender's root domain
-        // doesn't match any links in the body
-        or all(body.links,
-               .href_url.domain.root_domain != sender.email.domain.root_domain
-        )
-      ),
-      // in case it's embedded in an image attachment
-      // note: don't use message_screenshot() because it's not limited to current_thread
-      // and may FP
-      any(attachments,
-          .file_type in $file_types_images
-          and any(file.explode(.),
-                  any(ml.nlu_classifier(.scan.ocr.raw).intents,
-                      .name == "cred_theft" and .confidence == "high"
-                  )
+  // link can't be scanned due to Cloudflare captcha
+  and any(body.links,
+          regex.icontains(beta.linkanalysis(., mode="aggressive").final_dom.display_text,
+                          "cloudflare",
+                          "HTTP ERROR 404.*Resource not found"
           )
-      ),
-      strings.contains(body.current_thread.text,
-                       "Your mailbox can no longer send or receive messages."
-      )
-    )
-    or (
-      // recipient's email address is in the body
-      any(recipients.to,
-          strings.icontains(body.current_thread.text, .email.email)
-      )
-      // link leads to a suspicious TLD
-      and any(body.links,
-              beta.linkanalysis(., mode="aggressive").effective_url.domain.tld in $suspicious_tlds
-      )
-    )
   )
-  // exclude Google shared calendar messages
-  // Subject: "<sender name> has shared a calendar with you"
-  and headers.return_path.domain.domain != "calendar-server.bounces.google.com"
   and (
-    (
-      profile.by_sender().prevalence in ("new", "outlier")
-      and not profile.by_sender().solicited
-    )
+    (profile.by_sender().prevalence in ("new", "outlier") and not profile.by_sender().solicited)
     or (
       profile.by_sender().any_messages_malicious_or_spam
       and not profile.by_sender().any_false_positives
@@ -346,15 +239,12 @@ source: |
     )
     or sender.email.domain.root_domain not in $high_trust_sender_root_domains
   )
+  
 attack_types:
   - "Credential Phishing"
-tactics_and_techniques:
-  - "Free email provider"
-  - "Social engineering"
 detection_methods:
   - "Content analysis"
   - "Header analysis"
-  - "Natural Language Understanding"
-  - "Sender analysis"
   - "URL analysis"
-id: "c2bc8ca2-d207-5c7d-96e4-a0d3d33b2af5"
+  - "Sender analysis"
+id: "70ea21f9-2a88-5e33-81a2-4f3384080a04"

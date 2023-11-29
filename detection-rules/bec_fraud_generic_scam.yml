@@ -1,30 +1,36 @@
-name: "Honorific greeting BEC attempt with sender and reply-to mismatch"
+name: "BEC/Fraud: Generic Scam attempt to Undisclosed Receipients"
 description: |
-  Detects generic BEC/Fraud scams by analyzing text within the email body from mismatched senders with other suspicious indicators.
+  Detects potential generic scams by analyzing text within the email body and other suspicious signals.
 type: "rule"
 severity: "low"
 source: |
   type.inbound
-  // mismatched sender (From) and Reply-to + freemail
+
+  // undisclosed recipients
+  and any([recipients.to, recipients.bcc, recipients.cc],
+          any(., .display_name =~ "Undisclosed recipients")
+  )
+
+  // mismatched sender (from) and Reply-to
   and any(headers.reply_to,
           length(headers.reply_to) > 0
           and all(headers.reply_to,
                   .email.domain.root_domain != sender.email.domain.root_domain
-                  and .email.domain.root_domain in $free_email_providers
           )
   )
 
-  // use of honorific
-  and regex.icontains(body.current_thread.text,
-                      '(?:Mr|Mrs|Ms|Miss|Dr|Prof|Sir|Lady|Rev)\.?[ \t]+'
+  // generic recipient
+  and any(ml.nlu_classifier(body.current_thread.text).entities,
+          .name == "recipient" and regex.icontains(.text, "(sir|madam)")
   )
 
-  // BEC-themed language
-  and (
-    any(ml.nlu_classifier(body.current_thread.text).intents, .name == "bec")
-    and any(ml.nlu_classifier(body.current_thread.text).entities,
-            .name == "request"
-    )
+  // request made
+  and any(ml.nlu_classifier(body.current_thread.text).entities,
+          .name == "request")
+
+  // not a bec scam
+  and all(ml.nlu_classifier(body.current_thread.text).intents,
+          .name != "bec"
   )
 
   // negate highly trusted sender domains unless they fail DMARC authentication
@@ -51,14 +57,14 @@ source: |
   )
   and not profile.by_sender().any_false_positives
 
+
 attack_types:
   - "BEC/Fraud"
 tactics_and_techniques:
-  - "Free email provider"
   - "Social engineering"
 detection_methods:
   - "Content analysis"
   - "Header analysis"
   - "Natural Language Understanding"
   - "Sender analysis"
-id: "aa41b1b7-155c-5812-b431-25ac415538a6"
+id: "5dac401f-d3c1-5092-aba4-58ab597c702b"
