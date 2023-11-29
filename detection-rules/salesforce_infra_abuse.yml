@@ -1,11 +1,28 @@
-name: "Credential phishing: Engaging language and other indicators (first-time sender)"
-description: |
-  Message contains various suspicious indicators as well as engaging language resembling credential theft from a first-time sender.
+name: "Salesforce Infrastructure Abuse"
+description: "Identifies messages that resemble credential theft, originating from Salesforce. Salesforce infrastrcture abuse has been observed recently to send phishing attacks."
 type: "rule"
 severity: "medium"
 source: |
   type.inbound
-  and (
+
+  // we look at the return-path because many times in the abuse
+  // we've seen, the From is a custom domain
+  and headers.return_path.domain.root_domain == "salesforce.com"
+
+  // legit salesforce email addresses that haven't been observed to be abused
+  and sender.email.email not in ("support@salesforce.com")
+  and length(attachments) == 0
+  and length(body.links) > 0
+  and any(ml.nlu_classifier(body.current_thread.text).intents,
+          .name == "cred_theft" and .confidence == "high"
+  )
+  and 1 of (
+    ( // sender domain matches no body domains
+      length(body.links) > 0
+      and all(body.links,
+              .href_url.domain.root_domain != sender.email.domain.root_domain
+      )
+    ),
     regex.icontains(subject.subject,
                     "termination.*notice",
                     "38417",
@@ -197,164 +214,53 @@ source: |
                     "your document settlement",
                     "your order with amazon",
                     "your password has been compromised",
-    )
-    or regex.icontains(sender.display_name,
-                       "Admin",
-                       "Administrator",
-                       "Alert",
-                       "Assistant",
-                       "Billing",
-                       "Benefits",
-                       "Bonus",
-                       "CEO",
-                       "CFO",
-                       "CIO",
-                       "CTO",
-                       "Chairman",
-                       "Claim",
-                       "Confirm",
-                       "Critical",
-                       "Customer Service",
-                       "Deal",
-                       "Discount",
-                       "Director",
-                       "Exclusive",
-                       "Executive",
-                       "Fax",
-                       "Free",
-                       "Gift",
-                       "HR",
-                       "Helpdesk",
-                       "Human Resources",
-                       "Immediate",
-                       "Important",
-                       "Info",
-                       "Information",
-                       "Invoice",
-                       '\bIT\b',
-                       "Legal",
-                       "Lottery",
-                       "Management",
-                       "Manager",
-                       "Member Services",
-                       "Notification",
-                       "Offer",
-                       "Operations",
-                       "Order",
-                       "Partner",
-                       "Payment",
-                       "Payroll",
-                       "President",
-                       "Premium",
-                       "Prize",
-                       "Receipt",
-                       "Refund",
-                       "Registrar",
-                       "Required",
-                       "Reward",
-                       "Sales",
-                       "Secretary",
-                       "Security",
-                       "Service",
-                       "Storage",
-                       "Support",
-                       "Sweepstakes",
-                       "System",
-                       "Tax",
-                       "Team",
-                       "Tech Support",
-                       "Update",
-                       "Upgrade",
-                       "Urgent",
-                       "Validate",
-                       "Verify",
-                       "VIP",
-                       "Webmaster",
-                       "Winner",
-    )
+    ),
+    any($suspicious_subjects, strings.icontains(subject.subject, .))
   )
   and (
-    4 of (
-      any(recipients.to,
-          .email.domain.valid
-          and strings.icontains(body.current_thread.text, .email.email)
-      ),
-      any(ml.nlu_classifier(body.current_thread.text).intents,
-          .name == "cred_theft" and .confidence in ("medium", "high")
-      ),
-      any(ml.nlu_classifier(body.current_thread.text).entities,
-          .name == "request"
-      ),
+    // if the From is a custom domain, check that it's an unknown sender
+    // otherwise, it should be from salesforce
+    (
+      sender.email.domain.domain == "salesforce.com"
+      and any(headers.hops,
+              any(.fields,
+                  .name == "X-SFDC-EmailCategory" and .value == "apiMassMail"
+              )
+      )
+    )
+    or (
       (
-        // freemail providers should never be sending this type of email
-        sender.email.domain.domain in $free_email_providers
-  
-        // if not freemail, it's suspicious if the sender's root domain
-        // doesn't match any links in the body
-        or all(body.links,
-               .href_url.domain.root_domain != sender.email.domain.root_domain
+        (
+          profile.by_sender().prevalence in ("new", "outlier")
+          and not profile.by_sender().solicited
         )
-      ),
-      // in case it's embedded in an image attachment
-      // note: don't use message_screenshot() because it's not limited to current_thread
-      // and may FP
-      any(attachments,
-          .file_type in $file_types_images
-          and any(file.explode(.),
-                  any(ml.nlu_classifier(.scan.ocr.raw).intents,
-                      .name == "cred_theft" and .confidence == "high"
-                  )
-          )
-      ),
-      strings.contains(body.current_thread.text,
-                       "Your mailbox can no longer send or receive messages."
+        or (
+          profile.by_sender().any_messages_malicious_or_spam
+          and not profile.by_sender().any_false_positives
+        )
       )
-    )
-    or (
-      // recipient's email address is in the body
-      any(recipients.to,
-          strings.icontains(body.current_thread.text, .email.email)
-      )
-      // link leads to a suspicious TLD
-      and any(body.links,
-              beta.linkanalysis(., mode="aggressive").effective_url.domain.tld in $suspicious_tlds
-      )
-    )
-  )
-  // exclude Google shared calendar messages
-  // Subject: "<sender name> has shared a calendar with you"
-  and headers.return_path.domain.domain != "calendar-server.bounces.google.com"
-  and (
-    (
-      profile.by_sender().prevalence in ("new", "outlier")
-      and not profile.by_sender().solicited
-    )
-    or (
-      profile.by_sender().any_messages_malicious_or_spam
-      and not profile.by_sender().any_false_positives
-    )
-  )
-  // negate highly trusted sender domains unless they fail DMARC authentication
-  and (
-    (
-      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      // negate highly trusted sender domains unless they fail DMARC authentication
       and (
-        any(distinct(headers.hops, .authentication_results.dmarc is not null),
-            strings.ilike(.authentication_results.dmarc, "*fail")
+        (
+          sender.email.domain.root_domain in $high_trust_sender_root_domains
+          and (
+            any(distinct(headers.hops, .authentication_results.dmarc is not null),
+                strings.ilike(.authentication_results.dmarc, "*fail")
+            )
+          )
         )
+        or sender.email.domain.root_domain not in $high_trust_sender_root_domains
       )
     )
-    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
   )
 attack_types:
   - "Credential Phishing"
 tactics_and_techniques:
-  - "Free email provider"
+  - "Evasion"
   - "Social engineering"
 detection_methods:
   - "Content analysis"
   - "Header analysis"
   - "Natural Language Understanding"
-  - "Sender analysis"
   - "URL analysis"
-id: "c2bc8ca2-d207-5c7d-96e4-a0d3d33b2af5"
+id: "78a77c70-4008-545a-812f-bde793b72c29"
