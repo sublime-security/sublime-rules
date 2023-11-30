@@ -15,7 +15,20 @@ source: |
            (.file_type in $file_types_images or .file_type == "pdf")
            and any(ml.logo_detect(.).brands, .name == "PayPal")
            and any(file.explode(.),
-                   strings.ilike(.scan.ocr.raw, "*PayPal*")
+                  // exclude images taken with mobile cameras and screenshots from android
+                   not any(.scan.exiftool.fields,
+                           .key == "Model"
+                           or (
+                             .key == "Software"
+                             and strings.starts_with(.value, "Android")
+                           )
+                   )
+                   // exclude images taken with mobile cameras and screenshots from Apple
+                   and not any(.scan.exiftool.fields,
+                               .key == "DeviceManufacturer"
+                               and .value == "Apple Computer Inc."
+                   )
+                   and strings.ilike(.scan.ocr.raw, "*PayPal*")
                    and strings.ilike(.scan.ocr.raw,
                                      "*invoice*",
                                      "*transaction*",
@@ -61,10 +74,9 @@ source: |
       and not profile.by_sender().any_false_positives
     )
   )
-
+  
   // negate highly trusted sender domains unless they fail DMARC authentication
-  and
-  (
+  and (
     (
       sender.email.domain.root_domain in $high_trust_sender_root_domains
       and (
