@@ -1,11 +1,11 @@
-name: "Body: Microsoft logo or Suspicious Language and Bing open redirect"
+name: "Body: Microsoft logo or Suspicious Language and an open redirect"
 description: |
   Email contains a Microsoft logo or suspicious terms and use of the Bing open redirect. This has been exploited in the wild to impersonate Microsoft.
 type: "rule"
 severity: "high"
 source: |
   type.inbound
-
+  
   // Microsoft logo
   and (
     any(attachments,
@@ -42,9 +42,11 @@ source: |
            )
     )
   )
-
-  // Bing redirect
-  and any(body.links, .href_url.domain.root_domain == 'bing.com' and .href_url.path =~ '/ck/a')
+  
+  // open redirect
+  and any(body.links,
+          any(.href_url.rewrite.encoders, strings.icontains(., "open_redirect"))
+  )
   and sender.email.domain.root_domain not in $org_domains
   and sender.email.domain.root_domain not in (
     "bing.com",
@@ -57,6 +59,7 @@ source: |
     "sharepointonline.com",
     "yammer.com"
   )
+
 attack_types:
   - "BEC/Fraud"
 tactics_and_techniques:
