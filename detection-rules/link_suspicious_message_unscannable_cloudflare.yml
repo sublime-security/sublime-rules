@@ -214,11 +214,27 @@ source: |
   )
   
   // link can't be scanned due to Cloudflare captcha
-  and any(body.links,
-          regex.icontains(beta.linkanalysis(., mode="aggressive").final_dom.display_text,
-                          "cloudflare",
-                          "HTTP ERROR 404.*Resource not found"
-          )
+  and (
+    any(body.links,
+        regex.icontains(beta.linkanalysis(., mode="aggressive").final_dom.display_text,
+                        "cloudflare",
+                        "HTTP ERROR 404.*Resource not found"
+        )
+    )
+    or any(body.links,
+           strings.ilike(beta.linkanalysis(., mode="aggressive").final_dom.display_text,
+                         "*performance & security*",
+                         "*we need? to review the security*"
+           )
+           and (
+             any(file.explode(beta.linkanalysis(., mode="aggressive").screenshot),
+                 strings.ilike(.scan.ocr.raw, "*failure*")
+             )
+             or strings.ilike(beta.linkanalysis(., mode="aggressive").final_dom.display_text,
+                              "*failure*"
+             )
+           )
+    )
   )
   and (
     not profile.by_sender().solicited
