@@ -9,15 +9,16 @@ severity: "low"
 source: |
   type.inbound
   and length(body.html.raw) < 200
+  and length(body.links) > 0
   and (
-    (
-      length(body.links) > 0
-
-      // as of 20220116 there's a link parsing bug with .png inline images, so ignore those
-      and any(body.links, not strings.ilike(.href_url.url, "*.png"))
-    )
+    // as of 20220116 there's a link parsing bug with .png inline images, so ignore those
+    any(body.links, not strings.ilike(.href_url.url, "*.png"))
+  
     // cid images are treated as attachments, so we're looking for more than 1
-    or (length(attachments) > 1 and any(attachments, .file_type not in $file_types_images))
+    or (
+      length(attachments) > 1
+      and any(attachments, .file_type not in $file_types_images)
+    )
   )
   and strings.ilike(body.html.raw, "*img*cid*")
   and (
