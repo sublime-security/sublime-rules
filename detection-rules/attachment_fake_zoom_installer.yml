@@ -5,44 +5,24 @@ type: "rule"
 severity: "high"
 source: |
   type.inbound
-  and (
-    any(attachments,
-        (
-          .file_extension in~ ("html", "htm", "shtml", "dhtml")
-          or .file_type == "html"
-          or .content_type == "text/html"
-        )
-        and any(file.explode(.),
-                any(ml.logo_detect(file.html_screenshot(..)).brands,
-                    .name == "Zoom" and .confidence in ("medium", "high")
-                )
-                and any(ml.nlu_classifier(file.parse_html(..).display_text).entities,
-                        .name == "request" and .text =~ "download"
-                )
-                and any(.scan.url.urls,
-                        strings.iends_with(.path, ".exe") and .domain.root_domain not in $org_domains
-                )
-        )
-    )
-    or any(attachments,
-           (.file_extension in~ $file_extensions_common_archives)
-           and any(file.explode(.),
-                   (
-                     .file_extension in~ ("html", "htm", "shtml", "dhtml")
-                     or ..file_type == "html"
-                     or ..content_type == "text/html"
-                   )
-                   and any(ml.logo_detect(file.html_screenshot(..)).brands,
-                           .name == "Zoom" and .confidence in ("medium", "high")
-                   )
-                   and any(ml.nlu_classifier(file.parse_html(..).display_text).entities,
-                           .name == "request" and .text =~ "download"
-                   )
-                   and any(.scan.url.urls,
-                           strings.iends_with(.path, ".exe") and .domain.root_domain not in $org_domains
-                   )
-           )
-    )
+  and any(attachments,
+          (
+            .file_extension in~ ("html", "htm", "shtml", "dhtml")
+            or .file_type == "html"
+            or .content_type == "text/html"
+          )
+          and any(ml.logo_detect(file.html_screenshot(.)).brands,
+                  .name == "Zoom" and .confidence in ("medium", "high")
+          )
+          and any(ml.nlu_classifier(file.parse_html(.).display_text).entities,
+                  .name == "request" and .text =~ "download"
+          )
+          and any(file.explode(.),
+                  any(.scan.url.urls,
+                      strings.iends_with(.path, ".exe")
+                      and .domain.root_domain not in $org_domains
+                  )
+          )
   )
 attack_types:
   - "Malware/Ransomware"
