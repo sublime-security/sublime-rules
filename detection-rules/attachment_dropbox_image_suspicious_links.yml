@@ -1,17 +1,23 @@
 name: "Attachment: Dropbox image lure with no Dropbox domains in links"
-description: "Detects Dropbox phishing emails with no dropbox links with image attachments from first time sender."
+description: "Detects Dropbox phishing emails with no Dropbox links with image attachments from first time sender."
 type: "rule"
 severity: "medium"
 source: |
   type.inbound
   and length(filter(attachments, .file_type not in $file_types_images)) == 0
-  and any(body.links, not strings.ilike(.href_url.domain.root_domain, "dropbox.*"))
+  and any(body.links,
+          not strings.ilike(.href_url.domain.root_domain, "dropbox.*")
+  )
   and any(attachments,
           .file_type in $file_types_images
           and any(file.explode(.),
                   strings.ilike(.scan.ocr.raw, "*dropbox*")
                   and strings.ilike(.scan.ocr.raw, "*review*", "*sign*")
           )
+  )
+  and (
+    length(headers.references) == 0
+    or not any(headers.hops, any(.fields, strings.ilike(.name, "In-Reply-To")))
   )
   and (
     profile.by_sender().prevalence in ("new", "outlier")
