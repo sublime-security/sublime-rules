@@ -1,0 +1,53 @@
+name: "Attachment: Fake attachment image lure"
+description: | 
+  Message body (or attached message body) contains a image faking an Outlook attachment button. The image contains OCR entities that are suspicious.
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and (
+    // fake file attachment preview in original email
+    any(attachments,
+        .file_type in $file_types_images
+        and .size < 5000
+        and any(file.explode(.),
+                any(ml.nlu_classifier(.scan.ocr.raw).entities,
+                    .name in~ ("financial", "urgency")
+                )
+        )
+    )
+    or any(attachments,
+           .file_type in $file_types_images
+           and any(ml.logo_detect(.).brands, .name == "FakeAttachment")
+    )
+    // fake file attachment preview in attached EML
+    or any(attachments,
+           .content_type == "message/rfc822"
+           and any(file.parse_eml(.).attachments,
+                   .file_type in $file_types_images
+                   and .size < 5000
+                   and any(file.explode(.),
+                           any(ml.nlu_classifier(.scan.ocr.raw).entities,
+                               .name in~ ("financial", "urgency")
+                           )
+                   )
+           )
+    )
+  )
+
+tags:
+  - "Suspicious attachment"
+  - "Suspicious content"
+attack_types:
+  - "Credential Phishing"
+  - "Malware/Ransomware"
+tactics_and_techniques:
+  - "Evasion"
+  - "Image as content"
+  - "Social engineering"
+detection_methods:
+  - "EML analysis"
+  - "File analysis"
+  - "Natural Language Understanding"
+  - "Optical Character Recognition"
+id: "96b8b285-2116-5e45-b0ca-57b81dc87b94"
