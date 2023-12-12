@@ -17,16 +17,16 @@ source: |
                   // pass the QR URL to LinkAnalysis
                   any([beta.linkanalysis(.scan.qr.url)],
                       .credphish.disposition == "phishing"
-                      
+  
                       // any routing traverses via $suspicious_tld list
                       or any(.redirect_history, .domain.tld in $suspicious_tlds)
-                      
+  
                       // effective destination in $suspicious_tld list
                       or .effective_url.domain.tld in $suspicious_tlds
-                      
+  
                       // or the effective destination domain is in $abuse_ch_urlhaus_domains_trusted_reporters
                       or .effective_url.domain.root_domain in $abuse_ch_urlhaus_domains_trusted_reporters
-                      
+  
                       // or any files downloaded are zips or executables
                       or any(.files_downloaded,
                              .file_extension in $file_extensions_common_archives
@@ -34,18 +34,18 @@ source: |
                       )
                   )
                   or (
-                    
+  
                     // or the QR code's root domain is a url_shortener
                     .scan.qr.url.domain.root_domain in $url_shorteners
-                    
+  
                     // exclude google maps
                     and not strings.starts_with(.scan.qr.url.url, 'https://goo.gl/maps')
                   )
-                  
+  
                   // the QR code url is a bing open redirect
                   or .scan.qr.url.domain.root_domain == 'bing.com' and .scan.qr.url.path =~ '/ck/a'
                   or (
-                    
+  
                     // usap-dc open redirect
                     .scan.qr.url.domain.root_domain == "usap-dc.org"
                     and .scan.qr.url.path =~ "/tracker"
@@ -56,15 +56,13 @@ source: |
           )
   )
   and (
-            (
-                sender.email.domain.root_domain in $free_email_providers
-                and sender.email.email not in $sender_emails
-            )
-            or (
-                sender.email.domain.root_domain not in $free_email_providers
-                and sender.email.domain.domain not in $sender_domains
-            )
+    profile.by_sender().prevalence in ("new", "outlier")
+    or (
+      profile.by_sender().any_messages_malicious_or_spam
+      and not profile.by_sender().any_false_positives
+    )
   )
+
 attack_types:
   - "Credential Phishing"
 tactics_and_techniques:

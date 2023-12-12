@@ -1,0 +1,51 @@
+name: "Image as content linking to an open redirect"
+description: "Body contains little, no, or only disclaimer text, and an image linking to an open redirect."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and length(body.links) < 3
+  and 0 < (length(attachments)) < 3
+  and all(attachments, (.file_type in $file_types_images))
+  and (
+    // body text is very short
+    (
+      0 <= (length(body.current_thread.text)) < 10
+      or body.current_thread.text is null
+    )
+    or (
+      length(body.current_thread.text) < 900
+      // or body is most likely all warning banner (text contains the sender and common warning banner language)
+      and (
+        (
+          strings.contains(body.current_thread.text, sender.email.email)
+          and strings.contains(body.current_thread.text, 'caution')
+        )
+        or regex.icontains(body.current_thread.text,
+                           "intended recipient's use only|external email|sent from outside|you don't often|confidential"
+        )
+      )
+    )
+  )
+  and (
+    any(body.links,
+        any(.href_url.rewrite.encoders, strings.icontains(., "open_redirect"))
+    )
+    or any(body.links,
+           .href_url.domain.root_domain == 'sng.link'
+           and strings.ilike(.href_url.query_params, "*fallback_redirect*")
+    )
+  )
+attack_types:
+  - "Credential Phishing"
+  - "Malware/Ransomware"
+tactics_and_techniques:
+  - "Evasion"
+  - "Image as content"
+  - "Open redirect"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "HTML analysis"
+  - "URL analysis"
+id: "f5cec36b-76ea-5cd6-958b-74f819d73a47"
