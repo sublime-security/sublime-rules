@@ -10,11 +10,6 @@ source: |
     any(attachments,
         .file_type in $file_types_images
         and .size < 5000
-        and any(file.explode(.),
-                any(ml.nlu_classifier(.scan.ocr.raw).entities,
-                    .name in~ ("financial", "urgency")
-                )
-        )
         and any(ml.logo_detect(.).brands, .name == "FakeAttachment")
     )
     // fake file attachment preview in attached EML
@@ -23,15 +18,11 @@ source: |
            and any(file.parse_eml(.).attachments,
                    .file_type in $file_types_images
                    and .size < 5000
-                   and any(file.explode(.),
-                           any(ml.nlu_classifier(.scan.ocr.raw).entities,
-                               .name in~ ("financial", "urgency")
-                           )
-                   )
+                   and any(ml.logo_detect(.).brands, .name == "FakeAttachment")
            )
     )
   )
-
+  
   // negate highly trusted sender domains unless they fail DMARC authentication
   and (
     (
@@ -44,7 +35,6 @@ source: |
     )
     or sender.email.domain.root_domain not in $high_trust_sender_root_domains
   )
-
   and (
     not profile.by_sender().solicited
     or profile.by_sender().any_messages_malicious_or_spam
