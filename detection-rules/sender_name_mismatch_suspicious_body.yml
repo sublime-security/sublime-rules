@@ -1,0 +1,45 @@
+name: "Sender display name mismatch with suspicious body"
+description: "Sender's name significantly differs from their email address, a recipients email address is in the body along with suspicious language, and body contains a suspicious link."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and length(body.links) > 0
+  and strings.ilevenshtein(sender.display_name, sender.email.local_part) > 5
+  and any(recipients.to,
+          strings.icontains(body.current_thread.text, .email.email)
+          and .email.domain.valid
+  )
+  and any(ml.nlu_classifier(body.current_thread.text).intents,
+          .name == "cred_theft"
+  )
+  and (
+    any(body.links,
+        regex.icontains(.display_text,
+                        '(view|click|download|goto)?(attachment|download|file|online|document)s?'
+        )
+        or all(body.links, regex.match(.display_text, "[A-Z ]+"))
+    )
+  )
+  and any(body.links,
+          (
+            length(beta.linkanalysis(., mode="aggressive").redirect_history) > 1
+            and (
+              beta.linkanalysis(., mode="aggressive").credphish.contains_captcha
+              or beta.linkanalysis(., mode="aggressive").credphish.disposition == "phishing"
+            )
+          )
+          or beta.linkanalysis(., mode="aggressive").effective_url.domain.tld in $suspicious_tlds
+  )
+
+attack_types:
+  - "Credential Phishing"
+  - "Malware/Ransomware"
+tactics_and_techniques:
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Natural Language Understanding"
+  - "Sender analysis"
+  - "URL analysis"
+  - "URL screenshot"
