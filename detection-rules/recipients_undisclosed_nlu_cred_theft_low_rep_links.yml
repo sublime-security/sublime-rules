@@ -4,25 +4,20 @@ type: "rule"
 severity: "medium"
 source: |
   type.inbound
-  and (
-      length(recipients.to) == 0
-      or all(recipients.to, .display_name == "Undisclosed recipients")
-  )
+  and (length(recipients.to) == 0 or all(recipients.to, .display_name == "Undisclosed recipients"))
   and length(recipients.cc) == 0
   and length(recipients.bcc) == 0
-  and any(body.links, .href_url.domain.domain not in $tranco_1m)
-
+  and any(body.links, .href_url.domain.root_domain not in $tranco_1m)
   and (
-      any(body.links, regex.icontains(.display_text,
-          '(view|click|download|goto)?(attachment|download|file|online|document)s?')
-        or all(body.links, regex.contains(.display_text, "^[A-Z ]+$"))
-      )
+    any(body.links,
+        regex.icontains(.display_text,
+                        '(view|click|download|goto)?(attachment|download|file|online|document)s?'
+        )
+        or all(body.links, regex.match(.display_text, "[A-Z ]+"))
+    )
   )
-
-  and any(ml.nlu_classifier(coalesce(
-        body.html.display_text, body.plain.raw)).intents, 
-        .name in ("cred_theft")
-        and .confidence in ("medium", "high")
+  and any(ml.nlu_classifier(body.current_thread.text).intents,
+          .name in ("cred_theft") and .confidence in ("medium", "high")
   )
 attack_types:
   - "Credential Phishing"

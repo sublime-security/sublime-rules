@@ -8,61 +8,86 @@ severity: "medium"
 source: |
   type.inbound
   and (
-      sender.display_name =~ "paypal"
-      or strings.ilevenshtein(sender.display_name, 'paypal') <= 1
-      or strings.ilike(sender.email.domain.domain, '*paypal*')
-
-      or any(attachments, .file_type in ("pdf", "jpg", "jpeg", "png")
-          and any(ml.logo_detect(.).brands, .name == "PayPal")
-          and any(file.explode(.),
-              any(.scan.strings.strings, strings.ilike(., "*PayPal*"))
-              and any(.scan.strings.strings,
-                  strings.ilike(.,
-                      "*invoice*",
-                      "*transaction*",
-                      "*bitcoin*",
-                      "*dear customer*",
-                  )
-              )
-          )
-      )
+    sender.display_name =~ "paypal"
+    or strings.ilevenshtein(sender.display_name, 'paypal') <= 1
+    or strings.ilike(sender.email.domain.domain, '*paypal*')
+    or any(attachments,
+           (.file_type in $file_types_images or .file_type == "pdf")
+           and any(ml.logo_detect(.).brands, .name == "PayPal")
+           and any(file.explode(.),
+                  // exclude images taken with mobile cameras and screenshots from android
+                   not any(.scan.exiftool.fields,
+                           .key == "Model"
+                           or (
+                             .key == "Software"
+                             and strings.starts_with(.value, "Android")
+                           )
+                   )
+                   // exclude images taken with mobile cameras and screenshots from Apple
+                   and not any(.scan.exiftool.fields,
+                               .key == "DeviceManufacturer"
+                               and .value == "Apple Computer Inc."
+                   )
+                   and strings.ilike(.scan.ocr.raw, "*PayPal*")
+                   and strings.ilike(.scan.ocr.raw,
+                                     "*invoice*",
+                                     "*transaction*",
+                                     "*bitcoin*",
+                                     "*dear customer*",
+                   )
+           )
+    )
   )
-
-  and sender.email.domain.root_domain not in~ (
-      'paypal.com',
-      'paypal.ch',
-      'paypal.nl',
-      'paypal.co.uk',
-      'google.com',
-      'q4inc.com',
-      'paypal.com.au',
-      'paypal.se',
-      'paypal.be',
-      'paypal.de',
-      'paypal.dk',
-      'paypal.pl',
-      'paypal.es',
-      'paypal.ca',
-      'paypal.fr',
-      'paypal.it',
-      'synchronyfinancial.com',
-      'synchronybank.com',
-      'xoom.com',
-      'paypal-experience.com',
-      'paypalcorp.com'
+  and sender.email.domain.root_domain not in (
+    'paypal.com',
+    'paypal.ch',
+    'paypal.nl',
+    'paypal.co.uk',
+    'google.com',
+    'q4inc.com',
+    'paypal.com.au',
+    'paypal.se',
+    'paypal.be',
+    'paypal.de',
+    'paypal.dk',
+    'paypal.pl',
+    'paypal.es',
+    'paypal.ca',
+    'paypal.fr',
+    'paypal.it',
+    'paypal.com.sg',
+    'synchronyfinancial.com',
+    'synchronybank.com',
+    'xoom.com',
+    'paypal-experience.com',
+    'paypalcorp.com',
+    'paypal-customerfeedback.com',
+    'paypal-creditsurvey.com',
+    'paypal-prepaid.com',
+    'xoom.com',
+    'paypal.co.il'
   )
-
-  // unsolicited
   and (
-          (
-              sender.email.domain.root_domain in $free_email_providers
-              and sender.email.email not in $recipient_emails
-          )
-          or (
-              sender.email.domain.root_domain not in $free_email_providers
-              and sender.email.domain.domain not in $recipient_domains
-          )
+    not profile.by_sender().solicited
+    or (
+      profile.by_sender().any_messages_malicious_or_spam
+      and not profile.by_sender().any_false_positives
+    )
   )
+  
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and (
+        any(distinct(headers.hops, .authentication_results.dmarc is not null),
+            strings.ilike(.authentication_results.dmarc, "*fail")
+        )
+      )
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+
 attack_types:
   - "Credential Phishing"
 tactics_and_techniques:

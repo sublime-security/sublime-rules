@@ -10,60 +10,57 @@ source: |
   and 0 < length(body.links) < 5
   and sender.email.domain.root_domain not in $org_domains
   and any(body.links,
-      (
-          .href_url.domain.domain not in $tranco_1m or
-          .href_url.domain.domain in $free_file_hosts or
-          .href_url.domain.root_domain in $free_subdomain_hosts or
-          .href_url.domain.domain in $url_shorteners or
+          (
+            .href_url.domain.domain not in $tranco_1m
+            or .href_url.domain.domain in $free_file_hosts
+            or .href_url.domain.root_domain in $free_file_hosts
+            or .href_url.domain.root_domain in $free_subdomain_hosts
+            or .href_url.domain.domain in $url_shorteners
+            or 
   
-          // mass mailer link, masks the actual URL
-          .href_url.domain.root_domain in (
+            // mass mailer link, masks the actual URL
+            .href_url.domain.root_domain in (
               "hubspotlinks.com",
               "mandrillapp.com",
-              "sendgrid.net",
+              "sendgrid.net"
+            )
           )
-      )
   )
   
   // any brand logo detected
   and (
-      any(attachments,
-          .file_type in ('png', 'jpeg', 'jpg', 'bmp')
-          and any(ml.logo_detect(.).brands, .name is not null)
-      )
-      or any(ml.logo_detect(beta.message_screenshot()).brands,
-          .name is not null)
+    any(attachments,
+        .file_type in $file_types_images
+        and any(ml.logo_detect(.).brands, .name is not null)
+    )
+    or any(ml.logo_detect(beta.message_screenshot()).brands, .name is not null)
   )
   
   // Subject or sender contains fax
   and (
-      strings.icontains(subject.subject, "fax") or
-      strings.icontains(sender.display_name, "fax")
+    strings.icontains(subject.subject, "fax")
+    or strings.icontains(sender.display_name, "fax")
   )
   
   // suspicious content
   and (
-      strings.ilike(body.plain.raw, "*fax*")
-      or (
-          any(attachments,
-              .file_type in ('png', 'jpeg', 'jpg', 'bmp')
-              and any(file.explode(.),
-                  strings.ilike(.scan.ocr.raw, "*fax*")
-              )
-          )
+    strings.ilike(body.plain.raw, "*fax*")
+    or (
+      any(attachments,
+          .file_type in $file_types_images
+          and any(file.explode(.), strings.ilike(.scan.ocr.raw, "*fax*"))
       )
+    )
   )
   
-  // first time sender
+  // negate known fax mailers
+  and sender.email.domain.root_domain not in ("faxage.com")
   and (
-          (
-              sender.email.domain.root_domain in $free_email_providers
-              and sender.email.email not in $sender_emails
-          )
-          or (
-              sender.email.domain.root_domain not in $free_email_providers
-              and sender.email.domain.domain not in $sender_domains
-          )
+    profile.by_sender().prevalence in ("new", "outlier")
+    or (
+      profile.by_sender().any_messages_malicious_or_spam
+      and not profile.by_sender().any_false_positives
+    )
   )
 attack_types:
   - "Credential Phishing"
