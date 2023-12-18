@@ -5,23 +5,22 @@ description: |
 references:
   - "https://www.cyren.com/blog/articles/anatomy-of-an-attack-password-protected-files-attached-to-emails"
 type: "rule"
-severity: "high"
+severity: "medium"
 source: |
   type.inbound
   and any(attachments,
-      .file_extension in~ $file_extensions_macros
-      and file.oletools(.).indicators.encryption.exists
+          .file_extension in~ $file_extensions_macros
+          and file.oletools(.).indicators.encryption.exists
   )
   and (
-      (
-          sender.email.domain.root_domain in $free_email_providers
-          and sender.email.email not in $recipient_emails
-      )
-      or (
-          sender.email.domain.root_domain not in $free_email_providers
-          and sender.email.domain.domain not in $recipient_domains
-      )
+    not profile.by_sender().solicited
+    or (
+      profile.by_sender().any_messages_malicious_or_spam
+      and not profile.by_sender().any_false_positives
+    )
   )
+tags:
+  - "Attack surface reduction"
 attack_types:
   - "Malware/Ransomware"
 tactics_and_techniques:

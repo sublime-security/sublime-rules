@@ -1,0 +1,29 @@
+name: "Brand impersonation: Wise with suspicious attachment"
+description: |
+  Impersonating Wise Financial, as confirmed by NLU, and contains a suspicious attachment type.
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and (
+    strings.ilike(sender.display_name, '*wise*')
+    or strings.ilike(sender.email.domain.domain, '*wise*')
+  )
+  and any(ml.nlu_classifier(body.current_thread.text).tags, .name in ("payment", "invoice"))
+  and any(attachments,
+          .file_type in $file_extensions_common_archives
+          or .file_type in $file_extensions_executables
+          or .file_type in $file_extensions_macros
+          or .file_type in ("lz")
+  )
+  and sender.email.domain.root_domain not in~ ('wise.com', 'wise.jobs')
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Natural Language Understanding"
+  - "Sender analysis"
+id: "01480f95-dc1e-5b9a-a360-96bfee663c39"

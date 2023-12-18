@@ -18,27 +18,25 @@ source: |
   and sender.email.domain.root_domain not in~ ("microsoft.com", "microsoftonline.com")
 
   // Link to the device code MS pages
-  and any(body.links, (
-      .href_url.url == "https://microsoft.com/devicelogin" or
-      .href_url.url == "https://login.microsoftonline.com/common/oauth2/deviceauth")
+  and any(body.links,
+          (
+            .href_url.url == "https://microsoft.com/devicelogin"
+            or .href_url.url == "https://login.microsoftonline.com/common/oauth2/deviceauth"
+          )
   )
 
   // Body text references device codes
   and (
-      strings.icontains(body.html.display_text, "device code") or 
-      // A nine character string containing a combination of letters and characters
-      regex.icontains(body.html.display_text, '[\W]([A-Z0-9]{9})[\W]')
+    strings.icontains(body.html.display_text, "device code")
+    or 
+    // A nine character string containing a combination of letters and characters
+    regex.icontains(body.html.display_text, '[\W]([A-Z0-9]{9})[\W]')
   )
-
-  // Unsolicited
   and (
-    (
-        sender.email.domain.root_domain in $free_email_providers
-        and sender.email.email not in $recipient_emails
-    )
+    not profile.by_sender().solicited
     or (
-        sender.email.domain.root_domain not in $free_email_providers
-        and sender.email.domain.domain not in $recipient_domains
+      profile.by_sender().any_messages_malicious_or_spam
+      and not profile.by_sender().any_false_positives
     )
   )
 attack_types:

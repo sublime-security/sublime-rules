@@ -5,31 +5,32 @@ description: |
 type: "rule"
 severity: "medium"
 source: |
-  type.inbound 
+  type.inbound
   and sender.display_name in $org_display_names
-  and length(attachments) == 0 
-  and length(body.plain.raw) < 300
+  and length(attachments) == 0
+  and length(body.current_thread.text) < 400
   and (
-      sender.email.domain.root_domain not in $org_domains
-      or
-      sender.email.domain.root_domain in $free_email_providers
+    sender.email.domain.root_domain not in $org_domains
+    or sender.email.domain.root_domain in $free_email_providers
+  )
+  and 1 of (
+    regex.icontains(body.current_thread.text,
+                    '(pay\s?(roll|check|date|day)|direct deposit|\bACH\b|\bdd\b|gehalt|salario|salary)'
+    ),
+    regex.icontains(subject.subject,
+                    '(pay\s?(roll|check|date|day)|direct deposit|\bACH\b|\bdd\b|gehalt|salario|salary)'
+    )
+  )
+  and (
+    not profile.by_sender().solicited
+    or (
+      profile.by_sender().any_messages_malicious_or_spam
+      and not profile.by_sender().any_false_positives
+    )
   )
 
-  and 1 of (
-         regex.icontains(body.plain.raw, '(pay\s?(roll|check|date|day)|direct deposit|\bdd\b|gehalt|salario|salary)'),
-         regex.icontains(body.html.inner_text, '(pay\s?(roll|check|date|day)|direct deposit|\bdd\b|gehalt|salario|salary)'),
-         regex.icontains(subject.subject, '(pay\s?(roll|check|date|day)|direct deposit|\bdd\b|gehalt|salario|salary)') 
-  )
-  and (
-        (
-            sender.email.domain.root_domain in $free_email_providers
-            and sender.email.email not in $recipient_emails
-        )
-        or (
-            sender.email.domain.root_domain not in $free_email_providers
-            and sender.email.domain.domain not in $recipient_domains
-        )
-  )
+  and not profile.by_sender().any_false_positives
+
 attack_types:
   - "BEC/Fraud"
 tactics_and_techniques:

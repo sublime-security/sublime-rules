@@ -8,33 +8,52 @@ type: "rule"
 severity: "medium"
 source: |
   type.inbound
-
+  
   // only 1 To: recipient
   and length(recipients.to) + length(recipients.bcc) + length(recipients.cc) == 1
-
   and any(recipients.to,
-      // custom domains only
-      sender.email.domain.domain not in $free_email_providers
-
-      // recipient's domain is in the sender's display name
-      and strings.icontains(sender.display_name, .email.domain.root_domain))
-
+          // custom domains only
+          sender.email.domain.domain not in $free_email_providers
+  
+          // recipient's domain is in the sender's display name
+          and strings.icontains(sender.display_name, .email.domain.root_domain)
+  )
+  
   and not (
-     strings.contains(sender.display_name, "on behalf of")
-     and sender.email.domain.root_domain == "microsoftonline.com"
+    (
+      strings.contains(sender.display_name, "on behalf of")
+      and sender.email.domain.root_domain == "microsoftonline.com"
+    )
+    or (
+      strings.contains(sender.display_name, "via TransferXL")
+      and sender.email.domain.root_domain == "transferxl.com"
+    )
   )
-
-  // first-time sender
+  
+  and all(recipients.to, .email.domain.root_domain != sender.email.domain.root_domain)
+  
   and (
-            (
-                sender.email.domain.root_domain in $free_email_providers
-                and sender.email.email not in $sender_emails
-            )
-            or (
-                sender.email.domain.root_domain not in $free_email_providers
-                and sender.email.domain.domain not in $sender_domains
-            )
+    profile.by_sender().prevalence in ("new", "outlier")
+    or (
+      profile.by_sender().any_messages_malicious_or_spam
+      and not profile.by_sender().any_false_positives
+    )
   )
+  
+    // negate highly trusted sender domains unless they fail DMARC authentication
+  and
+  (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and (
+        any(distinct(headers.hops, .authentication_results.dmarc is not null),
+            strings.ilike(.authentication_results.dmarc, "*fail")
+        )
+      )
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+  
 attack_types:
   - "Credential Phishing"
 tactics_and_techniques:

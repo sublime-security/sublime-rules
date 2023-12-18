@@ -8,9 +8,22 @@ authors:
 severity: "medium"
 source: |
   type.inbound
-  and sender.email.domain.root_domain != "linkedin.com"
-  and any(body.links, .href_url.domain.root_domain == 'linkedin.com' and .href_url.path == '/slink')
-  and any(body.links, strings.ilike(.href_url.query_params, 'code=*'))
+  and (
+    (
+      sender.email.domain.root_domain != "linkedin.com"
+      and any(body.links,
+              .href_url.domain.root_domain == 'linkedin.com' and .href_url.path == '/slink'
+      )
+      and any(body.links, strings.ilike(.href_url.query_params, 'code=*'))
+    )
+    or any(attachments,
+           .file_type == "pdf"
+           and any(file.explode(.),
+                   any(.scan.url.urls, .domain.root_domain == 'linkedin.com' and .path == '/slink')
+                   and any(.scan.url.urls, strings.ilike(.query_params, 'code=*'))
+           )
+    )
+  )
 attack_types:
   - "Credential Phishing"
   - "Malware/Ransomware"
