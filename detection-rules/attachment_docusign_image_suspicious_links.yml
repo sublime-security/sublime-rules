@@ -1,7 +1,7 @@
 name: "Attachment: DocuSign image lure with no DocuSign domains in links"
 description: "Detects DocuSign phishing emails with no DocuSign links, a DocuSign logo attached, from a first-time sender."
 type: "rule"
-severity: "medium"
+severity: "high"
 source: |
   type.inbound
   and length(filter(attachments, .file_type not in $file_types_images)) == 0
@@ -26,15 +26,13 @@ source: |
           )
   )
   and (
-    (
-      sender.email.domain.root_domain in $free_email_providers
-      and sender.email.email not in $sender_emails
-    )
+    not profile.by_sender().solicited
     or (
-      sender.email.domain.root_domain not in $free_email_providers
-      and sender.email.domain.domain not in $sender_domains
+      profile.by_sender().any_messages_malicious_or_spam
+      and not profile.by_sender().any_false_positives
     )
   )
+  and not profile.by_sender().any_false_positives
 attack_types:
   - "Credential Phishing"
 tactics_and_techniques:

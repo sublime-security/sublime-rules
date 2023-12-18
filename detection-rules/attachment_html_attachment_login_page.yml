@@ -68,6 +68,7 @@ source: |
                   )
           )
   )
+
   and (
     (
       // exclude internal mailers where there is no SPF configured.
@@ -81,15 +82,30 @@ source: |
     )
     or sender.email.domain.root_domain not in $org_domains
   )
-  // Unsolicited
+
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and
+  (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and (
+        any(distinct(headers.hops, .authentication_results.dmarc is not null),
+            strings.ilike(.authentication_results.dmarc, "*fail")
+        )
+      )
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+
+
   and (
     (
-      sender.email.domain.root_domain in $free_email_providers
-      and sender.email.email not in $recipient_emails
+      not profile.by_sender().solicited
+      and profile.by_sender().prevalence in ("new", "outlier")
     )
     or (
-      sender.email.domain.root_domain not in $free_email_providers
-      and sender.email.domain.domain not in $recipient_domains
+      profile.by_sender().any_messages_malicious_or_spam
+      and not profile.by_sender().any_false_positives
     )
   )
 attack_types:

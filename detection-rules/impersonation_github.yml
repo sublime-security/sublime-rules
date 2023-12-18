@@ -7,11 +7,20 @@ type: "rule"
 severity: "high"
 source: |
   type.inbound
-  and not strings.ilike(sender.display_name, '*course*', '*bootcamp*', '*training*')
+  and not strings.ilike(sender.display_name,
+                        '*course*',
+                        '*bootcamp*',
+                        '*training*'
+  )
   and (
     strings.ilike(sender.display_name, '*github*')
     or strings.ilike(sender.email.email, '*github*')
     or strings.ilevenshtein(sender.email.domain.sld, 'github') <= 1
+  )
+  // negating listservs
+  and not (
+    any(headers.hops, any(.fields, .name == "List-Unsubscribe"))
+    and strings.contains(sender.display_name, "via")
   )
   and sender.email.domain.root_domain not in (
     'github.com',
@@ -21,18 +30,30 @@ source: |
     'gtmhub.com',
     'githubstatus.com',
     'githubnext.com',
-    'lithub.com'
+    'lithub.com',
+    'icims.com'
   )
+
+  // negate highly trusted sender domains unless they fail DMARC authentication
   and (
     (
-      sender.email.domain.root_domain in $free_email_providers
-      and sender.email.email not in $recipient_emails
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and (
+        any(distinct(headers.hops, .authentication_results.dmarc is not null),
+            strings.ilike(.authentication_results.dmarc, "*fail")
+        )
+      )
     )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+  and (
+    not profile.by_sender().solicited
     or (
-      sender.email.domain.root_domain not in $free_email_providers
-      and sender.email.domain.domain not in $recipient_domains
+      profile.by_sender().any_messages_malicious_or_spam
+      and not profile.by_sender().any_false_positives
     )
   )
+  and not profile.by_sender().any_false_positives
 attack_types:
   - "Credential Phishing"
 tactics_and_techniques:

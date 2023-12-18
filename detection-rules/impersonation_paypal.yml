@@ -15,7 +15,20 @@ source: |
            (.file_type in $file_types_images or .file_type == "pdf")
            and any(ml.logo_detect(.).brands, .name == "PayPal")
            and any(file.explode(.),
-                   strings.ilike(.scan.ocr.raw, "*PayPal*")
+                  // exclude images taken with mobile cameras and screenshots from android
+                   not any(.scan.exiftool.fields,
+                           .key == "Model"
+                           or (
+                             .key == "Software"
+                             and strings.starts_with(.value, "Android")
+                           )
+                   )
+                   // exclude images taken with mobile cameras and screenshots from Apple
+                   and not any(.scan.exiftool.fields,
+                               .key == "DeviceManufacturer"
+                               and .value == "Apple Computer Inc."
+                   )
+                   and strings.ilike(.scan.ocr.raw, "*PayPal*")
                    and strings.ilike(.scan.ocr.raw,
                                      "*invoice*",
                                      "*transaction*",
@@ -42,6 +55,7 @@ source: |
     'paypal.ca',
     'paypal.fr',
     'paypal.it',
+    'paypal.com.sg',
     'synchronyfinancial.com',
     'synchronybank.com',
     'xoom.com',
@@ -49,20 +63,31 @@ source: |
     'paypalcorp.com',
     'paypal-customerfeedback.com',
     'paypal-creditsurvey.com',
-    'xoom.com'
+    'paypal-prepaid.com',
+    'xoom.com',
+    'paypal.co.il'
   )
-
-  // unsolicited
+  and (
+    not profile.by_sender().solicited
+    or (
+      profile.by_sender().any_messages_malicious_or_spam
+      and not profile.by_sender().any_false_positives
+    )
+  )
+  
+  // negate highly trusted sender domains unless they fail DMARC authentication
   and (
     (
-      sender.email.domain.root_domain in $free_email_providers
-      and sender.email.email not in $recipient_emails
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and (
+        any(distinct(headers.hops, .authentication_results.dmarc is not null),
+            strings.ilike(.authentication_results.dmarc, "*fail")
+        )
+      )
     )
-    or (
-      sender.email.domain.root_domain not in $free_email_providers
-      and sender.email.domain.domain not in $recipient_domains
-    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
   )
+
 attack_types:
   - "Credential Phishing"
 tactics_and_techniques:

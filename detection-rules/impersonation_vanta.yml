@@ -8,8 +8,8 @@ authors:
 source: |
   type.inbound
   and (
-    strings.ilike(sender.display_name, '*vanta*')
-    or strings.ilike(sender.email.email, '*vanta*')
+    regex.imatch(sender.display_name, '\bvanta\b')
+    or regex.imatch(sender.email.local_part, '(\b)vanta|vanta(\b)')
     or strings.ilevenshtein(sender.email.domain.sld, 'vanta') <= 1
   )
   and not (
@@ -18,7 +18,23 @@ source: |
     or strings.ilevenshtein(sender.email.domain.sld, 'advantage') <= 1
   )
   and sender.email.domain.root_domain in $free_email_providers
-  and sender.email.email not in $recipient_emails
+  and sender.email.email not in $sender_emails
+  
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and
+  (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and (
+        any(distinct(headers.hops, .authentication_results.dmarc is not null),
+            strings.ilike(.authentication_results.dmarc, "*fail")
+        )
+      )
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+
+
 attack_types:
   - "Credential Phishing"
 tactics_and_techniques:

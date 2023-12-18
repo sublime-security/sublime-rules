@@ -1,0 +1,63 @@
+name: "Brand impersonation: Adobe with suspicious language and link"
+description: "Email contains an Adobe logo, at least one link, and suspicious link language from a new sender."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and length(attachments) == 0
+  and length(body.links) > 0
+  and any(ml.logo_detect(beta.message_screenshot()).brands,
+          .name == "Adobe" and .confidence in ("high")
+  )
+  and (
+    any(file.explode(beta.message_screenshot()),
+        strings.ilike(.scan.ocr.raw,
+                      "*review*",
+                      "*sign*",
+                      "*view*",
+                      "*completed document*",
+                      "*open agreement*",
+                      "*open document*"
+        )
+    )
+    or any(body.links,
+           strings.ilike(.display_text,
+                         "*review*",
+                         "*sign*",
+                         "*view*",
+                         "*completed document*",
+                         "*open agreement*",
+                         "*open document*"
+           )
+    )
+  )
+  and (
+    profile.by_sender().prevalence in ("new", "outlier")
+    or (
+      profile.by_sender().any_messages_malicious_or_spam
+      and not profile.by_sender().any_false_positives
+    )
+  )
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and (
+        any(distinct(headers.hops, .authentication_results.dmarc is not null),
+            strings.ilike(.authentication_results.dmarc, "*fail")
+        )
+      )
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Social engineering"
+detection_methods:
+  - "Computer Vision"
+  - "Content analysis"
+  - "Header analysis"
+  - "Sender analysis"
+id: "32cc8bf1-f4d7-549f-a970-eade24b7c6ae"

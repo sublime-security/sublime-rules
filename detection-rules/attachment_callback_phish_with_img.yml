@@ -10,20 +10,30 @@ severity: "high"
 source: |
   type.inbound
   and (
-    (
-      sender.email.domain.root_domain in $free_email_providers
-      and sender.email.email not in $recipient_emails
-    )
+    not profile.by_sender().solicited
     or (
-      sender.email.domain.root_domain not in $free_email_providers
-      and sender.email.domain.domain not in $recipient_domains
+      profile.by_sender().any_messages_malicious_or_spam
+      and not profile.by_sender().any_false_positives
     )
   )
   and sender.email.domain.root_domain in $free_email_providers
   and any(attachments,
+          // exclude images taken with mobile cameras and screenshots from android
           .file_type in $file_types_images
           and any(file.explode(.),
-                  4 of (
+                  not any(.scan.exiftool.fields,
+                          .key == "Model"
+                          or (
+                            .key == "Software"
+                            and strings.starts_with(.value, "Android")
+                          )
+                  )
+                  // exclude images taken with mobile cameras and screenshots from Apple
+                  and not any(.scan.exiftool.fields,
+                              .key == "DeviceManufacturer"
+                              and .value == "Apple Computer Inc."
+                  )
+                  and 4 of (
                     strings.icontains(.scan.ocr.raw, "purchase"),
                     strings.icontains(.scan.ocr.raw, "subscription"),
                     strings.icontains(.scan.ocr.raw, "antivirus"),
