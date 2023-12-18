@@ -1,0 +1,61 @@
+name: "Brand impersonation: Okta"
+description: "Impersonation of Okta an Identity and access management company."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and (
+    regex.icontains(sender.display_name, '\bOkta\b')
+    or strings.ilike(sender.email.domain.domain, '*Okta*')
+    or strings.ilike(subject.subject, '*Okta*')
+  )
+  and not(
+    sender.email.domain.root_domain in~ (
+      'oktacdn.com',
+      'okta.com',
+      'okta-emea.com',
+      'okta-gov.com',
+      'oktapreview.com',
+      'polaris.me'
+    )
+    and any(distinct(headers.hops, .authentication_results.dmarc is not null),
+           strings.ilike(.authentication_results.dmarc, "*pass")
+    )
+  )
+  and any(ml.logo_detect(beta.message_screenshot()).brands,
+          .name == "Okta" and .confidence in ("medium", "high")
+  )
+  and (
+    profile.by_sender().prevalence in ("new", "outlier")
+    or (
+      profile.by_sender().any_messages_malicious_or_spam
+      and not profile.by_sender().any_false_positives
+    )
+  )
+  
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and (
+        any(distinct(headers.hops, .authentication_results.dmarc is not null),
+            strings.ilike(.authentication_results.dmarc, "*fail")
+        )
+      )
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+
+
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Lookalike domain"
+  - "Social engineering"
+detection_methods:
+  - "Computer Vision"
+  - "Content analysis"
+  - "Header analysis"
+  - "Sender analysis"
+id: "b7a2989a-a5ef-5340-b1d0-6b7c51462855"
