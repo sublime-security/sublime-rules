@@ -1,0 +1,70 @@
+name: "Attachment: HTML Smuggling with base64 source"
+description: |
+  Potential HTML smuggling attacks from new senders.
+  This rule detects HTML files as attachments or within archives that contain base64 sources from new and unsolicited senders. 
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and (
+    any(attachments,
+        (
+          .file_extension in~ ("html", "htm", "shtml", "dhtml")
+          or .file_type == "html"
+          or .content_type == "text/html"
+        )
+        and any(file.explode(.),
+                length(.scan.strings.strings) < 20
+                and any(.scan.strings.strings,
+                        regex.icontains(., 'src="data:text/html;base64')
+                )
+        )
+    )
+    or any(attachments,
+           (.file_extension in~ $file_extensions_common_archives)
+           and any(file.explode(.),
+                   (
+                     .file_extension in~ ("html", "htm", "shtml", "dhtml")
+                     or ..file_type == "html"
+                     or ..content_type == "text/html"
+                   )
+                   and length(.scan.strings.strings) < 20
+                   and any(.scan.strings.strings,
+                           regex.icontains(., 'src="data:text/html;base64')
+                   )
+           )
+    )
+  )
+  and (
+    profile.by_sender().prevalence in ("new", "outlier")
+    and not profile.by_sender().solicited
+  )
+  
+  and not profile.by_sender().any_false_positives
+  
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and (
+        any(distinct(headers.hops, .authentication_results.dmarc is not null),
+            strings.ilike(.authentication_results.dmarc, "*fail")
+        )
+      )
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+attack_types:
+  - "Credential Phishing"
+  - "Malware/Ransomware"
+tactics_and_techniques:
+  - "Evasion"
+  - "HTML smuggling"
+detection_methods:
+  - "Archive analysis"
+  - "Content analysis"
+  - "File analysis"
+  - "HTML analysis"
+  - "Sender analysis"
+  
+id: "f352db77-f2c9-5cfc-b8d3-8adf889f70f3"
