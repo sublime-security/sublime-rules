@@ -7,6 +7,7 @@ source: |
   and length(body.links) < 3
   and 0 < (length(attachments)) < 3
   and all(attachments, (.file_type in $file_types_images))
+  and all(attachments, (.size > 10000))
   and (
     // body text is very short
     (
@@ -22,7 +23,7 @@ source: |
           and strings.contains(body.current_thread.text, 'caution')
         )
         or regex.icontains(body.current_thread.text,
-                           "intended recipient's use only|external email|sent from outside|you don't often"
+                           "intended recipient's use only|external email|sent from outside|you don't often|confidential"
         )
       )
     )
@@ -30,6 +31,7 @@ source: |
   and (
     any(body.links,
         any(.href_url.rewrite.encoders, strings.icontains(., "open_redirect"))
+        and .href_url.domain.root_domain not in $high_trust_sender_root_domains
     )
     or any(body.links,
            .href_url.domain.root_domain == 'sng.link'
@@ -56,6 +58,7 @@ source: |
     )
   )
   and not profile.by_sender().prevalence == "common"
+
 attack_types:
   - "Credential Phishing"
   - "Malware/Ransomware"
