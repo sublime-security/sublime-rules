@@ -8,30 +8,40 @@ source: |
   and regex.icontains(sender.display_name,
                       '(\bh\W?r\W?\b|human resources|hr depart(ment)?|employee relations)'
   )
-
+  
   // negate replies
   and (
     length(headers.references) == 0
     or not any(headers.hops, any(.fields, strings.ilike(.name, "In-Reply-To")))
   )
   // Negate common marketing mailers
-  and not regex.icontains(sender.display_name, 'HR (Events|Expert)')
+  and not regex.icontains(sender.display_name, 'HR (Events|Expert|Support Center)|HR and People Operations')
   
   and (
     (0 < length(body.links) < 10 or length(attachments) > 0)
     // mass-mailer infra abuse results in an inflated link count due to mailer templates that include links for unsubbing, changing preferences, etc.
     // loosening the link count check as a result ensures we fire even with these conditions
     or (
-      any(body.links, strings.ilike(.display_text, "*unsubscribe*", "update your preferences", "add us to your address book"))
+      any(body.links,
+          strings.ilike(.display_text,
+                        "*unsubscribe*",
+                        "update your preferences",
+                        "add us to your address book"
+          )
+      )
       and 0 < length(body.links) < 15
     )
   )
   // Request and Urgency
-  and any(ml.nlu_classifier(body.current_thread.text).entities, .name == "request")
-  and any(ml.nlu_classifier(body.current_thread.text).entities, .name == "urgency")
+  and any(ml.nlu_classifier(body.current_thread.text).entities,
+          .name == "request"
+  )
+  and any(ml.nlu_classifier(body.current_thread.text).entities,
+          .name in ("urgency", "financial")
+  )
   and (
     any(ml.nlu_classifier(body.current_thread.text).intents, .name != "benign")
-    or length(ml.nlu_classifier(body.current_thread.text).intents) == 0  // not benign but not malicious either
+    or length(ml.nlu_classifier(body.current_thread.text).intents) == 0 // not benign but not malicious either
   )
   and (
     profile.by_sender().prevalence in ("new", "outlier")
@@ -41,8 +51,7 @@ source: |
     )
   )
   // negate highly trusted sender domains unless they fail DMARC authentication
-  and
-  (
+  and (
     (
       sender.email.domain.root_domain in $high_trust_sender_root_domains
       and (
