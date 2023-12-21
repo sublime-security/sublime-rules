@@ -1,6 +1,6 @@
 name: "Attachment: HTML smuggling with atob and high entropy"
 description: |
-  Recursively scans files and archives to detect HTML smuggling techniques.
+  Recursively scans files and archives to detect HTML smuggling techniques using Javascript atob functions.
 references:
   - "https://delivr.to/payloads?id=7dbf0d83-1557-4345-bf67-d18c4256b0c1"
 type: "rule"
@@ -24,7 +24,13 @@ source: |
                     // usage: document['write'](atob)
                     or any(.scan.strings.strings, strings.ilike(., "*document*write*atob*"))
                     // usage: some_var = atob();
-                    or any(.scan.strings.strings, strings.ilike(., "*=*atob*;"))
+                    or any(.scan.strings.strings, regex.icontains(., "=.?atob.*;"))
+                    // usage: atob(atob
+                    or any(.scan.strings.strings, strings.ilike(., "*atob?atob*"))
+                    // usage: eval(atob)
+                    or any(.scan.strings.strings, strings.ilike(., "*eval?atob*"))
+                      // usage: atob(_0x)
+                    or any(.scan.strings.strings, strings.ilike(., "*atob(?0x*"))
                     // usage: obfuscating "atob"
                     or any(.scan.javascript.identifiers, strings.ilike(., '*ato\u0062*'))
                     // usage: document.head.insertAdjacentHTML("beforeend", atob(...
@@ -37,6 +43,19 @@ source: |
                   )
           )
   )
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and (
+        any(distinct(headers.hops, .authentication_results.dmarc is not null),
+            strings.ilike(.authentication_results.dmarc, "*fail")
+        )
+      )
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+
 attack_types:
   - "Credential Phishing"
   - "Malware/Ransomware"
