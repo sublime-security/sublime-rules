@@ -2,23 +2,23 @@ name: "Sender: Legitimate message senders"
 type: "query"
 source: |  
   (
-    sender.email.domain.root_domain not in ("protectedtrust.com")
-    and any(body.links,
-            .href_url.domain.root_domain != sender.email.domain.root_domain
+    sender.email.domain.root_domain in ("protectedtrust.com", "medallia.com", "icims.com", "workday.com")
+    or any(body.links,
+            .href_url.domain.root_domain == sender.email.domain.root_domain
     )
-    // Negate known secure mailer(s)
-    and not all(body.links,
+    // Known secure mailer(s)
+    or all(body.links,
                 .href_url.domain.root_domain in ("mimecast.com", "cisco.com")
     )
-    and any(headers.hops,
+    or any(headers.hops,
             .index == 0
-            and not any(.fields,
+            and any(.fields,
                         strings.contains(.value,
                                         'multipart/mixed; boundary="PROOFPOINT_BOUNDARY_1"'
                         )
             )
     )
-    and not (
+    or (
       any(headers.hops, any(.fields, .name == 'X-ZixNet'))
       and any(headers.domains,
               .root_domain in ("zixport.com", "zixcorp.com", "zixmail.net")
