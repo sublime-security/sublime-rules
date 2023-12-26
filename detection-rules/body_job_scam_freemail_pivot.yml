@@ -1,0 +1,17 @@
+name: "BEC/Fraud - Job Scam Fake thread or plaintext pivot to freemail"
+description: "Detects potential job scams using plaintext or fake threads attempting to pivot to a freemail address from an unsolicited sender."
+type: "rule"
+severity: "medium"
+source: "type.inbound\nand any(ml.nlu_classifier(body.current_thread.text).entities,\n        .name in (\"greeting\", \"salutation\")\n)\n\n// most likely to occur in plain text\nand (\n  body.html.raw is null\n  or \n\n  // HTML is not null but fake thread\n  (\n    strings.istarts_with(subject.subject, \"RE:\")\n    or strings.istarts_with(subject.subject, \"FWD:\")\n  )\n  and (\n    (length(headers.references) == 0 and headers.in_reply_to is null)\n    or not any(headers.hops, any(.fields, strings.ilike(.name, \"In-Reply-To\")))\n  )\n)\nand 3 of (\n  any([subject.subject, body.current_thread.text],\n      regex.icontains(., '(full|part).time')\n  ),\n  strings.ilike(body.current_thread.text, '*job*'),\n  regex.icontains(body.current_thread.text, '\\bHR\\b'),\n  strings.ilike(body.current_thread.text, '*manager*'),\n  strings.ilike(body.current_thread.text, '*commission*'),\n  strings.ilike(body.current_thread.text, '*hourly*'),\n  strings.ilike(body.current_thread.text, '*prior experience*'),\n  strings.ilike(body.current_thread.text, '*company rep*'),\n  strings.ilike(body.current_thread.text, \"100% legal\")\n)\n\n// all attachments are images or there's no attachments\nand (\n  (\n    length(attachments) > 0\n    and all(attachments, .file_type in $file_types_images)\n  )\n  or length(attachments) == 0\n)\n\n// there's an email in the body\nand regex.contains(body.current_thread.text,\n                   \"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\\\.[A-Za-z]{2,}\"\n)\n\n// and it's likely a freemail\nand any($free_email_providers, strings.icontains(body.current_thread.text, .))\n\n// and that email doesn't match the sender domain\nand (\n  all(body.links, .href_url.domain.root_domain != sender.email.domain.domain)\n  or sender.email.domain.root_domain in $free_email_providers\n)\nand (\n  (\n    not profile.by_sender().solicited\n    and not profile.by_sender().any_false_positives\n  )\n  or profile.by_sender().any_messages_malicious_or_spam\n)\nand not profile.by_sender().any_false_positives\n"
+attack_types:
+  - "BEC/Fraud"
+tactics_and_techniques:
+  - "Free email provider"
+  - "Out of band pivot"
+detection_methods:
+  - "Content analysis"
+  - "File analysis"
+  - "Natural Language Understanding"
+id: "ce21c151-90c2-5573-b19e-3dcbcfc0a195"
+testing_pr: 1179
+testing_sha: 1f93325444ca910b3d0118d5796fd9e39c794e5e
