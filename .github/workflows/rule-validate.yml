@@ -247,6 +247,7 @@ jobs:
 
       - name: "Find mql-mimic-exempt Comments"
         uses: actions/github-script@v6
+        id: find_emls_to_skip
         if: steps.find_pr_number.outputs.result != ''
         with:
           debug: ${{ secrets.ACTIONS_STEP_DEBUG || false }}
@@ -258,14 +259,16 @@ jobs:
             })
             const comments = await github.paginate(opts)
             
-            const regex = /\/mql-mimic-exempt((?:[\s:,;\/]+#*\d+)+)/gis
+            const seperatorRegex = /[\s:,;\/]*/
+            const exemptRegex = /\/mql-mimic-exempt((?:[\s:,;\/]+#*\d+)+)/gis
 
+            let allEMLsToSkip = []
             for (const comment of comments) {
               if (comment.author_association !== "MEMBER") {
                 console.log("Ignoring comment from non-member" + comment.user.login)
               }
 
-              while ((m = regex.exec(comment.body)) !== null) {
+              while ((m = exemptRegex.exec(comment.body)) !== null) {
                 // This is necessary to avoid infinite loops with zero-width matches
                 if (m.index === regex.lastIndex) {
                   regex.lastIndex++;
@@ -273,12 +276,24 @@ jobs:
                   
                 // The result can be accessed through the `m`-variable.
                 m.forEach((match, groupIndex) => {
-                  console.log(`Found match, group ${groupIndex}: ${match}`);
+                  if (groupIndex != 1) {
+                    return
+                  }
+            
+                  console.log("Found MQL Mimic Exemption EMLs: " + match)
+                  
+                  // First cut out all (optional) #
+                  match = match.replaceAll("#", "")
+                  let emls = match.split(seperatorRegex)
+                  console.log("Split EMLs: " + JSON.stringify(match))
+                  allEMLsToSkip = allEMLsToSkip.concat(emls)
                 });
               }
             }
             
-            
+            console.log("All EMLs: " + JSON.stringify(allEMLsToSkip))
+            return allEMLsToSkip.join(" ")
+
 
       - name: "Trigger MQL Mimic Tests"
         env:
@@ -288,8 +303,9 @@ jobs:
           token: '${{ secrets.GITHUB_TOKEN }}'
           sha: '${{ steps.get_head.outputs.HEAD }}'
           only_rule_ids: '${{ steps.find_ids.outputs.rule_ids }}'
+          skip_eml_ids: '${{ steps.find_emls_to_skip.outputs.result }}'
         run: |
-          body='{"branch":"'$branch'","repo":"'$repo'","token":"'$token'","sha":"'$sha'","only_rule_ids":"'$only_rule_ids'"}'
+          body='{"branch":"'$branch'","repo":"'$repo'","token":"'$token'","sha":"'$sha'","only_rule_ids":"'$only_rule_ids'","skip_eml_ids":"'$skip_eml_ids'"}'
           echo $body
           
           curl -X POST $trigger_url  \
