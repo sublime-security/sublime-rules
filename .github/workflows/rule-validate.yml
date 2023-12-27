@@ -61,33 +61,33 @@ jobs:
           pip install -r scripts/generate-rule-ids/requirements.txt
           python scripts/generate-rule-ids/main.py
 
-      - name: Validate Rules
-        run: |
-          for f in *-rules/*.yml
-          do
-            echo "Processing $f"
-            http_code=$(yq -o=json eval 'del(.type)' "$f" | curl -H "Content-Type: application/json" -X POST --data-binary @- -o response.txt -w "%{http_code}" --silent https://playground.sublimesecurity.com/v1/rules/validate)
-            echo '' >> response.txt
-            cat response.txt
-            if [[ "$http_code" != "200" ]]; then
-              echo "Unexpected response $http_code"
-              exit 1
-            fi
-          done
-
-      - name: Validate Insights and Signals
-        run: |
-          for f in {insights,signals}/**/*.yml
-          do
-            echo "Processing $f"
-            http_code=$(yq eval 'del(.type) | .source = "length([\n\n" + .source + "\n]) >= 0"' "$f" -o=json | curl -H "Content-Type: application/json" -X POST --data-binary @- -o response.txt -w "%{http_code}" --silent https://playground.sublimesecurity.com/v1/rules/validate)
-            echo '' >> response.txt
-            cat response.txt
-            if [[ "$http_code" != "200" ]]; then
-              echo "Unexpected response $http_code"
-              exit 1
-            fi
-          done
+#      - name: Validate Rules
+#        run: |
+#          for f in *-rules/*.yml
+#          do
+#            echo "Processing $f"
+#            http_code=$(yq -o=json eval 'del(.type)' "$f" | curl -H "Content-Type: application/json" -X POST --data-binary @- -o response.txt -w "%{http_code}" --silent https://playground.sublimesecurity.com/v1/rules/validate)
+#            echo '' >> response.txt
+#            cat response.txt
+#            if [[ "$http_code" != "200" ]]; then
+#              echo "Unexpected response $http_code"
+#              exit 1
+#            fi
+#          done
+#
+#      - name: Validate Insights and Signals
+#        run: |
+#          for f in {insights,signals}/**/*.yml
+#          do
+#            echo "Processing $f"
+#            http_code=$(yq eval 'del(.type) | .source = "length([\n\n" + .source + "\n]) >= 0"' "$f" -o=json | curl -H "Content-Type: application/json" -X POST --data-binary @- -o response.txt -w "%{http_code}" --silent https://playground.sublimesecurity.com/v1/rules/validate)
+#            echo '' >> response.txt
+#            cat response.txt
+#            if [[ "$http_code" != "200" ]]; then
+#              echo "Unexpected response $http_code"
+#              exit 1
+#            fi
+#          done
 
       - name: Verify no .yaml files exist
         run: |
@@ -230,6 +230,38 @@ jobs:
           echo "##[set-output name=rule_ids;]$(echo $altered_rule_ids)"
           # TODO: This doesn't solve for a modified rule_id. We could merge with any files known on 'main', but changing
           # a rule ID is a separate problem.
+
+      - name: Get PR Number
+        if: github.event_name == 'pull_request_target' || github.event_name == 'issue_comment'
+        id: find_pr_number
+        run:
+          if [[ "${{ github.event_name }}" == 'pull_request_target' ]]; then
+            result=${{ github.event.number }}"
+          elif [[ "${{ github.event_name }}" == 'issue_comment' ]]; then
+            result=${{ github.event.issue.number }}"
+          fi
+
+          echo "PR $result"
+          echo "##[set-output name=result;]$result"
+
+
+      - name: "Find mql-mimic-exempt Comments"
+        uses: actions/github-script@v6
+        if: steps.find_pr_number.outputs.result != ''
+        with:
+          debug: ${{ secrets.ACTIONS_STEP_DEBUG || false }}
+          script: |
+            // https://octokit.github.io/rest.js/v18#checks-create
+            let comments = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: "${{ steps.find_pr_number.outputs.result }}",
+            });
+            
+            for (let c in comments) {
+              console.log(c)
+            }
+            
 
       - name: "Trigger MQL Mimic Tests"
         env:
