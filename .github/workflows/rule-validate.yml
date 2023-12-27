@@ -251,14 +251,31 @@ jobs:
         with:
           debug: ${{ secrets.ACTIONS_STEP_DEBUG || false }}
           script: |
-            // https://octokit.github.io/rest.js/v18#checks-create
-            let response = await github.rest.issues.listComments({
+#            // https://octokit.github.io/rest.js/v18#checks-create
+#            let response = await github.rest.issues.listComments({
+#              owner: context.repo.owner,
+#              repo: context.repo.repo,
+#              issue_number: "${{ steps.find_pr_number.outputs.result }}",
+#            });
+#
+#            console.log(JSON.stringify(response))
+
+            const opts = github.rest.issues.listComments.endpoint.merge({
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: "${{ steps.find_pr_number.outputs.result }}",
-            });
+            })
+            const comments = await github.paginate(opts)
+                    
+            console.log(JSON.stringify(comments))
+            for (const comment of comments) {
+              if (comment.author_association !== "MEMBER") {
+                console.log("Ignoring comment from " + comment.user.login)
+              }
+
+              console.log("Body: " + comment.body)
+            }
             
-            console.log(JSON.stringify(response))
             
 
       - name: "Trigger MQL Mimic Tests"
