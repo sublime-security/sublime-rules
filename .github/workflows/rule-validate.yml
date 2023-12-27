@@ -295,6 +295,24 @@ jobs:
             // MQL Mimic will handle duplicates gracefully, no need to handle here.
             return allEMLsToSkip.join(" ")
 
+      - name: "Find Existing MQL Mimic Test Results"
+        uses: actions/github-script@v6
+        id: find_mql_mimic_results
+        with:
+          debug: ${{ secrets.ACTIONS_STEP_DEBUG || false }}
+          env:
+            sha: '${{ steps.get_head.outputs.HEAD }}'
+          script: |
+            const result = await client.rest.checks.listForRef({
+              check_name: "MQL Mimic Tests",
+              owner: "sublime-security",
+              repo: "sublime-rules"
+              ref: process.env.sha
+            })
+            
+            let existingRuns = result.data.check_runs.map((r) => r.id)
+            console.log(existingRuns)
+            return existingRuns
 
       - name: "Trigger MQL Mimic Tests"
         env:
@@ -314,12 +332,12 @@ jobs:
             -d "$body"
 
       - name: Wait for MQL Mimic check to be completed
-        uses: fountainhead/action-wait-for-check@v1.1.0
-        id: wait-for-build
+        uses: sublime-security/action-wait-for-check@v1.1.0
         # Wait for results so that the token remains valid while the test suite is executing and posting a check here.
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           checkName: "MQL Mimic Tests"
           ref: ${{ steps.get_head.outputs.HEAD }}
           timeoutSeconds: 3600
+          ignoreIDs: ${{ steps.find_mql_mimic_results.outputs.result }}
 
