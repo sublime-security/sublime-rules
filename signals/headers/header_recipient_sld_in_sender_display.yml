@@ -1,0 +1,22 @@
+name: "Header: Recipient domain's SLD is used in the sender's display name"
+type: "query"
+source: | 
+  (
+    // recipient SLD is being impersonated in the subject + display name
+    (
+      // these are usually targeted with just 1 recipient,
+      // but sometimes they CC themselves or have a blank CC
+      length(recipients.to) + length(recipients.cc) + length(recipients.bcc) <= 2
+      and any(recipients.to,
+              // ensure that we're checking the org SLD
+              .email.domain.sld in $org_slds
+              and strings.icontains(sender.display_name, .email.domain.sld)
+      )
+    )
+    or (
+      // accounts for BCC'd messages where the recipients are empty
+      // if BCC, sometimes the recipient will be the attacker's email
+      length(recipients.to) + length(recipients.cc) + length(recipients.bcc) <= 2
+      and strings.icontains(sender.display_name, mailbox.email.domain.sld)
+    )
+  )
