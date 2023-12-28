@@ -11,8 +11,8 @@ on:
 
 concurrency:
   # For pull_request_target workflows we want to use head_ref -- the branch triggering the workflow. Otherwise,
-  # use ref, which is the branch for a push event.
-  group: ${{ github.event_name == 'pull_request_target' && github.head_ref || github.ref }}
+  # use ref, which is the branch for a push event or workflow trigger. And for an issue comment just give up grouping.
+  group: ${{ github.event_name == 'pull_request_target' && github.head_ref || (github.event_name == 'issue_comment' && github.run_id || github.ref) }}
   cancel-in-progress: ${{ github.event_name == 'pull_request_target' }}
 
 jobs:
@@ -38,15 +38,13 @@ jobs:
       - name: Get Refs
         id: get_head_ref
         run: |
-          # Accurate for push events, other events require changes.
-          head_ref="${{ github.head_ref }}"
+          # Accurate for push events & workflow dispatch.
+          head_ref="${{ github.ref }}"
           repo="${{ github.repository }}"
 
           if [[ "${{ github.event_name }}" == 'pull_request_target' ]]; then
+            head_ref="${{ github.head_ref }}"
             repo="${{ github.event.pull_request.head.repo.full_name }}"
-          elif [[ "${{ github.event_name }}" == 'workflow_dispatch' ]]; then
-            # Run on a target, so run for all rules.
-            run_all="true"
           elif [[ "${{ github.event_name }}" == 'issue_comment' ]]; then
             # Rely on comment_branch to figure out the head and base
             head_ref="${{ steps.comment_branch.outputs.head_ref }}"
@@ -91,12 +89,14 @@ jobs:
           python-version: '3.10'
 
       - name: Add Rule IDs as Needed & Check for Duplicates
+        if: github.event_name != 'issue_comment'
         # Run before testing, just in case this could invalidate the rule itself
         run: |
           pip install -r scripts/generate-rule-ids/requirements.txt
           python scripts/generate-rule-ids/main.py
 
       - name: Validate Rules
+        if: github.event_name != 'issue_comment'
         run: |
           for f in *-rules/*.yml
           do
@@ -111,6 +111,7 @@ jobs:
           done
 
       - name: Validate Insights and Signals
+        if: github.event_name != 'issue_comment'
         run: |
           for f in {insights,signals}/**/*.yml
           do
@@ -125,15 +126,18 @@ jobs:
           done
 
       - name: Verify no .yaml files exist
+        if: github.event_name != 'issue_comment'
         run: |
           ! /bin/sh -c 'ls **/*.yaml'
 
           
       - name: Verify no .yml files exist in the top directory
+        if: github.event_name != 'issue_comment'
         run: |
           ! /bin/sh -c 'ls *.yml'
 
       - name: Commit & Push Results, if needed
+        if: github.event_name != 'issue_comment'
         id: final_basic_validation
         run: |
           rm response.txt
