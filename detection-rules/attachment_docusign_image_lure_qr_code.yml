@@ -14,13 +14,6 @@ source: |
                    .name == "DocuSign"
             )
           )
-  )
-  and any(attachments,
-          (
-            .file_type in $file_types_images
-            or .file_type == "pdf"
-            or .file_type in $file_extensions_macros
-          )
           and (
             any(file.explode(.),
                 regex.icontains(.scan.ocr.raw, 'scan|camera')
@@ -28,7 +21,7 @@ source: |
             )
             or (
               any(file.explode(.),
-                  .scan.qr.type == "url"
+                  .scan.qr.type is not null
                   // recipient email address is present in the URL, a common tactic used in credential phishing attacks 
                   and any(recipients.to,
                           (
@@ -60,15 +53,31 @@ source: |
                           and .email.domain.valid
                   )
               )
+              and regex.contains(.scan.qr.data, '\.')
+              // exclude images taken with mobile cameras and screenshots from android
+              and not any(.scan.exiftool.fields,
+                          .key == "Model"
+                          or (
+                            .key == "Software"
+                            and strings.starts_with(.value, "Android")
+                          )
+              )
+              // exclude images taken with mobile cameras and screenshots from Apple
+              and not any(.scan.exiftool.fields,
+                          .key == "DeviceManufacturer"
+                          and .value == "Apple Computer Inc."
+              )
             )
           )
   )
-  
   and (
     not any(headers.hops,
             .authentication_results.compauth.verdict is not null
             and .authentication_results.compauth.verdict == "pass"
-            and sender.email.domain.root_domain in ("docusign.net", "docusign.com")
+            and sender.email.domain.root_domain in (
+              "docusign.net",
+              "docusign.com"
+            )
     )
   )
   and (
@@ -78,7 +87,8 @@ source: |
       and not profile.by_sender().any_false_positives
     )
   )
-  
+
+
 attack_types:
   - "Credential Phishing"
 tactics_and_techniques:
