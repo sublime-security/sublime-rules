@@ -1,0 +1,35 @@
+name: "Constant Contact link infrastructure abuse"
+description: "Email contains a Constant Contact (mass mailing platform) tracking link but does not originate from Constant Contact sending infrastructure. The rs6.net domain has been abused by threat actors to attempt sophisticated credential phishing."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and any(body.links, .href_url.domain.root_domain == "rs6.net")
+  and not any(headers.hops,
+              strings.icontains(.authentication_results.spf_details.designator,
+                                "constantcontact.com"
+              )
+  )
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and (
+        any(distinct(headers.hops, .authentication_results.dmarc is not null),
+            strings.ilike(.authentication_results.dmarc, "*fail")
+        )
+      )
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Free email provider"
+  - "Open redirect"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Header analysis"
+  - "Sender analysis"
