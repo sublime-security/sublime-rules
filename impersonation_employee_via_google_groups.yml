@@ -1,0 +1,76 @@
+name: "Employee Impersonation via Google Groups with suspicious indicators"
+description: "Public Google Groups can be used to impersonate internal senders, while the reply to address is not under organizational control, leading to fraud, credential phishing, or other unwanted outcomes.
+"
+type: "rule"
+severity: ""
+source: |
+  (type.inbound or type.internal)
+  and sender.email.domain.root_domain in $org_domains
+  
+  // subject or reply to is leveraging an org display name
+  and (
+    any(headers.reply_to, .display_name in $org_display_names)
+    or any($org_display_names, strings.contains(., subject.subject))
+  )
+  and any(headers.hops,
+          any(.fields,
+              regex.icontains(.name,
+                              "X-Authenticated-Sender|X-Sender|X-Original-Sender"
+              )
+          )
+  )
+  
+  // reply to return path mismatch and not org domain
+  and any(headers.reply_to,
+          .email.domain.root_domain != headers.return_path.domain.root_domain
+          and .email.domain.root_domain not in $org_domains
+  )
+  
+  // googlegroups found in hops
+  and any(headers.hops,
+          .index == 0 and any(.fields, strings.icontains(.value, "googlegroups"))
+  )
+  
+  // financial nlu entity in current thread
+  and 3 of (
+    any(ml.nlu_classifier(body.current_thread.text).entities,
+        .name == "financial"
+    ),
+  
+    // invoice entity in display_text
+    any(ml.nlu_classifier(body.html.display_text).tags, .name == "invoice"),
+  
+    // fake thread
+    (
+      (length(headers.references) == 0 and headers.in_reply_to is null)
+      or not any(headers.hops, any(.fields, strings.ilike(.name, "In-Reply-To")))
+    ),
+  
+    // reply-to is freemail 
+    any(headers.reply_to, .email.domain.domain in $free_email_providers),
+  
+    // reply-to is not in $recipient_emails
+    any(headers.reply_to, .email.email not in $recipient_emails),
+  
+    // dmarc authentication is freemail provider
+    any(distinct(headers.hops, .authentication_results.dmarc is not null),
+        .authentication_results.dmarc_details.from.domain in $free_email_providers
+    )
+  )
+
+attack_types:
+  - "BEC/Fraud"
+  - "Credential Phishing"
+  - "Malware/Ransomware"
+tactics_and_techniques:
+  - "Evasion"
+  - "Free email provider"
+  - "Impersonation: Employee"
+  - "Social engineering"
+  - "Spoofing"
+detection_methods:
+  - "Content analysis"
+  - "Header analysis"
+  - "Natural Language Understanding"
+  - "Sender analysis"
+
