@@ -1,0 +1,42 @@
+name: "Credential Phishing: Fake Storage alerts (unsolicited)"
+description: "This rule targets credential phishing attempts disguised as storage space alerts, activating for inbound emails with specific storage-related keywords and evaluating sender trustworthiness and history. "
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and 0 < length(body.links) < 10
+  and any([subject.subject, sender.display_name], strings.contains(., "storage"))
+  and (
+    strings.icontains(subject.subject, "full")
+    or strings.icontains(subject.subject, "exceeded")
+    or strings.icontains(subject.subject, "out of")
+    or strings.icontains(subject.subject, "cloud")
+    or strings.icontains(subject.subject, "limit")
+    or strings.icontains(subject.subject, "all storage used")
+  )
+  
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and (
+        any(distinct(headers.hops, .authentication_results.dmarc is not null),
+            strings.ilike(.authentication_results.dmarc, "*fail")
+        )
+      )
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+  and (
+    not profile.by_sender().solicited
+    or profile.by_sender().any_messages_malicious_or_spam
+  )
+
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Sender analysis"
+
