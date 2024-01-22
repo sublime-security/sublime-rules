@@ -18,9 +18,22 @@ source: |
   )
   and sender.email.domain.root_domain in $free_email_providers
   and any(attachments,
+          // exclude images taken with mobile cameras and screenshots from android
           .file_type in $file_types_images
           and any(file.explode(.),
-                  4 of (
+                  not any(.scan.exiftool.fields,
+                          .key == "Model"
+                          or (
+                            .key == "Software"
+                            and strings.starts_with(.value, "Android")
+                          )
+                  )
+                  // exclude images taken with mobile cameras and screenshots from Apple
+                  and not any(.scan.exiftool.fields,
+                              .key == "DeviceManufacturer"
+                              and .value == "Apple Computer Inc."
+                  )
+                  and 4 of (
                     strings.icontains(.scan.ocr.raw, "purchase"),
                     strings.icontains(.scan.ocr.raw, "subscription"),
                     strings.icontains(.scan.ocr.raw, "antivirus"),

@@ -1,0 +1,19 @@
+name: "Attachment: HTML with Potential Phishing Portal Indicators"
+type: "query"
+source: |
+  type.inbound
+  and any(attachments,
+          (
+            .file_extension in~ ("html", "htm", "shtml", "dhtml")
+            or .file_type == "html"
+          )
+          and 3 of (
+              regex.icontains(file.parse_html(.).raw, "<form[^>]*>"),
+              regex.icontains(file.parse_html(.).raw, "type=\"password\""),
+              regex.icontains(file.parse_html(.).raw, "<input[^>]*>"),
+              regex.icontains(file.parse_html(.).raw, "<link[^>]*href=\"https?://[^\"]+\""),
+              regex.icontains(file.parse_html(.).raw, "<style[^>]*>"),
+              strings.ilike(file.parse_html(.).raw, "*background-image*"),
+              regex.icontains(file.parse_html(.).raw, "<script[^>]*>")
+          )
+  )
