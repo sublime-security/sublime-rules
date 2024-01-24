@@ -6,22 +6,53 @@ severity: "high"
 source: |
   type.inbound
   and length(filter(attachments, .file_type not in $file_types_images)) == 0
-  and any(attachments,
-          any(file.explode(.),
-              any(ml.nlu_classifier(.scan.ocr.raw).intents,
-                  .name == "cred_theft" and .confidence != "low"
+  and (
+    any(attachments,
+        any(file.explode(.),
+            any(ml.nlu_classifier(.scan.ocr.raw).intents,
+                .name == "cred_theft" and .confidence != "low"
+            )
+            and (
+              any(ml.nlu_classifier(.scan.ocr.raw).entities, .name == "urgency")
+              or any(ml.nlu_classifier(.scan.ocr.raw).entities,
+                     .name == "recipient" and .text == sender.email.local_part
               )
-              and any(ml.nlu_classifier(.scan.ocr.raw).entities, .name == "urgency")
-          )
-          and any(file.explode(.),
-                  3 of (
-                    strings.icontains(.scan.ocr.raw, "review"),
-                    strings.icontains(.scan.ocr.raw, "release"),
-                    strings.icontains(.scan.ocr.raw, "quarantine"),
-                    strings.icontains(.scan.ocr.raw, "messages"),
-                    any(ml.logo_detect(..).brands, strings.starts_with(.name, "Microsoft"))
+            )
+        )
+        and any(file.explode(.),
+                3 of (
+                  strings.icontains(.scan.ocr.raw, "review"),
+                  strings.icontains(.scan.ocr.raw, "release"),
+                  strings.icontains(.scan.ocr.raw, "quarantine"),
+                  strings.icontains(.scan.ocr.raw, "messages"),
+                  any(ml.logo_detect(..).brands,
+                      strings.starts_with(.name, "Microsoft")
                   )
-          )
+                )
+        )
+    )
+    or (
+      any(ml.nlu_classifier(body.current_thread.text).intents,
+          .name == "cred_theft" and .confidence != "low"
+      )
+      and (
+        any(ml.nlu_classifier(body.current_thread.text).entities,
+            .name == "urgency"
+        )
+        or any(ml.nlu_classifier(body.current_thread.text).entities,
+               .name == "recipient" and .text == sender.email.local_part
+        )
+      )
+      and 3 of (
+        strings.icontains(body.current_thread.text, "review"),
+        strings.icontains(body.current_thread.text, "release"),
+        strings.icontains(body.current_thread.text, "quarantine"),
+        strings.icontains(body.current_thread.text, "messages"),
+        any(ml.logo_detect(beta.message_screenshot()).brands,
+            strings.starts_with(.name, "Microsoft")
+        )
+      )
+    )
   )
   and sender.email.domain.root_domain not in (
     "bing.com",
