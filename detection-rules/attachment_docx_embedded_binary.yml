@@ -1,0 +1,31 @@
+name: "Malware: DocX embedded Binary"
+description: "This rule is designed to detect sophisticated phishing attacks that deliver binary payloads through .docx files. It identifies malicious documents containing embedded scripts or objects, either encoded in base64 or using specific JavaScript functions like createObjectURL or msSaveOrOpenBlob, which are indicative of attempts to download and execute a binary payload."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and any(attachments,
+          (
+            .file_extension == "docx"
+            or .file_extension in~ $file_extensions_common_archives
+          )
+          and any(file.explode(.),
+                  any(.flavors.yara, . == "base64_pe")
+                  // The malicious file to be downloaded and run with the data URI may not always be portable executable
+                  or any(.scan.strings.strings,
+                         strings.ilike(., "*.createObjectURL(*)*")
+                  )
+                  or any(.scan.strings.strings,
+                         strings.ilike(., "*.msSaveOrOpenBlob(*)*")
+                  )
+          )
+  )
+
+attack_types:
+  - "Malware/Ransomware"
+tactics_and_techniques:
+  - "Evasion"
+detection_methods:
+  - "Archive analysis"
+  - "Content analysis"
+  - "YARA"
