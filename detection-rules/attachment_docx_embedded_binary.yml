@@ -8,8 +8,35 @@ source: |
   type.inbound
   and any(attachments,
           (
-            .file_extension == "docx"
+            .file_extension in~ $file_extensions_macros
             or .file_extension in~ $file_extensions_common_archives
+            or .content_type == "application/zip"
+            or (
+              .file_extension is null
+              and .file_type == "unknown"
+              and .content_type == "application/octet-stream"
+              and .size < 100000000
+            )
+          )
+          and any(file.explode(.),
+                  .file_extension in~ (
+                    "doc",
+                    "docm",
+                    "docx",
+                    "dot",
+                    "dotm",
+                    "xls",
+                    "xlsx",
+                    "xlsm",
+                    "xlm",
+                    "xlsb",
+                    "xlt",
+                    "xltm",
+                    "ppt",
+                    "pptx",
+                    "pptm",
+                    "ppsm"
+                  )
           )
           and any(file.explode(.),
                   any(.flavors.yara, . == "base64_pe")
@@ -22,7 +49,6 @@ source: |
                   )
           )
   )
-
 attack_types:
   - "Malware/Ransomware"
 tactics_and_techniques:
