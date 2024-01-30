@@ -1,0 +1,91 @@
+name: "Constant Contact link infrastructure abuse"
+description: "Email contains a Constant Contact (mass mailing platform) tracking link but does not originate from Constant Contact sending infrastructure. The rs6.net domain has been abused by threat actors to attempt credential phishing."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and (
+    (
+      length(body.links) < 15
+      and any(body.links, .href_url.domain.root_domain == "rs6.net")
+    )
+    or (
+      length(attachments) <= 3
+      and (
+        any(attachments,
+            .file_type in $file_types_images
+            and any(file.explode(.),
+                    .scan.qr.type is not null
+                    and .scan.qr.url.domain.root_domain == "rs6.net"
+                    // exclude images taken with mobile cameras and screenshots from android
+                    and not any(.scan.exiftool.fields,
+                                .key == "Model"
+                                or (
+                                  .key == "Software"
+                                  and strings.starts_with(.value, "Android")
+                                )
+                    )
+                    // exclude images taken with mobile cameras and screenshots from Apple
+                    and not any(.scan.exiftool.fields,
+                                .key == "DeviceManufacturer"
+                                and .value == "Apple Computer Inc."
+                    )
+            )
+        )
+        or (
+          length(attachments) == 0
+          and any(file.explode(beta.message_screenshot()),
+                  .scan.exiftool.image_height < 2000
+                  and .scan.exiftool.image_width < 2000
+                  and .scan.qr.type is not null
+                  and .scan.qr.url.domain.root_domain == "rs6.net"
+          )
+        )
+      )
+    )
+  )
+  and not (
+    any(headers.hops,
+        strings.icontains(.authentication_results.spf_details.designator,
+                          "constantcontact.com"
+        )
+    )
+    or any(headers.hops,
+           strings.icontains(.received_spf.designator, "constantcontact.com")
+    )
+  )
+  // negating legit replies
+  and not (
+    (
+      strings.istarts_with(subject.subject, "RE:")
+      or strings.istarts_with(subject.subject, "Automatic reply:")
+    )
+    and (
+      length(headers.references) > 0
+      or any(headers.hops, any(.fields, strings.ilike(.name, "In-Reply-To")))
+    )
+  )
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and (
+        any(distinct(headers.hops, .authentication_results.dmarc is not null),
+            strings.ilike(.authentication_results.dmarc, "*fail")
+        )
+      )
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Free email provider"
+  - "Open redirect"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Header analysis"
+  - "Sender analysis"
+id: "8c5e8e4c-c610-5ece-b82a-214c637cba09"
