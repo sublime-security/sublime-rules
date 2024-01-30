@@ -9,6 +9,7 @@ source: |
          (
            .href_url.domain.root_domain not in $tranco_1m
            or .href_url.domain.domain in $free_file_hosts
+           or .href_url.domain.root_domain in $free_file_hosts
            or .href_url.domain.root_domain in $free_subdomain_hosts
            or .href_url.domain.domain in $url_shorteners
            or 
@@ -83,7 +84,8 @@ source: |
                        "*clear*",
                        "*only works*",
                        "*failed*",
-                       "*deleted*"
+                       "*deleted*",
+                       "*revalidated*"
      )
    )
    or (
@@ -117,33 +119,32 @@ source: |
    )
    or (
      any(file.explode(beta.message_screenshot()),
-                  strings.ilike(.scan.ocr.raw,
-                                "*password*",
-                                "*document*",
-                                "*voicemail*",
-                                "*cache*",
-                                "*fax*",
-                                "*storage*",
-                                "*quota*",
-                                "*messages*"
-                  )
-                  and strings.ilike(.scan.ocr.raw,
-                                    "*terminated*",
-                                    "*review*",
-                                    "*expire*",
-                                    "*click*",
-                                    "*view*",
-                                    "*exceed*",
-                                    "*clear*",
-                                    "*only works*",
-                                    "*failed*",
-                                    "*deleted*"
-                  )
+         strings.ilike(.scan.ocr.raw,
+                       "*password*",
+                       "*document*",
+                       "*voicemail*",
+                       "*cache*",
+                       "*fax*",
+                       "*storage*",
+                       "*quota*",
+                       "*messages*"
+         )
+         and strings.ilike(.scan.ocr.raw,
+                           "*terminated*",
+                           "*review*",
+                           "*expire*",
+                           "*click*",
+                           "*view*",
+                           "*exceed*",
+                           "*clear*",
+                           "*only works*",
+                           "*failed*",
+                           "*deleted*",
+                           "*revalidated"
+         )
      )
    )
- )
- 
- and (
+ or (
    any(ml.nlu_classifier(body.current_thread.text).intents,
        .name == "cred_theft" and .confidence in~ ("medium", "high")
    )
@@ -161,6 +162,7 @@ source: |
                  .name == "benign" and .confidence == "high"
      )
    )
+ )
  )
  and sender.email.domain.root_domain not in (
    "bing.com",
@@ -186,7 +188,17 @@ source: |
    )
    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
  )
-
+ 
+ and (
+    (
+      not profile.by_sender().solicited
+    )
+    or (
+      profile.by_sender().any_messages_malicious_or_spam
+      and not profile.by_sender().any_false_positives
+    )
+ )
+ and not profile.by_sender().any_false_positives
 
 attack_types:
   - "Credential Phishing"
