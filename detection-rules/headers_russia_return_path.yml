@@ -1,4 +1,4 @@
-name: "Russia return-path TLD (first-time sender)"
+name: "Russia return-path TLD (untrusted sender)"
 description: |
   The return-path header is a .ru TLD and first-time sender.
 type: "rule"
@@ -6,14 +6,20 @@ severity: "low"
 source: |
   type.inbound
   and headers.return_path.domain.tld == "ru"
-  and sender.email.email not in $recipient_emails
+  and sender.email.domain.root_domain != "corp.mail.ru"
   and (
-    profile.by_sender().prevalence in ("new", "outlier")
+    (
+        profile.by_sender().prevalence in ("new", "outlier")
+        and not profile.by_sender().solicited
+    )
     or (
       profile.by_sender().any_messages_malicious_or_spam
       and not profile.by_sender().any_false_positives
     )
   )
+
+tags:
+  - "Attack surface reduction"
 attack_types:
   - "BEC/Fraud"
   - "Credential Phishing"
