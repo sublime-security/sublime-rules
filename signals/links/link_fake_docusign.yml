@@ -1,12 +1,27 @@
 name: "Link: Docusign Display Text with a non-DocuSign domain"
 type: "query"
 source: |
-  any(body.links,
+  (
+    // orgs can have docusign.company.com
+    strings.ilike(sender.email.email, '*docusign.net*', '*docusign.com*')
+
+    // if the above is true, you'll see a "via Docusign"
+    or strings.ilike(sender.display_name, '*docusign*')
+
+    // detects 1 character variations,
+    // such as DocuSlgn (with an "L" instead of an "I")
+    or strings.ilevenshtein(sender.display_name, "docusign") == 1
+    or strings.ilike(sender.display_name, "*docuonline*", "*via *signature*")
+  )
+  and any(body.links,
           (
             regex.icontains(.display_text, "(view.completed.document|review doc)")
-            and .href_url.domain.root_domain not in (
-              "docusign.com",
-              "docusign.net"
+            or strings.ilevenshtein(.display_text, "Review Now") <= 3
+            or (
+              strings.icontains(.display_text, "Review")
+              and not strings.icontains(.display_text, "Review Us")
             )
+            or strings.icontains(.display_text, "Now")
           )
+          and .href_url.domain.root_domain not in ("docusign.com", "docusign.net")
   )
