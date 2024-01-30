@@ -1,4 +1,4 @@
-name: "Attachment: Office365 image (unsolicited)"
+name: "Attachment: Microsoft 365 Credential Phishing"
 description: |
   Looks for messages with an image attachment that contains words related to Microsoft, Office365, and passwords.
 type: "rule"
@@ -13,7 +13,9 @@ source: |
     )
     or any(attachments,
            .file_type in $file_types_images
-           and any(file.explode(.), strings.ilike(.scan.ocr.raw, "*microsoft*", "*office"))
+           and any(file.explode(.),
+                   strings.ilike(.scan.ocr.raw, "*microsoft*", "*office")
+           )
     )
   )
   and any(attachments,
@@ -24,7 +26,6 @@ source: |
                                   "unread messages",
                                   "Shared Documents",
                                   "expiration",
-                                  "office",
                                   "expire",
                                   "expiring",
                                   "kindly",
@@ -39,19 +40,41 @@ source: |
                                   "qr code",
                                   "security update",
                                   "invoice",
-                                  "retrieve"
-
+                                  "retrieve",
+                                  "blocked"
                                 ],
                                 strings.icontains(..scan.ocr.raw, .)
                          )
                   ) >= 2
+                  or (
+                    any(ml.nlu_classifier(.scan.ocr.raw).intents,
+                        .name == "cred_theft" and .confidence == "high"
+                    )
+                  and length(ml.nlu_classifier(.scan.ocr.raw).entities) > 1
+                )
           )
   )
   and (
     not any(headers.hops,
             .authentication_results.compauth.verdict is not null
             and .authentication_results.compauth.verdict == "pass"
-            and sender.email.domain.domain in ("microsoft.com", "sharepointonline.com")
+            and sender.email.domain.domain in (
+              "microsoft.com",
+              "sharepointonline.com"
+            )
+    )
+  )
+  
+  // negate angelbeat urls and microsoft disclaimer links
+  and (
+    length(body.links) > 0
+    and not all(body.links,
+            .href_url.domain.root_domain in (
+              "abeatinfo.com",
+              "abeatinvite.com",
+              "aka.ms",
+              "angelbeat.com"
+            )
     )
   )
   and (
@@ -61,6 +84,21 @@ source: |
       and not profile.by_sender().any_false_positives
     )
   )
+  
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and (
+        any(distinct(headers.hops, .authentication_results.dmarc is not null),
+            strings.ilike(.authentication_results.dmarc, "*fail")
+        )
+      )
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+  and not profile.by_sender().any_false_positives
+
 attack_types:
   - "Credential Phishing"
 tactics_and_techniques:

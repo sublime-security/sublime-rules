@@ -14,19 +14,19 @@ source: |
       and not profile.by_sender().any_false_positives
     )
   )
-
+  
   // single attachment
   and length(attachments) == 1
-
+  
   // sender is freemail
   and sender.email.domain.root_domain in $free_email_providers
-
+  
   // the attachment is a pdf with 1 page, and at least 60 ocr chars
   and any(attachments,
           .file_extension == "pdf"
           and any(file.explode(.), .scan.exiftool.page_count == 1)
           and any(file.explode(.), length(.scan.ocr.raw) > 60)
-
+  
           // 4 of the following strings are found        
           and any(file.explode(.),
                   4 of (
@@ -45,23 +45,29 @@ source: |
                     strings.icontains(.scan.ocr.raw, "cancel"),
                     strings.icontains(.scan.ocr.raw, "renew"),
                     strings.icontains(.scan.ocr.raw, "refund"),
-                    regex.icontains(.scan.ocr.raw, '\+\d')
+                    regex.icontains(.scan.ocr.raw, '(\+\d|1.(\()?\d{3}(\))?\D\d{3}\D\d{4})')
                   )
           )
-
+  
           // 1 of the following strings is found, representing common Callback brands          
-          and any(file.explode(.),
-                  1 of (
-                    strings.icontains(.scan.ocr.raw, "geek squad"),
-                    strings.icontains(.scan.ocr.raw, "lifelock"),
-                    strings.icontains(.scan.ocr.raw, "best buy"),
-                    strings.icontains(.scan.ocr.raw, "mcafee"),
-                    strings.icontains(.scan.ocr.raw, "norton"),
-                    strings.icontains(.scan.ocr.raw, "ebay"),
-                    strings.icontains(.scan.ocr.raw, "paypal"),
-                  )
+          and (
+            any(file.explode(.),
+                1 of (
+                  strings.icontains(.scan.ocr.raw, "geek squad"),
+                  strings.icontains(.scan.ocr.raw, "lifelock"),
+                  strings.icontains(.scan.ocr.raw, "best buy"),
+                  strings.icontains(.scan.ocr.raw, "mcafee"),
+                  strings.icontains(.scan.ocr.raw, "norton"),
+                  strings.icontains(.scan.ocr.raw, "ebay"),
+                  strings.icontains(.scan.ocr.raw, "paypal"),
+                )
+            )
+            or any(ml.logo_detect(.).brands,
+                   .name in ("PayPal", "Norton", "GeekSquad", "Ebay")
+            )
           )
   )
+
 attack_types:
   - "Callback Phishing"
 tactics_and_techniques:

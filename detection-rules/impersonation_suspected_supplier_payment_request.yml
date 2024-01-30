@@ -1,0 +1,72 @@
+name: "Impersonation: Suspected supplier impersonation with suspicious content"
+description: "This rule detects supplier impersonation by checking for: similar linked domains to the sender, non-freemail senders using freemail infrastructure, sender domains less than 90 days old, unsolicited communication or no prior interaction with the reply-to address, and a suspicious body."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  // a linked domain is similar but not the same as the sender domain
+  and any(body.links,
+          0 < strings.levenshtein(.href_url.domain.sld, sender.email.domain.sld) <= 2
+  )
+  // the sender is not a freemail, but the message or the in-reply-to indicates it traversed a freemail infrastructure, likely an auto forwarding rule
+  and (
+    sender.email.domain.root_domain not in $free_email_providers
+    and (
+      any(headers.references, any($free_email_providers, strings.contains(.., .)))
+      or any($free_email_providers, strings.contains(headers.in_reply_to, .))
+    )
+  )
+  // the sender domain is less than 90 days old and was not solicited, nor ever communicated with
+  and (
+    beta.whois(sender.email.domain).days_old < 90
+    and (
+      not profile.by_sender_domain().solicited
+      or // reply-to is not in $recipient_emails
+   any(headers.reply_to, .email.email not in $recipient_emails)
+    )
+  )
+  and (
+    2 of (
+      // language attempting to engage
+      (
+        any(ml.nlu_classifier(body.current_thread.text).entities,
+            .name == "request"
+        )
+        and any(ml.nlu_classifier(body.current_thread.text).entities,
+                .name == "financial"
+        )
+      ),
+      // payment tag high confidence 
+      any(ml.nlu_classifier(body.current_thread.text).tags,
+          .name == "payment" and .confidence == "high"
+      ),
+      // invoicing language
+      any(ml.nlu_classifier(body.current_thread.text).tags, .name == "invoice"),
+  
+      // urgency request
+      any(ml.nlu_classifier(body.current_thread.text).entities,
+          .name == "urgency"
+      )
+    )
+    or (
+      length(body.current_thread.text) < 300
+      and length(attachments) > 0
+      and all(attachments, (.file_type in $file_types_images))
+    )
+  )
+
+attack_types:
+  - "BEC/Fraud"
+tactics_and_techniques:
+  - "Evasion"
+  - "Free email provider"
+  - "Lookalike domain"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Header analysis"
+  - "Natural Language Understanding"
+  - "Sender analysis"
+  - "URL analysis"
+  - "Whois"
+id: "63d8b1ce-7409-58d9-aa78-fffba12bba29"
