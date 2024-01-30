@@ -1,0 +1,42 @@
+name: "Fake scan-to-email message"
+description: "Message resembles an email from a scan-to-email service or device, but does not contain any attachments, instead linking to an unknown domain."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and length(attachments) == 0
+  and 0 < length(body.links) < 3
+  and strings.ilike(subject.subject, "*message from*")
+  and (
+    strings.ilike(body.current_thread.text, "*scan date*", "*was sent from*")
+    or any(file.explode(beta.message_screenshot()),
+           strings.ilike(.scan.ocr.raw, "*scan date*", "*was sent from*")
+    )
+  )
+  and (
+    any(body.links, .href_url.domain.root_domain in~ $free_file_hosts)
+    or any(body.links, .display_url.url != .href_url.url)
+    or any(body.links, .display_url.url is null)
+  )
+  and all(body.links, .href_url.domain.domain not in~ $org_domains)
+  and sender.email.domain.domain not in~ $org_domains
+  and (
+    not profile.by_sender().solicited
+    or (
+      profile.by_sender().any_messages_malicious_or_spam
+      and not profile.by_sender().any_false_positives
+    )
+  )
+  and not profile.by_sender().any_false_positives
+
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Free file host"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Optical Character Recognition"
+  - "Sender analysis"
+  - "URL analysis"
+id: "78851fbe-9481-5fda-b472-f0b8dfb35e1a"
