@@ -1,0 +1,36 @@
+name: "Impersonation: Microsoft"
+type: "query"
+source: |
+  (
+    (
+      strings.ilike(subject.subject, '*Microsoft 365*')
+      and strings.ilike(subject.subject, '*is expired*')
+    )
+    or (
+      // should catch any instance of the word "expired"
+      strings.ilike(body.current_thread.text, "*expir*")
+      and strings.ilike(body.current_thread.text, "*password*")
+      and strings.ilike(body.current_thread.text, "*microsoft*")
+    )
+    or regex.icontains(body.current_thread.text,
+                      ".*reach you.{0,20}Microsoft Teams"
+    )
+    or strings.ilike(sender.display_name, '*new activity in Teams*')
+    or subject.subject =~ 'Offline Message in Teams'
+    or strings.ilike(subject.subject, '*Teams Sent A Message')
+    or sender.display_name in~ (
+      'Microsoft Partner Network',
+      'Microsoft',
+      'Microsoft Feedback',
+      'Microsoft account team',
+      'Microsoft Support',
+      'Microsoft 365 Message center',
+      'Microsoft Azure'
+    )
+  )
+  and sender.email.domain.root_domain not in~ (
+    'microsoft.com',
+    'microsoftsupport.com',
+    'office.com',
+    'teams-events.com'
+  )

@@ -4,7 +4,7 @@ description: |
 references:
   - "https://www.reddit.com/r/cybersecurity/comments/127q4ny/ticketmaster_systems_exploited_for_phishing/"
 type: "rule"
-severity: "medium"
+severity: "low"
 source: |
   type.inbound
   and any(body.links,
@@ -12,6 +12,29 @@ source: |
   )
   and sender.email.domain.root_domain != 'ticketmaster.com'
   and headers.return_path.domain.root_domain != "ticketmaster.com"
+
+  and (
+    not profile.by_sender().solicited
+    or (
+      profile.by_sender().any_messages_malicious_or_spam
+      and not profile.by_sender().any_false_positives
+    )
+  )
+
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and (
+        any(distinct(headers.hops, .authentication_results.dmarc is not null),
+            strings.ilike(.authentication_results.dmarc, "*fail")
+        )
+      )
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+tags:
+  - "Attack surface reduction"
 attack_types:
   - "Credential Phishing"
   - "Malware/Ransomware"

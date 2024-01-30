@@ -1,0 +1,52 @@
+name: "Link: QR code with phishing disposition in img or pdf"
+description: "This rule analyzes image attachments for QR Codes in which LinkAnalysis concludes is phishing. The rule ensures that the URLs do not link to any organizational domains."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and length(attachments) < 10
+  and any(attachments,
+          (.file_type in $file_types_images or .file_type == "pdf")
+          and any(file.explode(.),
+                  .scan.qr.type == "url"
+  
+                  // linkanalysis phishing disposition
+                  and any([beta.linkanalysis(.scan.qr.url)],
+                          .credphish.disposition == "phishing"
+                  )
+                  and .scan.qr.url.domain.root_domain not in $org_domains
+          )
+  )
+  and (
+    not profile.by_sender().solicited
+    or (
+      profile.by_sender().any_messages_malicious_or_spam
+      and not profile.by_sender().any_false_positives
+    )
+  )
+  
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and (
+        any(distinct(headers.hops, .authentication_results.dmarc is not null),
+            strings.ilike(.authentication_results.dmarc, "*fail")
+        )
+      )
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+  and not profile.by_sender().any_false_positives
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "QR code"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Computer Vision"
+  - "QR code analysis"
+  - "Sender analysis"
+  - "URL analysis"
+id: "8e8949f6-3561-513f-8cde-254124e10cde"
