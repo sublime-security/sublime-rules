@@ -14,58 +14,34 @@ source: |
                    .name == "DocuSign"
             )
           )
-  )
-  and any(attachments,
-          (
-            .file_type in $file_types_images
-            or .file_type == "pdf"
-            or .file_type in $file_extensions_macros
-          )
           and (
             any(file.explode(.),
-                regex.icontains(.scan.ocr.raw, 'scan|camera')
-                and regex.icontains(.scan.ocr.raw, '\bQR\b|Q\.R\.|barcode')
-            )
-            or (
-              any(file.explode(.),
-                  .scan.qr.type == "url"
-                  // recipient email address is present in the URL, a common tactic used in credential phishing attacks 
-                  and any(recipients.to,
-                          strings.icontains(..scan.qr.data, .email.email)
-  
-                          // the recipients sld is in the senders display name
-                          or any(recipients.to,
-                                 strings.icontains(sender.display_name,
-                                                   .email.domain.sld
-                                 )
-                          )
-  
-                          // the recipient local is in the body  
-                          or any(recipients.to,
-                                 strings.icontains(body.current_thread.text,
-                                                   .email.local_part
-                                 )
-                          )
-  
-                          // or the body is null 
-                          or body.current_thread.text is null
-                          or body.current_thread.text == ""
-  
-                          // or the subject contains authentication/urgency verbiage
-                          or regex.contains(subject.subject,
-                                            "(Authenticat(e|or|ion)|2fa|Multi.Factor|(qr|bar).code|action.require|alert|Att(n|ention):)"
-                          )
-                  )
-              )
+                .scan.qr.type is not null
+                and regex.contains(.scan.qr.data, '\.')
+                // exclude images taken with mobile cameras and screenshots from android
+                and not any(.scan.exiftool.fields,
+                            .key == "Model"
+                            or (
+                              .key == "Software"
+                              and strings.starts_with(.value, "Android")
+                            )
+                )
+                // exclude images taken with mobile cameras and screenshots from Apple
+                and not any(.scan.exiftool.fields,
+                            .key == "DeviceManufacturer"
+                            and .value == "Apple Computer Inc."
+                )
             )
           )
   )
-  
   and (
     not any(headers.hops,
             .authentication_results.compauth.verdict is not null
             and .authentication_results.compauth.verdict == "pass"
-            and sender.email.domain.root_domain in ("docusign.net", "docusign.com")
+            and sender.email.domain.root_domain in (
+              "docusign.net",
+              "docusign.com"
+            )
     )
   )
   and (
@@ -75,7 +51,8 @@ source: |
       and not profile.by_sender().any_false_positives
     )
   )
-  
+
+
 attack_types:
   - "Credential Phishing"
 tactics_and_techniques:
