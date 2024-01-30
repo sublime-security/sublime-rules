@@ -53,11 +53,23 @@ source: |
     or any(headers.hops,
            strings.icontains(.received_spf.designator, "constantcontact.com")
     )
+    or (
+      any(headers.hops,
+          .index == 0
+          and any(.authentication_results.dkim_details,
+                  .domain == "auth.ccsend.com"
+          )
+      )
+      and any(distinct(headers.hops, .authentication_results.dmarc is not null),
+              .index == 0 and strings.ilike(.authentication_results.dmarc, "*pass")
+      )
+    )
   )
   // negating legit replies
   and not (
     (
       strings.istarts_with(subject.subject, "RE:")
+      or strings.istarts_with(subject.subject, "FW:")
       or strings.istarts_with(subject.subject, "Automatic reply:")
     )
     and (
