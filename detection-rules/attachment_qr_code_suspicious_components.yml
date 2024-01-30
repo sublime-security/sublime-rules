@@ -2,7 +2,7 @@ name: "Attachment: QR code with credential phishing indicators"
 description: |
   Detects messages with between 1-3 attachments containing a QR code with suspicious credential theft indicators, such as: LinkAnalysis credential phishing conclusion, decoded QR code url traverses suspicious infrastructure, the final destination is in URLhaus, decoded  URL downloads a zip or executable, leverages URL shorteners, known QR abused openredirects, and more. 
 type: "rule"
-severity: "high"
+severity: "medium"
 source: |
   type.inbound
   and 1 <= length(attachments) < 3
@@ -40,6 +40,7 @@ source: |
   
                     // exclude google maps
                     and not strings.starts_with(.scan.qr.url.url, 'https://goo.gl/maps')
+                    and not strings.starts_with(.scan.qr.url.url, 'https://maps.app.goo.gl')
                   )
   
                   // the QR code url is a bing open redirect
@@ -56,11 +57,27 @@ source: |
           )
   )
   and (
-    profile.by_sender().prevalence in ("new", "outlier")
+    (
+      profile.by_sender().prevalence in ("new", "outlier")
+      and not profile.by_sender().solicited
+    )
     or (
       profile.by_sender().any_messages_malicious_or_spam
       and not profile.by_sender().any_false_positives
     )
+  )
+
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and (
+        any(distinct(headers.hops, .authentication_results.dmarc is not null),
+            strings.ilike(.authentication_results.dmarc, "*fail")
+        )
+      )
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
   )
 
 attack_types:

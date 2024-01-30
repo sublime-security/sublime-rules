@@ -5,14 +5,15 @@ type: "rule"
 severity: "medium"
 source: |
   type.inbound
+  and 0 < length(body.links) < 10
   and any(body.links,
-
+  
           // contains login or captcha
           (
             beta.linkanalysis(.).credphish.contains_login
             or beta.linkanalysis(.).credphish.contains_captcha
           )
-
+  
           // either the original or the redirect is a free subdomain
           and (
             (
@@ -24,7 +25,7 @@ source: |
               and .href_url.domain.subdomain is not null
             )
           )
-
+  
           // exclude FP prone free subdomain hosts
           // if it's a known brand impersonation, we'll detect it in other rules
           and .href_url.domain.root_domain not in ("zendesk.com")
@@ -37,6 +38,18 @@ source: |
     length(headers.references) > 0
     or any(headers.hops, any(.fields, strings.ilike(.name, "In-Reply-To")))
   )
+  
+  // exclude all freesubdomain links are images
+  and length(filter(body.links, 
+                 .href_url.domain.root_domain in $free_subdomain_hosts
+                 and .href_url.domain.subdomain is not null
+                 and .href_url.domain.subdomain != "www") ) > 0
+  
+  and not all(filter(body.links, 
+                 .href_url.domain.root_domain in $free_subdomain_hosts
+                 and .href_url.domain.subdomain is not null
+                 and .href_url.domain.subdomain != "www"), (strings.ends_with(.href_url.url, "jpeg") or strings.ends_with(.href_url.url, "png")))
+  
   // exclude FP prone senders
   and sender.email.domain.root_domain not in ("sharepointonline.com")
   // negate highly trusted sender domains unless they fail DMARC authentication
@@ -62,6 +75,9 @@ source: |
     )
   )
   and not profile.by_sender().any_false_positives
+
+tags:
+  - "Attack surface reduction"
 attack_types:
   - "Credential Phishing"
 tactics_and_techniques:
