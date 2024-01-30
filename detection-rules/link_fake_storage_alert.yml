@@ -14,7 +14,21 @@ source: |
     or strings.icontains(subject.subject, "limit")
     or strings.icontains(subject.subject, "all storage used")
   )
-  
+  and (
+    not sender.email.email == "no-reply@sharepointonline.com"
+    and (
+      any(distinct(headers.hops, .authentication_results.dmarc is not null),
+          strings.ilike(.authentication_results.dmarc, "*fail")
+      )
+      and all(body.links,
+              .href_url.domain.domain in (
+                "sharepoint.com",
+                "microsoft.com",
+                "aka.ms"
+              )
+      )
+    )
+  )
   // negate highly trusted sender domains unless they fail DMARC authentication
   and (
     (
@@ -31,6 +45,7 @@ source: |
     not profile.by_sender().solicited
     or profile.by_sender().any_messages_malicious_or_spam
   )
+
 attack_types:
   - "Credential Phishing"
 tactics_and_techniques:
