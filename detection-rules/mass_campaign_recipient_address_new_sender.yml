@@ -1,4 +1,4 @@
-name: "Mass campaign: recipient address in subject, body, and link (first-time sender)"
+name: "Mass campaign: recipient address in subject, body, and link (untrusted sender)"
 description: |
   This detects a pattern commonly observed in mass phishing campaigns.
 
@@ -40,6 +40,19 @@ source: |
   )
   and any(ml.nlu_classifier(body.current_thread.text).intents,
           .name in ("cred_theft") and .confidence == "high"
+  )
+  
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and (
+        any(distinct(headers.hops, .authentication_results.dmarc is not null),
+            strings.ilike(.authentication_results.dmarc, "*fail")
+        )
+      )
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
   )
 attack_types:
   - "Credential Phishing"
