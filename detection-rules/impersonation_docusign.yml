@@ -38,13 +38,20 @@ source: |
           )
           and .href_url.domain.root_domain not in ("docusign.com", "docusign.net")
   )
+
+  // negate legitimate docusign infrastructure
   and (
-    sender.email.domain.root_domain not in ('docusign.net', 'docusign.com')
-    // check for DMARC fail for spoofs
-    or any(distinct(headers.hops, .authentication_results.dmarc is not null),
-           strings.ilike(.authentication_results.dmarc, "*fail")
+    (
+      sender.email.domain.root_domain in ('docusign.net', 'docusign.com')
+      and (
+        any(distinct(headers.hops, .authentication_results.dmarc is not null),
+            strings.ilike(.authentication_results.dmarc, "*fail")
+        )
+      )
     )
+    or sender.email.domain.root_domain not in ('docusign.net', 'docusign.com')
   )
+
   // adding negation for messages originating from docusigns api
   // and the sender.display.name contains "via"
   and not (
