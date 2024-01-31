@@ -14,22 +14,25 @@ source: |
     or strings.icontains(subject.subject, "limit")
     or strings.icontains(subject.subject, "all storage used")
   )
-
+  
   // negate legitimate sharepoint storage alerts
   and (
-    not sender.email.email == "no-reply@sharepointonline.com"
-    and (
-      any(distinct(headers.hops, .authentication_results.dmarc is not null),
-          strings.ilike(.authentication_results.dmarc, "*fail")
+    (
+      sender.email.email == "no-reply@sharepointonline.com"
+      and (
+        any(distinct(headers.hops, .authentication_results.dmarc is not null),
+            strings.ilike(.authentication_results.dmarc, "*fail")
+        )
       )
-      and all(body.links,
-              .href_url.domain.domain in (
+      and not all(body.links,
+              .href_url.domain.root_domain in~ (
                 "sharepoint.com",
                 "microsoft.com",
                 "aka.ms"
               )
       )
     )
+    or sender.email.email != "no-reply@sharepointonline.com"
   )
   // negate highly trusted sender domains unless they fail DMARC authentication
   and (
