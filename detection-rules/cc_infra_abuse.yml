@@ -54,22 +54,27 @@ source: |
            strings.icontains(.received_spf.designator, "constantcontact.com")
     )
     or (
-      any(headers.hops,
-          .index == 0
-          and any(.authentication_results.dkim_details,
-                  .domain == "auth.ccsend.com"
-          )
+      (
+        any(headers.hops,
+            .index == 0
+            and any(.authentication_results.dkim_details,
+                    .domain == "auth.ccsend.com"
+            )
+        )
       )
       and any(distinct(headers.hops, .authentication_results.dmarc is not null),
-              .index == 0 and strings.ilike(.authentication_results.dmarc, "*pass")
+              .index == 0
+              and strings.ilike(.authentication_results.dmarc, "*pass")
       )
     )
+    or any(headers.references, strings.iends_with(., "ccsend.com"))
   )
   // negating legit replies
   and not (
     (
       strings.istarts_with(subject.subject, "RE:")
       or strings.istarts_with(subject.subject, "FW:")
+      or strings.istarts_with(subject.subject, "FWD:")
       or strings.istarts_with(subject.subject, "Automatic reply:")
     )
     and (
@@ -89,6 +94,7 @@ source: |
     )
     or sender.email.domain.root_domain not in $high_trust_sender_root_domains
   )
+  and profile.by_sender().prevalence in ("new", "outlier", "rare")
 
 attack_types:
   - "Credential Phishing"
