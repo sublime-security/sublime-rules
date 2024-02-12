@@ -14,7 +14,11 @@ source: |
                 // exclude images taken with mobile cameras and screenshots from android
                 not any(.scan.exiftool.fields,
                         .key == "Model"
-                        or .key == "Software" and strings.starts_with(.value, "Android")
+                        or (
+                          .key == "Software"
+                          and strings.starts_with(.value, "Android")
+                        )
+                        or (.key == "UserComment" and .value == "Screenshot")
                 )
                 and any(ml.nlu_classifier(.scan.ocr.raw).intents,
                         .name == "callback_scam" and .confidence == "high"
@@ -41,10 +45,9 @@ source: |
       and not profile.by_sender().any_false_positives
     )
   )
-
+  
   // negate highly trusted sender domains unless they fail DMARC authentication
-  and
-  (
+  and (
     (
       sender.email.domain.root_domain in $high_trust_sender_root_domains
       and (
@@ -55,6 +58,7 @@ source: |
     )
     or sender.email.domain.root_domain not in $high_trust_sender_root_domains
   )
+
 
 attack_types:
   - "Callback Phishing"
