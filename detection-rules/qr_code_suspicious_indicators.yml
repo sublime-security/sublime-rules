@@ -58,20 +58,31 @@ source: |
       )
       or any(file.explode(beta.message_screenshot()),
              (
-               .scan.qr.url.domain.tld in $suspicious_tlds
-               and .scan.qr.url.domain.root_domain != "app.link"
+               (.scan.qr.url.domain.tld in $suspicious_tlds
+               and .scan.qr.url.domain.root_domain != "app.link")
+                or ( // linkanalysis phishing disposition
+                       any([beta.linkanalysis(.scan.qr.url)],
+                           .credphish.disposition == "phishing"
+                       )
              )
       )
       or any(attachments,
              .file_type in $file_types_images
              and any(file.explode(.),
-                     .scan.qr.url.domain.tld in $suspicious_tlds
-                     and .scan.qr.url.domain.root_domain != "app.link"
+                     (
+                       .scan.qr.url.domain.tld in $suspicious_tlds
+                       and .scan.qr.url.domain.root_domain != "app.link"
+                     )
+                  
+                       and .scan.qr.url.domain.root_domain not in $org_domains
+                     )
              )
       )
-      or sender.email.domain.tld in $suspicious_tlds
     )
+  
+  or sender.email.domain.tld in $suspicious_tlds
   )
+  
   
   // sender profile is new or outlier
   and (
@@ -97,6 +108,7 @@ source: |
     )
     or sender.email.domain.root_domain not in $high_trust_sender_root_domains
   )
+
 
 attack_types:
   - "Credential Phishing"
