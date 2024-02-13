@@ -13,9 +13,38 @@ source: |
     strings.ilike(sender.display_name, '*netflix*')
     or strings.ilevenshtein(sender.display_name, 'netflix') <= 1
     or strings.ilike(sender.email.domain.domain, '*netflix*')
+    or regex.icontains(sender.display_name, 'n.{0,3}e.{0,3}t.{0,3}l.{0,3}i.{0,3}x.{0,3}')
+    or (
+      (
+        length(recipients.to) == 0
+        or (
+          all(recipients.to, .email.domain.valid == false)
+          and all(recipients.cc, .email.domain.valid == false)
+        )
+      )
+      and any(ml.logo_detect(beta.message_screenshot()).brands,
+              .name == "Netflix"
+              and .confidence in ("medium", "high")
+              and (
+                any(body.links,
+                    beta.linkanalysis(.).credphish.disposition == "phishing"
+                    and beta.linkanalysis(.).credphish.confidence in (
+                      "medium",
+                      "high"
+                    )
+                )
+              )
+      )
+    )
   )
-  and sender.email.domain.root_domain not in ('netflix.com', 'dvd.com', 'netflixfamily.com', 'envoy.com')
+  and sender.email.domain.root_domain not in (
+    'netflix.com',
+    'dvd.com',
+    'netflixfamily.com',
+    'envoy.com'
+  )
   and sender.email.email not in $recipient_emails
+
 attack_types:
   - "Credential Phishing"
 tactics_and_techniques:
