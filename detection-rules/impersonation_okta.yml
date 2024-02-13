@@ -23,7 +23,7 @@ source: |
       'polaris.me'
     )
     and any(distinct(headers.hops, .authentication_results.dmarc is not null),
-           strings.ilike(.authentication_results.dmarc, "*pass")
+            strings.ilike(.authentication_results.dmarc, "*pass")
     )
   )
   and any(ml.logo_detect(beta.message_screenshot()).brands,
@@ -36,7 +36,10 @@ source: |
       and not profile.by_sender().any_false_positives
     )
   )
-  
+  // negate okta relay
+  and not any(distinct(headers.domains, .domain is not null),
+              .domain == "mailrelay.okta.com"
+  )
   // negate highly trusted sender domains unless they fail DMARC authentication
   and (
     (
@@ -49,7 +52,6 @@ source: |
     )
     or sender.email.domain.root_domain not in $high_trust_sender_root_domains
   )
-
 
 attack_types:
   - "Credential Phishing"

@@ -1,0 +1,23 @@
+name: "Attachment: EML contains HTML Attachment with Portal Indicators"
+type: "query"
+source: |
+  any(attachments,
+      (
+        (.content_type == "message/rfc822" or .file_extension =~ "eml")
+        and any(file.parse_eml(.).attachments,
+                (
+                  .file_extension in~ ("html", "htm", "shtml", "dhtml")
+                  or .file_type == "html"
+                  or .content_type == "text/html"
+                )
+                and strings.ilike(file.parse_html(.).raw,
+                                  "*password*",
+                                  "*username*",
+                                  "*login-form*",
+                                  "*email-form*",
+                                  "*Incorrect password. Please try again.*",
+                                  "*Password Incomplete, please try again*"
+                )
+        )
+      )
+  )
