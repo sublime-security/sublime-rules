@@ -15,6 +15,25 @@ source: |
     or strings.icontains(subject.subject, "all storage used")
   )
 
+  // negate legitimate sharepoint storage alerts
+  and (
+    (
+      sender.email.email == "no-reply@sharepointonline.com"
+      and (
+        any(distinct(headers.hops, .authentication_results.dmarc is not null),
+            strings.ilike(.authentication_results.dmarc, "*fail")
+        )
+      )
+      and not all(body.links,
+              .href_url.domain.root_domain in~ (
+                "sharepoint.com",
+                "microsoft.com",
+                "aka.ms"
+              )
+      )
+    )
+    or sender.email.email != "no-reply@sharepointonline.com"
+  )
   // negate highly trusted sender domains unless they fail DMARC authentication
   and (
     (
@@ -40,4 +59,4 @@ detection_methods:
   - "Sender analysis"
 id: "750f04d6-f68a-564c-9e41-c1e5a58df28f"
 testing_pr: 1236
-testing_sha: 050c48ae38c082c03475c59e9050e5617ec8eef2
+testing_sha: b19fc59d0037a81fed58347eb2aaebc4c52eee95
