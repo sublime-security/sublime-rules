@@ -1,0 +1,83 @@
+name: "Brand impersonation: Internal Revenue Service"
+description: "Impersonation of the Internal Revenue Service, a U.S. federal agency."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and (
+    (
+      strings.ilike(sender.display_name, '*irs*', '*internal revenue service*')
+      or strings.ilevenshtein(sender.display_name, 'internal revenue service') <= 2
+      or strings.ilike(sender.email.domain.domain, '*irs*')
+    )
+    or (
+      strings.ilike(subject.subject, '*irs*', '*internal revenue service*')
+      and any(ml.nlu_classifier(body.current_thread.text).entities,
+              .name == "org" and .text in~ ("irs", "internal revenue service")
+      )
+    )
+  )
+  and (
+    (
+      any(ml.nlu_classifier(body.current_thread.text).intents,
+          .name in ("cred_theft", "callback_scam", "steal_pii", "bec")
+      )
+      and any(ml.nlu_classifier(body.current_thread.text).entities,
+              .name in ("urgency", "financial")
+      )
+    )
+    or (
+      any(attachments,
+          (
+            (.file_type in ("html") or .file_extension in ("htm", "html"))
+            and (
+              any(ml.nlu_classifier(file.parse_html(.).display_text).intents,
+                  .name in ("cred_theft", "callback_scam", "steal_pii", "bec")
+              )
+              and any(ml.nlu_classifier(file.parse_html(.).display_text).entities,
+                      .name in ("urgency", "financial")
+              )
+            )
+          )
+          or (
+            (.file_type in ("pdf") or .file_extension in ("pdf"))
+            and any(file.explode(.),
+                    (
+                      any(ml.nlu_classifier(.scan.ocr.raw).intents,
+                          .name in (
+                            "cred_theft",
+                            "callback_scam",
+                            "steal_pii",
+                            "bec"
+                          )
+                      )
+                      and any(ml.nlu_classifier(.scan.ocr.raw).entities,
+                              .name in ("urgency", "financial")
+                      )
+                    )
+            )
+          )
+      )
+    )
+  )
+  and sender.email.domain.root_domain not in~ ('irs.gov')
+  and sender.email.email not in $recipient_emails
+attack_types:
+  - "BEC/Fraud"
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Evasion"
+  - "HTML smuggling"
+  - "Image as content"
+  - "Impersonation: Brand"
+  - "Scripting"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "File analysis"
+  - "Natural Language Understanding"
+  - "Optical Character Recognition"
+  - "Sender analysis"
+id: "3572f7fb-c630-577e-9499-e2d5ffc1af9a"
+testing_pr: 1325
+testing_sha: 8d1880f03bbaf2ff49a0e784ca0f22ce6995baee
