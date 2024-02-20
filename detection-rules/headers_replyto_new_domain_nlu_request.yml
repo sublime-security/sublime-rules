@@ -1,11 +1,12 @@
 name: "Suspicious newly registered reply-to domain with engaging financial or urgent language"
 description: |
   Detects messages from a mismatched newly registered Reply-to domain that contain a financial or urgent request, or a request and 
-  an NLU tag with medium to high confidence, from first time sender. This technique is typically observed in Vendor impersonation.
+  an NLU tag with medium to high confidence, from an untrusted sender. This technique is typically observed in Vendor impersonation.
 type: "rule"
 severity: "medium"
 source: |
   type.inbound
+  and length(body.current_thread.text) < 5000
   and any(headers.reply_to,
           // mismatched reply-to and sender domain
           .email.domain.root_domain != sender.email.domain.root_domain
@@ -19,6 +20,13 @@ source: |
     any(ml.nlu_classifier(body.current_thread.text).entities, .name in ("financial", "urgency"))
     or any(ml.nlu_classifier(body.current_thread.text).tags,
            .name is not null and .confidence in ("medium", "high")
+    )
+  )
+  and (
+    not profile.by_sender().solicited
+    or (
+      profile.by_sender().any_messages_malicious_or_spam
+      and not profile.by_sender().any_false_positives
     )
   )
   and not profile.by_sender().any_false_positives
