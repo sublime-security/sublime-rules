@@ -1,0 +1,66 @@
+name: "Brand impersonation: Canada Revenue Agency"
+description: "Impersonation of the Canada Revenue Agency, Canada's federal tax authority."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and (
+    (
+      strings.ilike(sender.display_name, '*cra*', '*canada revenue agency*')
+      or strings.ilevenshtein(sender.display_name, 'canada revenue agency') <= 2
+      or strings.ilike(sender.email.domain.domain, '*cra*')
+    )
+    or (
+      strings.ilike(subject.subject, '*cra*', '*canada revenue agency*')
+      and any(ml.nlu_classifier(body.current_thread.text).entities,
+              .name == "org" and .text in~ ("cra", "canada revenue agency")
+      )
+    )
+  )
+  and (
+    (
+      any(ml.nlu_classifier(body.current_thread.text).intents,
+          .name in ("cred_theft", "callback_scam", "steal_pii", "bec")
+      )
+      and any(ml.nlu_classifier(body.current_thread.text).entities,
+              .name in ("urgency", "financial")
+      )
+    )
+    or (
+      any(attachments,
+          (
+            (.file_type in ("html") or .file_extension in ("htm", "html"))
+            and any(ml.nlu_classifier(file.parse_html(.).display_text).entities,
+                    .name in ("urgency", "financial")
+            )
+          )
+          or (
+            (.file_type in ("pdf") or .file_extension in ("pdf"))
+            and any(file.explode(.),
+                    any(ml.nlu_classifier(.scan.ocr.raw).entities,
+                        .name in ("urgency", "financial")
+                    )
+            )
+          )
+      )
+    )
+  )
+  and sender.email.domain.root_domain not in~ ('canada.ca')
+  and sender.email.email not in $recipient_emails
+
+attack_types:
+  - "BEC/Fraud"
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Evasion"
+  - "HTML smuggling"
+  - "Image as content"
+  - "Impersonation: Brand"
+  - "Scripting"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "File analysis"
+  - "Natural Language Understanding"
+  - "Optical Character Recognition"
+  - "Sender analysis"
