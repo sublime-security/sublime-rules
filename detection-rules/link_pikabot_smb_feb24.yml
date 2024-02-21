@@ -1,0 +1,38 @@
+name: "LinkAnalysis: PikaBot SMB link in message body (Feb 24)"
+description: |
+  Attackers are using a link to SMB share in emails to bypass the warning message about running a potentially malicious file. Downloads a zip file containing a exe file. 
+type: "rule"
+severity: "high"
+authors:
+  - twitter: "affje0x65"
+references:
+  - Internal Research
+  - https://twitter.com/anyrun_app/status/1760284876832473377
+  - https://twitter.com/1ZRR4H/status/1759609478222127515
+source: |
+    type.inbound
+        and any(body.links, strings.starts_with(.href_url.url, 'file://'))
+        and (
+        any(body.links,
+            .href_url.domain.domain in $abuse_ch_urlhaus_domains_trusted_reporters
+        )
+        or any(body.links,
+                any(beta.linkanalysis(., mode="aggressive").files_downloaded,
+                    .file_extension in~ $file_extensions_common_archives
+                    and (
+                    any(file.explode(.),
+                        .file_extension =~ "exe"
+                        or .scan.hash.sha256 in $abuse_ch_malwarebazaar_sha256_trusted_reporters
+                    )
+                    )
+                )
+        )
+        )     
+tags:
+  - "Malfam: PikaBot"
+attack_types:
+  - "Malware/Ransomware"
+tactics_and_techniques:
+  - "Evasion"
+detection_methods:
+  - "URL analysis"
