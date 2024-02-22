@@ -8,10 +8,29 @@ severity: "low"
 source: |
   type.inbound
   and (
-    strings.ilike(sender.display_name, '*facebook ads*', '*facebook business*')
-    or strings.ilevenshtein(sender.display_name, 'facebook ads') <= 2
-    or strings.ilevenshtein(sender.display_name, 'facebook business') <= 2
-    or strings.ilike(sender.email.domain.domain, '*facebook*')
+    (
+      strings.ilike(sender.display_name,
+                    '*facebook ads*',
+                    '*facebook business*',
+                    '*meta support*'
+      )
+      or strings.ilevenshtein(sender.display_name, 'facebook ads') <= 2
+      or strings.ilevenshtein(sender.display_name, 'facebook business') <= 2
+      or strings.ilevenshtein(sender.display_name, 'meta support') <= 2
+      or strings.ilike(sender.email.domain.domain, '*facebook*')
+    )
+    or (
+      (
+        strings.ilike(sender.display_name, '*facebook*', '*meta*')
+        or strings.ilevenshtein(sender.display_name, 'facebook') <= 2
+      )
+      and (
+        any(ml.logo_detect(beta.message_screenshot()).brands, .name == "Facebook")
+        or any(ml.nlu_classifier(body.current_thread.text).intents,
+               .name in ("cred_theft", "callback_scam", "steal_pii")
+        )
+      )
+    )
   )
   and sender.email.domain.root_domain not in~ (
     'facebook.com',
