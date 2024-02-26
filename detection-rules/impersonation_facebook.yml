@@ -28,7 +28,8 @@ source: |
       and (
         any(ml.logo_detect(beta.message_screenshot()).brands, .name == "Facebook")
         or any(ml.nlu_classifier(body.current_thread.text).intents,
-               .name in ("cred_theft", "callback_scam", "steal_pii") and .confidence in ("medium", "high")
+               .name in ("cred_theft", "callback_scam", "steal_pii")
+               and .confidence in ("high")
         )
       )
     )
@@ -37,9 +38,36 @@ source: |
     'facebook.com',
     'facebookmail.com',
     'eventsatfacebook.com',
-    'facebookenterprise.com'
+    'facebookenterprise.com',
+    'metamail.com',
+    'medallia.com'
   )
-  and sender.email.email not in $recipient_emails
+  and (
+    (
+      profile.by_sender().prevalence in ("new", "outlier")
+      and not profile.by_sender().solicited
+    )
+    or (
+      profile.by_sender().any_messages_malicious_or_spam
+      and not profile.by_sender().any_false_positives
+    )
+  )
+
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and (
+        any(distinct(headers.hops, .authentication_results.dmarc is not null),
+            strings.ilike(.authentication_results.dmarc, "*fail")
+        )
+      )
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+    
+      // salesforce has been abused for meta phishing campaigns repeatedly 
+    or sender.email.domain.root_domain == "salesforce.com"
+  )
   and not profile.by_sender().any_false_positives
 attack_types:
   - "Credential Phishing"
