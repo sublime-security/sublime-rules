@@ -4,26 +4,37 @@ type: "rule"
 severity: "high"
 source: |
   type.inbound
-  // all attachments are images
   and length(filter(attachments, .file_type not in $file_types_images)) == 0
   and (
-    any(body.links,
-    // the images are likely hyperlinked to a non docusign url
-        .display_text is null
-        and .display_url.url is null
-        and not strings.ilike(.href_url.domain.root_domain, "docusign.*")
-        and any(attachments,
-                (
-                  any(ml.logo_detect(.).brands,
-                      .name == "DocuSign" and .confidence in ("medium", "high")
-                  )
-                  or any(file.explode(.),
-                         strings.ilike(.scan.ocr.raw, "*DocuSign*")
-                         and any(ml.nlu_classifier(.scan.ocr.raw).intents,
-                                 .name == "cred_theft" and .confidence != "low"
-                         )
-                  )
+    // image attachment impersonating docusign
+    any(attachments,
+        (
+          any(ml.logo_detect(.).brands,
+              .name == "DocuSign" and .confidence in ("medium", "high")
+          )
+          or any(file.explode(.),
+                 strings.ilike(.scan.ocr.raw, "*DocuSign*")
+                 and any(ml.nlu_classifier(.scan.ocr.raw).intents,
+                         .name == "cred_theft" and .confidence != "low"
+                 )
+          )
+        )
+        and (
+          any(body.links,
+              (
+                // hyperlinked image not to docusign
+                .display_text is null
+                and .display_url.url is null
+                and not strings.ilike(.href_url.domain.root_domain, "docusign.*")
+              )
+              or (
+                // hyperlinked disclaimer not to docusign
+                any(ml.nlu_classifier(.display_text).entities,
+                    .name == "disclaimer"
                 )
+                and not strings.ilike(.href_url.domain.root_domain, "docusign.*")
+              )
+          )
         )
     )
     or (
