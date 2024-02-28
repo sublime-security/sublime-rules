@@ -10,36 +10,54 @@ source: |
           not strings.ilike(.href_url.domain.root_domain, "docusign.*")
   )
   and (
-    any(file.explode(beta.message_screenshot()),
-        strings.ilike(.scan.ocr.raw, "*DocuSign*")
-        and (
-          any(ml.nlu_classifier(.scan.ocr.raw).intents,
-              .name == "cred_theft" and .confidence != "low"
-          )
-          or any(file.explode(beta.message_screenshot()),
-                 regex.icontains(.scan.ocr.raw,
-                                 "review document",
-                                 "[^d][^o][^c][^u]sign",
-                                 "important edocs",
-                                 "completed document",
-                                 // German (Document (check|check|sign|sent))
-                                 "Dokument (überprüfen|prüfen|unterschreiben|geschickt)",
-                                 // German (important|urgent|immediate)
-                                 "(wichtig|dringend|sofort)"
+    any(attachments,
+        any(ml.logo_detect(.).brands,
+            .name == "DocuSign" and .confidence in ("medium", "high")
+        )
+        or any(file.explode(.),
+               strings.ilike(.scan.ocr.raw, "*DocuSign*")
+               and (
+                 any(ml.nlu_classifier(.scan.ocr.raw).intents,
+                     .name == "cred_theft" and .confidence != "low"
                  )
-          )
+                 or regex.icontains(.scan.ocr.raw,
+                                    "review document",
+                                    "[^d][^o][^c][^u]sign",
+                                    "important edocs",
+                                    "completed document",
+                                    // German (Document (check|check|sign|sent))
+                                    "Dokument (überprüfen|prüfen|unterschreiben|geschickt)",
+                                    // German (important|urgent|immediate)
+                                    "(wichtig|dringend|sofort)"
+                 )
+               )
         )
     )
     or any(attachments,
-           (
-             any(ml.logo_detect(.).brands,
-                 .name == "DocuSign" and .confidence in ("medium", "high")
-             )
-             or any(file.explode(.),
-                    strings.ilike(.scan.ocr.raw, "*DocuSign*")
-                    and any(ml.nlu_classifier(.scan.ocr.raw).intents,
-                            .name == "cred_theft" and .confidence != "low"
-                    )
+           .file_type =~ "gif"
+           and (
+             any(ml.logo_detect(beta.message_screenshot()).brands,
+                 .name == "DocuSign"
+                 or any(file.explode(beta.message_screenshot()),
+                        strings.ilike(.scan.ocr.raw, "*DocuSign*")
+                        and (
+                          any(ml.nlu_classifier(.scan.ocr.raw).intents,
+                              .name == "cred_theft" and .confidence != "low"
+                          )
+                          or any(file.explode(beta.message_screenshot()),
+                                 regex.icontains(.scan.ocr.raw,
+                                                 "review document",
+                                                 "[^d][^o][^c][^u]sign",
+                                                 "important edocs",
+                                                 "completed document",
+                                                 // German (Document (check|check|sign|sent))
+                                                 "Dokument (überprüfen|prüfen|unterschreiben|geschickt)",
+                                                 // German (important|urgent|immediate)
+                                                 "(wichtig|dringend|sofort)"
+                                 )
+                          )
+                        )
+                 )
              )
            )
     )
