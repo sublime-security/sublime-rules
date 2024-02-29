@@ -4,27 +4,67 @@ type: "rule"
 severity: "high"
 source: |
   type.inbound
-  and length(filter(attachments, .file_type not in $file_types_images)) == 0
+  and length(attachments) > 0
+  and all(attachments, .file_type in $file_types_images)
   and any(body.links,
           not strings.ilike(.href_url.domain.root_domain, "docusign.*")
   )
   and (
-    any(file.explode(beta.message_screenshot()),
-        strings.ilike(.scan.ocr.raw, "*DocuSign*")
-        and any(ml.nlu_classifier(.scan.ocr.raw).intents,
-                .name == "cred_theft" and .confidence != "low"
+    any(attachments,
+        any(ml.logo_detect(.).brands, .name == "DocuSign")
+        or any(file.explode(.),
+               strings.ilike(.scan.ocr.raw, "*DocuSign*")
+               and (
+                 any(ml.nlu_classifier(.scan.ocr.raw).intents,
+                     .name == "cred_theft" and .confidence != "low"
+                 )
+                 or regex.icontains(.scan.ocr.raw,
+                                    "((re)?view|access|complete(d)?) document(s)?",
+                                    "[^d][^o][^c][^u]sign",
+                                    "important edocs",
+                                    // German (Document (check|check|sign|sent))
+                                    "Dokument (überprüfen|prüfen|unterschreiben|geschickt)",
+                                    // German (important|urgent|immediate)
+                                    "(wichtig|dringend|sofort)"
+                 )
+               )
         )
     )
+  
+    // accomidate truncated pngs and GIF files which can cause logodetect/OCR failures
     or any(attachments,
            (
-             any(ml.logo_detect(.).brands,
-                 .name == "DocuSign" and .confidence in ("medium", "high")
-             )
+             .file_type =~ "gif"
              or any(file.explode(.),
-                    strings.ilike(.scan.ocr.raw, "*DocuSign*")
-                    and any(ml.nlu_classifier(.scan.ocr.raw).intents,
-                            .name == "cred_theft" and .confidence != "low"
+                    any(.scan.exiftool.fields,
+                        .key == "Warning" and .value == "Truncated PNG image"
                     )
+             )
+           )
+           and (
+             any(ml.logo_detect(beta.message_screenshot()).brands,
+                 (
+                   .name == "DocuSign"
+                   or any(file.explode(beta.message_screenshot()),
+                          strings.ilike(.scan.ocr.raw, "*DocuSign*")
+                   )
+                 )
+             )
+             and (
+               any(file.explode(beta.message_screenshot()),
+                   any(ml.nlu_classifier(.scan.ocr.raw).intents,
+                       .name == "cred_theft" and .confidence != "low"
+                   )
+                   or regex.icontains(.scan.ocr.raw,
+                                      "((re)?view|access|complete(d)?) document(s)?",
+                                      "[^d][^o][^c][^u]sign",
+                                      "important edocs",
+                                      // German (Document (check|check|sign|sent))
+                                      "Dokument (überprüfen|prüfen|unterschreiben|geschickt)",
+                                      // German (important|urgent|immediate)
+                                      "(wichtig|dringend|sofort)"
+                   )
+               )
              )
            )
     )
@@ -37,7 +77,7 @@ source: |
     )
   )
   and not profile.by_sender().any_false_positives
-
+  
   // negate docusign 'via' messages
   and not (
     any(headers.hops,
@@ -52,6 +92,7 @@ source: |
   and not any(headers.hops,
               regex.imatch(.received.server.raw, ".+.docusign.(net|com)")
   )
+  
 attack_types:
   - "Credential Phishing"
 tactics_and_techniques:
