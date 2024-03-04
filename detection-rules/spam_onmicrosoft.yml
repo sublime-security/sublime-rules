@@ -8,8 +8,20 @@ source: |
   and length(recipients.to) < 2
   and length(body.links) > 0
   and not any(attachments,
-            .content_type in ("message/rfc822", "message/delivery-status", "text/calendar")
+              .content_type in (
+                "message/rfc822",
+                "message/delivery-status",
+                "text/calendar"
+              )
+  )
+  // negate out of office auto-reply
+  and not (
+    strings.istarts_with(subject.subject, "Automatic reply:")
+    and (
+      length(headers.references) > 0
+      or any(headers.hops, any(.fields, strings.ilike(.name, "In-Reply-To")))
     )
+  )
   and (
     not profile.by_sender().solicited
     or (
