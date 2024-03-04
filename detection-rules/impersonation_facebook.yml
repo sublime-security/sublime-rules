@@ -1,6 +1,6 @@
-name: "Brand impersonation: Facebook"
+name: "Brand impersonation: Meta/Facebook"
 description: |
-  Impersonation of Facebook.
+  Impersonation of Meta or Meta's subsidary Facebook.
 references:
   - "https://www.techrepublic.com/article/google-and-amazon-most-impersonated-brands-in-phishing-attacks/"
 type: "rule"
@@ -13,7 +13,8 @@ source: |
                     '*facebook ads*',
                     '*facebook business*',
                     '*meta support*',
-                    '*meta for business*'
+                    '*meta for business*',
+                    '*meta policy*'
       )
       or strings.ilevenshtein(sender.display_name, 'facebook ads') <= 2
       or strings.ilevenshtein(sender.display_name, 'facebook business') <= 2
@@ -26,7 +27,7 @@ source: |
         or strings.ilevenshtein(sender.display_name, 'facebook') <= 2
       )
       and (
-        any(ml.logo_detect(beta.message_screenshot()).brands, .name == "Facebook")
+        any(ml.logo_detect(beta.message_screenshot()).brands, .name in ("Facebook", "Meta"))
         or any(ml.nlu_classifier(body.current_thread.text).intents,
                .name in ("cred_theft", "callback_scam", "steal_pii")
                and .confidence in ("high")
@@ -52,8 +53,9 @@ source: |
       profile.by_sender().any_messages_malicious_or_spam
       and not profile.by_sender().any_false_positives
     )
+    or sender.email.email == "noreply@salesforce.com"
   )
-
+  
   // negate highly trusted sender domains unless they fail DMARC authentication
   and (
     (
