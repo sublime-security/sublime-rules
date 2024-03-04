@@ -24,8 +24,15 @@ source: |
   // the attachment is a pdf with 1 page, and at least 60 ocr chars
   and any(attachments,
           .file_extension == "pdf"
-          and any(file.explode(.), .scan.exiftool.page_count == 1)
-          and any(file.explode(.), length(.scan.ocr.raw) > 60)
+          and any(file.explode(.),
+                  .scan.exiftool.page_count == 1
+                  and length(.scan.ocr.raw) > 60
+                  // not uber receipts
+                  and (
+                    length(.scan.pdf.urls) > 0
+                     and not all(.scan.pdf.urls, .domain.root_domain == "uber.com")
+                  )
+          )
   
           // 4 of the following strings are found        
           and any(file.explode(.),
@@ -45,7 +52,9 @@ source: |
                     strings.icontains(.scan.ocr.raw, "cancel"),
                     strings.icontains(.scan.ocr.raw, "renew"),
                     strings.icontains(.scan.ocr.raw, "refund"),
-                    regex.icontains(.scan.ocr.raw, '(\+\d|1.(\()?\d{3}(\))?\D\d{3}\D\d{4})')
+                    regex.icontains(.scan.ocr.raw,
+                                    '(\+\d|1.(\()?\d{3}(\))?\D\d{3}\D\d{4})'
+                    )
                   )
           )
   
