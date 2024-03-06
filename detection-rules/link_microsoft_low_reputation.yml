@@ -4,7 +4,7 @@ type: "rule"
 severity: "medium"
 source: |
  type.inbound
- // suspicious link
+ // suspicious link 
  and any(body.links,
          (
            .href_url.domain.root_domain not in $tranco_1m
@@ -144,25 +144,20 @@ source: |
          )
      )
    )
- or (
-   any(ml.nlu_classifier(body.current_thread.text).intents,
-       .name == "cred_theft" and .confidence in~ ("medium", "high")
-   )
-   or any(attachments,
-          .file_type in $file_types_images
-          and any(file.explode(.),
-                  any(ml.nlu_classifier(.scan.ocr.raw).intents,
-                      .name == "cred_theft" and .confidence in ("medium", "high")
-                  )
-          )
-   )
    or (
-     any(ml.nlu_classifier(body.current_thread.text).entities, .name == "urgency")
-     and not any(ml.nlu_classifier(body.current_thread.text).intents,
-                 .name == "benign" and .confidence == "high"
+     any(ml.nlu_classifier(body.current_thread.text).intents,
+         .name == "cred_theft" and .confidence in~ ("medium", "high")
+     )
+     or any(attachments,
+            .file_type in $file_types_images
+            and any(file.explode(.),
+                    any(ml.nlu_classifier(.scan.ocr.raw).intents,
+                        .name == "cred_theft"
+                        and .confidence in ("medium", "high")
+                    )
+            )
      )
    )
- )
  )
  and sender.email.domain.root_domain not in (
    "bing.com",
@@ -188,18 +183,20 @@ source: |
    )
    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
  )
- 
  and (
-    (
-      not profile.by_sender().solicited
-    )
-    or (
-      profile.by_sender().any_messages_malicious_or_spam
-      and not profile.by_sender().any_false_positives
-    )
+   not profile.by_sender().solicited
+   or (
+     profile.by_sender().any_messages_malicious_or_spam
+     and not profile.by_sender().any_false_positives
+   )
  )
  and not profile.by_sender().any_false_positives
-
+ 
+ // exclude marketing jargen from ms partners
+ and not regex.icontains(body.current_thread.text,
+                         'schedul(e|ing).{0,10}(call|meeting|demo|zoom|conversation|time|tool)|book.{0,10}(meeting|demo|call|slot|time)|connect.{0,12}(with me|phone|email)|my.{0,10}(calendar|cal)|reserve.{0,10}s[pl]ot|break the ice|want to know more?|miss your chance|if you no longer wish|low-code (development|approach|solution|journey|platform)'
+ )
+ 
 attack_types:
   - "Credential Phishing"
 tactics_and_techniques:

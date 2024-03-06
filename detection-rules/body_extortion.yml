@@ -1,6 +1,6 @@
 name: "Extortion / sextortion (untrusted sender)"
 description: |
-  Detects extortion and sextortion attempts by analyzing the email body text from a first-time sender.
+  Detects extortion and sextortion attempts by analyzing the email body text from an untrusted sender.
 references:
   - "https://krebsonsecurity.com/2018/07/sextortion-scam-uses-recipients-hacked-passwords/"
 type: "rule"
@@ -33,12 +33,11 @@ source: |
   )
   and (
     (
-      sender.email.domain.root_domain in $free_email_providers
-      and sender.email.email not in $sender_emails
+      profile.by_sender().prevalence in ("new", "outlier")
     )
     or (
-      sender.email.domain.root_domain not in $free_email_providers
-      and sender.email.domain.domain not in $sender_domains
+      profile.by_sender().any_messages_malicious_or_spam
+      and not profile.by_sender().any_false_positives
     )
   
     // many extortion emails spoof sender domains and fail sender authentication
