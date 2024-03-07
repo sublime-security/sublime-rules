@@ -1,12 +1,15 @@
-name: "Employee impersonation with urgent request (first-time sender)"
+name: "Employee impersonation with urgent request (untrusted sender)"
 description: |
   Sender is using a display name that matches the display name of someone in your organization.
 
-  Detects potential Business Email Compromise (BEC) attacks by analyzing text within email body first-time senders.
+  Detects potential Business Email Compromise (BEC) attacks by analyzing text within email body from untrusted senders.
 type: "rule"
 severity: "medium"
 source: |
   type.inbound
+  
+  // ensure the display name contains a space to avoid single named process accounts eg. 'billing, payment'
+  and strings.contains(sender.display_name, " ")
   and sender.display_name in~ $org_display_names
   and (
     any(ml.nlu_classifier(body.current_thread.text).intents,
@@ -38,6 +41,19 @@ source: |
       profile.by_sender().any_messages_malicious_or_spam
       and not profile.by_sender().any_false_positives
     )
+  )
+
+  // negate org domains unless they fail DMARC authentication
+  and (
+    (
+      sender.email.domain.root_domain in $org_domains
+      and (
+        any(distinct(headers.hops, .authentication_results.dmarc is not null),
+            strings.ilike(.authentication_results.dmarc, "*fail")
+        )
+      )
+    )
+    or sender.email.domain.root_domain not in $org_domains
   )
   
   // negate highly trusted sender domains unless they fail DMARC authentication
