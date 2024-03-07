@@ -7,6 +7,8 @@ source: |
   and sender.email.domain.root_domain == "onmicrosoft.com"
   and length(recipients.to) < 2
   and length(body.links) > 0
+  // bounce-back negations
+  and not strings.like(sender.email.local_part, "*postmaster*", "*mailer-daemon*", "*administrator*")
   and not any(attachments,
               .content_type in (
                 "message/rfc822",
@@ -14,12 +16,17 @@ source: |
                 "text/calendar"
               )
   )
-  // negate out of office auto-reply
+  // negating legit replies
   and not (
-    strings.istarts_with(subject.subject, "Automatic reply:")
+    (
+      strings.istarts_with(subject.subject, "RE:")
+      or strings.istarts_with(subject.subject, "FW:")
+      or strings.istarts_with(subject.subject, "FWD:")
+      or regex.imatch(subject.subject, '[^:]?automat.[^:]{0,20}:.*$')
+    )
     and (
       length(headers.references) > 0
-      or any(headers.hops, any(.fields, strings.ilike(.name, "In-Reply-To")))
+      and any(headers.hops, any(.fields, strings.ilike(.name, "In-Reply-To")))
     )
   )
   and (
@@ -29,6 +36,7 @@ source: |
       and not profile.by_sender().any_false_positives
     )
   )
+  and not sender.email.domain.domain in $org_domains
 tags:
  - "Attack surface reduction"
 attack_types:
