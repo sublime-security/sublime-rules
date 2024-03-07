@@ -61,43 +61,50 @@ source: |
                .scan.qr.url.domain.tld in $suspicious_tlds
                and .scan.qr.url.domain.root_domain != "app.link"
              )
+             or 
+             // linkanalysis phishing disposition
+             any([beta.linkanalysis(.scan.qr.url)],
+                 .credphish.disposition == "phishing"
+             )
       )
       or any(attachments,
              .file_type in $file_types_images
              and any(file.explode(.),
-                     .scan.qr.url.domain.tld in $suspicious_tlds
-                     and .scan.qr.url.domain.root_domain != "app.link"
+                     (
+                       .scan.qr.url.domain.tld in $suspicious_tlds
+                       and .scan.qr.url.domain.root_domain != "app.link"
+                     )
+                     and .scan.qr.url.domain.root_domain not in $org_domains
              )
       )
       or sender.email.domain.tld in $suspicious_tlds
     )
-  )
   
-  // sender profile is new or outlier
-  and (
-    (
-      profile.by_sender().prevalence in ("new", "outlier")
-      and not profile.by_sender().solicited
-    )
-    or (
-      profile.by_sender().any_messages_malicious_or_spam
-      and not profile.by_sender().any_false_positives
-    )
-  )
-  
-  // negate highly trusted sender domains unless they fail DMARC authentication
-  and (
-    (
-      sender.email.domain.root_domain in $high_trust_sender_root_domains
-      and (
-        any(distinct(headers.hops, .authentication_results.dmarc is not null),
-            strings.ilike(.authentication_results.dmarc, "*fail")
-        )
+    // sender profile is new or outlier
+    and (
+      (
+        profile.by_sender().prevalence in ("new", "outlier")
+        and not profile.by_sender().solicited
+      )
+      or (
+        profile.by_sender().any_messages_malicious_or_spam
+        and not profile.by_sender().any_false_positives
       )
     )
-    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  
+    // negate highly trusted sender domains unless they fail DMARC authentication
+    and (
+      (
+        sender.email.domain.root_domain in $high_trust_sender_root_domains
+        and (
+          any(distinct(headers.hops, .authentication_results.dmarc is not null),
+              strings.ilike(.authentication_results.dmarc, "*fail")
+          )
+        )
+      )
+      or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+    )
   )
-
 attack_types:
   - "Credential Phishing"
 tactics_and_techniques:
