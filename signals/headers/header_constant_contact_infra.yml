@@ -1,0 +1,25 @@
+name: "Header: Contains Constant Contact Infra"
+type: "query"
+source: | 
+  any(headers.hops,
+      strings.icontains(.authentication_results.spf_details.designator,
+                        "constantcontact.com"
+      )
+  )
+  or any(headers.hops,
+        strings.icontains(.received_spf.designator, "constantcontact.com")
+  )
+  or (
+    (
+      any(headers.hops,
+          .index == 0
+          and any(.authentication_results.dkim_details,
+                  .domain == "auth.ccsend.com"
+          )
+      )
+    )
+    and any(distinct(headers.hops, .authentication_results.dmarc is not null),
+            .index == 0 and strings.ilike(.authentication_results.dmarc, "*pass")
+    )
+  )
+  or any(headers.references, strings.iends_with(., "ccsend.com"))

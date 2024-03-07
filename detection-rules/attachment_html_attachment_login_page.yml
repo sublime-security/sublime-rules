@@ -44,7 +44,7 @@ source: |
                       )
                     )
                   )
-                  or 
+                  or
                   //Known phishing obfuscation
                   2 of (
                     // Enter password
@@ -53,20 +53,34 @@ source: |
                                       "*&#69;&#110;&#116;&#101;&#114;&#32;&#112;&#97;&#115;&#115;&#119;&#111;&#114;&#100*"
                         )
                     ),
-  
-                    // Forgotten my password  
-                    any(.scan.strings.strings,  
-                        strings.ilike(.,  
+
+                    // Forgotten my password
+                    any(.scan.strings.strings,
+                        strings.ilike(.,
                                       "*&#70;&#111;&#114;&#103;&#111;&#116;&#116;&#101;&#110;&#32;&#109;&#121;&#32;&#112;&#97;&#115;&#115;&#119;&#111;&#114;&#100*"
                         )
                     ),
-  
+
                     // Sign in
                     any(.scan.strings.strings,
                         strings.ilike(., "*&#83;&#105;&#103;&#110;&#32;&#105;&#110*")
                     )
                   )
           )
+  )
+
+  and (
+    (
+      // exclude internal mailers where there is no SPF configured.
+      // if the sender's root domain is an org domain, we
+      // ensure there's no SPF failures to protect against spoofs.
+      // we use root_domain because it's typically subdomains that are misconfigured
+      sender.email.domain.root_domain in $org_domains
+      and not any(distinct(headers.hops, .received_spf.verdict is not null),
+                  strings.ilike(.received_spf.verdict, "*fail")
+      )
+    )
+    or sender.email.domain.root_domain not in $org_domains
   )
 
   // negate highly trusted sender domains unless they fail DMARC authentication
@@ -82,6 +96,7 @@ source: |
     )
     or sender.email.domain.root_domain not in $high_trust_sender_root_domains
   )
+
 
   and (
     (
