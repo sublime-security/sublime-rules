@@ -69,11 +69,18 @@ source: |
           )
   )
 
-  // negate legit replies
-  and not (
-    length(headers.references) > 0
-    or any(headers.hops, any(.fields, strings.ilike(.name, "In-Reply-To")))
+  // negate legit replies unless there is a freemail reply to that doesn't match the sender
+  and (
+    not (
+      length(headers.references) > 0
+      or any(headers.hops, any(.fields, strings.ilike(.name, "In-Reply-To")))
+    )
+    or any(headers.reply_to,
+           .email.domain.root_domain in $free_email_providers
+           and .email.email != sender.email.email
+    )
   )
+
   
   // negate highly trusted sender domains unless they fail DMARC authentication
   and
