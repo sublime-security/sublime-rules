@@ -4,20 +4,29 @@ type: "rule"
 severity: "medium"
 source: |
  type.inbound
- // suspicious link
+ // suspicious link 
  and any(body.links,
          (
            .href_url.domain.root_domain not in $tranco_1m
            or .href_url.domain.domain in $free_file_hosts
+           or .href_url.domain.root_domain in $free_file_hosts
            or .href_url.domain.root_domain in $free_subdomain_hosts
            or .href_url.domain.domain in $url_shorteners
            or 
  
            // mass mailer link, masks the actual URL
-           .href_url.domain.root_domain in ("hubspotlinks.com", "mandrillapp.com", "sendgrid.net")
+           .href_url.domain.root_domain in (
+             "hubspotlinks.com",
+             "mandrillapp.com",
+             "sendgrid.net",
+             "rs6.net"
+           )
  
            // Google AMP redirect
-           or (.href_url.domain.sld == "google" and strings.starts_with(.href_url.path, "/amp/"))
+           or (
+             .href_url.domain.sld == "google"
+             and strings.starts_with(.href_url.path, "/amp/")
+           )
          )
  
          // exclude sources of potential FPs
@@ -47,7 +56,9 @@ source: |
        .file_type in $file_types_images
        and any(ml.logo_detect(.).brands, strings.starts_with(.name, "Microsoft"))
    )
-   or any(ml.logo_detect(beta.message_screenshot()).brands, strings.starts_with(.name, "Microsoft"))
+   or any(ml.logo_detect(beta.message_screenshot()).brands,
+          strings.starts_with(.name, "Microsoft")
+   )
  )
  
  // suspicious content
@@ -73,7 +84,8 @@ source: |
                        "*clear*",
                        "*only works*",
                        "*failed*",
-                       "*deleted*"
+                       "*deleted*",
+                       "*revalidated*"
      )
    )
    or (
@@ -105,23 +117,45 @@ source: |
          )
      )
    )
- )
- and (
-   any(ml.nlu_classifier(body.current_thread.text).intents,
-       .name == "cred_theft" and .confidence in~ ("medium", "high")
-   )
-   or any(attachments,
-          .file_type in $file_types_images
-          and any(file.explode(.),
-                  any(ml.nlu_classifier(.scan.ocr.raw).intents,
-                      .name == "cred_theft" and .confidence in ("medium", "high")
-                  )
-          )
+   or (
+     any(file.explode(beta.message_screenshot()),
+         strings.ilike(.scan.ocr.raw,
+                       "*password*",
+                       "*document*",
+                       "*voicemail*",
+                       "*cache*",
+                       "*fax*",
+                       "*storage*",
+                       "*quota*",
+                       "*messages*"
+         )
+         and strings.ilike(.scan.ocr.raw,
+                           "*terminated*",
+                           "*review*",
+                           "*expire*",
+                           "*click*",
+                           "*view*",
+                           "*exceed*",
+                           "*clear*",
+                           "*only works*",
+                           "*failed*",
+                           "*deleted*",
+                           "*revalidated"
+         )
+     )
    )
    or (
-     any(ml.nlu_classifier(body.html.inner_text).entities, .name == "urgency")
-     and not any(ml.nlu_classifier(body.current_thread.text).intents,
-                 .name == "benign" and .confidence == "high"
+     any(ml.nlu_classifier(body.current_thread.text).intents,
+         .name == "cred_theft" and .confidence in~ ("medium", "high")
+     )
+     or any(attachments,
+            .file_type in $file_types_images
+            and any(file.explode(.),
+                    any(ml.nlu_classifier(.scan.ocr.raw).intents,
+                        .name == "cred_theft"
+                        and .confidence in ("medium", "high")
+                    )
+            )
      )
    )
  )
@@ -129,6 +163,7 @@ source: |
    "bing.com",
    "microsoft.com",
    "microsoftonline.com",
+   "microsoftstoreemail.com",
    "microsoftsupport.com",
    "microsoft365.com",
    "office.com",
@@ -136,7 +171,33 @@ source: |
    "sharepointonline.com",
    "yammer.com"
  )
-
+ 
+ // negate highly trusted sender domains unless they fail DMARC authentication
+ and (
+   (
+     sender.email.domain.root_domain in $high_trust_sender_root_domains
+     and (
+       any(distinct(headers.hops, .authentication_results.dmarc is not null),
+           strings.ilike(.authentication_results.dmarc, "*fail")
+       )
+     )
+   )
+   or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+ )
+ and (
+   not profile.by_sender().solicited
+   or (
+     profile.by_sender().any_messages_malicious_or_spam
+     and not profile.by_sender().any_false_positives
+   )
+ )
+ and not profile.by_sender().any_false_positives
+ 
+ // exclude marketing jargen from ms partners
+ and not regex.icontains(body.current_thread.text,
+                         'schedul(e|ing).{0,10}(call|meeting|demo|zoom|conversation|time|tool)|book.{0,10}(meeting|demo|call|slot|time)|connect.{0,12}(with me|phone|email)|my.{0,10}(calendar|cal)|reserve.{0,10}s[pl]ot|break the ice|want to know more?|miss your chance|if you no longer wish|low-code (development|approach|solution|journey|platform)'
+ )
+ 
 attack_types:
   - "Credential Phishing"
 tactics_and_techniques:

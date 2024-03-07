@@ -1,6 +1,6 @@
-name: "Body: Advanced Fee Fraud (AFF) from Freemail providers or Suspicious TLDs"
+name: "Advance Fee Fraud (AFF) from freemail provider or suspicious TLD"
 description: |
-  Advanced Fee Fraud (AFF) is a type of BEC/Fraud involving upfront fees for promised
+  Advance Fee Fraud (AFF) is a type of BEC/Fraud involving upfront fees for promised
   future returns, such as lottery scams, inheritance payouts, and investment opportunities.
   This rule identifies messages from Freemail domains or suspicious TLDS, including those
   with suspicious reply-to addresses. It utilizes Natural Language Understanding to detect
@@ -23,17 +23,23 @@ source: |
     )
     or sender.email.domain.tld in $suspicious_tlds
   )
-  and any(ml.nlu_classifier(body.current_thread.text).tags,
-          .name == "advance_fee" and .confidence in ("medium", "high")
-  )
   and (
-    profile.by_sender().prevalence in ("new", "outlier")
+    any(ml.nlu_classifier(body.current_thread.text).tags,
+        .name == "advance_fee" and .confidence in ("medium", "high")
+    )
     or (
-      profile.by_sender().any_messages_malicious_or_spam
-      and not profile.by_sender().any_false_positives
+      length(body.current_thread.text) < 200
+      and regex.icontains(body.current_thread.text,
+                          '(donation|inheritence|\$\d,\d{3}\,\d{3}|lottery)'
+      )
     )
   )
-
+  and (
+      not profile.by_sender().solicited
+      or profile.by_sender().any_messages_malicious_or_spam
+    )
+  
+    and not profile.by_sender().any_false_positives
 attack_types:
   - "BEC/Fraud"
 tactics_and_techniques:

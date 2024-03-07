@@ -1,0 +1,53 @@
+name: "Attachment: PDF with embedded Javascript"
+description: |
+  PDF contains embedded Javascript.
+references:
+  - "https://delivr.to/payloads?id=f1a0c398-995c-4ea3-9404-0b7b27792e8d"
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and any(attachments,
+          .file_extension == "pdf"
+          and any(file.explode(.),
+                  (
+                    (any(.scan.strings.strings, strings.icontains(., '/JavaScript')))
+                    and (any(.scan.strings.strings, strings.icontains(., '/JS (')))
+                  )
+          )
+  )
+
+  and (
+    (
+      profile.by_sender().prevalence in ("new", "outlier")
+      and not profile.by_sender().solicited
+    )
+    or (
+      profile.by_sender().any_messages_malicious_or_spam
+      and not profile.by_sender().any_false_positives
+    )
+  )
+
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and (
+        any(distinct(headers.hops, .authentication_results.dmarc is not null),
+            strings.ilike(.authentication_results.dmarc, "*fail")
+        )
+      )
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+  
+tags:
+  - "Attack surface reduction"
+attack_types:
+  - "Malware/Ransomware"
+tactics_and_techniques:
+  - "Evasion"
+  - "Scripting"
+detection_methods:
+  - "File analysis"
+id: "d4cde94f-d9e5-527a-9192-da09f3d21275"

@@ -14,7 +14,24 @@ source: |
   )
   // sedex.com is not affiliated with FedEx, but is an apparent FP
   and sender.email.domain.root_domain not in~ ('fedex.com', 'sedex.com', 'myworkday.com')
-  and sender.email.email not in $sender_emails
+  and (
+    not profile.by_sender().any_false_positives
+    and not profile.by_sender().solicited
+  )
+
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and
+  (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and (
+        any(distinct(headers.hops, .authentication_results.dmarc is not null),
+            strings.ilike(.authentication_results.dmarc, "*fail")
+        )
+      )
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
 attack_types:
   - "Credential Phishing"
 tactics_and_techniques:
