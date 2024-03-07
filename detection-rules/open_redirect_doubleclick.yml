@@ -1,0 +1,28 @@
+name: "Open redirect: Doubleclick.net"
+description: Doubleclick.net link leveraging an open redirect from a new or outlier sender.
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and length(body.links) < 10
+  and any(body.links,
+          .href_url.domain.root_domain == "doubleclick.net"
+          and .href_url.path == "/aclk"
+          and regex.icontains(.href_url.query_params, "&adurl=[a-zA-Z]{3,10}://.*$")
+  )
+  and (
+    profile.by_sender().prevalence in ("new", "outlier")
+    or (
+      profile.by_sender().any_messages_malicious_or_spam
+      and not profile.by_sender().any_false_positives
+    )
+  )
+attack_types:
+  - "Credential Phishing"
+  - "Malware/Ransomware"
+tactics_and_techniques:
+  - "Open redirect"
+detection_methods:
+  - "Sender analysis"
+  - "URL analysis"
+id: "9c620146-2e0e-5cbb-96fc-fea27236117c"
