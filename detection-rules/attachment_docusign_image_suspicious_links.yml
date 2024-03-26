@@ -19,27 +19,33 @@ source: |
   )
   and (
     any(attachments,
-        any(ml.logo_detect(.).brands, .name == "DocuSign")
-        or any(file.explode(.),
-               strings.ilike(.scan.ocr.raw, "*DocuSign*")
-               and (
-                 any(ml.nlu_classifier(.scan.ocr.raw).intents,
-                     .name == "cred_theft" and .confidence != "low"
+        (
+          any(ml.logo_detect(.).brands, .name == "DocuSign")
+          or any(file.explode(.),
+                 strings.ilike(.scan.ocr.raw, "*DocuSign*")
+                 and (
+                   any(ml.nlu_classifier(.scan.ocr.raw).intents,
+                       .name == "cred_theft" and .confidence != "low"
+                   )
+                   or regex.icontains(.scan.ocr.raw,
+                                      "((re)?view|access|complete(d)?) document(s)?",
+                                      "[^d][^o][^c][^u]sign",
+                                      "important edocs",
+                                      // German (Document (check|check|sign|sent))
+                                      "Dokument (überprüfen|prüfen|unterschreiben|geschickt)",
+                                      // German (important|urgent|immediate)
+                                      "(wichtig|dringend|sofort)"
+                   )
                  )
-                 or regex.icontains(.scan.ocr.raw,
-                                    "((re)?view|access|complete(d)?) document(s)?",
-                                    "[^d][^o][^c][^u]sign",
-                                    "important edocs",
-                                    // German (Document (check|check|sign|sent))
-                                    "Dokument (überprüfen|prüfen|unterschreiben|geschickt)",
-                                    // German (important|urgent|immediate)
-                                    "(wichtig|dringend|sofort)"
-                 )
-               )
-               and not (
-                 strings.ilike(.scan.ocr.raw, "*DocuSigned By*")
-                 and strings.ilike(.scan.ocr.raw, "*DocuSign Envelope ID*")
-               )
+          )
+        )
+        and not any(file.explode(.),
+                    (
+                      strings.ilike(.scan.ocr.raw, "*DocuSigned By*")
+                      and not strings.ilike(.scan.ocr.raw,
+                                            "*DocuSign Envelope ID*"
+                      )
+                    )
         )
     )
   
@@ -78,11 +84,15 @@ source: |
                                         "(wichtig|dringend|sofort)"
                      )
                    )
-                   and not (
-                     strings.ilike(.scan.ocr.raw, "*DocuSigned By*")
-                     and strings.ilike(.scan.ocr.raw, "*DocuSign Envelope ID*")
-                   )
                )
+             )
+             and not any(file.explode(beta.message_screenshot()),
+                         (
+                           strings.ilike(.scan.ocr.raw, "*DocuSigned By*")
+                           and not strings.ilike(.scan.ocr.raw,
+                                                 "*DocuSign Envelope ID*"
+                           )
+                         )
              )
            )
     )
