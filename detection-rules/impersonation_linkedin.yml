@@ -11,8 +11,31 @@ source: |
     sender.display_name =~ 'linkedin'
     or strings.ilevenshtein(sender.display_name, 'linkedin') <= 2
     or strings.ilevenshtein(sender.email.domain.root_domain, 'linkedin.com') <= 2
+    or (
+      strings.ilike(sender.display_name, "*linkedin*")
+      and 1 of (
+        any(ml.nlu_classifier(body.current_thread.text).intents,
+            .name in ("cred_theft", "steal_pii") and .confidence == "high"
+        ),
+        beta.whois(sender.email.domain).days_old <= 30
+        and strings.ilike(sender.email.email, "*linkedin*"),
+        (
+          length(headers.reply_to) > 0
+          and all(headers.reply_to,
+                  .email.domain.root_domain != sender.email.domain.root_domain
+          )
+          and all(headers.reply_to,
+                  .email.domain.root_domain != headers.return_path.domain.root_domain
+          )
+          and sender.email.domain.root_domain != headers.return_path.domain.root_domain
+        )
+      )
+    )
   )
-  and sender.email.domain.root_domain not in ('linkedin.com', 'smartrecruiters.com')
+  and sender.email.domain.root_domain not in (
+    'linkedin.com',
+    'smartrecruiters.com'
+  )
   and sender.email.email not in $recipient_emails
   and not strings.iends_with(headers.message_id, "linkedin.com>")
 attack_types:
