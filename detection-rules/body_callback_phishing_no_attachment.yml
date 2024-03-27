@@ -15,7 +15,10 @@ source: |
       and not profile.by_sender().any_false_positives
     )
   )
-  and sender.email.domain.root_domain in $free_email_providers
+  and (
+    sender.email.domain.root_domain in $free_email_providers
+    or beta.whois(sender.email.domain).found == false
+  )
   and (
     strings.ilike(body.current_thread.text,
                   "*mcafee*",
@@ -32,29 +35,62 @@ source: |
     )
   )
   and length(body.current_thread.text) < 1500
-  and 3 of (
-    strings.ilike(body.current_thread.text, '*purchase*'),
-    strings.ilike(body.current_thread.text, '*payment*'),
-    strings.ilike(body.current_thread.text, '*transaction*'),
-    strings.ilike(body.current_thread.text, '*subscription*'),
-    strings.ilike(body.current_thread.text, '*antivirus*'),
-    strings.ilike(body.current_thread.text, '*order*'),
-    strings.ilike(body.current_thread.text, '*support*'),
-    strings.ilike(body.current_thread.text, '*help line*'),
-    strings.ilike(body.current_thread.text, '*receipt*'),
-    strings.ilike(body.current_thread.text, '*invoice*'),
-    strings.ilike(body.current_thread.text, '*call*'),
-    strings.ilike(body.current_thread.text, '*cancel*'),
-    strings.ilike(body.current_thread.text, '*renew*'),
-    strings.ilike(body.current_thread.text, '*refund*')
-  )
-  // phone number regex
   and (
-    regex.icontains(body.current_thread.text,
-                    '\+?(\d{1}.)?\(?\d{3}?\)?.\d{3}.?\d{4}'
+    (
+      3 of (
+        strings.ilike(body.current_thread.text, '*purchase*'),
+        strings.ilike(body.current_thread.text, '*payment*'),
+        strings.ilike(body.current_thread.text, '*transaction*'),
+        strings.ilike(body.current_thread.text, '*subscription*'),
+        strings.ilike(body.current_thread.text, '*antivirus*'),
+        strings.ilike(body.current_thread.text, '*order*'),
+        strings.ilike(body.current_thread.text, '*support*'),
+        strings.ilike(body.current_thread.text, '*help line*'),
+        strings.ilike(body.current_thread.text, '*receipt*'),
+        strings.ilike(body.current_thread.text, '*invoice*'),
+        strings.ilike(body.current_thread.text, '*call*'),
+        strings.ilike(body.current_thread.text, '*cancel*'),
+        strings.ilike(body.current_thread.text, '*renew*'),
+        strings.ilike(body.current_thread.text, '*refund*')
+      )
+      // phone number regex
+      and (
+        regex.icontains(body.current_thread.text,
+                        '\+?(\d{1}.)?\(?\d{3}?\)?.\d{3}.?\d{4}'
+        )
+        or regex.icontains(body.current_thread.text,
+                           '\+?(\d{1,2})?\s?\(?\d{3}\)?[\s\.\-⋅]{0,5}\d{3}[\s\.\-⋅]{0,5}\d{4}'
+        )
+      )
     )
-    or regex.icontains(body.current_thread.text,
-                       '\+?(\d{1,2})?\s?\(?\d{3}\)?[\s\.\-⋅]{0,5}\d{3}[\s\.\-⋅]{0,5}\d{4}'
+    or (
+      any(file.explode(beta.message_screenshot()),
+          3 of (
+            strings.ilike(.scan.ocr.raw, '*purchase*'),
+            strings.ilike(.scan.ocr.raw, '*payment*'),
+            strings.ilike(.scan.ocr.raw, '*transaction*'),
+            strings.ilike(.scan.ocr.raw, '*subscription*'),
+            strings.ilike(.scan.ocr.raw, '*antivirus*'),
+            strings.ilike(.scan.ocr.raw, '*order*'),
+            strings.ilike(.scan.ocr.raw, '*support*'),
+            strings.ilike(.scan.ocr.raw, '*help line*'),
+            strings.ilike(.scan.ocr.raw, '*receipt*'),
+            strings.ilike(.scan.ocr.raw, '*invoice*'),
+            strings.ilike(.scan.ocr.raw, '*call*'),
+            strings.ilike(.scan.ocr.raw, '*cancel*'),
+            strings.ilike(.scan.ocr.raw, '*renew*'),
+            strings.ilike(.scan.ocr.raw, '*refund*')
+          )
+          // phone number regex
+          and (
+            regex.icontains(.scan.ocr.raw,
+                            '\+?(\d{1}.)?\(?\d{3}?\)?.\d{3}.?\d{4}'
+            )
+            or regex.icontains(.scan.ocr.raw,
+                               '\+?(\d{1,2})?\s?\(?\d{3}\)?[\s\.\-⋅]{0,5}\d{3}[\s\.\-⋅]{0,5}\d{4}'
+            )
+          )
+      )
     )
   )
   and sender.email.domain.root_domain not in (
