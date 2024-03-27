@@ -1,0 +1,53 @@
+name: "Fake request for tax preperation"
+description: "Unknown sender requesting assistance with tax preparation. This is associated with known threat actor activity, TA576."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and length(body.current_thread.text) < 1000
+  // there are no links, all the links are to aka.ms, or an extraction from a warning banner that match the senders domain
+  and (
+    length(body.links) == 0
+    or length(filter(body.links,
+                     (
+                       .display_text is null
+                       and .display_url.url == sender.email.domain.root_domain
+                     )
+                     or .href_url.domain.domain == "aka.ms"
+                     or beta.whois(.display_url.domain).days_old < 30
+              )
+    ) == length(body.links)
+  )
+  and length(attachments) == 0
+  and strings.ilike(subject.subject, "*tax*")
+  and strings.icontains(body.current_thread.text, "tax")
+  and strings.ilike(body.current_thread.text, "*return*", "*record*")
+  and (
+    any(ml.nlu_classifier(body.current_thread.text).entities, .name == "request")
+    or strings.ilike(body.current_thread.text,
+                     "*necessary documents*",
+                     "*in search of*"
+    )
+  )
+  and (
+    (
+      profile.by_sender().prevalence in ("new", "outlier")
+      and not profile.by_sender().solicited
+    )
+    or (
+      profile.by_sender().any_messages_malicious_or_spam
+      and not profile.by_sender().any_false_positives
+    )
+  )
+  and not profile.by_sender().any_false_positives
+
+attack_types:
+  - "BEC/Fraud"
+  - "Malware/Ransomware"
+tactics_and_techniques:
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Natural Language Understanding"
+  - "Sender analysis"
+id: "e36b85b3-ffc6-5d73-b865-7dbdf9b4b1a0"
