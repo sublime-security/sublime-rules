@@ -18,11 +18,19 @@ source: |
   )
   // the sender domain is less than 90 days old and was not solicited, nor ever communicated with
   and (
-    beta.whois(sender.email.domain).days_old < 90
-    and (
-      not profile.by_sender_domain().solicited
-      or // reply-to is not in $recipient_emails
+    (
+      beta.whois(sender.email.domain).days_old < 90
+      and (
+        not profile.by_sender_domain().solicited
+        or // reply-to is not in $recipient_emails
    any(headers.reply_to, .email.email not in $recipient_emails)
+      )
+    )
+    // the sender email nor it's domain has ever been contacted by your org, and the sender is never before seen
+    or (
+      sender.email.domain.domain not in $recipient_domains
+      and sender.email.email not in $recipient_emails
+      and profile.by_sender().days_known == 0
     )
   )
   and (
@@ -46,6 +54,10 @@ source: |
       // urgency request
       any(ml.nlu_classifier(body.current_thread.text).entities,
           .name == "urgency"
+      ),
+      // bec language high confidence
+      any(ml.nlu_classifier(body.current_thread.text).intents,
+          .name == "bec" and .confidence == "high"
       )
     )
   )
