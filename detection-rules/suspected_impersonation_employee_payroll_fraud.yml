@@ -1,0 +1,56 @@
+name: "Suspected Employee Impersonation: Payroll Fraud"
+description: "This rule detects messages impersonating employees, from unsolicited senders attempting to reroute payroll or alter payment details. This rule uses Natural Language Understanding to identify entities in conjuction with keyword/phrase matching."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and length(attachments) == 0
+  and length(body.links) < 10
+  and length(body.current_thread.text) < 400
+  and any(ml.nlu_classifier(body.current_thread.text).entities,
+          .name == "request"
+  )
+  and any(ml.nlu_classifier(body.current_thread.text).entities,
+          .name == "financial"
+  )
+  and any(ml.nlu_classifier(body.current_thread.text).entities, .name == "sender")
+  and 1 of (
+    regex.icontains(body.current_thread.text,
+                    '(pay\s?(roll|check|date|day)|direct deposit|\bACH\b|\bdd\b|gehalt|salario|salary)'
+    ),
+    regex.icontains(subject.subject,
+                    '(pay\s?(roll|check|date|day)|direct deposit|\bACH\b|\bdd\b|gehalt|salario|salary)'
+    )
+  )
+  and (
+    not profile.by_sender().solicited
+    or (
+      profile.by_sender().any_messages_malicious_or_spam
+      and not profile.by_sender().any_false_positives
+    )
+  )
+  and not profile.by_sender().any_false_positives
+  and (
+    (
+      sender.email.domain.root_domain in $org_domains
+      and (
+        any(distinct(headers.hops, .authentication_results.dmarc is not null),
+            strings.ilike(.authentication_results.dmarc, "*fail")
+        )
+      )
+    )
+    or sender.email.domain.root_domain not in $org_domains
+  )
+attack_types:
+  - "BEC/Fraud"
+tactics_and_techniques:
+  - "Impersonation: Employee"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Header analysis"
+  - "Natural Language Understanding"
+  - "Sender analysis"
+id: "979b268f-7319-5add-8aef-53b1da67ecf4"
+testing_pr: 1435
+testing_sha: 2b232355a25bdf1cdea45f1a4f69905719699cc6
