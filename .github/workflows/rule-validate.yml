@@ -98,32 +98,39 @@ jobs:
       - name: Validate Rules
         if: github.event_name != 'issue_comment'
         run: |
-          for f in *-rules/*.yml
+          echo '{"rules_or_queries": [' > bulk_validate_request.json
+          
+          file_count=$(ls -1 {*-rules/*.yml,insights/**/*.yml} | wc -l)
+          counter=0
+  
+          for f in {*-rules/*.yml}
           do
-            echo "Processing $f"
-            http_code=$(yq -o=json eval 'del(.type)' "$f" | curl -H "Content-Type: application/json" -X POST --data-binary @- -o response.txt -w "%{http_code}" --silent https://playground.sublimesecurity.com/v1/rules/validate)
-            echo '' >> response.txt
-            cat response.txt
-            if [[ "$http_code" != "200" ]]; then
-              echo "Unexpected response $http_code"
-              exit 1
+            ((counter++))
+            yq -o=json eval 'del(.type)' "$f" >> bulk_validate_request.json
+          
+            if [[ $counter -ne $file_count ]]; then
+              echo "," >> bulk_validate_request.json
+            fi
+          done
+          
+          for f in {insights/**/*.yml}
+          do
+            ((counter++))
+            yq -o=json eval 'del(.type) | .source = "length([\n\n" + .source + "\n]) >= 0"' "$f" >> bulk_validate_request.json
+          
+            if [[ $counter -ne $file_count ]]; then
+              echo "," >> bulk_validate_request.json
             fi
           done
 
-      - name: Validate Insights
-        if: github.event_name != 'issue_comment'
-        run: |
-          for f in insights/**/*.yml
-          do
-            echo "Processing $f"
-            http_code=$(yq eval 'del(.type) | .source = "length([\n\n" + .source + "\n]) >= 0"' "$f" -o=json | curl -H "Content-Type: application/json" -X POST --data-binary @- -o response.txt -w "%{http_code}" --silent https://playground.sublimesecurity.com/v1/rules/validate)
-            echo '' >> response.txt
-            cat response.txt
-            if [[ "$http_code" != "200" ]]; then
-              echo "Unexpected response $http_code"
-              exit 1
-            fi
-          done
+          echo "]}" >> bulk_validate_request.json
+          http_code=$(echo bulk_validate_request.json | curl -H "Content-Type: application/json" -X POST -d @bulk_validate_request.json -o response.txt -w "%{http_code}" --silent https://playground.sublimesecurity.com/v1/rules/bulk_validate)
+          echo '' >> response.txt
+          cat response.txt
+          if [[ "$http_code" != "200" ]]; then
+            echo "Unexpected response $http_code"
+            exit 1
+          fi
 
       - name: Verify no .yaml files exist
         if: github.event_name != 'issue_comment'
