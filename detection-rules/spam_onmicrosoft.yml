@@ -3,40 +3,43 @@ description: "The default Microsoft Exchange Online sender domain, onmicrosoft.c
 type: "rule"
 severity: "low"
 source: |
-  type.inbound
-  and sender.email.domain.root_domain == "onmicrosoft.com"
-  and length(recipients.to) < 2
-  and length(body.links) > 0
-  // bounce-back negations
-  and not strings.like(sender.email.local_part, "*postmaster*", "*mailer-daemon*", "*administrator*")
-  and not any(attachments,
-              .content_type in (
-                "message/rfc822",
-                "message/delivery-status",
-                "text/calendar"
-              )
-  )
-  // negating legit replies
-  and not (
-    (
-      strings.istarts_with(subject.subject, "RE:")
-      or strings.istarts_with(subject.subject, "FW:")
-      or strings.istarts_with(subject.subject, "FWD:")
-      or regex.imatch(subject.subject, '[^:]?automat.[^:]{0,20}:.*$')
+    type.inbound
+    and sender.email.domain.root_domain == "onmicrosoft.com"
+    and length(recipients.to) < 2
+    and length(body.links) > 0
+    // bounce-back negations
+    and not strings.like(sender.email.local_part, "*postmaster*", "*mailer-daemon*", "*administrator*")
+    and not any(attachments,
+                .content_type in (
+                  "message/rfc822",
+                  "message/delivery-status",
+                  "text/calendar"
+                )
+    )
+    // negating legit replies
+    and not (
+      (
+        strings.istarts_with(subject.subject, "RE:")
+        or strings.istarts_with(subject.subject, "FW:")
+        or strings.istarts_with(subject.subject, "FWD:")
+        or regex.imatch(subject.subject, '[^:]?automat.[^:]{0,20}:.*$')
+        // german legit replies
+        or strings.istarts_with(subject.subject, "Abwesen")
+      )
+      and (
+        length(headers.references) > 0
+        and any(headers.hops, any(.fields, strings.ilike(.name, "In-Reply-To")))
+        or any(headers.hops, any(.fields, strings.ilike(.name, "X-Auto-Response-Suppress")))
+      )
     )
     and (
-      length(headers.references) > 0
-      and any(headers.hops, any(.fields, strings.ilike(.name, "In-Reply-To")))
+      not profile.by_sender().solicited
+      or (
+        profile.by_sender().any_messages_malicious_or_spam
+        and not profile.by_sender().any_false_positives
+      )
     )
-  )
-  and (
-    not profile.by_sender().solicited
-    or (
-      profile.by_sender().any_messages_malicious_or_spam
-      and not profile.by_sender().any_false_positives
-    )
-  )
-  and not sender.email.domain.domain in $org_domains
+    and not sender.email.domain.domain in $org_domains
 tags:
  - "Attack surface reduction"
 attack_types:
