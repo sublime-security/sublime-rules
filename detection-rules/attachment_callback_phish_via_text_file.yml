@@ -1,0 +1,75 @@
+name: "Attachment: Callback Phishing solicitation via text file with a large unknown recipient list"
+description: "Callback Phishing via text file attachment, with a large number of recipients that are unknown to the organization, and a short body and subject from an unknown sender."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and (
+    length(recipients.to) > 10
+    and length(filter(recipients.to,
+                      .email.domain.domain not in $org_domains
+                      and .email.email not in $recipient_emails
+                      and (
+                        .email.domain.valid
+                        or strings.icontains(.display_name, "undisclosed")
+                      )
+               )
+    ) >= 10
+  )
+  and length(subject.subject) <= 10
+  and length(body.links) == 0
+  and (body.current_thread.text is null or length(body.current_thread.text) < 50)
+  and 0 < length(attachments) < 4
+  and any(attachments,
+          .content_type == "text/plain"
+          and any(file.explode(.),
+                  any(.scan.strings.strings,
+                      strings.ilike(.,
+                                    "*mcafee*",
+                                    "*norton*",
+                                    "*geek squad*",
+                                    "*paypal*",
+                                    "*ebay*",
+                                    "*symantec*",
+                                    "*best buy*",
+                                    "*lifelock*"
+                      )
+                      and any(..scan.strings.strings,
+                              regex.icontains(.,
+                                              '\b\+?(\d{1}.)?\(?\d{3}?\)?.\d{3}.?\d{4}\b'
+                              )
+                      )
+                  )
+          )
+  )
+  and profile.by_sender().prevalence != "common"
+  and not profile.by_sender().solicited
+  and not profile.by_sender().any_false_positives
+  
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and (
+        any(distinct(headers.hops, .authentication_results.dmarc is not null),
+            strings.ilike(.authentication_results.dmarc, "*fail")
+        )
+      )
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+  
+
+attack_types:
+  - "Callback Phishing"
+tactics_and_techniques:
+  - "Evasion"
+  - "Out of band pivot"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "File analysis"
+  - "Header analysis"
+  - "Sender analysis"
+
+id: "ca39c83a-b308-532d-894b-528bdaef2748"
