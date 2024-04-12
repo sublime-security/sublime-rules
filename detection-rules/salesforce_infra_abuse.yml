@@ -4,11 +4,11 @@ type: "rule"
 severity: "medium"
 source: |
   type.inbound
-
+  
   // we look at the return-path because many times in the abuse
   // we've seen, the From is a custom domain
   and headers.return_path.domain.root_domain == "salesforce.com"
-
+  
   // legit salesforce email addresses that haven't been observed to be abused
   and sender.email.email not in ("support@salesforce.com")
   and length(attachments) == 0
@@ -21,6 +21,10 @@ source: |
       length(body.links) > 0
       and all(body.links,
               .href_url.domain.root_domain != sender.email.domain.root_domain
+              and .href_url.domain.root_domain not in (
+                "salesforce.com",
+                "force.com"
+              )
       )
     ),
     regex.icontains(subject.subject,
@@ -239,6 +243,7 @@ source: |
           and not profile.by_sender().any_false_positives
         )
       )
+  
       // negate highly trusted sender domains unless they fail DMARC authentication
       and (
         (
