@@ -265,7 +265,7 @@ jobs:
           # a rule ID is a separate problem.
 
       - name: Get PR Number
-        if: github.event_name == 'pull_request_target' || github.event_name == 'issue_comment' || github.event_name == 'merge_group'
+        if: github.event_name == 'pull_request_target' || github.event_name == 'issue_comment'
         id: find_pr_number
         run: |
           if [[ "${{ github.event_name }}" == 'pull_request_target' || "${{ github.event_name }}" == 'merge_group' ]]; then
@@ -331,6 +331,7 @@ jobs:
       - name: "Find Existing MQL Mimic Test Results"
         uses: actions/github-script@v6
         id: find_mql_mimic_results
+        if: ${{ github.event_name != 'merge_group' }}
         env:
           sha: '${{ steps.get_head.outputs.HEAD }}'
         with:
@@ -348,6 +349,7 @@ jobs:
             return existingRuns
 
       - name: "Trigger MQL Mimic Tests"
+        if: ${{ github.event_name != 'merge_group' }}
         env:
           trigger_url: '${{ secrets.MQL_MOCK_TRIGGER }}'
           branch: '${{ steps.get_head_ref.outputs.head_ref }}'
@@ -365,6 +367,7 @@ jobs:
             -d "$body"
 
       - name: Wait for MQL Mimic check to be completed
+        if: ${{ github.event_name != 'merge_group' }}
         uses: sublime-security/action-wait-for-check@master
         # Wait for results so that the token remains valid while the test suite is executing and posting a check here.
         with:
@@ -374,3 +377,39 @@ jobs:
           timeoutSeconds: 3600
           ignoreIDs: ${{ steps.find_mql_mimic_results.outputs.result }}
 
+      - name: "Create MQL Mimic Check"
+        uses: actions/github-script@v6
+        if: ${{ github.event_name == 'merge_group' }}
+        id: create_check
+        env:
+          sha: '${{ inputs.sha }}'
+          owner: '${{ inputs.owner }}'
+          repo: '${{ inputs.repo }}'
+          run_url: "${{ format('https://github.com/sublime-security/shared-rule-tests/actions/runs/{0}', github.run_id) }}"
+        with:
+          github-token: '${{ inputs.check_token }}'
+          debug: ${{ secrets.ACTIONS_STEP_DEBUG || false }}
+          retries: 3
+          # Default includes 422 which GitHub returns when it doesn't know about the head_sha we set the status for.
+          # This occurs when the previous push succeeds, but the checks/pull request component of GitHub isn't yet aware
+          # of the new commit. This isn't the common case, but it comes up enough to be annoying.
+          retry-exempt-status-codes: 400, 401, 403, 404
+          script: |
+            // any JavaScript code can go here, you can use Node JS APIs too.
+            // Docs: https://docs.github.com/en/rest/checks/runs#create-a-check-run
+            // Rest: https://octokit.github.io/rest.js/v18#checks-create
+            const response = await github.rest.checks.create({
+              owner: "sublime-security",
+              repo: "sublime-rules",
+              head_sha: process.env.sha,
+              name: "MQL Mimic Tests",
+              status: "in_progress",
+              details_url: process.env.run_url,
+              output: {
+                title: "MQL Mimic Tests",
+                summary: "MQL Mimic tests are not run on merge queues",
+                text: "MQL Mimic auto pass",
+              },
+            });
+            
+            return response["data"]["id"]
