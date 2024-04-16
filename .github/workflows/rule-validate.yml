@@ -8,6 +8,7 @@ on:
   workflow_dispatch: {}
   issue_comment:
     types: [ created ]
+  merge_group: {}
 
 concurrency:
   # For pull_request_target workflows we want to use head_ref -- the branch triggering the workflow. Otherwise,
@@ -38,7 +39,7 @@ jobs:
       - name: Get Refs
         id: get_head_ref
         run: |
-          # Accurate for push events & workflow dispatch.
+          # Accurate for push events, merge queues, and workflow dispatch.
           head_ref="${{ github.ref }}"
           repo="${{ github.repository }}"
 
@@ -70,7 +71,7 @@ jobs:
           if [[ "${{ github.event_name }}" == 'pull_request_target' ]]; then
             # Detect changes based on whatever we're merging into.
             base_ref="${{ github.base_ref }}"
-          elif [[ "${{ github.event_name }}" == 'push' ]]; then
+          elif [[ "${{ github.event_name }}" == 'push' || "${{ github.event_name }}" == 'merge_group' ]]; then
             # Detect changes based on the previous commit
             base_ref="$(git rev-parse HEAD^)"
           elif [[ "${{ github.event_name }}" == 'workflow_dispatch' ]]; then
@@ -264,10 +265,10 @@ jobs:
           # a rule ID is a separate problem.
 
       - name: Get PR Number
-        if: github.event_name == 'pull_request_target' || github.event_name == 'issue_comment'
+        if: github.event_name == 'pull_request_target' || github.event_name == 'issue_comment' || github.event_name == 'merge_group'
         id: find_pr_number
         run: |
-          if [[ "${{ github.event_name }}" == 'pull_request_target' ]]; then
+          if [[ "${{ github.event_name }}" == 'pull_request_target' || "${{ github.event_name }}" == 'merge_group' ]]; then
             result="${{ github.event.number }}"
           elif [[ "${{ github.event_name }}" == 'issue_comment' ]]; then
             result="${{ github.event.issue.number }}"
