@@ -8,39 +8,24 @@ source: |
   and any(ml.nlu_classifier(body.current_thread.text).intents,
           .name in ("bec") and .confidence == "high"
   )
-  and 1 of (
+  and 
+  // mismatched From and Reply-to
+  (
     (
-      // mismatched From and Reply-to
       length(headers.reply_to) > 0
-      and all(headers.reply_to, .email.domain.root_domain != sender.email.domain.root_domain)
-    ),
-    (
-      // DMARC failure
-      any(distinct(headers.hops, .authentication_results.dmarc is not null),
-          strings.ilike(.authentication_results.dmarc, "*fail")
+      and all(headers.reply_to,
+              .email.domain.root_domain != sender.email.domain.root_domain
       )
-    ),
-    (
-      // SPF failure
-      any(distinct(headers.hops, .authentication_results.spf is not null),
-          strings.ilike(.authentication_results.spf, "*fail")
-      )
-    ),
+    )
+    or not headers.auth_summary.dmarc.pass
+    or not headers.auth_summary.spf.pass
   )
   
   // negate "via" senders via dmarc authentication or gmail autoforwards
-  and (
-    not (
-      any(distinct(headers.hops, .authentication_results.dmarc is not null),
-          strings.ilike(.authentication_results.dmarc, "pass")
-          or (
-            not any([headers.return_path.email],
-                    strings.ilike(headers.return_path.local_part, "*+caf_=*")
-            )
-            and strings.contains(sender.display_name, "via")
-          )
-      )
-    )
+  and not (
+    strings.ilike(headers.return_path.local_part, "*+caf_=*")
+    and strings.contains(sender.display_name, "via")
+    and (headers.auth_summary.dmarc.pass)
   )
   and (
     not profile.by_sender().solicited

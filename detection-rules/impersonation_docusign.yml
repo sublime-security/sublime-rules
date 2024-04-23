@@ -39,17 +39,13 @@ source: |
           and .href_url.domain.root_domain not in ("docusign.com", "docusign.net")
   )
 
-  // negate legitimate docusign infrastructure
+  // negate highly trusted sender domains unless they fail DMARC authentication
   and (
-    (
-      sender.email.domain.root_domain in ('docusign.net', 'docusign.com')
-      and (
-        any(distinct(headers.hops, .authentication_results.dmarc is not null),
-            strings.ilike(.authentication_results.dmarc, "*fail")
-        )
-      )
+    coalesce(sender.email.domain.root_domain in $high_trust_sender_root_domains
+             and not headers.auth_summary.dmarc.pass,
+             false
     )
-    or sender.email.domain.root_domain not in ('docusign.net', 'docusign.com')
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
   )
 
   // adding negation for messages originating from docusigns api
