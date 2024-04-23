@@ -11,7 +11,10 @@ authors:
   - twitter: "amitchell516"
 source: |
   type.inbound
-  and length(body.links) < 30
+  and (
+    length(body.links) < 30
+    or sender.email.local_part == "newsletter" and length(body.links) < 5
+  )
   and (
     (
       strings.ilike(subject.subject, '*Microsoft 365*')
@@ -23,7 +26,9 @@ source: |
       and strings.ilike(body.current_thread.text, "*password*")
       and strings.ilike(body.current_thread.text, "*microsoft*")
     )
-    or regex.icontains(body.current_thread.text, ".*reach you.{0,20}Microsoft Teams")
+    or regex.icontains(body.current_thread.text,
+                       ".*reach you.{0,20}Microsoft Teams"
+    )
     or strings.ilike(sender.display_name, '*new activity in Teams*')
     or subject.subject =~ 'Offline Message in Teams'
     or strings.ilike(subject.subject, '*Teams Sent A Message')
@@ -45,7 +50,6 @@ source: |
     'teams-events.com',
     'qualtrics-research.com'
   )
-  and not sender.email.local_part == "newsletter"
   and (
     profile.by_sender().prevalence in ("new", "outlier")
     or (
@@ -55,19 +59,13 @@ source: |
   )
   
   // negate highly trusted sender domains unless they fail DMARC authentication
-  and
-  (
+  and (
     (
       sender.email.domain.root_domain in $high_trust_sender_root_domains
-      and (
-        any(distinct(headers.hops, .authentication_results.dmarc is not null),
-            strings.ilike(.authentication_results.dmarc, "*fail")
-        )
-      )
+      and not headers.auth_summary.dmarc.pass
     )
     or sender.email.domain.root_domain not in $high_trust_sender_root_domains
   )
-
 
 attack_types:
   - "Credential Phishing"
