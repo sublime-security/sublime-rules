@@ -27,7 +27,9 @@ source: |
         or strings.ilevenshtein(sender.display_name, 'facebook') <= 2
       )
       and (
-        any(ml.logo_detect(beta.message_screenshot()).brands, .name in ("Facebook", "Meta"))
+        any(ml.logo_detect(beta.message_screenshot()).brands,
+            .name in ("Facebook", "Meta")
+        )
         or any(ml.nlu_classifier(body.current_thread.text).intents,
                .name in ("cred_theft", "callback_scam", "steal_pii")
                and .confidence in ("high")
@@ -46,7 +48,7 @@ source: |
   )
   and (
     (
-      profile.by_sender().prevalence in ("new", "outlier")
+      profile.by_sender().prevalence != "common"
       and not profile.by_sender().solicited
     )
     or (
@@ -62,18 +64,15 @@ source: |
   and (
     (
       sender.email.domain.root_domain in $high_trust_sender_root_domains
-      and (
-        any(distinct(headers.hops, .authentication_results.dmarc is not null),
-            strings.ilike(.authentication_results.dmarc, "*fail")
-        )
-      )
+      and not headers.auth_summary.dmarc.pass
     )
     or sender.email.domain.root_domain not in $high_trust_sender_root_domains
-    
-      // salesforce has been abused for meta phishing campaigns repeatedly 
+  
+    // salesforce has been abused for meta phishing campaigns repeatedly 
     or sender.email.domain.root_domain == "salesforce.com"
   )
   and not profile.by_sender().any_false_positives
+
 attack_types:
   - "Credential Phishing"
 tactics_and_techniques:

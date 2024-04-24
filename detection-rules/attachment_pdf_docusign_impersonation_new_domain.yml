@@ -10,19 +10,14 @@ source: |
           and any(file.explode(.), any(.scan.pdf.urls, beta.whois(.domain).days_old <= 3))
   )
   
-  // negate legitimate docusign infrastructure
-  and
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and (
     (
-      (
-        sender.email.domain.root_domain in ('docusign.net', 'docusign.com')
-        and (
-          any(distinct(headers.hops, .authentication_results.dmarc is not null),
-              strings.ilike(.authentication_results.dmarc, "*fail")
-          )
-        )
-      )
-      or sender.email.domain.root_domain not in ('docusign.net', 'docusign.com')
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and not headers.auth_summary.dmarc.pass
     )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
     
   // excludes senders that contain "via" in the display name a resilient way
   and not (
