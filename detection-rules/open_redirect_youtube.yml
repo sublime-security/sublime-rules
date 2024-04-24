@@ -7,9 +7,34 @@ authors:
   - twitter: "vector_sec"
 source: |
   type.inbound
-  and any(body.links,
-          .href_url.domain.root_domain == "youtube.com"
-          and strings.icontains(.href_url.url, "attribution_link?")
+  and (
+    any(body.links,
+        .href_url.domain.sld == "youtube"
+        and (
+          strings.icontains(.href_url.url, "attribution_link?")
+          or .href_url.path == "/redirect"
+        )
+    )
+    or any(attachments,
+           (
+             .file_extension in~ $file_extensions_macros
+             or .file_extension in~ $file_extensions_common_archives
+             or (
+               .file_extension is null
+               and .file_type == "unknown"
+               and .content_type == "application/octet-stream"
+               and .size < 100000000
+             )
+           )
+           and any(file.oletools(.).relationships,
+                   .name == "hyperlink"
+                   and .target_url.domain.sld == "youtube"
+                   and (
+                     strings.icontains(.target_url.path, "attribution_link?")
+                     or .target_url.path == "/redirect"
+                   )
+           )
+    )
   )
   and headers.auth_summary.dmarc.details.from.root_domain == "youtube.com"
   

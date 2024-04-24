@@ -8,10 +8,18 @@ source: |
   and length(filter(attachments, .file_type not in $file_types_images)) == 0
   and any(attachments,
           any(file.explode(.),
-              any(ml.nlu_classifier(.scan.ocr.raw).intents,
-                  .name == "cred_theft" and .confidence != "low"
+              (
+                any(ml.nlu_classifier(.scan.ocr.raw).intents,
+                    .name == "cred_theft" and .confidence != "low"
+                )
+                or length(ml.nlu_classifier(.scan.ocr.raw).intents) == 0
               )
-              and any(ml.nlu_classifier(.scan.ocr.raw).entities, .name == "urgency")
+              and (
+                any(ml.nlu_classifier(.scan.ocr.raw).entities, .name == "urgency")
+                or any(ml.nlu_classifier(.scan.ocr.raw).entities,
+                       .name == "sender" and strings.icontains(.text, "Microsoft")
+                )
+              )
           )
           and any(file.explode(.),
                   3 of (
@@ -19,7 +27,11 @@ source: |
                     strings.icontains(.scan.ocr.raw, "release"),
                     strings.icontains(.scan.ocr.raw, "quarantine"),
                     strings.icontains(.scan.ocr.raw, "messages"),
-                    any(ml.logo_detect(..).brands, strings.starts_with(.name, "Microsoft"))
+                    strings.icontains(.scan.ocr.raw, "blocked"),
+                    strings.icontains(.scan.ocr.raw, "notification"),
+                    any(ml.logo_detect(..).brands,
+                        strings.starts_with(.name, "Microsoft")
+                    )
                   )
           )
   )
@@ -34,7 +46,7 @@ source: |
     "sharepointonline.com",
     "yammer.com",
   )
-
+  
   // negate highly trusted sender domains unless they fail DMARC authentication
   and (
     (
@@ -43,9 +55,9 @@ source: |
     )
     or sender.email.domain.root_domain not in $high_trust_sender_root_domains
   )
-
   and not profile.by_sender().solicited
   and not profile.by_sender().any_false_positives
+
 attack_types:
   - "Credential Phishing"
 tactics_and_techniques:
