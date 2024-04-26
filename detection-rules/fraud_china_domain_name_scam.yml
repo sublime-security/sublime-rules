@@ -1,0 +1,50 @@
+name: "BEC/Fraud: China Domain Name registration scam"
+description: "Message proporting to be from registrars based in China claiming that another company has attempted to register a domain with them which contains one of the recipients trademarks or domain names."
+type: "rule"
+severity: "medium"
+references:
+  - "https://www.linkedin.com/pulse/beware-rising-domain-name-scams-from-china-cautionary-girish-mehta-jvofc/"
+  - "https://www.dqindia.com/beware-china-domain-name-registration-scam-ignore-mails-cn-mentioning-domain-conflict/"
+source: |
+  type.inbound
+  and (
+    (
+      any(body.links, .href_url.domain.tld == "cn")
+      and any(ml.nlu_classifier(body.current_thread.text).entities,
+              .name == "request"
+      )
+      and any(ml.nlu_classifier(body.current_thread.text).entities,
+              .name == "urgency"
+      )
+      and any(ml.nlu_classifier(body.current_thread.text).entities,
+              .name == "org" and .text == "Network Service Company"
+      )
+    )
+    or (
+      strings.ilike(body.current_thread.text, "*registrar*")
+      and 3 of (
+        strings.ilike(body.current_thread.text, "*(CN)*"),
+        strings.ilike(body.current_thread.text, "*.cn*"),
+        strings.ilike(body.current_thread.text, "*conflict with your company*"),
+        strings.ilike(body.current_thread.text, "*internet keyword*"),
+        strings.ilike(body.current_thread.text, "*we received an application*"),
+        headers.mailer == "Foxmail 6, 13, 102, 15 [cn]"
+      )
+    )
+    or any(attachments,
+           .sha256 == "4d5cb53ef13020417c691ea922d6f5d5173bb2e0e0cccb5303884202a79466bc"
+    )
+  )
+  and not profile.by_sender().solicited
+  and not profile.by_sender().any_false_positives
+attack_types:
+  - "BEC/Fraud"
+tactics_and_techniques:
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Natural Language Understanding"
+  - "Sender analysis"
+id: "6977f850-3b22-5ecd-b810-80fadae2212e"
+testing_pr: 1488
+testing_sha: 91bd720eb450c0da07b4e6c44c951562f9689fad
