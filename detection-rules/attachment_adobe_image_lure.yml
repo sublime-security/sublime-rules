@@ -8,10 +8,20 @@ source: |
     length(filter(attachments, .file_type not in $file_types_images)) == 0
     or length(filter(attachments, .file_type != "pdf")) == 0
   )
-  
-  and all(body.links,
-            .href_url.domain.domain not in~ $org_domains
-            and .href_url.domain.domain not in ("aka.ms")
+  and any(body.links, .display_text is null)
+  and (
+    length(filter(body.links,
+                  (
+                    .display_text is null
+                    and .display_url.url == sender.email.domain.root_domain
+                  )
+                  or .href_url.domain.root_domain in (
+                    "aka.ms",
+                    "mimecast.com",
+                    "cisco.com"
+                  )
+           )
+    ) != length(body.links)
   )
   and (
     any(file.explode(beta.message_screenshot()),
@@ -37,11 +47,7 @@ source: |
   and (
     (
       sender.email.domain.root_domain in $high_trust_sender_root_domains
-      and (
-        any(distinct(headers.hops, .authentication_results.dmarc is not null),
-            strings.ilike(.authentication_results.dmarc, "*fail")
-        )
-      )
+      and not headers.auth_summary.dmarc.pass
     )
     or sender.email.domain.root_domain not in $high_trust_sender_root_domains
   )
