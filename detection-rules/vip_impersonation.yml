@@ -1,6 +1,6 @@
 name: "VIP / Executive impersonation (untrusted)"
 description: |
-  Sender display name matches the display name of a user in the $org_vips list, and the sender has never been seen before.
+  Sender display name or subject matches the display name of a user in the $org_vips list, and the sender has never been seen before.
 
   The $org_vips list must first be manually connected to a VIP group of your upstream provider (Google Workspace and Microsoft 365 only) in order for this rule to work.
   Once connected, the list will be automatically synced and kept up-to-date. For more information, see the $org_vips documentation: https://docs.sublimesecurity.com/docs/configure-org_vips-list
@@ -12,13 +12,25 @@ type: "rule"
 severity: "high"
 source: |
   type.inbound
-  and any($org_vips, .display_name =~ sender.display_name)
+  and (
+    any($org_vips, .display_name =~ sender.display_name)
+    or any($org_vips, strings.contains(subject.subject, .display_name))
+  )
   and (
     // ignore personal <> work emails
     // where the sender and mailbox's display name are the same
-    length(recipients.to) > 1
-    or length(recipients.cc) > 1
+    length(recipients.to) > 0
+    or length(recipients.cc) > 0
     or sender.display_name != mailbox.display_name
+  )
+  // bounce-back negations
+  and not strings.like(sender.email.local_part, "*postmaster*", "*mailer-daemon*", "*administrator*")
+  and not any(attachments,
+              .content_type in (
+                "message/rfc822",
+                "message/delivery-status",
+                "text/calendar"
+              )
   )
   and (
     (
