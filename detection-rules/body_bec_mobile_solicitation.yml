@@ -7,13 +7,20 @@ source: |
   and length(body.current_thread.text) < 500
   and length(attachments) == 0
   and regex.contains(body.current_thread.text,
-                     "((email|send|shoot|give|provide|) me)|((confirm) your)"
+                     "(email|send|shoot|give|provide|attach|confirm|) (me|your)"
   )
   and regex.contains(body.current_thread.text,
                      "(cell(/s?phone)?|mobile.{0,10}(phone|number|#|no)|whatsapp)"
   )
-  and any(ml.nlu_classifier(body.current_thread.text).intents,
-          .name == "bec" and .confidence in ("medium", "high")
+  and (
+    any(ml.nlu_classifier(body.current_thread.text).intents,
+        .name == "bec" and .confidence in ("medium", "high")
+    )
+    or (
+      // confidence can be low on very short bodies
+      length(body.current_thread.text) < 150
+      and any(ml.nlu_classifier(body.current_thread.text).intents, .name == "bec")
+    )
   )
   and (
     not profile.by_sender().solicited
