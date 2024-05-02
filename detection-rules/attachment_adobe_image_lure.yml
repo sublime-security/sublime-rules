@@ -8,7 +8,21 @@ source: |
     length(filter(attachments, .file_type not in $file_types_images)) == 0
     or length(filter(attachments, .file_type != "pdf")) == 0
   )
-  and all(body.links, .display_text is null)
+  and any(body.links, .display_text is null)
+  and (
+    length(filter(body.links,
+                  (
+                    .display_text is null
+                    and .display_url.url == sender.email.domain.root_domain
+                  )
+                  or .href_url.domain.root_domain in (
+                    "aka.ms",
+                    "mimecast.com",
+                    "cisco.com"
+                  )
+           )
+    ) != length(body.links)
+  )
   and (
     any(file.explode(beta.message_screenshot()),
         any(ml.logo_detect(beta.message_screenshot()).brands, .name == "Adobe")
