@@ -15,22 +15,17 @@ source: |
   and any(ml.logo_detect(beta.message_screenshot()).brands,
           .name == "Quickbooks" and .confidence in ("medium", "high")
   )
-  and sender.email.domain.root_domain not in~ ('intuit.com', 'turbotax.com', 'intuit.ca', 'meliopayments.com', 'qemailserver.com')
+  and sender.email.domain.root_domain not in~ ('intuit.com', 'turbotax.com', 'intuit.ca', 'meliopayments.com', 'qemailserver.com', 'intuit.co.uk')
   and (
       not profile.by_sender().any_false_positives 
       and not profile.by_sender().solicited
   )
 
   // negate highly trusted sender domains unless they fail DMARC authentication
-  and
-  (
+  and (
     (
       sender.email.domain.root_domain in $high_trust_sender_root_domains
-      and (
-        any(distinct(headers.hops, .authentication_results.dmarc is not null),
-            strings.ilike(.authentication_results.dmarc, "*fail")
-        )
-      )
+      and not headers.auth_summary.dmarc.pass
     )
     or sender.email.domain.root_domain not in $high_trust_sender_root_domains
   )

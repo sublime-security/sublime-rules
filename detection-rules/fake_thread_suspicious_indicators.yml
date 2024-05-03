@@ -35,7 +35,7 @@ source: |
         strings.icontains(body.html.display_text, "subject:")
       )
       and (
-        strings.ilevenshtein(body.current_thread.text, body.html.display_text) > 100
+        length(body.current_thread.text)+100 < length(body.html.display_text)
       )
       //negating bouncebacks
       and not any(attachments,
@@ -92,10 +92,10 @@ source: |
     ),
   
     // new body domain
-    any(body.links, beta.whois(.href_url.domain).days_old < 30),
+    any(body.links, network.whois(.href_url.domain).days_old < 30),
   
     // new sender domain
-    beta.whois(sender.email.domain).days_old < 30,
+    network.whois(sender.email.domain).days_old < 30,
   
     // new sender
     profile.by_sender().days_known < 7
@@ -105,11 +105,7 @@ source: |
   and (
     (
       sender.email.domain.root_domain in $high_trust_sender_root_domains
-      and (
-        any(distinct(headers.hops, .authentication_results.dmarc is not null),
-            strings.ilike(.authentication_results.dmarc, "*fail")
-        )
-      )
+      and not headers.auth_summary.dmarc.pass
     )
     or sender.email.domain.root_domain not in $high_trust_sender_root_domains
   )

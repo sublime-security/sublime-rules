@@ -4,7 +4,7 @@ type: "rule"
 severity: "medium"
 source: |
  type.inbound
- // suspicious link
+ // suspicious link 
  and any(body.links,
          (
            .href_url.domain.root_domain not in $tranco_1m
@@ -37,11 +37,14 @@ source: |
              "1drv.ms",
              "microsoft.com",
              "aka.ms",
-             "msftauthimages.net"
+             "msftauthimages.net",
+             "mimecastprotect.com",
+             "office.com"
            )
            or any(body.links, .href_url.domain.domain in $free_file_hosts)
          )
          and .href_url.domain.root_domain not in $org_domains
+         and .href_url.domain.valid 
  )
  
  // not a reply
@@ -58,6 +61,28 @@ source: |
    )
    or any(ml.logo_detect(beta.message_screenshot()).brands,
           strings.starts_with(.name, "Microsoft")
+   )
+   or (
+     regex.icontains(body.html.raw,
+                     '<table[^>]*>\s*<tbody[^>]*>\s*<tr[^>]*>\s*(<td[^>]*bgcolor="#[0-9A-Fa-f]{6}"[^>]*>\s*&nbsp;\s*</td>\s*){2}\s*</tr>\s*<tr[^>]*>\s*(<td[^>]*bgcolor="#[0-9A-Fa-f]{6}"[^>]*>\s*&nbsp;\s*</td>\s*){2}'
+     )
+     or regex.icontains(body.html.raw,
+                        '<td style="background:\s*rgb\(246,\s*93,\s*53\);\s*height:\d+px;">.*?<td style="background:\s*rgb\(129,\s*187,\s*5\);\s*height:\d+px;">.*?<td style="background:\s*rgb\(4,\s*165,\s*240\);\s*height:\d+px;">.*?<td style="background:\s*rgb\(255,\s*186,\s*7\);\s*height:\d+px;">'
+     )
+     or 4 of (
+       regex.icontains(body.html.raw,
+                       '<td style="width:.\d.px;.height:.\d.px;.background-color:.rgb\(245, 189, 67\);">.{0,10}</td>'
+       ),
+       regex.icontains(body.html.raw,
+                       '<td style="width:.\d.px;.height:.\d.px;.background-color:.rgb\(137, 184, 57\);">.{0,10}</td>'
+       ),
+       regex.icontains(body.html.raw,
+                       '<td style="width:.\d.px;.height:.\d.px;.background-color:.rgb\(217, 83, 51\);">.{0,10}</td>'
+       ),
+       regex.icontains(body.html.raw,
+                       '<td style="width:.\d.px;.height:.\d.px;.background-color:.rgb\(71, 160, 218\);">.{0,10}</td>'
+       )
+     )
    )
  )
  
@@ -144,62 +169,57 @@ source: |
          )
      )
    )
- or (
-   any(ml.nlu_classifier(body.current_thread.text).intents,
-       .name == "cred_theft" and .confidence in~ ("medium", "high")
-   )
-   or any(attachments,
-          .file_type in $file_types_images
-          and any(file.explode(.),
-                  any(ml.nlu_classifier(.scan.ocr.raw).intents,
-                      .name == "cred_theft" and .confidence in ("medium", "high")
-                  )
-          )
-   )
    or (
-     any(ml.nlu_classifier(body.current_thread.text).entities, .name == "urgency")
-     and not any(ml.nlu_classifier(body.current_thread.text).intents,
-                 .name == "benign" and .confidence == "high"
+     any(ml.nlu_classifier(body.current_thread.text).intents,
+         .name == "cred_theft" and .confidence in~ ("medium", "high")
+     )
+     or any(attachments,
+            .file_type in $file_types_images
+            and any(file.explode(.),
+                    any(ml.nlu_classifier(.scan.ocr.raw).intents,
+                        .name == "cred_theft"
+                        and .confidence in ("medium", "high")
+                    )
+            )
      )
    )
- )
  )
  and sender.email.domain.root_domain not in (
    "bing.com",
    "microsoft.com",
    "microsoftonline.com",
+   "microsoftstoreemail.com",
    "microsoftsupport.com",
    "microsoft365.com",
    "office.com",
+   "office365.com",
    "onedrive.com",
    "sharepointonline.com",
-   "yammer.com"
+   "yammer.com",
  )
  
- // negate highly trusted sender domains unless they fail DMARC authentication
- and (
-   (
-     sender.email.domain.root_domain in $high_trust_sender_root_domains
-     and (
-       any(distinct(headers.hops, .authentication_results.dmarc is not null),
-           strings.ilike(.authentication_results.dmarc, "*fail")
-       )
-     )
-   )
-   or sender.email.domain.root_domain not in $high_trust_sender_root_domains
- )
- 
- and (
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and (
     (
-      not profile.by_sender().solicited
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and not headers.auth_summary.dmarc.pass
     )
-    or (
-      profile.by_sender().any_messages_malicious_or_spam
-      and not profile.by_sender().any_false_positives
-    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+ and (
+   not profile.by_sender().solicited
+   or (
+     profile.by_sender().any_messages_malicious_or_spam
+     and not profile.by_sender().any_false_positives
+   )
  )
  and not profile.by_sender().any_false_positives
-
+ 
+ // exclude marketing jargen from ms partners
+ and not regex.icontains(body.current_thread.text,
+                         'schedul(e|ing).{0,10}(call|meeting|demo|zoom|conversation|time|tool)|book.{0,10}(meeting|demo|call|slot|time)|connect.{0,12}(with me|phone|email)|my.{0,10}(calendar|cal)|reserve.{0,10}s[pl]ot|break the ice|want to know more?|miss your chance|if you no longer wish|low-code (development|approach|solution|journey|platform)'
+ )
+ 
 attack_types:
   - "Credential Phishing"
 tactics_and_techniques:

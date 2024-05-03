@@ -1,6 +1,6 @@
-name: "Brand impersonation: Facebook"
+name: "Brand impersonation: Meta/Facebook"
 description: |
-  Impersonation of Facebook.
+  Impersonation of Meta or Meta's subsidary Facebook.
 references:
   - "https://www.techrepublic.com/article/google-and-amazon-most-impersonated-brands-in-phishing-attacks/"
 type: "rule"
@@ -12,7 +12,9 @@ source: |
       strings.ilike(sender.display_name,
                     '*facebook ads*',
                     '*facebook business*',
-                    '*meta support*'
+                    '*meta support*',
+                    '*meta for business*',
+                    '*meta policy*'
       )
       or strings.ilevenshtein(sender.display_name, 'facebook ads') <= 2
       or strings.ilevenshtein(sender.display_name, 'facebook business') <= 2
@@ -25,9 +27,12 @@ source: |
         or strings.ilevenshtein(sender.display_name, 'facebook') <= 2
       )
       and (
-        any(ml.logo_detect(beta.message_screenshot()).brands, .name == "Facebook")
+        any(ml.logo_detect(beta.message_screenshot()).brands,
+            .name in ("Facebook", "Meta")
+        )
         or any(ml.nlu_classifier(body.current_thread.text).intents,
                .name in ("cred_theft", "callback_scam", "steal_pii")
+               and .confidence in ("high")
         )
       )
     )
@@ -36,9 +41,38 @@ source: |
     'facebook.com',
     'facebookmail.com',
     'eventsatfacebook.com',
-    'facebookenterprise.com'
+    'facebookenterprise.com',
+    'meta.com',
+    'metamail.com',
+    'medallia.com'
   )
-  and sender.email.email not in $recipient_emails
+  and (
+    (
+      profile.by_sender().prevalence != "common"
+      and not profile.by_sender().solicited
+    )
+    or (
+      profile.by_sender().any_messages_malicious_or_spam
+      and not profile.by_sender().any_false_positives
+    )
+    or sender.email.email == "noreply@salesforce.com"
+    // sent via Google group
+    or any(headers.hops, any(.fields, .name == "X-Google-Group-Id"))
+  )
+  
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and not headers.auth_summary.dmarc.pass
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  
+    // salesforce has been abused for meta phishing campaigns repeatedly 
+    or sender.email.domain.root_domain == "salesforce.com"
+  )
+  and not profile.by_sender().any_false_positives
+
 attack_types:
   - "Credential Phishing"
 tactics_and_techniques:
