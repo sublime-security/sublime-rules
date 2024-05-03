@@ -5,6 +5,7 @@ type: "rule"
 severity: "medium"
 source: |
   type.inbound
+  and length(filter(body.links, .href_url.domain.valid)) < 25
   and (
     strings.ilike(sender.display_name, '*aramco*')
     or strings.ilevenshtein(sender.display_name, 'aramco') <= 1
@@ -12,22 +13,19 @@ source: |
     or strings.ilike(subject.subject, '*aramco*')
   )
   and sender.email.domain.root_domain not in~ (
-    'aramco.com',
+    'aramco.com', 'aramcoamericas.com', 'aramcoventures.com'
   )
-  and any(ml.nlu_classifier(body.html.display_text).entities, strings.ilike(.text, "*aramco*"))
-  and any(ml.nlu_classifier(body.html.display_text).entities,
+  and any(ml.nlu_classifier(body.current_thread.text).entities, strings.ilike(.text, "*aramco*"))
+  and any(ml.nlu_classifier(body.current_thread.text).entities,
           .name == "financial" or .name == "request"
   )
-  and any(ml.nlu_classifier(body.html.display_text).entities, .name == "urgency")
+  and any(ml.nlu_classifier(body.current_thread.text).entities, .name == "urgency")
+  
   // negate highly trusted sender domains unless they fail DMARC authentication
   and (
     (
       sender.email.domain.root_domain in $high_trust_sender_root_domains
-      and (
-        any(distinct(headers.hops, .authentication_results.dmarc is not null),
-            strings.ilike(.authentication_results.dmarc, "*fail")
-        )
-      )
+      and not headers.auth_summary.dmarc.pass
     )
     or sender.email.domain.root_domain not in $high_trust_sender_root_domains
   )
