@@ -8,7 +8,7 @@ source: |
   and length(attachments) == 1
   and any(attachments,
           (.content_type == "message/rfc822" or .file_extension =~ "eml")
-
+  
           // identifies suspicious URLs in the attached EML
           and any(file.parse_eml(.).body.links,
                   (
@@ -18,13 +18,13 @@ source: |
                       "high"
                     )
                   )
-
+  
                   // or any links in the final dom lead to a suspicious tld
                   or any(ml.link_analysis(.).final_dom.links,
                          .href_url.domain.tld in $suspicious_tlds
                          or ml.link_analysis(.href_url).effective_url.domain.tld in $suspicious_tlds
                   )
-
+  
                   // link redirects to a suspicious TLD
                   or any(ml.link_analysis(., mode="aggressive").redirect_history,
                          .domain.tld in $suspicious_tlds
@@ -39,23 +39,21 @@ source: |
                                     )
                            )
                     ) >= 2
-                    and length(distinct(map(ml.link_analysis(.,
-                                                              mode="aggressive"
-                                            ).redirect_history,
+                    and length(distinct(map(ml.link_analysis(., mode="aggressive").redirect_history,
                                             .domain.domain
                                         )
                                )
                     ) >= 3
                   )
           )
-
+  
           // identifies other suspicious indicators
           and (
             // engaging language in the original body
             any(ml.nlu_classifier(body.current_thread.text).entities,
                 .name == "request"
             )
-
+  
             // // engaging language in the attached EML
             or any(ml.nlu_classifier(file.parse_eml(.).body.current_thread.text).entities,
                    .name == "request"
@@ -205,10 +203,15 @@ source: |
           )
   )
   // exclude bounce backs & read receipts
-  and not strings.like(sender.email.local_part,
-                       "*postmaster*",
-                       "*mailer-daemon*",
-                       "*administrator*"
+  and not strings.ilike(sender.email.local_part,
+                        "*postmaster*",
+                        "*mailer-daemon*",
+                        "*administrator*"
+  )
+  // exclude optonline deprecated mailbox returns
+  and (
+    not strings.starts_with(sender.display_name, "Auto-reply")
+    and sender.email.domain.root_domain == "optonline.net"
   )
   and not regex.icontains(subject.subject, "^(undeliverable|read:)")
   and not any(attachments, .content_type == "message/delivery-status")
