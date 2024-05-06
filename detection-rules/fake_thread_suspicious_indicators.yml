@@ -11,6 +11,8 @@ source: |
         strings.istarts_with(subject.subject, "RE:")
         or strings.istarts_with(subject.subject, "FW:")
         or strings.istarts_with(subject.subject, "FWD:")
+        or regex.icontains(subject.subject, '.{0,10}re:|fw:|fwd:')
+        or regex.imatch(subject.subject, '[^:]?automat.[^:]{0,20}:.*$')
       )
       and (
         (length(headers.references) == 0 and headers.in_reply_to is null)
@@ -35,9 +37,9 @@ source: |
         strings.icontains(body.html.display_text, "subject:")
       )
       and (
-        length(body.current_thread.text)+100 < length(body.html.display_text)
+        length(body.current_thread.text) + 100 < length(body.html.display_text)
       )
-      //negating bouncebacks
+      // negating bouncebacks
       and not any(attachments,
                   .content_type in ("message/delivery-status", "message/rfc822")
       )
@@ -98,7 +100,22 @@ source: |
     network.whois(sender.email.domain).days_old < 30,
   
     // new sender
-    profile.by_sender().days_known < 7
+    profile.by_sender().days_known < 7,
+  
+    // excessive whitespace
+    (
+      regex.icontains(body.html.raw, '((<br\s*/?>\s*){20,}|\n{20,})')
+      or regex.icontains(body.html.raw, '(<p[^>]*>\s*<br\s*/?>\s*</p>\s*){30,}')
+      or regex.icontains(body.html.raw,
+                         '(<p class=".*?"><span style=".*?"><o:p>&nbsp;</o:p></span></p>\s*){30,}'
+      )
+      or regex.icontains(body.html.raw, '(<p>&nbsp;</p>\s*){7,}')
+      or regex.icontains(body.html.raw, '(<p[^>]*>\s*&nbsp;<br>\s*</p>\s*){5,}')
+      or regex.icontains(body.html.raw, '(<p[^>]*>&nbsp;</p>\s*){7,}')
+    ),
+  
+    // body contains recipient SLD
+    any(recipients.to, strings.icontains(body.current_thread.text, .email.domain.sld))
   )
   
   // negate highly trusted sender domains unless they fail DMARC authentication
