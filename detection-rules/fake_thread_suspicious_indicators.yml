@@ -60,7 +60,12 @@ source: |
     ),
   
     // invoicing language
-    any(ml.nlu_classifier(body.current_thread.text).tags, .name == "invoice"),
+    (
+      any(ml.nlu_classifier(body.current_thread.text).tags, .name == "invoice")
+      or any(ml.nlu_classifier(body.current_thread.text).entities,
+             .text == "invoice"
+      )
+    ),
   
     // urgency request
     any(ml.nlu_classifier(body.current_thread.text).entities, .name == "urgency"),
@@ -91,6 +96,12 @@ source: |
     // sender domain matches no body domains
     all(body.links,
         .href_url.domain.root_domain != sender.email.domain.root_domain
+    ),
+
+    // body contains name of VIP
+    (
+      any($org_vips, strings.icontains(body.html.inner_text, .display_name))
+      or any($org_vips, strings.icontains(body.plain.raw, .display_name))
     ),
   
     // new body domain

@@ -1,6 +1,6 @@
-name: "VIP / Executive impersonation (untrusted)"
+name: "VIP / Executive impersonation in subject (untrusted)"
 description: |
-  Sender display name matches the display name of a user in the $org_vips list, and the sender has never been seen before.
+  Sender subject contains the display name of a user in the $org_vips list, and the sender has never been seen before.
 
   The $org_vips list must first be manually connected to a VIP group of your upstream provider (Google Workspace and Microsoft 365 only) in order for this rule to work.
   Once connected, the list will be automatically synced and kept up-to-date. For more information, see the $org_vips documentation: https://docs.sublimesecurity.com/docs/configure-org_vips-list
@@ -9,10 +9,13 @@ description: |
 
   Additional rule logic can be added to look for suspicious subjects, suspicious links, etc.
 type: "rule"
-severity: "high"
+severity: "medium"
 source: |
   type.inbound
-  and any($org_vips, .display_name =~ sender.display_name)
+  and any($org_vips,
+          strings.contains(subject.subject, .display_name)
+          and strings.contains(.display_name, " ")
+  )
   and (
     // ignore personal <> work emails
     // where the sender and mailbox's display name are the same
@@ -21,7 +24,11 @@ source: |
     or sender.display_name != mailbox.display_name
   )
   // bounce-back negations
-  and not strings.like(sender.email.local_part, "*postmaster*", "*mailer-daemon*", "*administrator*")
+  and not strings.like(sender.email.local_part,
+                       "*postmaster*",
+                       "*mailer-daemon*",
+                       "*administrator*"
+  )
   and not any(attachments,
               .content_type in (
                 "message/rfc822",
@@ -57,4 +64,4 @@ tactics_and_techniques:
 detection_methods:
   - "Header analysis"
   - "Sender analysis"
-id: "e42c84b7-9d50-5870-9a5d-311670a14bc1"
+id: "0a641fe5-70b9-5f4e-9c34-0d70eac11fae"
