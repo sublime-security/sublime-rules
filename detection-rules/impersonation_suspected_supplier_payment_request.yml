@@ -8,22 +8,26 @@ source: |
   and any(body.links,
           0 < strings.levenshtein(.href_url.domain.sld, sender.email.domain.sld) <= 2
   )
-  // the sender is not a freemail, but the message or the in-reply-to indicates it traversed a freemail infrastructure, likely an auto forwarding rule
+  // the sender is not a freemail, but the message or the in-reply-to indicates it traversed a freemail infrastructure, likely an auto forwarding rule. Or the sender or reply-to domain is new
   and (
     sender.email.domain.root_domain not in $free_email_providers
     and (
       any(headers.references, any($free_email_providers, strings.contains(.., .)))
-      or any($free_email_providers, strings.contains(headers.in_reply_to, .))
+      or (
+        any($free_email_providers, strings.contains(headers.in_reply_to, .))
+        // with the suspicious traversal tolerate 90 days
+        and network.whois(sender.email.domain).days_old < 90
+      )
+      or network.whois(sender.email.domain).days_old < 30
+      or any(headers.reply_to, network.whois(.email.domain).days_old < 30)
     )
   )
-  // the sender domain is less than 90 days old and was not solicited, nor ever communicated with
+  
+  //  not solicited, nor ever communicated with
   and (
-    network.whois(sender.email.domain).days_old < 90
-    and (
-      not profile.by_sender_domain().solicited
-      or // reply-to is not in $recipient_emails
+    not profile.by_sender_domain().solicited
+    or // reply-to is not in $recipient_emails
    any(headers.reply_to, .email.email not in $recipient_emails)
-    )
   )
   and (
     2 of (
@@ -49,6 +53,7 @@ source: |
       )
     )
   )
+
 attack_types:
   - "BEC/Fraud"
 tactics_and_techniques:
