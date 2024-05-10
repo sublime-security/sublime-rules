@@ -1,0 +1,52 @@
+name: "Spam: Fake photo share"
+description: 'Message contains pretexting language about sharing photos ("found these photos and thought you''d like them", "remember these photos?") and a link with a newly registered domain. Fake threads and plain text bodies have been seen in the wild, indicating active evasion techniques.'
+type: "rule"
+severity: "low"
+source: |
+  type.inbound
+  and (
+    (
+      (length(body.plain.raw) < 500 and length(body.current_thread.text) == 0)
+      or (
+        length(body.html.display_text) < 500
+        and length(body.current_thread.text) == 0
+      )
+      or (length(body.current_thread.text) < 500)
+    )
+    and (
+      strings.ilike(subject.subject, "*picture*", "*photo*", "*image*")
+      or strings.icontains(subject.subject, sender.display_name)
+      or (
+        strings.ilike(body.html.display_text, "*picture*", "*photo*", "*image*")
+        or strings.ilike(body.plain.raw, "*picture*", "*photo*", "*image*")
+        or strings.ilike(body.current_thread.text,
+                         "*picture*",
+                         "*photo*",
+                         "*image*"
+        )
+      )
+    )
+  )
+  and length(body.links) < 5
+  and any(body.links,
+          (
+            network.whois(.href_url.domain).days_old < 30
+            and .href_url.domain.root_domain != sender.email.domain.root_domain
+          )
+          or (
+            length(.display_text) == 1
+            and .href_url.domain.root_domain == "facebook.com"
+          )
+  )
+
+attack_types:
+  - "Spam"
+tactics_and_techniques:
+  - "Evasion"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Sender analysis"
+  - "URL analysis"
+  - "Whois"
+id: "eb086f7d-3ad7-52cd-8e16-3ce08726b9ea"
