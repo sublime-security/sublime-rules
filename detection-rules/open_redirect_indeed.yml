@@ -1,0 +1,31 @@
+name: "Open redirect: Indeed"
+description: "Detects emails containing links using Indeed '/r?target=xxxxxx' open redirect where the email has not come from indeed.com"
+references:
+  - "https://www.bleepingcomputer.com/news/security/evilproxy-uses-indeedcom-open-redirect-for-microsoft-365-phishing/"
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and (
+    (
+      sender.email.domain.root_domain != "indeed.com"
+      and any(body.links, "indeed_open_redirect" in .href_url.rewrite.encoders)
+    )
+    or any(attachments,
+           .file_type == "pdf"
+           and any(file.explode(.),
+                   any(.scan.url.urls, "indeed_open_redirect" in .rewrite.encoders)
+           )
+    )
+  )
+attack_types:
+  - "Credential Phishing"
+  - "Malware/Ransomware"
+tactics_and_techniques:
+  - "Open redirect"
+detection_methods:
+  - "Sender analysis"
+  - "URL analysis"
+id: "98ce5477-49dd-5e60-b778-f8c2fcb283c2"
+testing_pr: 845
+testing_sha: 9ddb067c7e8cbda7d81640ce70e0537f61b1714f
