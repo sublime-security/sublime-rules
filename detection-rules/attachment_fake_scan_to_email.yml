@@ -4,20 +4,35 @@ type: "rule"
 severity: "medium"
 source: |
   type.inbound
+  and length(body.current_thread.text) < 1500
   and (
-    strings.ilike(body.current_thread.text,
-                  "*scan date*",
-                  "*was sent from*",
-                  "*of pages*",
-                  "*scanned file*"
+    3 of (
+      strings.icontains(body.current_thread.text, "Number of Images:"),
+      strings.icontains(body.current_thread.text, "Attachment File Type:"),
+      strings.icontains(body.current_thread.text, "Device Name:"),
+      strings.icontains(body.current_thread.text, "Device Location:")
     )
-    or any(file.explode(beta.message_screenshot()),
-           strings.ilike(.scan.ocr.raw,
-                         "*scan date*",
-                         "*was sent from*",
-                         "*of pages*",
-                         "*scanned file*"
-           )
+    or (
+      3 of (
+        strings.ilike(body.current_thread.text, "*scan date*"),
+        strings.ilike(body.current_thread.text, "*was sent from*"),
+        strings.ilike(body.current_thread.text, "*of pages*"),
+        strings.ilike(body.current_thread.text, "*scanned file*"),
+      )
+      or any(file.explode(beta.message_screenshot()),
+             3 of (
+               strings.ilike(body.current_thread.text, "*scan date*"),
+               strings.ilike(body.current_thread.text, "*was sent from*"),
+               strings.ilike(body.current_thread.text, "*of pages*"),
+               strings.ilike(body.current_thread.text, "*scanned file*"),
+               strings.icontains(body.current_thread.text, "Number of Images:"),
+               strings.icontains(body.current_thread.text,
+                                 "Attachment File Type:"
+               ),
+               strings.icontains(body.current_thread.text, "Device Name:"),
+               strings.icontains(body.current_thread.text, "Device Location:")
+             )
+      )
     )
   )
   and length(filter(attachments, .file_type == "pdf")) == 1
@@ -34,6 +49,9 @@ source: |
                     )
                     or any(ml.nlu_classifier(.scan.ocr.raw).intents,
                            .name == "cred_theft"
+                    )
+                    or any(ml.logo_detect(..).brands,
+                           .name in ("DocuSign", "Microsoft")
                     )
                   )
                   and length(.scan.url.urls) == 1
