@@ -1,0 +1,78 @@
+name: "Brand Impersonation: DocuSign PDF with QR code with missing or broken logo"
+description: "Detects PDF using DocuSign/Signature language, referencing or including a QR code from an Unsolicited sender. These messages often lead users to phishing sites or initiate unwanted downloads.
+"
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and length(body.current_thread.text) < 1000
+  and any([subject.subject, sender.display_name],
+          regex.icontains(., '\bSign(ature)?\b')
+  )
+  and any(attachments,
+          .file_type == "pdf"
+          // Broken or absent logo 
+          and not any(ml.logo_detect(.).brands, .name is not null)
+          and (
+            any(file.explode(.),
+                strings.icontains(.scan.ocr.raw, 'Docusign')
+                and regex.icontains(.scan.ocr.raw, 'scan|camera')
+                and regex.icontains(.scan.ocr.raw, '\bQR\b|Q\.R\.|barcode')
+                and .scan.exiftool.page_count == 1
+            )
+            or (
+              any(file.explode(.),
+                  (
+                    strings.icontains(.scan.ocr.raw, 'Docusign')
+                    and .scan.qr.type is not null
+                    and regex.contains(.scan.qr.data, '\.')
+                    and .scan.exiftool.page_count == 1
+                  )
+                  or (
+                    any(file.explode(beta.message_screenshot()),
+                        .scan.exiftool.image_height < 2000
+                        and .scan.exiftool.image_width < 2000
+                        and .scan.qr.type is not null
+                        and regex.contains(.scan.qr.data, '\.')
+                        and strings.icontains(.scan.ocr.raw, 'Docusign')
+                    )
+                  )
+              )
+            )
+          )
+  )
+  and (
+    not profile.by_sender().solicited
+    or (
+      profile.by_sender().any_messages_malicious_or_spam
+      and not profile.by_sender().any_false_positives
+    )
+  )
+  and not profile.by_sender().any_false_positives
+  
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and (
+        any(distinct(headers.hops, .authentication_results.dmarc is not null),
+            strings.ilike(.authentication_results.dmarc, "*fail")
+        )
+      )
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+  
+
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "PDF"
+  - "QR code"
+  - "Social engineering"
+detection_methods:
+  - "Computer Vision"
+  - "Content analysis"
+  - "QR code analysis"
+  - "Sender analysis"
