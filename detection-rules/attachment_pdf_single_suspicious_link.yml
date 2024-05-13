@@ -3,112 +3,106 @@ description: "This rule identifies PDFs with suspicious content: credential thef
 type: "rule"
 severity: "medium"
 source: |
-  type.inbound
-  // pdf attachment
-  
-  and any(attachments,
-          .file_extension == "pdf"
-          and any(file.explode(.),
-          // single url 
-                  length(.scan.pdf.urls) == 1
-  
-                  // pdf contains login or captcha, or an open redirect, or 
-                  and any(.scan.pdf.urls,
-                          any([ml.link_analysis(.)],
-                              (
-                                .credphish.contains_login
-                                or .credphish.contains_captcha
-                              )
-                              or (
-                                any(.original_url.rewrite.encoders,
-                                    strings.contains(., "open_redirect")
-                                )
-                              )
-                          )
-                          // low reputation domain
-                          or (
-                            .domain.root_domain not in $tranco_1m
-                            and .domain.root_domain not in $org_domains
-                            and .domain.root_domain != "sublimesecurity.com"
-                          )
-                  )
-                  // pdf contains little text, but the text is high confidence credential theft language
-                  and length(.scan.ocr.raw) < 300
-                  and any(ml.nlu_classifier(.scan.ocr.raw).intents,
-                          .name == "cred_theft" and .confidence == "high"
-                  )
-          )
-  )
-  
-  and 1 of (
-    ( // all recipients are undisclosed
-      (
-        length(recipients.bcc) > 0
-        or any(recipients.to,
-               strings.ilike(.display_name, "undisclosed?recipients")
-        )
-      )
-    ),
-    ( // subject contains commonly abused financial strings
-      regex.icontains(subject.subject,
-                      "balance.statement",
-                      "closing.agreement",
-                      "closing.doc",
-                      "initial.cd",
-                      "final.cd",
-                      "closing.disclosure",
-                      "closing.instructions",
-                      "closing.package",
-                      "closing.statement",
-                      "payment.confirmation",
-                      "payment.notification",
-                      "past.due",
-                      "unpaid.inv",
-                      "remit",
-                      "settlement.statement",
-                      "payoff",
-                      "loan.settle",
-                      "Prelim CD",
-                      "Title Commitment"
-      )
-    ),
-    ( // file name contains commonly abused financial strings
-      any(attachments,
-          regex.icontains(.file_name,
-                          "balance.statement",
-                          "closing.agreement",
-                          "closing.doc",
-                          "initial.cd",
-                          "final.cd",
-                          "closing.disclosure",
-                          "closing.instructions",
-                          "closing.package",
-                          "closing.statement",
-                          "payment.confirmation",
-                          "payment.notification",
-                          "past.due",
-                          "unpaid.inv",
-                          "remit",
-                          "settlement.statement",
-                          "payoff",
-                          "loan.settle",
-                          "Prelim CD",
-                          "Title Commitment"
-          )
-      )
-    )
-  )
-  
-  // not solicited and no false positives
-  and (
-    not profile.by_sender().solicited
-    or (
-      profile.by_sender().any_messages_malicious_or_spam
-      and not profile.by_sender().any_false_positives
-    )
-  )
-  
+type.inbound
+// pdf attachment
+and any(attachments,
+        .file_extension == "pdf"
+        and any(file.explode(.),
+                // single url 
+                length(.scan.pdf.urls) == 1
 
+                // pdf contains login or captcha, or an open redirect, or 
+                and any(.scan.pdf.urls,
+                        any([ml.link_analysis(.)],
+                            (
+                              .credphish.contains_login
+                              or .credphish.contains_captcha
+                            )
+                            or (
+                              any(.original_url.rewrite.encoders,
+                                  strings.contains(., "open_redirect")
+                              )
+                            )
+                        )
+                        // low reputation domain
+                        or (
+                          .domain.root_domain not in $tranco_1m
+                          and .domain.root_domain not in $org_domains
+                          and .domain.root_domain != "sublimesecurity.com"
+                        )
+                )
+                // pdf contains little text, but the text is high confidence credential theft language
+                and length(.scan.ocr.raw) < 300
+                and any(ml.nlu_classifier(.scan.ocr.raw).intents,
+                        .name == "cred_theft" and .confidence == "high"
+                )
+        )
+)
+and (
+  (
+    length(recipients.bcc) > 0
+    or any(recipients.to,
+           strings.ilike(.display_name, "undisclosed?recipients")
+    )
+  )
+  or ( // subject contains commonly abused financial strings
+    regex.icontains(subject.subject,
+                    "balance.statement",
+                    "closing.agreement",
+                    "closing.doc",
+                    "initial.cd",
+                    "final.cd",
+                    "closing.disclosure",
+                    "closing.instructions",
+                    "closing.package",
+                    "closing.statement",
+                    "payment.confirmation",
+                    "payment.notification",
+                    "past.due",
+                    "unpaid.inv",
+                    "remit",
+                    "settlement.statement",
+                    "payoff",
+                    "loan.settle",
+                    "Prelim CD",
+                    "Title Commitment"
+    )
+  )
+  or ( // file name contains commonly abused financial strings
+    any(attachments,
+        regex.icontains(.file_name,
+                        "balance.statement",
+                        "closing.agreement",
+                        "closing.doc",
+                        "initial.cd",
+                        "final.cd",
+                        "closing.disclosure",
+                        "closing.instructions",
+                        "closing.package",
+                        "closing.statement",
+                        "payment.confirmation",
+                        "payment.notification",
+                        "past.due",
+                        "unpaid.inv",
+                        "remit",
+                        "settlement.statement",
+                        "payoff",
+                        "loan.settle",
+                        "Prelim CD",
+                        "Title Commitment"
+        )
+    )
+  )
+)
+
+// not solicited and no false positives
+and (
+  not profile.by_sender().solicited
+  or (
+    profile.by_sender().any_messages_malicious_or_spam
+    and not profile.by_sender().any_false_positives
+  )
+)
 attack_types:
   - "Credential Phishing"
 tactics_and_techniques:
