@@ -1,0 +1,18 @@
+name: "Spam: Unsolicited malformed PDF "
+description: "This rule is designed to identify spam messages featuring a single malformed PDF attachment often leading to romance scam, pornographic, or dating websites. These emails typically contain short body text and intentionally distorted PDFs to avoid detection."
+type: "rule"
+severity: "low"
+source: "type.inbound\n// body text is very short\nand length(body.current_thread.text) < 50\n\n// one attachment\nand length(attachments) == 1\n\n// attachment is named a pdf, but mime type doesn't match with high entropy\nand any(attachments,\n        .file_type == \"unknown\"\n        and strings.ends_with(.file_name, \"pdf\")\n        and any(file.explode(.),\n                .flavors.mime in (\n                  \"application/octet-stream\",\n                  \"application/marc\"\n                )\n                and .scan.entropy.entropy >= 6\n        )\n)\n// a free email address was hyperlinked \nand any(body.links,\n        .display_text is null and .href_url.url in $free_email_providers\n)\n\n// multiple freemail senders found in recipients.to\nand length(filter(recipients.to,\n                  .email.domain.root_domain in $free_email_providers\n           )\n) >= 3\n\n// unsolicited and no false positives or previously flagged\nand (\n  profile.by_sender().prevalence in (\"new\", \"outlier\")\n  or (\n    profile.by_sender().any_messages_malicious_or_spam\n    and not profile.by_sender().any_false_positives\n  )\n)\nand not profile.by_sender().any_false_positives\n"
+attack_types:
+  - "Spam"
+tactics_and_techniques:
+  - "Evasion"
+  - "Free email provider"
+  - "PDF"
+detection_methods:
+  - "Content analysis"
+  - "File analysis"
+  - "Sender analysis"
+id: "f0c50031-8782-5f0a-aee0-68284651df63"
+testing_pr: 1539
+testing_sha: 68a146addb3b4314e4f8a75d056a73abaac4a56d
