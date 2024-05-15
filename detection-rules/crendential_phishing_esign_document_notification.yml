@@ -1,0 +1,129 @@
+name: "Credential Phishing: Suspicious E-sign Agreement Document Notification"
+description: "Detects phishing attempts disguised as e-signature requests, characterized by common document sharing phrases, unusual HTML padding, and suspicious link text."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and any([subject.subject, sender.display_name],
+          regex.icontains(strings.replace_confusables(.),
+                          "DocuLink",
+                          "Access.&.Approved",
+                          "Attend.and.Review",
+                          "Completed.File",
+                          "Dochsared",
+                          "Docshared",
+                          "DocsPoint",
+                          "Document.Shared",
+                          "DocuCentre",
+                          "DocuCenter",
+                          "DocCenter",
+                          "DocsOnline",
+                          "\\beSign",
+                          "e\\.sign",
+                          "eSignature",
+                          "eSign&Return",
+                          "eSignOnline",
+                          "Fileshare",
+                          "Review.and.Complete",
+                          "Review.&.Sign",
+                          "SignOnline",
+                          "Signature.Request",
+                          "Shared.Completed",
+                          "Sign.and.Seal",
+                          "viaSign",
+                          "D0cuSign",
+                          "DocsID",
+                          "Complete.{0,10}DocuSign",
+                          "Enroll & Sign",
+                          "Review and Sign",
+                          "SignReport",
+                          "SignDoc",
+                          "Docxxx",
+                          "docufile",
+                          "E­-­S­i­g­n­&Return",
+                          "document.signature",
+          )
+  )
+  and (
+    regex.icontains(body.html.raw, '((<br\s*/?>\s*){20,}|\n{20,})')
+    or regex.icontains(body.html.raw, '(<p[^>]*>\s*<br\s*/?>\s*</p>\s*){30,}')
+    or regex.icontains(body.html.raw,
+                       '(<p class=".*?"><span style=".*?"><o:p>&nbsp;</o:p></span></p>\s*){30,}'
+    )
+    or regex.icontains(body.html.raw, '(<p>&nbsp;</p>\s*){7,}')
+    or regex.icontains(body.html.raw, '(<p[^>]*>\s*&nbsp;<br>\s*</p>\s*){5,}')
+    or regex.icontains(body.html.raw, '(<p[^>]*>&nbsp;</p>\s*){7,}')
+    or strings.count(body.html.raw, '&nbsp;‌&nbsp;‌&nbsp') > 50
+  )
+  and (
+    any(body.links,
+        regex.icontains(.display_text,
+                        "activate",
+                        "re-auth",
+                        "verify",
+                        "acknowledg",
+                        "(keep|change).{0,20}(active|password|access)",
+                        '((verify|view|click|download|goto|keep|Vιew|release).{0,10}(attachment|current|download|fax|file|document|message|same)s?)',
+                        'use.same.pass',
+                        'validate.{0,15}account',
+                        'recover.{0,15}messages',
+                        '(retry|update).{0,10}payment',
+                        'check activity',
+                        '(listen|play).{0,10}(vm|voice)',
+                        'clarify.{0,20}(deposit|wallet|funds)',
+                        'enter.{0,15}teams',
+                        'Review and sign'
+        )
+    )
+    or any(body.links,
+           (
+             regex.contains(.display_text,
+                            "\\bVIEW",
+                            "DOWNLOAD",
+                            "CHECK",
+                            "KEEP.(SAME|MY)",
+                            "VERIFY",
+                            "ACCESS\\b",
+                            "SIGN\\b",
+                            "ENABLE\\b",
+                            "RETAIN",
+                            "PLAY",
+                            "LISTEN",
+             )
+             and regex.match(.display_text, "^[^a-z]*[A-Z][^a-z]*$")
+           )
+    )
+  )
+  and (
+    not profile.by_sender().solicited
+    or (
+      profile.by_sender().any_messages_malicious_or_spam
+      and not profile.by_sender().any_false_positives
+    )
+  )
+  and not profile.by_sender().any_false_positives
+  
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and (
+        any(distinct(headers.hops, .authentication_results.dmarc is not null),
+            strings.ilike(.authentication_results.dmarc, "*fail")
+        )
+      )
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Header analysis"
+  - "HTML analysis"
+  - "URL analysis"
+  - "Sender analysis"
+id: "9b68c2d8-951e-5e04-9fa3-2ca67d9226a6"
