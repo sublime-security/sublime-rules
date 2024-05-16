@@ -1,0 +1,21 @@
+name: "Attachment: Callback Phishing solicitation via pdf file"
+description: "A fraudulent invoice/receipt found in an single page pdf attachment.\nCallback Phishing is an attempt by an attacker to solicit the victim (recipient) to call a phone number. \nThe resulting interaction could lead to a multitude of attacks ranging from Financial theft, Remote Access Trojan (RAT) Installation or Ransomware Deployment.\n"
+type: "rule"
+severity: "high"
+source: "type.inbound\nand (\n  not profile.by_sender().solicited\n  or (\n    profile.by_sender().any_messages_malicious_or_spam\n    and not profile.by_sender().any_false_positives\n  )\n)\n\n// single attachment\nand length(attachments) == 1\n\n// sender is freemail\nand sender.email.domain.root_domain in $free_email_providers\n\n// the attachment is a pdf with 1 page, and at least 60 ocr chars\nand any(attachments,\n(.file_extension == \"pdf\"\n        and any(file.explode(.), .scan.exiftool.page_count < 3)\n        and any(file.explode(.), length(.scan.ocr.raw) > 60)) \n\n        // 4 of the following strings are found        \n        and (\n          any(file.explode(.),\n              4 of (\n                strings.icontains(.scan.ocr.raw, \"purchase\"),\n                strings.icontains(.scan.ocr.raw, \"payment\"),\n                strings.icontains(.scan.ocr.raw, \"transaction\"),\n                strings.icontains(.scan.ocr.raw, \"subscription\"),\n                strings.icontains(.scan.ocr.raw, \"antivirus\"),\n                strings.icontains(.scan.ocr.raw, \"order\"),\n                strings.icontains(.scan.ocr.raw, \"support\"),\n                strings.icontains(.scan.ocr.raw, \"help line\"),\n                strings.icontains(.scan.ocr.raw, \"receipt\"),\n                strings.icontains(.scan.ocr.raw, \"invoice\"),\n                strings.icontains(.scan.ocr.raw, \"call\"),\n                strings.icontains(.scan.ocr.raw, \"helpdesk\"),\n                strings.icontains(.scan.ocr.raw, \"cancel\"),\n                strings.icontains(.scan.ocr.raw, \"renew\"),\n                strings.icontains(.scan.ocr.raw, \"refund\"),\n                strings.icontains(.scan.ocr.raw, \"amount\"),\n                strings.icontains(.scan.ocr.raw, \"crypto\"),\n                strings.icontains(.scan.ocr.raw, \"wallet address\"),\n                regex.icontains(.scan.ocr.raw, '\\$\\d{3}\\.\\d{2}\\b'),\n                regex.icontains(.scan.ocr.raw,\n                                '(\\+\\d|1.(\\()?\\d{3}(\\))?\\D\\d{3}\\D\\d{4})'\n                ),\n                regex.icontains(.scan.ocr.raw,\n                                '\\+?(\\d{1,2})?\\s?\\(?\\d{3}\\)?[\\s\\.\\-⋅]{0,5}\\d{3}[\\s\\.\\-⋅]{0,5}\\d{4}'\n                )\n              )\n          )\n        )\n\n        // 1 of the following strings is found, representing common Callback brands          \n        and (\n          any(file.explode(.),\n              1 of (\n                strings.icontains(.scan.ocr.raw, \"geek squad\"),\n                strings.icontains(.scan.ocr.raw, \"lifelock\"),\n                strings.icontains(.scan.ocr.raw, \"best buy\"),\n                strings.icontains(.scan.ocr.raw, \"mcafee\"),\n                strings.icontains(.scan.ocr.raw, \"norton\"),\n                strings.icontains(.scan.ocr.raw, \"ebay\"),\n                strings.icontains(.scan.ocr.raw, \"paypal\"),\n              )\n          )\n          or any(ml.logo_detect(.).brands,\n                 .name in (\"PayPal\", \"Norton\", \"GeekSquad\", \"Ebay\")\n          )\n        )\n)\n"
+attack_types:
+  - "Callback Phishing"
+tactics_and_techniques:
+  - "Evasion"
+  - "Free email provider"
+  - "Out of band pivot"
+  - "PDF"
+  - "Social engineering"
+detection_methods:
+  - "Exif analysis"
+  - "File analysis"
+  - "Optical Character Recognition"
+  - "Sender analysis"
+id: "ac33f097-af20-554c-b29a-56f21be1b285"
+testing_pr: 1551
+testing_sha: babd98cc406e1f63f943467bf2e767c0d20fb1a6
