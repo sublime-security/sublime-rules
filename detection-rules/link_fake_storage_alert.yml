@@ -4,6 +4,22 @@ type: "rule"
 severity: "medium"
 source: |
   type.inbound
+  and (
+    // body is short or padded
+    length(body.current_thread.text) < 1200
+    or (
+      // html padding obfuscation
+      regex.icontains(body.html.raw, '((<br\s*/?>\s*){20,}|\n{20,})')
+      or regex.icontains(body.html.raw, '(<p[^>]*>\s*<br\s*/?>\s*</p>\s*){30,}')
+      or regex.icontains(body.html.raw,
+                         '(<p class=".*?"><span style=".*?"><o:p>&nbsp;</o:p></span></p>\s*){30,}'
+      )
+      or regex.icontains(body.html.raw, '(<p>&nbsp;</p>\s*){7,}')
+      or regex.icontains(body.html.raw, '(<p[^>]*>\s*&nbsp;<br>\s*</p>\s*){5,}')
+      or regex.icontains(body.html.raw, '(<p[^>]*>&nbsp;</p>\s*){7,}')
+      or strings.count(body.html.raw, '&nbsp;‌&nbsp;‌&nbsp') > 50
+    )
+  )
   and 0 < length(body.links) < 8
   and (
     (
@@ -76,4 +92,4 @@ detection_methods:
   - "Sender analysis"
 id: "750f04d6-f68a-564c-9e41-c1e5a58df28f"
 testing_pr: 1556
-testing_sha: 54e44f170f0ad308309f6540c49ccf31a0485bb1
+testing_sha: 47052256a817b7ffdca0875c87aa4623be56031f
