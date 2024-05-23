@@ -4,9 +4,24 @@ type: "rule"
 severity: "high"
 source: |
   type.inbound
+  
   // a linked domain is similar but not the same as the sender domain
   and any(body.links,
-          0 < strings.levenshtein(.href_url.domain.sld, sender.email.domain.sld) <= 2
+          length(.href_url.domain.sld) > 3
+          and 0 < strings.levenshtein(.href_url.domain.sld,
+                                      sender.email.domain.sld
+          ) <= 2
+          and not sender.email.domain.root_domain == "onmicrosoft.com"
+  
+          // looking for lookalike domains above, typically the registrars won't match
+          and network.whois(sender.email.domain).registrar_name != network.whois(.href_url.domain
+          ).registrar_name
+  
+          // and one of the domains is less than 30 days old
+          and (
+            network.whois(sender.email.domain).days_old < 30
+            or network.whois(.href_url.domain).days_old < 30
+          )
   )
   // the sender is not a freemail, but the message or the in-reply-to indicates it traversed a freemail infrastructure, likely an auto forwarding rule. Or the sender or reply-to domain is new
   and (
@@ -24,8 +39,10 @@ source: |
         // with the suspicious traversal tolerate 90 days
         and network.whois(sender.email.domain).days_old < 90
       )
-      or network.whois(sender.email.domain).days_old < 30
-      or any(headers.reply_to, network.whois(.email.domain).days_old < 30)
+      or any(headers.reply_to,
+             network.whois(.email.domain).days_old < 30
+             and .email.email != sender.email.email
+      )
     )
   )
   
@@ -59,7 +76,6 @@ source: |
       )
     )
   )
-
 attack_types:
   - "BEC/Fraud"
 tactics_and_techniques:

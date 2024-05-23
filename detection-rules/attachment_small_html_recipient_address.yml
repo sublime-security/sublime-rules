@@ -4,6 +4,7 @@ type: "rule"
 severity: "medium"
 source: |
   type.inbound
+  and type.inbound
   and (
     any(attachments,
         (
@@ -16,7 +17,10 @@ source: |
                 .size < 10000
                 and length(.scan.strings.strings) < 20
                 and any(recipients.to,
-                        any(..scan.strings.strings, strings.icontains(., ..email.email)) and .email.domain.valid
+                        any(..scan.strings.strings,
+                            strings.icontains(., ..email.email)
+                        )
+                        and .email.domain.valid
                 )
         )
     )
@@ -31,13 +35,43 @@ source: |
                    and .size < 10000
                    and length(.scan.strings.strings) < 20
                    and any(recipients.to,
-                           any(..scan.strings.strings, strings.icontains(., ..email.email)) and .email.domain.valid
+                           any(..scan.strings.strings,
+                               strings.icontains(., ..email.email)
+                           )
+                           and .email.domain.valid
                    )
            )
     )
   )
+  and not any(attachments,
+            any(file.parse_eml(.).attachments,
+                .content_type == "message/delivery-status"
+            )
+      )
+  // bounce-back negations
   and (
-    profile.by_sender().prevalence in ("new", "outlier")
+    (
+      strings.like(sender.email.local_part,
+                   "*postmaster*",
+                   "*mailer-daemon*",
+                   "*administrator*"
+      )
+      and not any(attachments,
+                  .content_type in (
+                    "message/rfc822",
+                    "message/delivery-status",
+                    "text/calendar"
+                  )
+      )
+    )
+    or not strings.like(sender.email.local_part,
+                        "*postmaster*",
+                        "*mailer-daemon*",
+                        "*administrator*"
+    )
+  )
+  and (
+    not profile.by_sender().solicited
     or (
       profile.by_sender().any_messages_malicious_or_spam
       and not profile.by_sender().any_false_positives
