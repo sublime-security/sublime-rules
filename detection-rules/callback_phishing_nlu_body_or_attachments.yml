@@ -25,6 +25,19 @@ source: |
                         and .confidence in ("medium", "high")
                 )
         )
+        and (
+          // negate noreply unless a logo is found
+          not sender.email.local_part in ("no_reply", "noreply")
+          and not any(ml.logo_detect(beta.message_screenshot()).brands,
+                      .name in (
+                        "PayPal",
+                        "Norton",
+                        "GeekSquad",
+                        "Ebay",
+                        "McAfee"
+                      )
+          )
+        )
     )
     or any(ml.nlu_classifier(body.current_thread.text).intents,
            .name in ("callback_scam")
@@ -32,7 +45,6 @@ source: |
            and length(body.current_thread.text) < 1500
     )
   )
-  and not sender.email.local_part in ("no_reply", "noreply")
   and not (
     any(headers.domains, .domain == "smtp-out.gcp.bigcommerce.net")
     and strings.icontains(body.html.raw, "bigcommerce.com")
