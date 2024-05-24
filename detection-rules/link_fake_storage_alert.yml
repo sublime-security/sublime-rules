@@ -27,6 +27,32 @@ source: |
           and not strings.ilike(.scan.ocr.raw, "*free plan*")
       )
     )
+    or (
+      any(body.links,
+          // fingerprints of a hyperlinked image
+          .display_text is null
+          and .display_url.url is null
+          and (
+            .href_url.domain.root_domain in $free_file_hosts
+            or .href_url.domain.root_domain == "beehiiv.com"
+          )
+          and length(attachments) ==1
+          and all(attachments,
+                  .file_type in $file_types_images
+                  and .size > 2000
+                  and any(file.explode(.),
+                          strings.ilike(.scan.ocr.raw,
+                                        "*storage*full*",
+                                        "*free*upgrade*",
+                                        "*storage*details*",
+                                        "*storage*quot",
+                                        "*email*storage*",
+                                        "*total*storage*"
+                          )
+                  )
+          )
+      )
+    )
   )
   and (
     regex.icontains(subject.subject, '\bfull\b')
@@ -35,6 +61,7 @@ source: |
     or strings.icontains(subject.subject, "icloud")
     or strings.icontains(subject.subject, "limit")
     or strings.icontains(subject.subject, "all storage used")
+    or strings.icontains(subject.subject, "compliance")
   )
   
   // negate legitimate sharepoint storage alerts
