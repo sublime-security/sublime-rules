@@ -15,13 +15,21 @@ source: |
   and any(ml.logo_detect(beta.message_screenshot()).brands,
           .name == "Quickbooks" and .confidence in ("medium", "high")
   )
-  and sender.email.domain.root_domain not in~ ('intuit.com', 'turbotax.com', 'intuit.ca', 'meliopayments.com', 'qemailserver.com', 'intuit.co.uk', 'quickbooksonline.com')
-  and (
-      not profile.by_sender().any_false_positives 
-      and not profile.by_sender().solicited
+  and sender.email.domain.root_domain not in~ (
+    'intuit.com',
+    'turbotax.com',
+    'intuit.ca',
+    'meliopayments.com',
+    'qemailserver.com',
+    'intuit.co.uk',
+    'quickbooksonline.com'
   )
-
-  and length(filter(body.links,
+  and (
+    not profile.by_sender().any_false_positives
+    and not profile.by_sender().solicited
+  )
+  and (
+    length(filter(body.links,
                   .href_url.domain.root_domain not in~ (
                     'intuit.com',
                     'turbotax.com',
@@ -33,8 +41,10 @@ source: |
                   )
                   and .href_url.domain.domain != sender.email.domain.domain
            )
-  ) != 0
-
+    ) != 0
+    or length(body.links) == 0
+  )
+  
   // negate highly trusted sender domains unless they fail DMARC authentication
   and (
     (
