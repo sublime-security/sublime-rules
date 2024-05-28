@@ -32,16 +32,21 @@ source: |
       and regex.icontains(body.current_thread.text,
                           '(donation|inheritence|\$\d,\d{3}\,\d{3}|lottery)'
       )
-      and not (
-        (
-          strings.istarts_with(subject.subject, "RE:")
-          // out of office auto-reply
-          or strings.istarts_with(subject.subject, "Automatic reply:")
+      and (
+        not (
+          (
+            strings.istarts_with(subject.subject, "RE:")
+            // out of office auto-reply
+            or strings.istarts_with(subject.subject, "Automatic reply:")
+          )
+          and (
+            length(headers.references) > 0
+            or any(headers.hops,
+                   any(.fields, strings.ilike(.name, "In-Reply-To"))
+            )
+          )
         )
-        and (
-          length(headers.references) > 0
-          or any(headers.hops, any(.fields, strings.ilike(.name, "In-Reply-To")))
-        )
+        or any(headers.reply_to, .email.email != sender.email.email)
       )
     )
   )
