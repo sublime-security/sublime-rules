@@ -27,9 +27,20 @@ source: |
       and not any(ml.nlu_classifier(body.current_thread.text).intents,
                   .name == "benign" and .confidence == "high"
       )
-      // there are intents returned
-      and any(ml.nlu_classifier(body.current_thread.text).intents, true)
-      and not strings.istarts_with(subject.subject, "fwd:")
+      and (
+        (
+          // there are intents returned
+          any(ml.nlu_classifier(body.current_thread.text).intents, true)
+          // short body that also contains an org display name
+          or (
+            length(body.current_thread.text) > 200
+            and any(ml.nlu_classifier(body.current_thread.text).entities,
+                    .name == "sender" and .text in $org_display_names
+            )
+          )
+        )
+        and not strings.istarts_with(subject.subject, "fwd:")
+      )
     )
   )
   and (
