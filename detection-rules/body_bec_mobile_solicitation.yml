@@ -6,11 +6,9 @@ source: |
   type.inbound
   and length(body.current_thread.text) < 500
   and length(attachments) == 0
-  and regex.contains(body.current_thread.text,
-                     "(email|send|shoot|give|provide|attach|confirm|) (me|your)"
-  )
-  and regex.contains(body.current_thread.text,
-                     "(cell(/s?phone)?|mobile.{0,10}(phone|number|#|no)|whatsapp)"
+  
+  and regex.icontains(body.current_thread.text,
+                     '(mobile|contact).{0,10}(phone|number|#|no)|whatsapp|\bcell|personalcell'
   )
   and (
     any(ml.nlu_classifier(body.current_thread.text).intents,
@@ -19,7 +17,12 @@ source: |
     or (
       // confidence can be low on very short bodies
       length(body.current_thread.text) < 150
-      and any(ml.nlu_classifier(body.current_thread.text).intents, .name == "bec")
+      and (
+        any(ml.nlu_classifier(body.current_thread.text).intents, .name == "bec")
+        or any(ml.nlu_classifier(body.current_thread.text).entities,
+               strings.icontains(.text, "kindly")
+        )
+      )
     )
   )
   and (
@@ -27,6 +30,7 @@ source: |
     or profile.by_sender().any_messages_malicious_or_spam
   )
   and not profile.by_sender().any_false_positives
+
 
 attack_types:
   - "BEC/Fraud"
