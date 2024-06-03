@@ -12,6 +12,35 @@ source: |
     regex.icontains(sender.display_name, '\bDHL\b')
     or strings.ilike(sender.email.domain.domain, '*DHL*')
     or strings.ilike(subject.subject, '*DHL notification*')
+    or regex.icontains(subject.subject, '\bD.{1,3}H.{1,3}L.{1,3}\b')
+  )
+  and (
+    any(ml.nlu_classifier(body.current_thread.text).entities, .name == "urgency")
+    or any(ml.nlu_classifier(body.current_thread.text).entities,
+           .name == "org" and .text =~ "DHL"
+    )
+    or any(ml.logo_detect(beta.message_screenshot()).brands,
+           .name == "DHL" and .confidence in ("medium", "high")
+    )
+    or regex.icontains(body.current_thread.text, '\bDHL\b')
+    or (
+      any(file.explode(beta.message_screenshot()),
+          strings.ilike(.scan.ocr.raw,
+                        "*package*",
+                        "*parcel*",
+                        "*shipping*",
+                        "*delivery*",
+                        "*track*"
+          )
+      )
+      or strings.ilike(body.current_thread.text,
+                       "*package*",
+                       "*parcel*",
+                       "*shipping*",
+                       "*delivery*",
+                       "*track*"
+      )
+    )
   )
   and sender.email.domain.root_domain not in~ (
     'dhl.com',
