@@ -1,0 +1,33 @@
+name: "Shopify infrastructure abuse"
+description: "Attackers have been observed using myshopify.com links to bypass domain reputation checks."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and any(body.links,
+          .href_url.domain.root_domain == "myshopify.com"
+  
+          // negate legitimate Shopify newsletters
+          and (
+            not any(headers.domains, .root_domain == "klaviyomail.com")
+            and not any(body.links,
+                        .href_url.domain.root_domain in ("klclick2.com")
+            )
+            and not any(headers.domains,
+                        .root_domain not in ("shopify.com", "myshopify.com")
+            )
+          )
+  )
+
+attack_types:
+  - "Credential Phishing"
+  - "Spam"
+tactics_and_techniques:
+  - "Evasion"
+  - "Free subdomain host"
+  - "Impersonation: Brand"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Header analysis"
+  - "URL analysis"
