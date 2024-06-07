@@ -1,6 +1,6 @@
 # Description
 
-Explain your change and why. For example, "negating letigimate replies," or "adding additional credential theft keywords."
+Explain your change and why. For example, "negating legitimate replies," or "adding additional credential theft keywords."
 
 If it's a new rule or insight, explain what the rule is designed to catch/what the insight should fire on.
 
