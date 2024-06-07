@@ -13,6 +13,10 @@ For example, samples you are negating, samples you are including, or samples you
 - Sample 1
 - Sample 2
 
+## Associated hunts
+
+If you ran any hunts with your rule, please link them here.
+
 # Screenshot (insights)
 
 **For new insights only:** Insert a screenshot of the insight firing. Remove this section if not applicable.
