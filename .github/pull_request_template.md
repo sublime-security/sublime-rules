@@ -17,6 +17,8 @@ For example, samples you are negating, samples you are including, or samples you
 
 If you ran any hunts with your rule, please link them here.
 
+- Hunt 1
+
 # Screenshot (insights)
 
 **For new insights only:** Insert a screenshot of the insight firing. Remove this section if not applicable.
