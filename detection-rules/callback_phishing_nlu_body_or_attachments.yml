@@ -28,12 +28,12 @@ source: |
         and (
           // negate noreply unless a logo is found in the attachment
           (
-            sender.email.local_part in ("no_reply", "noreply")
+            sender.email.local_part in ("no_reply", "noreply", "do-not-reply")
             and any(ml.logo_detect(.).brands,
                     .name in ("PayPal", "Norton", "GeekSquad", "Ebay", "McAfee")
             )
           )
-          or sender.email.local_part not in ("no_reply", "noreply")
+          or sender.email.local_part not in ("no_reply", "noreply", "do-not-reply")
         )
     )
     or any(ml.nlu_classifier(body.current_thread.text).intents,
@@ -46,6 +46,18 @@ source: |
     any(headers.domains, .domain == "smtp-out.gcp.bigcommerce.net")
     and strings.icontains(body.html.raw, "bigcommerce.com")
   )
+  
+  // Negate noreply unless a logo is found in the body
+  and not (
+          (
+            sender.email.local_part in ("no_reply", "noreply", "do-not-reply")
+            and not any(ml.logo_detect(beta.message_screenshot()).brands,
+                    .name in ("PayPal", "Norton", "GeekSquad", "Ebay", "McAfee")
+            )
+          )
+          or sender.email.local_part not in ("no_reply", "noreply", "do-not-reply")
+        )
+  
   and (
     not profile.by_sender().solicited
     or (
@@ -62,7 +74,7 @@ source: |
     )
     or sender.email.domain.root_domain not in $high_trust_sender_root_domains
   )
-
+  
 attack_types:
   - "Callback Phishing"
 tactics_and_techniques:
