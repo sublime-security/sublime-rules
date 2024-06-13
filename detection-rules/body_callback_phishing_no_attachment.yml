@@ -20,6 +20,10 @@ source: |
     or sender.email.domain.tld in $suspicious_tlds
     or network.whois(sender.email.domain).found == false
     or headers.mailer in~ ("Microsoft CDO for Windows 2000")
+    or (
+      length(recipients.to) == 1
+      and all(recipients.to, .email.domain.domain not in $org_domains)
+    )
   )
   and (
     strings.ilike(body.current_thread.text,
@@ -32,8 +36,10 @@ source: |
                   "*symantec*",
                   "*best buy*",
                   "*lifelock*",
-                  "*utilities premium*"
+                  "*utilities premium*",
+                  "*pc security*"
     )
+    or regex.icontains(body.current_thread.text, "pay.{0,10}pal")
     or any(ml.logo_detect(beta.message_screenshot()).brands,
            .name in ("PayPal", "Norton", "GeekSquad", "Ebay", "McAfee")
     )

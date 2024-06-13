@@ -16,8 +16,19 @@ source: |
           )
           and (
             any(file.explode(.),
-                .scan.qr.type is not null
-                and regex.contains(.scan.qr.data, '\.')
+                (
+                  (
+                    .scan.qr.type is not null
+                    and regex.contains(.scan.qr.data, '\.')
+                  )
+                  or 
+                  // QR code language
+                  ( 
+                    regex.icontains(.scan.ocr.raw, 'scan|camera')
+                    and regex.icontains(.scan.ocr.raw, '\bQR\b|Q\.R\.|barcode')
+                  )
+                )
+  
                 // exclude images taken with mobile cameras and screenshots from android
                 and not any(.scan.exiftool.fields,
                             .key == "Model"
@@ -51,7 +62,6 @@ source: |
       and not profile.by_sender().any_false_positives
     )
   )
-
 
 attack_types:
   - "Credential Phishing"
