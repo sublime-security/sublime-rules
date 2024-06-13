@@ -8,7 +8,7 @@ source: |
     (
       0 < length(body.links) < 8
       and any([subject.subject, sender.display_name],
-              strings.icontains(., "storage")
+              regex.icontains(., "storage|mailbox")
       )
     )
     or (
@@ -16,7 +16,41 @@ source: |
           any(ml.nlu_classifier(.scan.ocr.raw).intents,
               .name == "cred_theft" and .confidence == "high"
           )
-          and strings.ilike(.scan.ocr.raw, "*storage*full*", "*free*upgrade*")
+          and strings.ilike(.scan.ocr.raw,
+                            "*storage*full*",
+                            "*free*upgrade*",
+                            "*storage*details*",
+                            "*storage*quot",
+                            "*email*storage*",
+                            "*total*storage*"
+          )
+          and not strings.ilike(.scan.ocr.raw, "*free plan*")
+      )
+    )
+    or (
+      any(body.links,
+          // fingerprints of a hyperlinked image
+          .display_text is null
+          and .display_url.url is null
+          and (
+            .href_url.domain.root_domain in $free_file_hosts
+            or .href_url.domain.root_domain == "beehiiv.com"
+          )
+          and length(attachments) ==1
+          and all(attachments,
+                  .file_type in $file_types_images
+                  and .size > 2000
+                  and any(file.explode(.),
+                          strings.ilike(.scan.ocr.raw,
+                                        "*storage*full*",
+                                        "*free*upgrade*",
+                                        "*storage*details*",
+                                        "*storage*quot",
+                                        "*email*storage*",
+                                        "*total*storage*"
+                          )
+                  )
+          )
       )
     )
   )
@@ -27,6 +61,9 @@ source: |
     or strings.icontains(subject.subject, "icloud")
     or strings.icontains(subject.subject, "limit")
     or strings.icontains(subject.subject, "all storage used")
+    or strings.icontains(subject.subject, "compliance")
+    or strings.icontains(subject.subject, "max storage")
+    or strings.icontains(subject.subject, "storage space")
   )
   
   // negate legitimate sharepoint storage alerts

@@ -11,7 +11,6 @@ source: |
         strings.istarts_with(subject.subject, "RE:")
         or strings.istarts_with(subject.subject, "FW:")
         or strings.istarts_with(subject.subject, "FWD:")
-        or regex.icontains(subject.subject, '.{0,10}re:|fw:|fwd:')
         or regex.imatch(subject.subject, '[^:]?automat.[^:]{0,20}:.*$')
       )
       and (
@@ -27,6 +26,11 @@ source: |
       not (
         (
           strings.istarts_with(subject.subject, "RE:")
+          or strings.istarts_with(subject.subject, "R:")
+          or strings.istarts_with(subject.subject, "ODG:")
+          or strings.istarts_with(subject.subject, "答复:")
+          or strings.istarts_with(subject.subject, "AW:")
+          or strings.istarts_with(subject.subject, "TR:")
           or strings.istarts_with(subject.subject, "FWD:")
         )
       )
@@ -46,8 +50,9 @@ source: |
     )
   )
   
-  // unusual sender (email address rarely sends to your organization)
-  and profile.by_sender().prevalence in ("new", "outlier", "rare")
+  // and not solicited
+  and not profile.by_sender().solicited
+
   and 4 of (
     // language attempting to engage
     (
@@ -60,7 +65,12 @@ source: |
     ),
   
     // invoicing language
-    any(ml.nlu_classifier(body.current_thread.text).tags, .name == "invoice"),
+    (
+      any(ml.nlu_classifier(body.current_thread.text).tags, .name == "invoice")
+      or any(ml.nlu_classifier(body.current_thread.text).entities,
+             .text == "invoice"
+      )
+    ),
   
     // urgency request
     any(ml.nlu_classifier(body.current_thread.text).entities, .name == "urgency"),
@@ -91,6 +101,12 @@ source: |
     // sender domain matches no body domains
     all(body.links,
         .href_url.domain.root_domain != sender.email.domain.root_domain
+    ),
+
+    // body contains name of VIP
+    (
+      any($org_vips, strings.icontains(body.html.inner_text, .display_name))
+      or any($org_vips, strings.icontains(body.plain.raw, .display_name))
     ),
   
     // new body domain
