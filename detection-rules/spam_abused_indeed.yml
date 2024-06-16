@@ -1,0 +1,26 @@
+name: "Spam: Abused Indeed Application Emails"
+description: "Indeed applicaiton emails are being used to delivery spam by injecting an image into the application template and hiding the default Indeed content via inline CSS.  This has been observed deliverying emails with the intention of having the receiptant unknowning sign up for a Consumer Savings Club which charges a monthly membership fee."
+type: "rule"
+severity: "low"
+source: | 
+  type.inbound
+  // from indeed
+  and strings.ends_with(headers.message_id, '-ApplicationEmail@indeedemail.com>')
+  and headers.auth_summary.dmarc.pass and headers.auth_summary.dmarc.details.from.domain == 'indeedemail.com'
+  
+  // with a hidden section
+  and not strings.like(body.html.raw,
+                   '*style="display:none;">___*',
+                   '*style="display: none;">______*',
+                   '*<div style="display: none; max-height: 0px; overflow: hidden;">&nbsp;*'
+  
+  )
+attack_types:
+  - "Spam"
+tactics_and_techniques:
+  - "Evasion"
+  - "Image as content"
+  - "Abused Service Provider"
+detection_methods:
+  - "Content analysis"
+  - "Sender analysis"
