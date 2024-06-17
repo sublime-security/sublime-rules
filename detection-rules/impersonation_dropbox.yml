@@ -11,9 +11,26 @@ source: |
     or strings.ilike(sender.email.domain.domain, '*dropbox*')
   )
   and sender.email.domain.root_domain !~ 'dropbox.com'
-  and any(attachments,
-          .file_type in $file_types_images
-          and any(file.explode(.), strings.ilike(.scan.ocr.raw, "*dropbox*"))
+  and (
+    any(attachments,
+        .file_type in $file_types_images
+        and any(file.explode(.), strings.ilike(.scan.ocr.raw, "*dropbox*"))
+    )
+    or any(body.links,
+           strings.ilike(.display_text,
+                         "*review*",
+                         "*sign*",
+                         "*view*",
+                         "*completed document*",
+                         "*open agreement*",
+                         "*open document*"
+           )
+           and not strings.ilike(.display_text, "*view this email in*")
+           and .href_url.domain.root_domain != "dropbox.com"
+           and any(ml.nlu_classifier(body.current_thread.text).intents,
+                   .name == "cred_theft" and .confidence in ("medium", "high")
+           )
+    )
   )
   and sender.email.email not in $recipient_emails
 
