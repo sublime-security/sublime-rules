@@ -12,7 +12,7 @@ source: |
     regex.icontains(sender.display_name, '\bDHL\b')
     or strings.ilike(sender.email.domain.domain, '*DHL*')
     or strings.ilike(subject.subject, '*DHL notification*')
-    or regex.icontains(subject.subject, '\bD.{0,2}H.{0,2}L.{0,2}\b')
+    or regex.contains(subject.subject, '\bD.{0,2}H.{0,2}L.{0,2}\b')
   )
   and (
     any(ml.nlu_classifier(body.current_thread.text).entities, .name == "urgency")
@@ -42,6 +42,30 @@ source: |
       )
     )
   )
+  and (
+    (
+      (
+        length(headers.references) > 0
+        or not any(headers.hops,
+                   any(.fields, strings.ilike(.name, "In-Reply-To"))
+        )
+      )
+      and not (
+        (
+          strings.istarts_with(subject.subject, "RE:")
+          or strings.istarts_with(subject.subject, "RES:")
+          or strings.istarts_with(subject.subject, "R:")
+          or strings.istarts_with(subject.subject, "ODG:")
+          or strings.istarts_with(subject.subject, "答复:")
+          or strings.istarts_with(subject.subject, "AW:")
+          or strings.istarts_with(subject.subject, "TR:")
+          or strings.istarts_with(subject.subject, "FWD:")
+          or regex.imatch(subject.subject, '(\[[^\]]+\]\s?){0,3}(re|fwd?)\s?:')
+        )
+      )
+    )
+    or length(headers.references) == 0
+  )
   and sender.email.domain.root_domain not in~ (
     'dhl.com',
     'dhl-news.com',
@@ -50,6 +74,7 @@ source: |
     'dhlparcel.co.uk',
     'dhlecs.com',
     'dhl.co.uk',
+    'dhl.co.tz',
     'dpdhl.com',
     'dhl.de',
     'dhl.fr',
@@ -57,7 +82,8 @@ source: |
     'inmotion.dhl',
     'dhlparcel.nl',
     'dhltariff.co.uk',
-    'dhlindia-kyc.com'
+    'dhlindia-kyc.com',
+    'dpogroup.com'
   )
   and (
     profile.by_sender().prevalence in ("new", "outlier")
