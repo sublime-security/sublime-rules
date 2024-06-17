@@ -1,0 +1,29 @@
+name: "Spam: Image as content with Hidden HTML Element"
+description: "This has been observed in the delivery of emails containing account/membership expiration lure themes of popular online services or delivery notifications."
+type: "rule"
+severity: "low"
+source: |
+  type.inbound
+  and not profile.by_sender().solicited
+  // not high trust sender domains
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and not headers.auth_summary.dmarc.pass
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+  // find the template for the html body
+  and regex.icontains(body.html.raw,
+                      '<a href="https?:\/\/[^\x22]+\x22><img\s*src=\x22https:\/\/[^\x22]+\x22\><\/a>(?:<\/?[^>]*>){0,3}<(?:span|div)\s*style=\x22\s*display\s*\x3a\s*none\x3b[^\x22]*\x22>(?:_|&nbsp\x3b\x200c?){3,}'
+  )
+  // any logo detection
+
+
+attack_types:
+  - "Spam"
+tactics_and_techniques:
+  - "Evasion"
+  - "Image as content"
+detection_methods:
+  - "Content analysis"
