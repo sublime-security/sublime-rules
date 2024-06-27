@@ -23,30 +23,43 @@ source: |
   
   // the attachment is a pdf with 1 page, and at least 60 ocr chars
   and any(attachments,
-          .file_extension == "pdf"
-          and any(file.explode(.), .scan.exiftool.page_count == 1)
-          and any(file.explode(.), length(.scan.ocr.raw) > 60)
+          (
+            .file_extension == "pdf"
+            and any(file.explode(.), .scan.exiftool.page_count < 3)
+            and any(file.explode(.), length(.scan.ocr.raw) > 60)
+          )
   
           // 4 of the following strings are found        
-          and any(file.explode(.),
-                  4 of (
-                    strings.icontains(.scan.ocr.raw, "purchase"),
-                    strings.icontains(.scan.ocr.raw, "payment"),
-                    strings.icontains(.scan.ocr.raw, "transaction"),
-                    strings.icontains(.scan.ocr.raw, "subscription"),
-                    strings.icontains(.scan.ocr.raw, "antivirus"),
-                    strings.icontains(.scan.ocr.raw, "order"),
-                    strings.icontains(.scan.ocr.raw, "support"),
-                    strings.icontains(.scan.ocr.raw, "help line"),
-                    strings.icontains(.scan.ocr.raw, "receipt"),
-                    strings.icontains(.scan.ocr.raw, "invoice"),
-                    strings.icontains(.scan.ocr.raw, "call"),
-                    strings.icontains(.scan.ocr.raw, "helpdesk"),
-                    strings.icontains(.scan.ocr.raw, "cancel"),
-                    strings.icontains(.scan.ocr.raw, "renew"),
-                    strings.icontains(.scan.ocr.raw, "refund"),
-                    regex.icontains(.scan.ocr.raw, '(\+\d|1.(\()?\d{3}(\))?\D\d{3}\D\d{4})')
+          and (
+            any(file.explode(.),
+                4 of (
+                  strings.icontains(.scan.ocr.raw, "purchase"),
+                  strings.icontains(.scan.ocr.raw, "payment"),
+                  strings.icontains(.scan.ocr.raw, "transaction"),
+                  strings.icontains(.scan.ocr.raw, "subscription"),
+                  strings.icontains(.scan.ocr.raw, "antivirus"),
+                  strings.icontains(.scan.ocr.raw, "order"),
+                  strings.icontains(.scan.ocr.raw, "support"),
+                  strings.icontains(.scan.ocr.raw, "help line"),
+                  strings.icontains(.scan.ocr.raw, "receipt"),
+                  strings.icontains(.scan.ocr.raw, "invoice"),
+                  strings.icontains(.scan.ocr.raw, "call"),
+                  strings.icontains(.scan.ocr.raw, "helpdesk"),
+                  strings.icontains(.scan.ocr.raw, "cancel"),
+                  strings.icontains(.scan.ocr.raw, "renew"),
+                  strings.icontains(.scan.ocr.raw, "refund"),
+                  strings.icontains(.scan.ocr.raw, "amount"),
+                  strings.icontains(.scan.ocr.raw, "crypto"),
+                  strings.icontains(.scan.ocr.raw, "wallet address"),
+                  regex.icontains(.scan.ocr.raw, '\$\d{3}\.\d{2}\b'),
+                  regex.icontains(.scan.ocr.raw,
+                                  '(\+\d|1.(\()?\d{3}(\))?\D\d{3}\D\d{4})'
+                  ),
+                  regex.icontains(.scan.ocr.raw,
+                                  '\+?(\d{1,2})?\s?\(?\d{3}\)?[\s\.\-⋅]{0,5}\d{3}[\s\.\-⋅]{0,5}\d{4}'
                   )
+                )
+            )
           )
   
           // 1 of the following strings is found, representing common Callback brands          
@@ -66,6 +79,18 @@ source: |
                    .name in ("PayPal", "Norton", "GeekSquad", "Ebay")
             )
           )
+          // Negate bank statements
+          and not (
+            any(file.explode(.),
+                2 of (
+                  strings.icontains(.scan.ocr.raw, "opening balance"),
+                  strings.icontains(.scan.ocr.raw, "closing balance"),
+                  strings.icontains(.scan.ocr.raw, "direct debit"),
+                  strings.icontains(.scan.ocr.raw, "interest"),
+                  strings.icontains(.scan.ocr.raw, "account balance"),
+                )
+            )
+        )
   )
 
 attack_types:

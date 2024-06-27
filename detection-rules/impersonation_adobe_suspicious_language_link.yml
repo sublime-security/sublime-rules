@@ -26,6 +26,9 @@ source: |
                       "*open agreement*",
                       "*open document*"
         )
+        and not strings.ilike(.scan.ocr.raw,
+                                  "*view this email in*"
+        )
     )
     or any(body.links,
            strings.ilike(.display_text,
@@ -36,10 +39,13 @@ source: |
                          "*open agreement*",
                          "*open document*"
            )
+           and not strings.ilike(.display_text,
+                                     "*view this email in*"
+           )
     )
   )
   and (
-    profile.by_sender().prevalence in ("new", "outlier")
+    not profile.by_sender().solicited
     or (
       profile.by_sender().any_messages_malicious_or_spam
       and not profile.by_sender().any_false_positives
@@ -49,14 +55,11 @@ source: |
   and (
     (
       sender.email.domain.root_domain in $high_trust_sender_root_domains
-      and (
-        any(distinct(headers.hops, .authentication_results.dmarc is not null),
-            strings.ilike(.authentication_results.dmarc, "*fail")
-        )
-      )
+      and not headers.auth_summary.dmarc.pass
     )
     or sender.email.domain.root_domain not in $high_trust_sender_root_domains
   )
+  
 attack_types:
   - "Credential Phishing"
 tactics_and_techniques:

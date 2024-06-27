@@ -12,21 +12,78 @@ source: |
     regex.icontains(sender.display_name, '\bDHL\b')
     or strings.ilike(sender.email.domain.domain, '*DHL*')
     or strings.ilike(subject.subject, '*DHL notification*')
+    or regex.contains(subject.subject, '\bD.{0,2}H.{0,2}L.{0,2}\b')
+  )
+  and (
+    any(ml.nlu_classifier(body.current_thread.text).entities, .name == "urgency")
+    or any(ml.nlu_classifier(body.current_thread.text).entities,
+           .name == "org" and .text =~ "DHL"
+    )
+    or any(ml.logo_detect(beta.message_screenshot()).brands,
+           .name == "DHL" and .confidence in ("medium", "high")
+    )
+    or regex.icontains(body.current_thread.text, '\bDHL\b')
+    or (
+      any(file.explode(beta.message_screenshot()),
+          strings.ilike(.scan.ocr.raw,
+                        "*package*",
+                        "*parcel*",
+                        "*shipping*",
+                        "*delivery*",
+                        "*track*"
+          )
+      )
+      or strings.ilike(body.current_thread.text,
+                       "*package*",
+                       "*parcel*",
+                       "*shipping*",
+                       "*delivery*",
+                       "*track*"
+      )
+    )
+  )
+  and (
+    (
+      (
+        length(headers.references) > 0
+        or not any(headers.hops,
+                   any(.fields, strings.ilike(.name, "In-Reply-To"))
+        )
+      )
+      and not (
+        (
+          strings.istarts_with(subject.subject, "RE:")
+          or strings.istarts_with(subject.subject, "RES:")
+          or strings.istarts_with(subject.subject, "R:")
+          or strings.istarts_with(subject.subject, "ODG:")
+          or strings.istarts_with(subject.subject, "答复:")
+          or strings.istarts_with(subject.subject, "AW:")
+          or strings.istarts_with(subject.subject, "TR:")
+          or strings.istarts_with(subject.subject, "FWD:")
+          or regex.imatch(subject.subject, '(\[[^\]]+\]\s?){0,3}(re|fwd?)\s?:')
+        )
+      )
+    )
+    or length(headers.references) == 0
   )
   and sender.email.domain.root_domain not in~ (
     'dhl.com',
     'dhl-news.com',
     'bdhllp.com',
+    'dhlecommerce.co.uk',
     'dhlparcel.co.uk',
     'dhlecs.com',
     'dhl.co.uk',
+    'dhl.co.tz',
     'dpdhl.com',
     'dhl.de',
     'dhl.fr',
     'dhlending.com',
     'inmotion.dhl',
     'dhlparcel.nl',
-    'dhltariff.co.uk'
+    'dhltariff.co.uk',
+    'dhlindia-kyc.com',
+    'dpogroup.com'
   )
   and (
     profile.by_sender().prevalence in ("new", "outlier")
@@ -37,15 +94,10 @@ source: |
   )
 
   // negate highly trusted sender domains unless they fail DMARC authentication
-  and
-  (
+  and (
     (
       sender.email.domain.root_domain in $high_trust_sender_root_domains
-      and (
-        any(distinct(headers.hops, .authentication_results.dmarc is not null),
-            strings.ilike(.authentication_results.dmarc, "*fail")
-        )
-      )
+      and not headers.auth_summary.dmarc.pass
     )
     or sender.email.domain.root_domain not in $high_trust_sender_root_domains
   )
