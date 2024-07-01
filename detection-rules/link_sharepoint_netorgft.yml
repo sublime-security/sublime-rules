@@ -1,0 +1,17 @@
+name: "Link: SharePoint Files Shared from GoDaddy Federated Tenants"
+description: "This matches on inbound Shared File notiifcation emails from Microsoft, where any link to sharepoint contains a default GoDaddy Federated Tenant Name. These have been observed being frequenantly abused to send Credential Phishing."
+type: "rule"
+severity: "low"
+source: "type.inbound\n// Matches the message id observed. DKIM/SPF domains can be custom and therefor are unpredictable. \nand strings.starts_with(headers.message_id, '<Share-')\nand strings.ends_with(headers.message_id, '@odspnotify>')\n\n// subject matches the default \"shared <filename> with you\" format\nand strings.ends_with(subject.subject, ' with you')\n\n// any of the links are the default netorgft name from GoDaddy\nand any(body.links,\n        // Default GoDaddy tenant names\n        strings.starts_with(.href_url.domain.subdomain, 'netorgft')\n        and .href_url.domain.root_domain == \"sharepoint.com\"\n)\n\n// and sender has never had email sent to them\nand not profile.by_sender().solicited\n\n// and there haven't been any FPs reported for the sender\nand not profile.by_sender().any_false_positives\n"
+tags:
+  - "Attack surface reduction"
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Evasion"
+detection_methods:
+  - "Sender analysis"
+  - "URL analysis"
+id: "0e26cdd2-cf19-53ed-8b30-b3e2e7ea912f"
+testing_pr: 1700
+testing_sha: f588426a930e9e0c4adcda0c426a308160c2ae0a
