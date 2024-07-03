@@ -11,12 +11,8 @@ source: |
         strings.istarts_with(subject.subject, "RE:")
         or strings.istarts_with(subject.subject, "FW:")
         or strings.istarts_with(subject.subject, "FWD:")
-        or regex.imatch(subject.subject, '[^:]?automat.[^:]{0,20}:.*$')
-      )
-      and (
-        (length(headers.references) == 0 and headers.in_reply_to is null)
-        or not any(headers.hops,
-                   any(.fields, strings.ilike(.name, "In-Reply-To"))
+        or regex.imatch(subject.subject,
+                        '(\[[^\]]+\]\s?){0,3}(re|fwd?|automat.*)\s?:.*'
         )
       )
     )
@@ -50,9 +46,13 @@ source: |
     )
   )
   
+  and (
+    (length(headers.references) == 0 and headers.in_reply_to is null)
+    or not any(headers.hops, any(.fields, strings.ilike(.name, "In-Reply-To")))
+  )
+  
   // and not solicited
   and not profile.by_sender().solicited
-
   and 4 of (
     // language attempting to engage
     (
@@ -102,7 +102,7 @@ source: |
     all(body.links,
         .href_url.domain.root_domain != sender.email.domain.root_domain
     ),
-
+  
     // body contains name of VIP
     (
       any($org_vips, strings.icontains(body.html.inner_text, .display_name))
@@ -131,7 +131,9 @@ source: |
     ),
   
     // body contains recipient SLD
-    any(recipients.to, strings.icontains(body.current_thread.text, .email.domain.sld))
+    any(recipients.to,
+        strings.icontains(body.current_thread.text, .email.domain.sld)
+    )
   )
   
   // negate highly trusted sender domains unless they fail DMARC authentication
