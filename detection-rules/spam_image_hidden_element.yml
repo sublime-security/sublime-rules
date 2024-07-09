@@ -1,0 +1,36 @@
+name: "Spam: Image as content with Hidden HTML Element"
+description: "This has been observed in the delivery of emails containing account/membership expiration lure themes of popular online services or delivery notifications."
+type: "rule"
+severity: "low"
+source: |
+  type.inbound
+  and not profile.by_sender().solicited
+  // not high trust sender domains
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and not headers.auth_summary.dmarc.pass
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+  and (
+    // find the template - a link that is a centered image
+    regex.contains(body.html.raw,
+                   'center(?:\x22[^\>]+)?\>\s*<a href=\"https?:\/\/[^\x22]+\x22(?:\s[a-z]+=\x22[^\x22]+\x22)*>\s*[^\n]+\<img src=\x22[^\x22]+\x22><\/a>\s*<\/'
+    )
+    // and where there is a span/div that is hidden with either &nbsp\x3b\x200c? or underscores repeating multiple times OR followed by a new metatag
+    and regex.contains(body.html.raw,
+                       '<(?:span|div)\s*style=\x22\s*display\s*\x3a\s*none\x3b[^\x22]*\x22>(?:(?:_|&nbsp\x3b\x200c?){3,}\s+\<|\s+\<meta |\s+\<center )'
+    )
+  )
+
+attack_types:
+  - "Spam"
+tactics_and_techniques:
+  - "Evasion"
+  - "Image as content"
+detection_methods:
+  - "Content analysis"
+  - "HTML analysis"
+  - "Sender analysis"
+id: "5de8861f-a343-521f-ac8c-b4b91e389a6e"
