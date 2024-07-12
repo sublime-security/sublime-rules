@@ -24,34 +24,29 @@ source: |
     or sender.email.domain.tld in $suspicious_tlds
   )
   and (
-    (
-      any(ml.nlu_classifier(body.current_thread.text).intents,
-          .name == "advance_fee" and .confidence in ("medium", "high")
+    any(ml.nlu_classifier(body.current_thread.text).tags,
+        .name == "advance_fee" and .confidence in ("medium", "high")
+    )
+    or (
+      length(body.current_thread.text) < 200
+      and regex.icontains(body.current_thread.text,
+                          '(donation|inheritence|\$\d,\d{3}\,\d{3}|lottery)'
       )
-      or any(ml.nlu_classifier(body.current_thread.text).tags,
-            .name == "advance_fee" and .confidence in ("medium", "high")
-      )
-      or (
-        length(body.current_thread.text) < 200
-        and regex.icontains(body.current_thread.text,
-                            '(donation|inheritence|\$\d,\d{3}\,\d{3}|lottery)'
-        )
-        and (
-          not (
-            (
-              strings.istarts_with(subject.subject, "RE:")
-              // out of office auto-reply
-              or strings.istarts_with(subject.subject, "Automatic reply:")
-            )
-            and (
-              length(headers.references) > 0
-              or any(headers.hops,
-                    any(.fields, strings.ilike(.name, "In-Reply-To"))
-              )
+      and (
+        not (
+          (
+            strings.istarts_with(subject.subject, "RE:")
+            // out of office auto-reply
+            or strings.istarts_with(subject.subject, "Automatic reply:")
+          )
+          and (
+            length(headers.references) > 0
+            or any(headers.hops,
+                   any(.fields, strings.ilike(.name, "In-Reply-To"))
             )
           )
-          or any(headers.reply_to, .email.email != sender.email.email)
         )
+        or any(headers.reply_to, .email.email != sender.email.email)
       )
     )
   )
@@ -60,7 +55,6 @@ source: |
     or profile.by_sender().any_messages_malicious_or_spam
   )
   and not profile.by_sender().any_false_positives
-
 attack_types:
   - "BEC/Fraud"
 tactics_and_techniques:
