@@ -4,19 +4,13 @@ type: "rule"
 severity: "low"
 source: |
   type.inbound
-  // Matches the message id observed. DKIM/SPF domains can be custom and therefore are unpredictable.
-  and strings.starts_with(headers.message_id, '<Share-')
-  and strings.ends_with(headers.message_id, '@odspnotify>')
-  
-  // SharePoint email indicators
-  and strings.like(body.current_thread.text,
-                   "*shared a file with you*",
-                   "*shared with you*",
-                   "*invited you to access a file*"
-  )
   and strings.icontains(subject.subject, "shared")
-  // look at the links
-  and any(body.links,
+  and strings.ilike(body.current_thread.text,
+                    "*shared a file with you*",
+                    "*shared with you*",
+                    "*invited you to access a file*"
+  )
+  and not any(body.links,
           (
   
             // file sharing service references
@@ -24,17 +18,27 @@ source: |
             or strings.icontains(.display_text, 'docusign')
   
             // file name lures
-            or regex.icontains(.display_text, 'secure.(?:file|document)')
-            or regex.icontains(.display_text, 'important.(?:file|document)')
-            or regex.icontains(.display_text, 'shared.(?:file|document)')
-            or regex.icontains(.display_text, 'document\s?\d+$')
+            // secure theme
+            or regex.icontains(.display_text, 'secured?.*(?:file|document|docs|fax)')
+            or regex.icontains(.display_text, 'important.*(?:file|document|docs|fax)')
+            or regex.icontains(.display_text, 'shared?.*(?:file|document|docs|fax)')
+            or regex.icontains(.display_text, 'protected.*(?:file|document|docs|fax)')
+            or regex.icontains(.display_text, 'encrypted.*(?:file|document|docs|fax)')
+  
+            // digits
+            or regex.icontains(.display_text, 'doc(?:ument)?\s?\d+$')
             or regex.icontains(.display_text, '^\d+$')
+            
+            // onedrive theme
             or strings.icontains(.display_text, 'one_docx')
+            or strings.icontains(.display_text, 'OneDrive')
             or regex.icontains(.display_text, 'A document.*One.?Drive')
   
             // action in file name
             or strings.icontains(.display_text, 'click here')
             or strings.icontains(.display_text, 'Download PDF')
+            or strings.icontains(.display_text, 'Validate')
+            
   
             // limited file name to "confidential"
             or .display_text =~ 'Confidentiality'
@@ -43,11 +47,10 @@ source: |
             // invoice themes
             or strings.icontains(.display_text, 'payment')
             or strings.icontains(.display_text, 'invoice')
-            or regex.icontains(.display_text, 'order\s?\(?\d+\)?$')
             or regex.icontains(.display_text, 'INV(?:_|\s)?\d+$')
             // starts with INV_ or INV\x20
-            or regex.icontains(.display_text, '^INV(?:_|\s)')
-            or regex.icontains(.display_text, 'P[O0](?:_|\s)?\d+$')
+            or regex.icontains(.display_text, '^INV(?:_|\s)?')
+            or regex.icontains(.display_text, 'PO(?:_|\s)?\d+$')
             or strings.icontains(.display_text, 'receipt')
             or strings.icontains(.display_text, 'billing')
             or strings.icontains(.display_text, 'statement')
@@ -65,9 +68,6 @@ source: |
   )
   // and sender has never had email sent to them
   and not profile.by_sender().solicited
-    
-  // and there haven't been any FPs reported for the sender
-  and not profile.by_sender().any_false_positives
 
 attack_types:
   - "Credential Phishing"
