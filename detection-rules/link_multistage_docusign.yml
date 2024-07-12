@@ -14,66 +14,65 @@ source: |
   and headers.auth_summary.spf.details.designator == 'docusign.net'
   and headers.auth_summary.dmarc.pass
   
-  // take a look at the links in the email
-  and any(body.links,
-          // find the link I want to test, this should be a docusign link
-          (
-            regex.icontains(.display_text,
-                            "((view|show).completed.document|(?:re)?view doc|view.attached)"
-            )
-            or (
-              strings.icontains(.href_url.url, '/Signing/EmailStart.aspx')
-              or strings.icontains(.href_url.url, '/signing/emails/v')
-            )
-          )
-  				
-          // go the link so we can take a look at the page.
-          and any(ml.link_analysis(., mode="aggressive").final_dom.links,
-                  (
-                    // any of those links domains are new
-                    network.whois(.href_url.domain).days_old < 30
-                    or (
-                      // go to free file hosts
-                      any(body.links,
-                          .href_url.domain.root_domain in $free_file_hosts
-                          or .href_url.domain.domain in $free_file_hosts
-                      )
-                      // go to free subdomains hosts
-                      or any(body.links,
-                             .href_url.domain.root_domain in $free_subdomain_hosts
-                             // where there is a subdomain
-                             and .href_url.domain.subdomain is not null
-                             and .href_url.domain.subdomain != "www"
-                      )
-                      // go to url shortners
-                      or any(body.links,
-                             .href_url.domain.root_domain in $url_shorteners
-                             or .href_url.domain.domain in $url_shorteners
-                      )
-                    )
-                    or (
-                      any(ml.link_analysis(., mode="aggressive").final_dom.links,
-                          // find any links that mention common "action" words
-                          regex.icontains(.display_text,
-                                          '(?:view|click|show|access|download|goto|Validate|Va[il]idar|login|verify|account)'
-                          )
-                          and (
-                            // and when visiting those links, are phishing
-                            ml.link_analysis(., mode="aggressive").credphish.disposition == "phishing"
+  // filter out all the links, keeping just the one I want
+  and any(filter(body.links,
+                 // find the link I want to test, this should be a docusign link
+                 (
+                   regex.icontains(.display_text,
+                                   "((view|show).completed.document|(?:re)?view doc|view.attached)"
+                   )
+                   or strings.icontains(.href_url.url, '/Signing/EmailStart.aspx')
+                   or strings.icontains(.href_url.url, '/signing/emails/v')
+                 )
+          ),
   
-                            // hit a captcha page
-                            or ml.link_analysis(., mode="aggressive").credphish.contains_captcha
+          // go the link so we can take a look at the links on the Docusign page
+          any(filter(ml.link_analysis(., mode="aggressive").final_dom.links,
+                     // filter out any links on the adobe express page which are
+                     // or www.adobe.com (privacy page/report abuse/etc)
+                     .href_url.domain.root_domain != 'docusign.net'
+                     and .href_url.domain.root_domain != 'docusign.com'
+                     // relative links (no domains)
+                     and .href_url.domain.domain is not null
+              ),
+              (
+                // any of those links domains are new
+                network.whois(.href_url.domain).days_old < 30
+                // go to free file hosts
+                or .href_url.domain.root_domain in $free_file_hosts
+                or .href_url.domain.domain in $free_file_hosts
   
-                            // or we redirect to common website, observed when we are evaded
-                            or (
-                              length(ml.link_analysis(., mode="aggressive").redirect_history
-                              ) > 0
-                              and ml.link_analysis(., mode="aggressive").effective_url.domain.root_domain in $tranco_10k
-                            )
-                          )
-                      )
+                // go to free subdomains hosts
+                or (
+                  .href_url.domain.root_domain in $free_subdomain_hosts
+                  // where there is a subdomain
+                  and .href_url.domain.subdomain is not null
+                  and .href_url.domain.subdomain != "www"
+                )
+                // go to url shortners
+                or .href_url.domain.root_domain in $url_shorteners
+                or .href_url.domain.domain in $url_shorteners
+                or (
+                  // find any links that mention common "action" words
+                  regex.icontains(.display_text,
+                                  '(?:view|click|show|access|download|goto|Validate|Va[il]idar|login|verify|account)'
+                  )
+                  and (
+                    // and when visiting those links, are phishing
+                    ml.link_analysis(., mode="aggressive").credphish.disposition == "phishing"
+  
+                    // hit a captcha page
+                    or ml.link_analysis(., mode="aggressive").credphish.contains_captcha
+  
+                    // or we redirect to common website, observed when we are evaded
+                    or (
+                      length(ml.link_analysis(., mode="aggressive").redirect_history
+                      ) > 0
+                      and ml.link_analysis(., mode="aggressive").effective_url.domain.root_domain in $tranco_10k
                     )
                   )
+                )
+              )
           )
   )
 attack_types:
