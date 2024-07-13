@@ -4,7 +4,6 @@ type: "rule"
 severity: "low"
 source: |
   type.inbound
-  
   and strings.icontains(subject.subject, "shared")
   and strings.ilike(body.current_thread.text,
                     "*shared a file with you*",
@@ -12,10 +11,14 @@ source: |
                     "*invited you to access a file*"
   )
   and any(body.links,
-          (
+          .href_url.domain.root_domain == "sharepoint.com"
+          and (
+  
+            // the file name is all capital
+            regex.match(.display_text, '^([A-Z0-9]\s?)+$')
   
             // file sharing service references
-            strings.icontains(.display_text, 'dropbox')
+            or strings.icontains(.display_text, 'dropbox')
             or strings.icontains(.display_text, 'docusign')
   
             // file name lures
@@ -29,7 +32,7 @@ source: |
             // digits
             or regex.icontains(.display_text, 'doc(?:ument)?\s?\d+$')
             or regex.icontains(.display_text, '^\d+$')
-            
+  
             // onedrive theme
             or strings.icontains(.display_text, 'one_docx')
             or strings.icontains(.display_text, 'OneDrive')
@@ -39,37 +42,39 @@ source: |
             or strings.icontains(.display_text, 'click here')
             or strings.icontains(.display_text, 'Download PDF')
             or strings.icontains(.display_text, 'Validate')
-            
   
             // limited file name to "confidential"
             or .display_text =~ 'Confidentiality'
             or .display_text =~ 'Confidential'
   
             // invoice themes
-            or strings.icontains(.display_text, 'payment')
-            or strings.icontains(.display_text, 'invoice')
-            or regex.icontains(.display_text, 'INV(?:_|\s)?\d+$')
-            // starts with INV_ or INV\x20
-            or regex.icontains(.display_text, '^INV(?:_|\s)?')
-            or regex.icontains(.display_text, 'PO(?:_|\s)?\d+$')
-            or strings.icontains(.display_text, 'receipt')
-            or strings.icontains(.display_text, 'billing')
-            or strings.icontains(.display_text, 'statement')
-            or strings.icontains(.display_text, 'Past Due')
-            or regex.icontains(.display_text, 'Remit(tance)?')
-            or strings.icontains(.display_text, 'Purchase Order')
+            or (
+              any(ml.nlu_classifier(.display_text).entities, .name == "financial")
+              or (
+                strings.icontains(.display_text, 'payment')
+                or strings.icontains(.display_text, 'invoice')
+                or regex.icontains(.display_text, 'INV(?:_|\s)?\d+$')
+                // starts with INV_ or INV\x20
+                or regex.icontains(.display_text, '^INV(?:_|\s)?')
+                or regex.icontains(.display_text, 'P[O0](?:_|\s)?\d+$')
+                or strings.icontains(.display_text, 'receipt')
+                or strings.icontains(.display_text, 'billing')
+                or strings.icontains(.display_text, 'statement')
+                or strings.icontains(.display_text, 'Past Due')
+                or regex.icontains(.display_text, 'Remit(tance)?')
+                or strings.icontains(.display_text, 'Purchase Order')
   
-            // contract language
-            or strings.icontains(.display_text, 'settlement')
-            or strings.icontains(.display_text, 'contract agreement')
-            or strings.icontains(.display_text, 'Proposal')
-            or strings.icontains(.display_text, 'contract doc')
+                // contract language
+                or strings.icontains(.display_text, 'settlement')
+                or strings.icontains(.display_text, 'contract agreement')
+                or strings.icontains(.display_text, 'Pr[0o]p[0o]sal')
+                or strings.icontains(.display_text, 'contract doc')
+              )
+            )
           )
-          and .href_url.domain.root_domain == "sharepoint.com"
   )
   // and sender has never had email sent to them
   and not profile.by_sender().solicited
-
 attack_types:
   - "Credential Phishing"
 tactics_and_techniques:
