@@ -1,0 +1,122 @@
+name: "Link: Suspicious SharePoint Document Name"
+description: "The detection rule is intended to match on emails sent from SharePoint indicating a shared file to the recipient that contain suspicious content within the document name.  The Link display text is leveraged to identify the name of the shared file."
+type: "rule"
+severity: "low"
+source: |
+  type.inbound
+  and strings.icontains(subject.subject, "shared")
+  and strings.ilike(body.current_thread.text,
+                    "*shared a file with you*",
+                    "*shared with you*",
+                    "*invited you to access a file*"
+  )
+  and any(body.links,
+          (
+            (
+              .href_url.domain.root_domain == "sharepoint.com"
+              or .href_url.domain.root_domain == "1drv.ms"
+              // handle urls with mimecast rewriting
+              or (
+                .href_url.domain.root_domain == 'mimecastprotect.com'
+                and strings.icontains(.href_url.query_params, '.sharepoint.com')
+              )
+            )
+            and (
+              // the file name does not include lowercase letters, while allowing for non letter chars
+              regex.match(.display_text, '^[^a-z]+$')
+  
+              // file sharing service references
+              or strings.icontains(.display_text, 'dropbox')
+              or strings.icontains(.display_text, 'docusign')
+  
+              // file name lures
+              // secure theme
+              or regex.icontains(.display_text, 'secured?.*(?:file|document|docs|fax)')
+              or regex.icontains(.display_text, 'important.*(?:file|document|docs|fax)')
+              or regex.icontains(.display_text, 'shared?.*(?:file|document|docs|fax)')
+              or regex.icontains(.display_text, 'protected.*(?:file|document|docs|fax)')
+              or regex.icontains(.display_text, 'encrypted.*(?:file|document|docs|fax)')
+  
+              // scanner theme
+              or strings.icontains(.display_text, 'scanne[rd]_')
+              // image themed
+              or strings.icontains(.display_text, '_IMG_')
+              or regex.icontains(.display_text, '^IMG[_-](?:\d|\W)+$')
+  
+              // digits
+              or regex.icontains(.display_text, 'doc(?:ument)?\s?\d+$')
+              or regex.icontains(.display_text, '^\d+$')
+  
+              // onedrive theme
+              or strings.icontains(.display_text, 'one_docx')
+              or strings.icontains(.display_text, 'OneDrive')
+              or regex.icontains(.display_text, 'A document.*One.?Drive')
+  
+              // action in file name
+              or strings.icontains(.display_text, 'click here')
+              or strings.icontains(.display_text, 'Download PDF')
+              or strings.icontains(.display_text, 'Validate')
+  
+              // limited file name to "confidential"
+              or .display_text =~ 'Confidentiality'
+              or .display_text =~ 'Confidential'
+  
+              // invoice themes
+              or any(ml.nlu_classifier(.display_text).entities,
+                     .name == "financial"
+              )
+              or strings.icontains(.display_text, 'payment')
+              or strings.icontains(.display_text, 'invoice')
+              or regex.icontains(.display_text, 'INV(?:_|\s)?\d+$')
+              // starts with INV_ or INV\x20
+              or regex.icontains(.display_text, '^INV(?:_|\s)')
+              or regex.icontains(.display_text, 'P[O0]\W+?\d+$')
+              or strings.icontains(.display_text, 'receipt')
+              or strings.icontains(.display_text, 'billing')
+              or (
+                strings.icontains(.display_text, 'statement')
+                and not .display_text =~ "Privacy Statement"
+              )
+              or strings.icontains(.display_text, 'Past Due')
+              or regex.icontains(.display_text, 'Remit(tance)?')
+              or strings.icontains(.display_text, 'Purchase Order')
+  
+              // contract language
+              or strings.icontains(.display_text, 'settlement')
+              or strings.icontains(.display_text, 'contract agreement')
+              or regex.icontains(.display_text, 'Pr[0o]p[0o]sal')
+              or strings.icontains(.display_text, 'contract doc')
+  
+              // the document name is the same as the org name
+              or strings.icontains(
+                  body.current_thread.text,
+                  strings.concat(
+                      'This email is generated through ',
+                      .display_text,
+                      "\'s use of Microsoft 365 and may contain content that is controlled by ",
+                      .display_text
+                  )
+              )
+              // or sometime's the orgname is simply the domain
+              or strings.icontains(
+                  body.current_thread.text,
+                  strings.concat(
+                      'This email is generated through ',
+                      .display_text,
+                      ".com\'s use of Microsoft 365 and may contain content that is controlled by ",
+                      .display_text
+                  )
+              )
+            )
+          )
+  )
+  // and sender has never had email sent to them
+  and not profile.by_sender().solicited
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Free file host"
+  - "Evasion"
+detection_methods:
+  - "Content analysis"
+id: "f95fee6e-8127-5888-a9a9-4bbeabfe33a3"
