@@ -4,7 +4,13 @@ type: "rule"
 severity: "low"
 source: |
   type.inbound
-  and sender.email.domain.root_domain == "onmicrosoft.com"
+  and (
+    sender.email.domain.root_domain == "onmicrosoft.com"
+    or (
+      strings.icontains(sender.display_name, "onmicrosoft.com")
+      and sender.email.domain.valid == false
+    )
+  )
   and length(recipients.to) < 2
   and length(body.links) > 0
   // bounce-back negations
@@ -15,6 +21,7 @@ source: |
                 "message/delivery-status",
                 "text/calendar"
               )
+              or (.content_type == "text/plain" and .file_extension == "ics")
   )
   // negating legit replies
   and not (
@@ -22,13 +29,16 @@ source: |
       strings.istarts_with(subject.subject, "RE:")
       or strings.istarts_with(subject.subject, "FW:")
       or strings.istarts_with(subject.subject, "FWD:")
-      or regex.imatch(subject.subject, '[^:]?automat.[^:]{0,20}:.*$')
+      or regex.imatch(subject.subject, '(\[[^\]]+\]\s?){0,3}(re|fwd?|automat.*)\s?:.*')
+      or strings.istarts_with(subject.subject, "Réponse automatique")
     )
     and (
       length(headers.references) > 0
       and any(headers.hops, any(.fields, strings.ilike(.name, "In-Reply-To")))
     )
   )
+  // construct the proper sender domain and check against known recipients
+  and not strings.concat(sender.email.domain.subdomain,  ".", sender.email.domain.tld) in $recipient_domains
   and (
     not profile.by_sender().solicited
     or (

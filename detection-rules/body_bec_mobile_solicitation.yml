@@ -6,20 +6,54 @@ source: |
   type.inbound
   and length(body.current_thread.text) < 500
   and length(attachments) == 0
-  and body.html.raw is null
-  and regex.contains(body.plain.raw, "(email|send|shoot|give|provide) me")
-  and regex.contains(body.plain.raw,
-                     "(cell(/s?phone)?.{0,10}(phone|number|#|no)|whatsapp)"
+  
+  and regex.icontains(body.current_thread.text,
+                     '(mobile|contact).{0,10}(phone|number|#|no)|whatsapp|\bcell|personalcell'
   )
-  and any(ml.nlu_classifier(body.current_thread.text).intents,
-          .name == "bec" and .confidence in ("medium", "high")
+  and (
+    any(ml.nlu_classifier(body.current_thread.text).intents,
+        .name == "bec" and .confidence in ("medium", "high")
+    )
+    or (
+      // confidence can be low on very short bodies
+      length(body.current_thread.text) < 225
+      and (
+        any(ml.nlu_classifier(body.current_thread.text).intents, .name == "bec")
+        or any(ml.nlu_classifier(body.current_thread.text).entities,
+               strings.icontains(.text, "kindly")
+        )
+      )
+    )
+  )
+  and (
+    (
+      (
+        length(headers.references) > 0
+        or not any(headers.hops,
+                   any(.fields, strings.ilike(.name, "In-Reply-To"))
+        )
+      )
+      and not (
+        (
+          strings.istarts_with(subject.subject, "RE:")
+          or strings.istarts_with(subject.subject, "RES:")
+          or strings.istarts_with(subject.subject, "R:")
+          or strings.istarts_with(subject.subject, "ODG:")
+          or strings.istarts_with(subject.subject, "答复:")
+          or strings.istarts_with(subject.subject, "AW:")
+          or strings.istarts_with(subject.subject, "TR:")
+          or strings.istarts_with(subject.subject, "FWD:")
+          or regex.imatch(subject.subject, '(\[[^\]]+\]\s?){0,3}(re|fwd?|automat.*)\s?:.*')
+        )
+      )
+    )
+    or length(headers.references) == 0
   )
   and (
     not profile.by_sender().solicited
     or profile.by_sender().any_messages_malicious_or_spam
   )
   and not profile.by_sender().any_false_positives
-  
 
 attack_types:
   - "BEC/Fraud"
@@ -29,5 +63,4 @@ detection_methods:
   - "Content analysis"
   - "Natural Language Understanding"
   - "Sender analysis"
-
 id: "514ffd68-a663-5b83-8a25-e380f0a7f1a7"
