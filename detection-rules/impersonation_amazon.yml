@@ -20,6 +20,9 @@ source: |
     or strings.ilevenshtein(sender.display_name, 'amazon pay') <= 1
     or strings.ilevenshtein(sender.display_name, 'amazon marketplace') <= 1
     or strings.ilevenshtein(sender.display_name, 'amazon customer support') <= 1
+    or strings.ilevenshtein(sender.display_name, 'prime notification') <= 1
+    or strings.ilevenshtein(sender.display_name, 'prime support') <= 1
+    or strings.ilike(subject.subject, "*prime membership*")
     or (
       strings.ilevenshtein(sender.display_name, 'amazon') <= 1
       and sender.email.domain.root_domain in $free_email_providers
@@ -34,7 +37,9 @@ source: |
     'amazon.com',
     'amazon.com.au',
     'amazon.com.be',
+    'amazon.com.sg',
     'amazon.co.uk',
+    'amazon.co.jp',
     'amazon.de',
     'amazon.es',
     'amazon.fr',
@@ -56,20 +61,16 @@ source: |
     'amazonpay.com',
     'q4inc.com',
     'synchronybank.com',
+    'opodo.com'
   )
   and sender.email.email not in $recipient_emails
   and sender.email.domain.domain not in $org_domains
-
+  
   // negate highly trusted sender domains unless they fail DMARC authentication
-  and
-  (
+  and (
     (
       sender.email.domain.root_domain in $high_trust_sender_root_domains
-      and (
-        any(distinct(headers.hops, .authentication_results.dmarc is not null),
-            strings.ilike(.authentication_results.dmarc, "*fail")
-        )
-      )
+      and not headers.auth_summary.dmarc.pass
     )
     or sender.email.domain.root_domain not in $high_trust_sender_root_domains
   )
