@@ -1,0 +1,17 @@
+name: "Current event: CrowdStrike impersonation"
+description: "Discovery rule for messages which are leveraging the CrowdStrike defect generated on Jul 19th 2024 which caused wide spread outages. "
+type: "rule"
+severity: "low"
+references:
+  - "https://www.crowdstrike.com/blog/statement-on-falcon-content-update-for-windows-hosts/"
+source: "type.inbound\nand (\n  any([sender.display_name, subject.subject, body.current_thread.text],\n      strings.icontains(., \"crowdstrike\")\n  )\n  or any(body.links, strings.icontains(.display_text, 'crowdstrike'))\n\n  // look alike display_name\n  or 0 < strings.ilevenshtein(strings.replace_confusables(sender.display_name), 'crowdstrike') <= 2\n\n  // look alike domains\n  or 0 < strings.ilevenshtein(strings.replace_confusables(sender.email.domain.sld), 'crowdstrike') <= 2\n)\n\n// has either attachments or links\nand sum([length(body.links), length(attachments)]) > 0\n\n// the links don't all go to crowdstrike or other \"trusted\" sites.\nand all(body.links,\n        .href_url.domain.root_domain not in (\n          'crowdstrike.com',\n          'aka.ms',\n          'mimecastprotect.com',\n          'mimecast.com',\n          'microsoft.com'\n        )\n)\n\n// not from CS actual\nand not (\n  sender.email.domain.root_domain == 'crowdstrike.com'\n  and headers.auth_summary.dmarc.pass\n  and headers.auth_summary.spf.pass\n\n  and (\n        // if there is a reply-to header, make sure the root_domain is crowdstrike\n        (\n            length(headers.reply_to) > 0 \n            and all(headers.reply_to, .email.domain.root_domain == 'crowdstrike.com')\n        )\n        // if there isn't a reply-to, that's ok too\n        or length(headers.reply_to) == 0\n      )\n  // return_path root_domain must be crowstrike.com\n  and headers.return_path.domain.root_domain == 'crowdstrike.com'\n)\n\n// contains themed words based on Crowdstrikes Recommendations\nand (\n  // safe mode and windows recovery\n  strings.icontains(subject.subject, 'safe mode')\n  or any(body.links, strings.icontains(.display_text, 'safe mode'))\n  or strings.icontains(body.current_thread.text, 'safe mode')\n  or strings.icontains(subject.subject, 'windows recovery')\n  or any(body.links, strings.icontains(.display_text, 'windows recovery'))\n  or strings.icontains(body.current_thread.text, 'windows recovery')\n\n  // incident id\n  or strings.icontains(subject.subject, 'C-00000291')\n  or any(body.links, strings.icontains(.display_text, 'C-00000291'))\n  or strings.icontains(body.current_thread.text, 'C-00000291')\n\n  // body link domains contain crowdstrike and are newly registered\n  or (\n    any(body.links,\n        strings.icontains(.href_url.domain.domain, 'crowdstrike')\n        and network.whois(.href_url.domain).days_old <= 10\n    )\n  )\n)\n\n// not high trust sender domains\nand (\n  (\n    sender.email.domain.root_domain in $high_trust_sender_root_domains\n    and not headers.auth_summary.dmarc.pass\n  )\n  or sender.email.domain.root_domain not in $high_trust_sender_root_domains\n)\n\n// and no false positives and not solicited\nand (\n  not profile.by_sender().any_false_positives\n  and not profile.by_sender().solicited\n)\n"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Lookalike domain"
+  - "Spoofing"
+detection_methods:
+  - "Sender analysis"
+  - "Content analysis"
+id: "b49975fc-f91b-55b3-ab9a-1fd5659a22a2"
+testing_pr: 1762
+testing_sha: 1e3cfb373db52057e62d96268e35aca0b9f5dba2
