@@ -11,15 +11,17 @@ source: |
         strings.icontains(., "crowdstrike", )
         or (strings.icontains(., "crowd") and strings.icontains(., "falcon"))
     )
-    or any(body.links, 
-          strings.icontains(.display_text, 'crowdstrike')
-          or (strings.icontains(.display_text, "crowd") and strings.icontains(.display_text, "falcon"))
+    or any(body.links,
+           strings.icontains(.display_text, 'crowdstrike')
+           or (
+             strings.icontains(.display_text, "crowd")
+             and strings.icontains(.display_text, "falcon")
+           )
     )
   
     // look alike display_name
-    or 0 < strings.ilevenshtein(strings.replace_confusables(sender.display_name),'crowdstrike') <= 2
-    or 0 <= strings.ilevenshtein(strings.replace_confusables(sender.display_name),'crowdfalcon') <= 2
-  
+    or 0 < strings.ilevenshtein(strings.replace_confusables(sender.display_name), 'crowdstrike') <= 2
+    or 0 <= strings.ilevenshtein(strings.replace_confusables(sender.display_name), 'crowdfalcon') <= 2
   
     // look alike domains
     or 0 < strings.ilevenshtein(strings.replace_confusables(sender.email.domain.sld), 'crowdstrike') <= 2
@@ -67,7 +69,7 @@ source: |
     or strings.icontains(subject.subject, 'windows recovery')
     or any(body.links, strings.icontains(.display_text, 'windows recovery'))
     or strings.icontains(body.current_thread.text, 'windows recovery')
-
+  
     // incident id
     or strings.icontains(subject.subject, 'C-00000291')
     or any(body.links, strings.icontains(.display_text, 'C-00000291'))
@@ -102,14 +104,19 @@ source: |
     not profile.by_sender().any_false_positives
     and not profile.by_sender().solicited
   )
-
-  // and not many links, with an unsubscribe option (likely newsletter/informative)
-  and (
-    not length(body.links) > 15
-    and (
-      any(body.links,
-          strings.icontains(.display_text, "unsub")
-          or any(headers.hops, any(.fields, .name == "List-Unsubscribe"))
+  
+  // negate commonly benign conditions
+  and not (
+    // contains a large number of links
+    length(body.links) > 15
+    or (
+      // contains a few links, but also contains unsub options
+      length(body.links) <= 7
+      and (
+        any(body.links,
+            strings.icontains(.display_text, "unsub")
+            or any(headers.hops, any(.fields, .name == "List-Unsubscribe"))
+        )
       )
     )
   )
