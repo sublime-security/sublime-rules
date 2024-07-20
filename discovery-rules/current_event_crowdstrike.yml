@@ -8,15 +8,24 @@ source: |
   type.inbound
   and (
     any([sender.display_name, subject.subject, body.current_thread.text],
-        strings.icontains(., "crowdstrike")
+        strings.icontains(., "crowdstrike", )
+        or (strings.icontains(., "crowd") and strings.icontains(., "falcon"))
     )
-    or any(body.links, strings.icontains(.display_text, 'crowdstrike'))
+    or any(body.links,
+           strings.icontains(.display_text, 'crowdstrike')
+           or (
+             strings.icontains(.display_text, "crowd")
+             and strings.icontains(.display_text, "falcon")
+           )
+    )
   
     // look alike display_name
     or 0 < strings.ilevenshtein(strings.replace_confusables(sender.display_name), 'crowdstrike') <= 2
+    or 0 <= strings.ilevenshtein(strings.replace_confusables(sender.display_name), 'crowdfalcon') <= 2
   
     // look alike domains
     or 0 < strings.ilevenshtein(strings.replace_confusables(sender.email.domain.sld), 'crowdstrike') <= 2
+    or 0 <= strings.ilevenshtein(strings.replace_confusables(sender.email.domain.sld), 'crowdfalcon') <= 2
   )
   
   // has either attachments or links
@@ -38,16 +47,15 @@ source: |
     sender.email.domain.root_domain == 'crowdstrike.com'
     and headers.auth_summary.dmarc.pass
     and headers.auth_summary.spf.pass
-  
     and (
-          // if there is a reply-to header, make sure the root_domain is crowdstrike
-          (
-              length(headers.reply_to) > 0 
-              and all(headers.reply_to, .email.domain.root_domain == 'crowdstrike.com')
-          )
-          // if there isn't a reply-to, that's ok too
-          or length(headers.reply_to) == 0
-        )
+      // if there is a reply-to header, make sure the root_domain is crowdstrike
+      (
+        length(headers.reply_to) > 0
+        and all(headers.reply_to, .email.domain.root_domain == 'crowdstrike.com')
+      )
+      // if there isn't a reply-to, that's ok too
+      or length(headers.reply_to) == 0
+    )
     // return_path root_domain must be crowstrike.com
     and headers.return_path.domain.root_domain == 'crowdstrike.com'
   )
@@ -70,7 +78,13 @@ source: |
     // body link domains contain crowdstrike and are newly registered
     or (
       any(body.links,
-          strings.icontains(.href_url.domain.domain, 'crowdstrike')
+          (
+            strings.icontains(.href_url.domain.domain, 'crowdstrike')
+            or (
+              strings.icontains(.href_url.domain.domain, "crowd")
+              and strings.icontains(.href_url.domain.domain, "falcon")
+            )
+          )
           and network.whois(.href_url.domain).days_old <= 10
       )
     )
@@ -89,6 +103,22 @@ source: |
   and (
     not profile.by_sender().any_false_positives
     and not profile.by_sender().solicited
+  )
+  
+  // negate commonly benign conditions
+  and not (
+    // contains a large number of links
+    length(body.links) > 15
+    or (
+      // contains a few links, but also contains unsub options
+      length(body.links) <= 7
+      and (
+        any(body.links,
+            strings.icontains(.display_text, "unsub")
+            or any(headers.hops, any(.fields, .name == "List-Unsubscribe"))
+        )
+      )
+    )
   )
 tactics_and_techniques:
   - "Impersonation: Brand"
