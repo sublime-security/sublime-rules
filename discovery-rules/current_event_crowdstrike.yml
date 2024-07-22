@@ -45,7 +45,7 @@ source: |
             'microsoft.com'
           )
   )
-
+  
   // not from CS actual
   and not (
     sender.email.domain.root_domain == 'crowdstrike.com'
@@ -63,24 +63,24 @@ source: |
     // return_path root_domain must be crowstrike.com
     and headers.return_path.domain.root_domain == 'crowdstrike.com'
   )
-
+  
   // contains themed words based on Crowdstrikes Recommendations
   and (
     // safe mode
     strings.icontains(subject.subject, 'safe mode')
     or any(body.links, strings.icontains(.display_text, 'safe mode'))
     or strings.icontains(body.current_thread.text, 'safe mode')
-
+  
     // windows recovery
     or strings.icontains(subject.subject, 'windows recovery')
     or any(body.links, strings.icontains(.display_text, 'windows recovery'))
     or strings.icontains(body.current_thread.text, 'windows recovery')
-
+  
     // file name
     or strings.icontains(subject.subject, 'C-00000291')
     or any(body.links, strings.icontains(.display_text, 'C-00000291'))
     or strings.icontains(body.current_thread.text, 'C-00000291')
-
+  
     // body link domains contain crowdstrike and are newly registered
     or (
       any(body.links,
@@ -119,7 +119,7 @@ source: |
           )
       )
     )
-
+  
     // Attachments contain links
     or (
       any(attachments,
@@ -182,14 +182,14 @@ source: |
                         or .domain.root_domain in $free_subdomain_hosts
                       )
                     )
-
+  
                     // or it's free file host/subdomain host
                     or .domain.domain in $free_file_hosts
                     or .domain.root_domain in $free_file_hosts
                     or .domain.root_domain in $free_subdomain_hosts
-
+  
                     // LA for downloaded filenames
-                    or any(ml.link_analysis(.).files_downloaded,
+                    or any(ml.link_analysis(., mode="aggressive").files_downloaded,
                            (
                              strings.icontains(.file_name, 'crowdstrike')
                              or (
@@ -199,6 +199,24 @@ source: |
                            // just an exe
                            )
                            or .file_extension in $file_extensions_executables
+                           or (
+                             .file_extension in~ $file_extensions_common_archives
+                             // explode the attachment and look at the filename
+                             and any(file.explode(.),
+                                     .depth == 1
+                                     and (
+                                       strings.icontains(.file_name,
+                                                         'crowdstrike'
+                                       )
+                                       or (
+                                         strings.icontains(.file_name, "crowd")
+                                         and strings.icontains(.file_name,
+                                                               "falcon"
+                                         )
+                                       )
+                                     )
+                             )
+                           )
                     )
                 )
             )
@@ -214,13 +232,13 @@ source: |
     )
     or sender.email.domain.root_domain not in $high_trust_sender_root_domains
   )
-
+  
   // and no false positives and not solicited
   and (
     not profile.by_sender().any_false_positives
     and not profile.by_sender().solicited
   )
-
+  
   // negate commonly benign conditions
   and not (
     // contains a large number of links
