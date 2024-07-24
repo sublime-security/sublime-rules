@@ -7,7 +7,12 @@ references:
 source: |
   type.inbound
   and (
-    any([sender.display_name, subject.subject, body.current_thread.text],
+    any([
+          sender.display_name,
+          subject.subject,
+          sender.email.email,
+          body.current_thread.text
+        ],
         strings.icontains(., "crowdstrike", )
         or (strings.icontains(., "crowd") and strings.icontains(., "falcon"))
     )
@@ -18,7 +23,6 @@ source: |
              and strings.icontains(.display_text, "falcon")
            )
     )
-  
     // look alike display_name
     or 0 < strings.ilevenshtein(strings.replace_confusables(sender.display_name), 'crowdstrike') <= 2
     or 0 <= strings.ilevenshtein(strings.replace_confusables(sender.display_name), 'crowdfalcon') <= 2
@@ -62,34 +66,164 @@ source: |
   
   // contains themed words based on Crowdstrikes Recommendations
   and (
-    // safe mode and windows recovery
+    // safe mode
     strings.icontains(subject.subject, 'safe mode')
     or any(body.links, strings.icontains(.display_text, 'safe mode'))
     or strings.icontains(body.current_thread.text, 'safe mode')
+  
+    // windows recovery
     or strings.icontains(subject.subject, 'windows recovery')
     or any(body.links, strings.icontains(.display_text, 'windows recovery'))
     or strings.icontains(body.current_thread.text, 'windows recovery')
   
-    // incident id
+    // file name
     or strings.icontains(subject.subject, 'C-00000291')
     or any(body.links, strings.icontains(.display_text, 'C-00000291'))
     or strings.icontains(body.current_thread.text, 'C-00000291')
-
+  
     // body link domains contain crowdstrike and are newly registered
     or (
       any(body.links,
+          // the domain
           (
-            strings.icontains(.href_url.domain.domain, 'crowdstrike')
-            or (
-              strings.icontains(.href_url.domain.domain, "crowd")
-              and strings.icontains(.href_url.domain.domain, "falcon")
+            (
+              strings.icontains(.href_url.domain.domain, 'crowdstrike')
+              or (
+                strings.icontains(.href_url.domain.domain, "crowd")
+                and strings.icontains(.href_url.domain.domain, "falcon")
+              )
+            )
+            // and it's a newly registered domain
+            and network.whois(.href_url.domain).days_old <= 14
+          )
+          // the path
+          or (
+            (
+              strings.icontains(.href_url.path, 'crowdstrike')
+              or (
+                strings.icontains(.href_url.path, "crowd")
+                and strings.icontains(.href_url.path, "falcon")
+              )
+            )
+            // the path has keywords, but the domain is not high-rep
+            and (
+              (
+                .href_url.domain.domain not in $tranco_1m
+                and .href_url.domain.domain not in $umbrella_1m
+              )
+              // if it's in Tranco or Umbrella, still include it if it's one of these
+              or .href_url.domain.domain in $free_file_hosts
+              or .href_url.domain.root_domain in $free_file_hosts
+              or .href_url.domain.root_domain in $free_subdomain_hosts
             )
           )
-          and network.whois(.href_url.domain).days_old <= 10
+      )
+    )
+  
+    // Attachments contain links
+    or (
+      any(attachments,
+          // Attachment file names
+          strings.icontains(.file_name, 'crowdstrike')
+          or (
+            strings.icontains(.file_name, "crowd")
+            and strings.icontains(.file_name, "falcon")
+          )
+          // attachment names inside of a zip
+          or (
+            .file_extension in~ $file_extensions_common_archives
+            // explode the attachment and look at the filename
+            and any(file.explode(.),
+                    .depth == 1
+                    and (
+                      strings.icontains(.file_name, 'crowdstrike')
+                      or (
+                        strings.icontains(.file_name, "crowd")
+                        and strings.icontains(.file_name, "falcon")
+                      )
+                    )
+            )
+          )
+          // links in attachments
+          or (
+            any(file.explode(.),
+                any(.scan.url.urls,
+  
+                    // the domain
+                    (
+                      (
+                        strings.icontains(.domain.domain, 'crowdstrike')
+                        or (
+                          strings.icontains(.domain.domain, "crowd")
+                          and strings.icontains(.domain.domain, "falcon")
+                        )
+                      )
+                      // and it's a newly registered domain
+                      and network.whois(.domain).days_old <= 14
+                    )
+                    // the path
+                    or (
+                      (
+                        strings.icontains(.path, 'crowdstrike')
+                        or (
+                          strings.icontains(.path, "crowd")
+                          and strings.icontains(.path, "falcon")
+                        )
+                      )
+                      // the path has keywords, but the domain is not high-rep
+                      and (
+                        (
+                          .domain.domain not in $tranco_1m
+                          and .domain.domain not in $umbrella_1m
+                        )
+                        // if it's in Tranco or Umbrella, still include it if it's one of these
+                        or .domain.domain in $free_file_hosts
+                        or .domain.root_domain in $free_file_hosts
+                        or .domain.root_domain in $free_subdomain_hosts
+                      )
+                    )
+  
+                    // or it's free file host/subdomain host
+                    or .domain.domain in $free_file_hosts
+                    or .domain.root_domain in $free_file_hosts
+                    or .domain.root_domain in $free_subdomain_hosts
+  
+                    // LA for downloaded filenames
+                    or any(ml.link_analysis(., mode="aggressive").files_downloaded,
+                           (
+                             strings.icontains(.file_name, 'crowdstrike')
+                             or (
+                               strings.icontains(.file_name, "crowd")
+                               and strings.icontains(.file_name, "falcon")
+                             )
+                           // just an exe
+                           )
+                           or .file_extension in $file_extensions_executables
+                           or (
+                             .file_extension in~ $file_extensions_common_archives
+                             // explode the attachment and look at the filename
+                             and any(file.explode(.),
+                                     .depth == 1
+                                     and (
+                                       strings.icontains(.file_name,
+                                                         'crowdstrike'
+                                       )
+                                       or (
+                                         strings.icontains(.file_name, "crowd")
+                                         and strings.icontains(.file_name,
+                                                               "falcon"
+                                         )
+                                       )
+                                     )
+                             )
+                           )
+                    )
+                )
+            )
+          )
       )
     )
   )
-  
   // not high trust sender domains
   and (
     (
