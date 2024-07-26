@@ -36,8 +36,8 @@ source: |
   and sum([length(body.links), length(attachments)]) > 0
   
   // the links don't all go to crowdstrike or other "trusted" sites.
-  and all(body.links,
-          .href_url.domain.root_domain not in (
+  and not all(body.links,
+          .href_url.domain.root_domain in (
             'crowdstrike.com',
             'aka.ms',
             'mimecastprotect.com',
@@ -81,10 +81,60 @@ source: |
     or any(body.links, strings.icontains(.display_text, 'C-00000291'))
     or strings.icontains(body.current_thread.text, 'C-00000291')
   
+    // the body contains keywords and the link is sus
+    or (
+      any([body.current_thread.text, body.html.display_text, body.plain.raw],
+          2 of (
+            strings.icontains(., 'outage'),
+            strings.icontains(., 'Update'),
+            strings.icontains(., 'IT Issues'),
+            strings.icontains(., 'Download'),
+            strings.icontains(., 'Fix'),
+            strings.icontains(., "password"),
+            strings.icontains(., "unread messages"),
+            strings.icontains(., "Shared Documents"),
+            strings.icontains(., "expiration"),
+            strings.icontains(., "office"),
+            strings.icontains(., "expire"),
+            strings.icontains(., "expiring"),
+            strings.icontains(., "kindly"),
+            strings.icontains(., "renew"),
+            strings.icontains(., "review"),
+            strings.icontains(., "emails failed"),
+            strings.icontains(., "kicked out"),
+            strings.icontains(., "prevented"),
+            strings.icontains(., "storage quota"),
+            strings.icontains(., "required now"),
+            strings.icontains(., "cache"),
+            strings.icontains(., "qr code"),
+            strings.icontains(., "barcode"),
+            strings.icontains(., "security update"),
+            strings.icontains(., "quarantine")
+          )
+      )
+      and any(body.links,
+              // is sus
+              .href_url.domain.domain in $url_shorteners
+              or .href_url.domain.domain in $free_file_hosts
+              or .href_url.domain.root_domain in $free_file_hosts
+              or .href_url.domain.root_domain in $free_subdomain_hosts
+              // contains a an open redirect rewriter
+              or any(.href_url.rewrite.encoders,
+                     strings.icontains(., "open_redirect")
+              )
+              // contains signs of an open redirect
+              or strings.icontains(.href_url.path, 'http')
+              or strings.icontains(.href_url.path, '//')
+              or strings.icontains(.href_url.path, '%2f%2f')
+              or strings.icontains(.href_url.query_params, 'http')
+              or strings.icontains(.href_url.query_params, '//')
+      )
+    )
+  
     // body link domains contain crowdstrike and are newly registered
     or (
       any(body.links,
-          // the domain
+          // the domain is newly registered
           (
             (
               strings.icontains(.href_url.domain.domain, 'crowdstrike')
@@ -242,7 +292,7 @@ source: |
   // negate commonly benign conditions
   and not (
     // contains a large number of links
-    length(body.links) > 15
+    length(body.links) > 20
     or (
       // contains a few links, but also contains unsub options
       length(body.links) <= 7
