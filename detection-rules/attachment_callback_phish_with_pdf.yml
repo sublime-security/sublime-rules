@@ -14,22 +14,25 @@ source: |
       and not profile.by_sender().any_false_positives
     )
   )
-
+  
   // single attachment
   and length(attachments) == 1
-
+  
   // sender is freemail
   and sender.email.domain.root_domain in $free_email_providers
-
+  
   // the attachment is a pdf with less than 3 pages, and at least 60 ocr chars
   and any(attachments,
           (
             .file_extension == "pdf"
             and (
+              // get the length of the attached pdf
               any(file.explode(.),
-                  .scan.exiftool.page_count < 3
-                  and .depth <= 1
-                  and length(.scan.ocr.raw) > 60
+                  .depth == 0 and .scan.exiftool.page_count < 3
+              )
+              // check that any _single_ result in the file.explode matches these conditions
+              and any(file.explode(.),
+                  length(.scan.ocr.raw) > 60
                   // 4 of the following strings are found        
                   and (
                     4 of (
@@ -60,7 +63,7 @@ source: |
                       )
                     )
                   )
-
+  
                   // 1 of the following strings is found, representing common Callback brands          
                   and 1 of (
                     strings.icontains(.scan.ocr.raw, "geek squad"),
@@ -82,7 +85,7 @@ source: |
                     )
                   )
               )
-
+            
             or any(ml.logo_detect(.).brands,
                    .name in ("PayPal", "Norton", "GeekSquad", "Ebay")
             )
