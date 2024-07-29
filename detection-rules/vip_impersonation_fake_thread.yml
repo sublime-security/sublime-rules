@@ -15,22 +15,25 @@ source: |
                                 )
           )
   )
-  and 3 of (
-    strings.icontains(body.html.display_text, "from:"),
-    strings.icontains(body.html.display_text, "to:"),
-    strings.icontains(body.html.display_text, "sent:"),
-    strings.icontains(body.html.display_text, "subject:")
+  and any([body.current_thread.text, body.html.display_text, body.plain.raw],
+          3 of (
+            strings.icontains(., "from:"),
+            strings.icontains(., "to:"),
+            strings.icontains(., "sent:"),
+            strings.icontains(., "date:"),
+            strings.icontains(., "cc:"),
+            strings.icontains(., "subject:")
+          )
   )
   and (
     length(headers.references) == 0
-    and not any(headers.hops, any(.fields, strings.ilike(.name, "In-Reply-To")))
+    or headers.in_reply_to is null
   )
   and (
     network.whois(sender.email.domain).days_old < 90
     or profile.by_sender().days_known == 0
   )
   and not profile.by_sender().solicited
-
 attack_types:
   - "BEC/Fraud"
 tactics_and_techniques:
