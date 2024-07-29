@@ -1,4 +1,4 @@
-name: "Body: Business Email Compromise (BEC) attempt from first-time sender"
+name: "Business Email Compromise (BEC) attempt from untrusted sender"
 description: |
   Detects potential Business Email Compromise (BEC) attacks by analyzing text within the email body from first-time senders.
 type: "rule"
@@ -15,6 +15,7 @@ source: |
       // out of office auto-reply
       // the NLU model will handle these better natively soon
       or strings.istarts_with(subject.subject, "Automatic reply:")
+      or regex.imatch(subject.subject, '(\[[^\]]+\]\s?){0,3}(re|fwd?|automat.*)\s?:.*')
     )
     and (
       length(headers.references) > 0
@@ -22,26 +23,18 @@ source: |
     )
   )
   and (
-    (
-      profile.by_sender().prevalence in ("new", "outlier")
-      and not profile.by_sender().solicited
-    )
+    not profile.by_sender().solicited
     or (
       profile.by_sender().any_messages_malicious_or_spam
       and not profile.by_sender().any_false_positives
     )
   )
-
+  
   // negate highly trusted sender domains unless they fail DMARC authentication
-  and
-  (
+  and (
     (
       sender.email.domain.root_domain in $high_trust_sender_root_domains
-      and (
-        any(distinct(headers.hops, .authentication_results.dmarc is not null),
-            strings.ilike(.authentication_results.dmarc, "*fail")
-        )
-      )
+      and not headers.auth_summary.dmarc.pass
     )
     or sender.email.domain.root_domain not in $high_trust_sender_root_domains
   )

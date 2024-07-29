@@ -7,14 +7,20 @@ source: |
   type.inbound
   
   // Sharepoint body content looks like this
-  and strings.contains(body.current_thread.text, "shared a file with you")
+  and strings.like(body.current_thread.text, "*shared a file with you*", "*shared with you*", "*invited you to access a file*")
   and strings.icontains(subject.subject, "shared")
   and any(ml.logo_detect(beta.message_screenshot()).brands, .name == "Microsoft")
-  
+
+  // Negate messages when the message-id indciates the message is from MS actual. DKIM/SPF domains can be custom and therefore are unpredictable.
+  and not (
+      strings.starts_with(headers.message_id, '<Share-')
+      and strings.ends_with(headers.message_id, '@odspnotify>')
+  )
+
   // fake Sharepoint shares are easy to identify if there are any links
   // that don't point to microsoft[.]com or *.sharepoint[.]com
   and not all(body.links,
-              .href_url.domain.root_domain in ("aka.ms", "microsoft.com", "sharepoint.com")
+              .href_url.domain.root_domain in ("1drv.ms", "aka.ms", "microsoft.com", "sharepoint.com")
   )
   and sender.email.domain.root_domain not in $org_domains
   and sender.email.domain.root_domain not in (
@@ -35,11 +41,7 @@ source: |
   and (
     (
       sender.email.domain.root_domain in $high_trust_sender_root_domains
-      and (
-        any(distinct(headers.hops, .authentication_results.dmarc is not null),
-            strings.ilike(.authentication_results.dmarc, "*fail")
-        )
-      )
+      and not headers.auth_summary.dmarc.pass
     )
     or sender.email.domain.root_domain not in $high_trust_sender_root_domains
   )
