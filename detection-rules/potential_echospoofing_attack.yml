@@ -1,0 +1,40 @@
+source: |
+  type.inbound
+  and headers.auth_summary.dmarc.pass
+  and headers.auth_summary.spf.pass
+  // We are looking for a hop chain of the format: threat actor -> outlook -> proofpoint -> vicitm.
+  // Check the first hop.
+  and all(filter(headers.hops, .index == 0),
+      // Not sent by Outlook.
+      not strings.icontains(.received.source.raw, ".outlook.com")
+      // Received by Outlook
+      and strings.icontains(.received.server.raw, ".outlook.com")
+      // Delivered via Frontend Transport
+      and .received.link.raw == "Frontend Transport"
+  )
+
+  // Second hop should be betweem Outlook servers.
+  and all(filter(headers.hops, .index == 1),
+      // Sent by outlook.
+      strings.icontains(.received.source.raw, ".outlook.com")
+      // Received by outlook
+      and (strings.icontains(.received.server.raw, ".outlook.com") or strings.icontains(.received.server.raw, ".office365.com"))
+      // Delivered via Frontend Transport
+      and .received.link.raw == "Frontend Transport"
+  )
+
+  // The auth check should be against Proofpoint's hop.
+  and all(filter(headers.hops, .index == headers.auth_summary.dmarc.received_hop),
+      strings.icontains(.received.source.raw, "pps.filterd")
+      and strings.icontains(.received.server.raw, ".pphosted.com")
+  )
+type: rule
+name: Potential EchoSpoofing Attack
+authors:
+  - name: Intezer Research Team
+description: Using misconfiguration between Proofpoint and Outlook, threat actors can created spoofed emails that passes DKIM, DMARC, and SPF checks.
+references: 
+  - "https://labs.guard.io/echospoofing-a-massive-phishing-campaign-exploiting-proofpoints-email-protection-to-dispatch-3dd6b5417db6"
+tags:
+  - Brand impersonation
+severity: high
