@@ -1,0 +1,47 @@
+name: "Open Redirect: Acoustic"
+description: |
+  Message contains use of the Acoustic open redirect. This has been exploited in the wild.
+type: "rule"
+severity: "low"
+source: |
+  type.inbound
+  and any(body.links,
+      (
+        strings.starts_with(.href_url.domain.subdomain, "links.")
+        or .href_url.domain.subdomain == "links"
+      )
+      and strings.icontains(.href_url.path, '/ctt')
+      and regex.icontains(.href_url.query_params, '(?:^|&)kd=(?:http|//)')
+      and regex.icontains(.href_url.query_params, '(?:^|&)k=')
+      and regex.icontains(.href_url.query_params, '(?:^|&)m=')
+      and not .href_url.domain.root_domain == sender.email.domain.root_domain
+  )
+  and (
+    not profile.by_sender().solicited
+    or (
+      profile.by_sender().any_messages_malicious_or_spam
+      and not profile.by_sender().any_false_positives
+    )
+  )
+
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and not headers.auth_summary.dmarc.pass
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+tags:
+  - "Attack surface reduction"
+attack_types:
+  - "Credential Phishing"
+  - "Malware/Ransomware"
+tactics_and_techniques:
+  - "Open redirect"
+detection_methods:
+  - "Sender analysis"
+  - "URL analysis"
+id: "e88a1d71-49c0-5cc8-8454-1dc920a128d6"
+testing_pr: 1800
+testing_sha: c91346b594083ab7b84885038331be9351b9c9c3
