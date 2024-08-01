@@ -1,16 +1,20 @@
-name: "Open Redirect: IndiaTimes"
+name: "Open Redirect: Acoustic"
 description: |
-  Message contains use of the IndiaTimes open redirect. This has been exploited in the wild.
-references:
-  - "https://www.strongestlayer.ai/India-Times-Hosting-Redirect-to-Newly-Discovered-Microsoft-Phishing-Site"
+  Message contains use of the Acoustic open redirect. This has been exploited in the wild.
 type: "rule"
-severity: "medium"
+severity: "low"
 source: |
   type.inbound
-  any(body.links,
-      .href_url.domain.root_domain == "indiatimes.com"
-      and strings.icontains(.href_url.path, '/etl.php')
-      and strings.icontains(.href_url.query_params, 'url=')
+  and any(body.links,
+      (
+        strings.starts_with(.href_url.domain.subdomain, "links.")
+        or .href_url.domain.subdomain == "links"
+      )
+      and strings.icontains(.href_url.path, '/ctt')
+      and regex.icontains(.href_url.query_params, '(?:^|&)kd=(?:http|//)')
+      and regex.icontains(.href_url.query_params, '(?:^|&)k=')
+      and regex.icontains(.href_url.query_params, '(?:^|&)m=')
+      and not .href_url.domain.root_domain == sender.email.domain.root_domain
   )
   and (
     not profile.by_sender().solicited
@@ -28,6 +32,8 @@ source: |
     )
     or sender.email.domain.root_domain not in $high_trust_sender_root_domains
   )
+tags:
+  - "Attack surface reduction"
 attack_types:
   - "Credential Phishing"
   - "Malware/Ransomware"
