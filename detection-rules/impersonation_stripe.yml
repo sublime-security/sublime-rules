@@ -1,0 +1,34 @@
+name: "Brand Impersonation: Stripe"
+description: |
+  Impersonation of Stripe, usually for credential theft.
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and (
+    sender.display_name =~ 'stripe'
+    or strings.ilevenshtein(sender.display_name, 'stripe') <= 1
+  )
+  and sender.email.domain.root_domain not in~ ('stripe.com')
+  and sender.email.email not in $recipient_emails
+
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and not headers.auth_summary.dmarc.pass
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Lookalike domain"
+  - "Social engineering"
+detection_methods:
+  - "Header analysis"
+  - "Sender analysis"
+id: "862d4654-4a32-50c1-a441-b3a5106be174"
+testing_pr: 1809
+testing_sha: 83ce45b293cc481d3d98a331ef06419c65130791
