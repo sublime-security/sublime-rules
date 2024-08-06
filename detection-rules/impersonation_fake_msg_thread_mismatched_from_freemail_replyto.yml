@@ -30,16 +30,23 @@ source: |
 
   // Check for Message Thread Indicators
   and (
-    strings.istarts_with(subject.subject, "RE:")
-    or regex.icontains(body.current_thread.text,
-                       "From:[ a-z0-9<>_@\\.]{0,80}Sent:[ a-z0-9<>_@\\.:]{0,40}To:[ a-z0-9<>_@\\.;]{0,300}(Cc:)?.{0,300}Subject:"
+    regex.icontains(subject.subject, '\b(?:RE|FWD?)\s*:')
+    or any([body.current_thread.text, body.html.display_text, body.plain.raw],
+           3 of (
+             strings.icontains(., "from:"),
+             strings.icontains(., "to:"),
+             strings.icontains(., "sent:"),
+             strings.icontains(., "date:"),
+             strings.icontains(., "cc:"),
+             strings.icontains(., "subject:")
+           )
     )
   )
 
   // Check for the Presence of References or In-Reply-To properties
   and (
     length(headers.references) == 0
-    or not any(headers.hops, any(.fields, strings.ilike(.name, "In-Reply-To")))
+    or headers.in_reply_to is null
   )
 attack_types:
   - "BEC/Fraud"

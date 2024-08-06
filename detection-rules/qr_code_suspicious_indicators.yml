@@ -32,6 +32,8 @@ source: |
                               .key == "DeviceManufacturer"
                               and .value == "Apple Computer Inc."
                   )
+                  // exclude images from WhatsApp (mobile)
+                  and not regex.match(.file_name, 'WhatsApp Image \d\d\d\d-\d\d-\d\d at \d\d\.\d\d\.\d\d\.jpeg')
                   and not (
                     .scan.exiftool.image_height > 3000
                     or .scan.exiftool.image_width > 3000
@@ -53,7 +55,33 @@ source: |
           strings.icontains(sender.display_name, .email.domain.sld)
       )
       or length(body.current_thread.text) is null
-      or body.current_thread.text == ""
+      or (
+        body.current_thread.text == ""
+        and (
+          (
+            (
+              length(headers.references) > 0
+              or headers.in_reply_to is null
+            )
+            and not (
+              (
+                strings.istarts_with(subject.subject, "RE:")
+                or strings.istarts_with(subject.subject, "RES:")
+                or strings.istarts_with(subject.subject, "R:")
+                or strings.istarts_with(subject.subject, "ODG:")
+                or strings.istarts_with(subject.subject, "答复:")
+                or strings.istarts_with(subject.subject, "AW:")
+                or strings.istarts_with(subject.subject, "TR:")
+                or strings.istarts_with(subject.subject, "FWD:")
+                or regex.imatch(subject.subject,
+                                '(\[[^\]]+\]\s?){0,3}(re|fwd?|automat.*)\s?:.*'
+                )
+              )
+            )
+          )
+          or length(headers.references) == 0
+        )
+      )
       or regex.contains(subject.subject,
                         "(Authenticat(e|or|ion)|2fa|Multi.Factor|(qr|bar).code|action.require|alert|Att(n|ention):)"
       )
@@ -284,6 +312,7 @@ source: |
                      (
                        .scan.qr.url.domain.tld in $suspicious_tlds
                        and .scan.qr.url.domain.root_domain != "app.link"
+                       and .scan.qr.url.domain.root_domain != "qr.link"
                      )
                      and .scan.qr.url.domain.root_domain not in $org_domains
              )
@@ -298,11 +327,10 @@ source: |
       profile.by_sender().prevalence in ("new", "outlier")
       and not profile.by_sender().solicited
     )
-    or (
-      profile.by_sender().any_messages_malicious_or_spam
-      and not profile.by_sender().any_false_positives
-    )
+    or profile.by_sender().any_messages_malicious_or_spam
   )
+
+  and not profile.by_sender().any_false_positives
   
   // negate highly trusted sender domains unless they fail DMARC authentication
   and (
