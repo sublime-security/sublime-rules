@@ -5,7 +5,7 @@ severity: "high"
 source: |
   type.inbound
   and any(filter(body.links, .href_url.domain.domain == "forms.office.com"),
-          // avoid doing Link Analysis if the display-text has been observed in cred phishing
+          // avoid doing Link Analysis if the display-text has strong indications of phishing
           any([
                 "REVIEW",
                 "PROPOSAL",
@@ -14,39 +14,45 @@ source: |
                 "eFax",
                 "Restore",
                 "OPEN",
-                "View",
-                "Start",
                 "Secure",
                 "Messaging",
                 "Reset",
                 "Account",
                 "Verify",
-                "Confirm",
                 "Login",
                 "Notification",
                 "Alert",
                 "Urgent",
                 "Immediate",
                 "Access",
-                "Important",
                 "Support",
                 "Update",
                 "Download",
                 "Attachment",
-                "Service"
+                "Service",
+                "Payment",
+                "Remittance",
+                "Invoice"
               ],
-              // confusables in the display_text as been observed
+              // replace confusables - observed ITW
               strings.icontains(strings.replace_confusables(..display_text), .)
+              // add confidence to these strings by using profile.by_sender()
+              and (
+                  not profile.by_sender().solicited
+                  and profile.by_sender().prevalence in ('new', 'outlier')
+              )
+  
           )
           or 
+          // look at the final_dom.raw
           // if the page has been taken down, match
           strings.icontains(ml.link_analysis(., mode="aggressive").final_dom.raw,
                             'This form was blocked due to privacy or safety concerns.'
           )
           // this logic checks for three abnormal cases
-          // // 1) no questions
-          // // 2) questions, but no inputs
-          // // 3) a bunch of new lines (used to push down the submit button of the form)
+          // 1) no questions
+          // 2) questions, but no inputs
+          // 3) a bunch of new lines (used to push down the submit button of the form)
           // AND 
           // // there is one or two links that isn't "standard" on the form
           or (
@@ -66,7 +72,11 @@ source: |
                 )
                 // no inputs
                 and not strings.icontains(ml.link_analysis(., mode="aggressive").final_dom.raw,
-                                          '<input aria-label="'
+                                          '<input '
+                )
+                // no required fields
+                and not strings.icontains(ml.link_analysis(., mode="aggressive").final_dom.raw,
+                                          '<span>Required</span>'
                 )
               )
               or 
@@ -95,6 +105,7 @@ source: |
             ) <= 2
           )
   )
+
 attack_types:
   - "Credential Phishing"
 tactics_and_techniques:
