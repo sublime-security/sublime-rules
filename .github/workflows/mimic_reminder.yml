@@ -1,0 +1,60 @@
+name: Comment on PRs with Mimic Failures
+
+on:
+  schedule:
+    - cron: '0 0 * * *'  # Runs daily at midnight
+  workflow_dispatch:
+
+jobs:
+  comment-on-failed-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Fetch all open PRs
+        id: fetch-prs
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const { data: pullRequests } = await github.pulls.list({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+            });
+            return pullRequests.map(pr => ({ number: pr.number, labels: pr.labels.map(label => label.name) }));
+
+      - name: Check CI status and comment
+        uses: actions/github-script@v6
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const prs = ${{ steps.fetch-prs.outputs.result }};
+            const checkName = 'MQL Mimic Tests';
+            const oneDayInMs = 24 * 60 * 60 * 1000;
+            const now = new Date().getTime();
+
+            for (const pr of prs) {
+              if (pr.labels.includes('stale')) {
+                continue;
+              }
+
+              const { data: checkRuns } = await github.checks.listForRef({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                ref: `refs/pull/${pr.number}/head`,
+              });
+
+              const checkRun = checkRuns.check_runs.find(run => run.name === checkName && run.conclusion === 'failure');
+              if (checkRun) {
+                const checkCompletedAt = new Date(checkRun.completed_at).getTime();
+                if (now - checkCompletedAt > oneDayInMs) {
+                  await github.issues.createComment({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    issue_number: pr.number,
+                    body: 'Reminder: MQL Mimic tests have been failing for over 24 hours.',
+                  });
+                }
+              }
+            }
