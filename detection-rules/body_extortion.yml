@@ -22,8 +22,9 @@ source: |
       regex.icontains(body.current_thread.text,
                       "porn|adult (web)?site|webcam|masturbating|jerking off|pleasuring yourself|getting off"
       ),
-      regex.icontains(body.current_thread.text, "pervert|perversion"),
+      regex.icontains(body.current_thread.text, "pervert|perversion|masturbat"),
       regex.icontains(body.current_thread.text, '\d\d hours'),
+      regex.icontains(body.current_thread.text, 'bitcoin|\bbtc\b|blockchain'),
       strings.icontains(body.current_thread.text, "permanently delete"),
       (
         strings.icontains(body.current_thread.text, "contact the police")
@@ -35,7 +36,7 @@ source: |
     )
   )
   and (
-    profile.by_sender().prevalence in ("new", "outlier")
+    not profile.by_sender().solicited
     or (
       profile.by_sender().any_messages_malicious_or_spam
       and not profile.by_sender().any_false_positives
@@ -43,9 +44,10 @@ source: |
     or any(headers.hops, any(.fields, .name == "X-Google-Group-Id"))
   
     // many extortion emails spoof sender domains and fail sender authentication
-    or any(headers.hops,
-           .authentication_results.dmarc == "fail"
-           or .authentication_results.compauth.verdict not in ("pass", "softpass")
+    or (
+      not headers.auth_summary.dmarc.pass
+      or headers.auth_summary.dmarc.pass is null
+      or not headers.auth_summary.spf.pass
     )
   )
   and length(body.current_thread.text) < 6000
