@@ -1,0 +1,25 @@
+name: "Salesforce HTML attachment"
+type: "query"
+source: |
+  type.inbound
+  and length(attachments) == 1
+  and any(attachments,
+          (
+            .file_extension in~ ("html", "htm", "shtml", "dhtml")
+            or .file_extension in~ $file_extensions_common_archives
+            or .file_type == "html"
+          )
+          and any(file.explode(.),
+                  length(.scan.url.urls) == 1
+                  and all(.scan.url.urls,
+                          // looking for mydomain.my.salesforce.com
+                          .domain.root_domain == "salesforce.com"
+                          and strings.ends_with(.domain.subdomain, "my")
+                          and strings.starts_with(.path, "/sfc")
+                  )
+          )
+          and strings.starts_with(file.parse_html(.).display_text,
+                                  "Attachment not opening? Click this link"
+          )
+  )
+severity: "informational"
