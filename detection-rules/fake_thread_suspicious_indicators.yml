@@ -30,25 +30,38 @@ source: |
           or strings.istarts_with(subject.subject, "FWD:")
         )
       )
-      and 3 of (
-        strings.icontains(body.html.display_text, "from:"),
-        strings.icontains(body.html.display_text, "to:"),
-        strings.icontains(body.html.display_text, "sent:"),
-        strings.icontains(body.html.display_text, "subject:")
+      and any([body.current_thread.text, body.html.display_text, body.plain.raw],
+              3 of (
+                strings.icontains(., "from:"),
+                strings.icontains(., "to:"),
+                strings.icontains(., "sent:"),
+                strings.icontains(., "date:"),
+                strings.icontains(., "cc:"),
+                strings.icontains(., "subject:")
+              )
       )
       and (
         length(body.current_thread.text) + 100 < length(body.html.display_text)
       )
-      // negating bouncebacks
-      and not any(attachments,
-                  .content_type in ("message/delivery-status", "message/rfc822")
-      )
     )
+  )
+
+  // negating bouncebacks
+  and not any(attachments,
+              .content_type in ("message/delivery-status", "message/rfc822")
+  )
+  // negating Google Calendar invites
+  and (
+    (
+      headers.return_path.domain.domain is not null
+      and headers.return_path.domain.domain != 'calendar-server.bounces.google.com'
+    )
+    or headers.return_path.domain.domain is null
   )
   
   and (
-    (length(headers.references) == 0 and headers.in_reply_to is null)
-    or not any(headers.hops, any(.fields, strings.ilike(.name, "In-Reply-To")))
+    length(headers.references) == 0 
+    or headers.in_reply_to is null
   )
   
   // and not solicited
@@ -126,6 +139,7 @@ source: |
                          '(<p class=".*?"><span style=".*?"><o:p>&nbsp;</o:p></span></p>\s*){30,}'
       )
       or regex.icontains(body.html.raw, '(<p>&nbsp;</p>\s*){7,}')
+      or regex.icontains(body.html.raw, '(<p>&nbsp;</p><br>\s*){7,}')
       or regex.icontains(body.html.raw, '(<p[^>]*>\s*&nbsp;<br>\s*</p>\s*){5,}')
       or regex.icontains(body.html.raw, '(<p[^>]*>&nbsp;</p>\s*){7,}')
     ),
