@@ -10,17 +10,58 @@ source: |
   and (
     // orgs can have docusign.company.com
     strings.ilike(sender.email.email, '*docusign.net*', '*docusign.com*')
-
+  
     // if the above is true, you'll see a "via Docusign"
     or strings.ilike(sender.display_name, '*docusign*')
-
+  
     // detects 1 character variations,
     // such as DocuSlgn (with an "L" instead of an "I")
     or strings.ilevenshtein(sender.display_name, "docusign") == 1
-
     or strings.ilike(sender.display_name, "*docuonline*", "*via *signature*")
+    or (
+      strings.istarts_with(body.html.inner_text, "docusign")
+      and not strings.istarts_with(body.current_thread.text, "docusign")
+    )
+    or (
+      (
+        regex.icontains(body.html.raw, '<font size="[0-9]">DocuSign</font>')
+        or regex.icontains(body.html.raw, '\nDocu(?:<[^\>]+>\s*)+Sign<')
+        or regex.icontains(body.html.raw,
+                           '<span[^>]*style="[^"]*">DocuSign<\/span>'
+        )
+        or regex.icontains(body.html.raw, '<strong>DocuSign</strong>')
+        or regex.icontains(body.html.raw, '<div class="logo">DocuSign</div>')
+        or regex.icontains(body.html.raw,
+                           'D&#917540;&#917540;o&#917540;&#917540;c︀uS&#917540;&#917540;i︀gn'
+        )
+      )
+      and (
+        regex.icontains(body.html.raw, 'background:\s*rgb\(30,\s*76,\s*161\)')
+        or regex.icontains(body.html.raw,
+                           'background-color:\s*rgb\(30,\s*76,\s*161\)'
+        )
+        or regex.icontains(body.html.raw,
+                           'background-color:\s*rgb\(61,\s*170,\s*73\)'
+        )
+        or regex.icontains(body.html.raw,
+                           '<div[^>]*BACKGROUND-COLOR: #1e4ca1[^>]*>',
+                           '<td[^>]*BACKGROUND-COLOR: #1e4ca1[^>]*>',
+                           '<table[^>]*background-color:\s*#1e4ca1'
+        )
+        or regex.icontains(body.html.raw, 'background-color:#214e9f;')
+        or regex.icontains(body.html.raw, 'background-color:#3260a7')
+        or regex.icontains(body.html.raw, 'background-color:#0056b3')
+        or regex.icontains(body.html.raw, 'BACKGROUND-COLOR:#1e4ca1')
+        or regex.icontains(body.html.raw, 'background-color:#214395')
+        or regex.icontains(body.html.raw,
+                           '<table[^>]*style="[^"]*background:\s*#1E4CA1[^"]*"[^>]*>(.*?)<\/table>'
+        )
+        or any(body.links, regex.icontains(.display_text, 'view.{0,3}doc'))
+        or any(body.links, regex.contains(.display_text, '\bDOCUMENT'))
+      )
+    )
   )
-
+  
   // identifies the main CTA in the email, eg "Review now" or "Review document"
   // this should always be a known docusign domain,
   // even with branded docusign subdomains
@@ -36,9 +77,17 @@ source: |
             or strings.icontains(.display_text, "Now")
             or strings.icontains(.display_text, "document")
           )
-          and .href_url.domain.root_domain not in ("docusign.com", "docusign.net")
+        and not .href_url.domain.root_domain in ("docusign.com", "docusign.net")
+        and not (
+          .href_url.domain.root_domain == "mimecastprotect.com"
+          and (
+            .href_url.query_params is not null
+            and (regex.icontains(.href_url.query_params, 'domain=(?:\w+.)?docusign.net')
+            or regex.icontains(.href_url.query_params, 'domain=(?:\w+.)?docusign.com'))
+          )
+        )
   )
-
+  
   // negate highly trusted sender domains unless they fail DMARC authentication
   and (
     coalesce(sender.email.domain.root_domain in $high_trust_sender_root_domains
@@ -47,12 +96,14 @@ source: |
     )
     or sender.email.domain.root_domain not in $high_trust_sender_root_domains
   )
-
+  
   // adding negation for messages originating from docusigns api
   // and the sender.display.name contains "via"
   and not (
     any(headers.hops,
-        any(.fields, .name == "X-Api-Host" and strings.ends_with(.value, "docusign.net"))
+        any(.fields,
+            .name == "X-Api-Host" and strings.ends_with(.value, "docusign.net")
+        )
     )
     and strings.contains(sender.display_name, "via")
   )

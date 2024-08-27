@@ -12,7 +12,18 @@ source: |
           or .file_type == "pdf"
           or .file_type in~ $file_extensions_macros
         )
-        and any(ml.logo_detect(.).brands, strings.starts_with(.name, "Microsoft"))
+        and (
+          any(ml.logo_detect(.).brands, strings.starts_with(.name, "Microsoft"))
+          or any(file.explode(.),
+                  // for Office documents
+                 .flavors.mime == "text/xml"
+                 and any(.scan.strings.strings,
+                         regex.icontains(.,
+                                         'Microsoft (Authenticat(e|or|ion)|2fa|Multi.Factor|(qr|bar).code|action.require|alert|Att(n|ention):)'
+                         )
+                 )
+          )
+        )
     )
     or any(ml.logo_detect(beta.message_screenshot()).brands,
            strings.starts_with(.name, "Microsoft")
