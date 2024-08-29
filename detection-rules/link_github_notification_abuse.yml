@@ -1,0 +1,35 @@
+name: "GitHub Notification Abuse"
+description: "This detection rule matches GitHub notifications which contain links to free file hosts, free subdomain hosts, and url shortners.  This has been seen in previous campaigns where malicious actors leveraged existing issues on public GitHub repositories by adding comments with links to Info Stealer malware."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  // actual GitHub notifications
+  and sender.email.email == "notifications@github.com"
+  and all(headers.reply_to, .email.domain.domain == "reply.github.com")
+  and headers.return_path.email == "noreply@github.com"
+  and headers.auth_summary.spf.pass
+  and headers.auth_summary.dmarc.pass
+  // suspicious links
+  and any(
+      // filter any links that go back to GitHub
+      filter(body.links, .href_url.domain.root_domain != 'github.com'),
+          // see if the remaining links are within several lists
+          .href_url.domain.root_domain in $free_file_hosts
+          or (
+            .href_url.domain.root_domain in $free_subdomain_hosts
+            and .href_url.domain.subdomain is not null
+          )
+          or .href_url.domain.root_domain in $url_shorteners
+  )
+
+attack_types:
+  - "Malware/Ransomware"
+tactics_and_techniques:
+  - "Free subdomain host"
+  - "Free file host"
+  - "Evasion"
+detection_methods:
+  - "Header analysis"
+  - "Content analysis"
+  - "URL analysis"
