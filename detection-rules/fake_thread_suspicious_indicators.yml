@@ -43,11 +43,20 @@ source: |
       and (
         length(body.current_thread.text) + 100 < length(body.html.display_text)
       )
-      // negating bouncebacks
-      and not any(attachments,
-                  .content_type in ("message/delivery-status", "message/rfc822")
-      )
     )
+  )
+
+  // negating bouncebacks
+  and not any(attachments,
+              .content_type in ("message/delivery-status", "message/rfc822")
+  )
+  // negating Google Calendar invites
+  and (
+    (
+      headers.return_path.domain.domain is not null
+      and headers.return_path.domain.domain != 'calendar-server.bounces.google.com'
+    )
+    or headers.return_path.domain.domain is null
   )
   
   and (
@@ -130,6 +139,7 @@ source: |
                          '(<p class=".*?"><span style=".*?"><o:p>&nbsp;</o:p></span></p>\s*){30,}'
       )
       or regex.icontains(body.html.raw, '(<p>&nbsp;</p>\s*){7,}')
+      or regex.icontains(body.html.raw, '(<p>&nbsp;</p><br>\s*){7,}')
       or regex.icontains(body.html.raw, '(<p[^>]*>\s*&nbsp;<br>\s*</p>\s*){5,}')
       or regex.icontains(body.html.raw, '(<p[^>]*>&nbsp;</p>\s*){7,}')
     ),
