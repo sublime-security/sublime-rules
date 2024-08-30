@@ -3,23 +3,7 @@ description: |
   Impersonation of Stripe, usually for credential theft.
 type: "rule"
 severity: "high"
-source: |
-  type.inbound
-  and (
-    sender.display_name =~ 'stripe'
-    or strings.ilevenshtein(sender.display_name, 'stripe') <= 1
-  )
-  and sender.email.domain.root_domain not in~ ('stripe.com')
-  and sender.email.email not in $recipient_emails
-
-  // negate highly trusted sender domains unless they fail DMARC authentication
-  and (
-    (
-      sender.email.domain.root_domain in $high_trust_sender_root_domains
-      and not headers.auth_summary.dmarc.pass
-    )
-    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
-  )
+source: "type.inbound\nand (\n  // Display name after replacing unicode confusables is stripe\n  strings.replace_confusables(sender.display_name) =~ 'stripe'\n  or (\n    // the edit distance is 1 or 2\n    strings.ilevenshtein(strings.replace_confusables(sender.display_name), 'stripe') <= 2\n    // the length is the same as \"stripe\"\n    and length(sender.display_name) == 6 \n    // and not one of these english words that matches the edit distance\n    and not sender.display_name in~ (\"strive\", \"stride\", \"strife\", \"strike\", \"strobe\", \"streps\", \"string\")\n  )\n)\nand sender.email.domain.root_domain not in~ ('stripe.com')\nand sender.email.email not in $recipient_emails\n\n// negate highly trusted sender domains unless they fail DMARC authentication\nand (\n  (\n    sender.email.domain.root_domain in $high_trust_sender_root_domains\n    and not headers.auth_summary.dmarc.pass\n  )\n  or sender.email.domain.root_domain not in $high_trust_sender_root_domains\n)\n"
 attack_types:
   - "Credential Phishing"
 tactics_and_techniques:
@@ -31,4 +15,4 @@ detection_methods:
   - "Sender analysis"
 id: "862d4654-4a32-50c1-a441-b3a5106be174"
 testing_pr: 1809
-testing_sha: 83ce45b293cc481d3d98a331ef06419c65130791
+testing_sha: 0982892de77bcd84ad0535639c8c0a08ff5a8131
