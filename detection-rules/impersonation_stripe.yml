@@ -6,8 +6,16 @@ severity: "high"
 source: |
   type.inbound
   and (
-    sender.display_name =~ 'stripe'
-    or strings.ilevenshtein(sender.display_name, 'stripe') <= 1
+    // Display name after replacing unicode confusables is stripe
+    strings.replace_confusables(sender.display_name) =~ 'stripe'
+    or (
+      // the edit distance is 1 or 2
+      strings.ilevenshtein(strings.replace_confusables(sender.display_name), 'stripe') <= 2
+      // the length is the same as "stripe"
+      and length(sender.display_name) == 6 
+      // and not one of these english words that matches the edit distance
+      and not sender.display_name in~ ("strive", "stride", "strife", "strike", "strobe", "streps", "string")
+    )
   )
   and sender.email.domain.root_domain not in~ ('stripe.com')
   and sender.email.email not in $recipient_emails
