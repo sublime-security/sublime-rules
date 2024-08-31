@@ -10,10 +10,28 @@ source: |
   and headers.return_path.email == "noreply@github.com"
   and headers.auth_summary.spf.pass
   and headers.auth_summary.dmarc.pass
-  // suspicious links
+
+  // remove github bots
+  and not strings.iends_with(sender.display_name, "[bot]")
+
+  // only match messages with short bodies
+  and length(body.html.display_text) <= 500
+
+  // only matches messages where sender display name is not in the org display names.  This attemps to avoid catching internal employees comenting on org repos
+  and not any($org_display_names, . =~ sender.display_name)
+
+  // match messages with suspicious links
   and any(
-      // filter any links that go back to GitHub
-      filter(body.links, .href_url.domain.root_domain != 'github.com'),
+          // filter any links that go back to github
+          filter(body.links,
+                 .href_url.domain.root_domain not in (
+                   'github.com',
+                   'githubusercontent.com',
+                   'github.io',
+                   'githubsupport.com',
+                   'githubstatus.com'
+                 )
+          ),
           // see if the remaining links are within several lists
           .href_url.domain.root_domain in $free_file_hosts
           or (
@@ -34,4 +52,4 @@ detection_methods:
   - "URL analysis"
 id: "eabdee5e-1c96-543f-9786-26fda9cbe2d0"
 testing_pr: 1855
-testing_sha: df205895ad04b3022d8dd4e93c198b6923c59f95
+testing_sha: 7e14a3e32327e246ee4c9a21f64cae5af27db023
