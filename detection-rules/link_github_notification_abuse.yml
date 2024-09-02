@@ -2,44 +2,7 @@ name: "GitHub Notification Abuse"
 description: "This detection rule matches GitHub notifications which contain links to free file hosts, free subdomain hosts, and url shortners.  This has been seen in previous campaigns where malicious actors leveraged existing issues on public GitHub repositories by adding comments with links to Info Stealer malware."
 type: "rule"
 severity: "medium"
-source: |
-  type.inbound
-  // actual GitHub notifications
-  and sender.email.email == "notifications@github.com"
-  and all(headers.reply_to, .email.domain.domain == "reply.github.com")
-  and headers.return_path.email == "noreply@github.com"
-  and headers.auth_summary.spf.pass
-  and headers.auth_summary.dmarc.pass
-
-  // remove github bots
-  and not strings.iends_with(sender.display_name, "[bot]")
-
-  // only match messages with short bodies
-  and length(body.html.display_text) <= 500
-
-  // only matches messages where sender display name is not in the org display names.  This attemps to avoid catching internal employees comenting on org repos
-  and not any($org_display_names, . =~ sender.display_name)
-
-  // match messages with suspicious links
-  and any(
-          // filter any links that go back to github
-          filter(body.links,
-                 .href_url.domain.root_domain not in (
-                   'github.com',
-                   'githubusercontent.com',
-                   'github.io',
-                   'githubsupport.com',
-                   'githubstatus.com'
-                 )
-          ),
-          // see if the remaining links are within several lists
-          .href_url.domain.root_domain in $free_file_hosts
-          or (
-            .href_url.domain.root_domain in $free_subdomain_hosts
-            and .href_url.domain.subdomain is not null
-          )
-          or .href_url.domain.root_domain in $url_shorteners
-  )
+source: "type.inbound\n// actual GitHub notifications\nand sender.email.email == \"notifications@github.com\"\nand all(headers.reply_to, .email.domain.domain == \"reply.github.com\")\nand headers.return_path.email == \"noreply@github.com\"\nand headers.auth_summary.spf.pass\nand headers.auth_summary.dmarc.pass\n\n// remove github bots\nand not strings.iends_with(sender.display_name, \"[bot]\")\n\n// only match messages with short bodies\nand length(body.html.display_text) <= 500\n\n// remove messages that have <pre> tag which would indicate a code comment\nand not strings.icontains(body.html.raw, '<pre>')\n\n// do not match messages where the sender display name is in the org display names.  \n// This attempts to avoid catching internal employees comenting on org repos\nand not any($org_display_names, . =~ sender.display_name)\n\n// match messages with suspicious links\nand any(\n        // filter any links that go back to github\n        filter(body.links,\n               .href_url.domain.root_domain not in (\n                 'github.com',\n                 'githubusercontent.com',\n                 'github.io',\n                 'githubsupport.com',\n                 'githubstatus.com'\n               )\n        ),\n        // see if the remaining links are within several lists\n        .href_url.domain.root_domain in $free_file_hosts\n        or (\n          .href_url.domain.root_domain in $free_subdomain_hosts\n          and .href_url.domain.subdomain is not null\n        )\n        or .href_url.domain.root_domain in $url_shorteners\n)\n"
 attack_types:
   - "Malware/Ransomware"
 tactics_and_techniques:
@@ -52,4 +15,4 @@ detection_methods:
   - "URL analysis"
 id: "eabdee5e-1c96-543f-9786-26fda9cbe2d0"
 testing_pr: 1855
-testing_sha: 7e14a3e32327e246ee4c9a21f64cae5af27db023
+testing_sha: 5b6042103de21cc26d71ad82f2041b2085c831ff
