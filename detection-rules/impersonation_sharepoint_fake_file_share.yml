@@ -5,12 +5,26 @@ type: "rule"
 severity: "medium"
 source: |
   type.inbound
-  
+
   // Sharepoint body content looks like this
-  and strings.like(body.current_thread.text, "*shared a file with you*", "*shared with you*", "*invited you to access a file*")
-  and strings.icontains(subject.subject, "shared")
+  and any([body.current_thread.text, body.plain.raw],
+          strings.ilike(.,
+                        "*shared a file with you*",
+                        "*shared with you*",
+                        "*invited you to access a file*"
+          )
+  )
+  and strings.ilike(subject.subject, "*shared*", "*updated*")
   and (
-    any(ml.logo_detect(beta.message_screenshot()).brands, .name == "Microsoft")
+    any(ml.logo_detect(beta.message_screenshot()).brands,
+        strings.starts_with(.name, "Microsoft")
+    )
+    or any(attachments,
+           .file_type in $file_types_images
+           and any(ml.logo_detect(.).brands,
+                   strings.starts_with(.name, "Microsoft")
+           )
+    )
     or (
       regex.icontains(body.html.raw,
                       '<table[^>]*>\s*<tbody[^>]*>\s*<tr[^>]*>\s*(<td[^>]*bgcolor="#[0-9A-Fa-f]{6}"[^>]*>\s*&nbsp;\s*</td>\s*){2}\s*</tr>\s*<tr[^>]*>\s*(<td[^>]*bgcolor="#[0-9A-Fa-f]{6}"[^>]*>\s*&nbsp;\s*</td>\s*){2}'
@@ -130,14 +144,19 @@ source: |
 
   // Negate messages when the message-id indciates the message is from MS actual. DKIM/SPF domains can be custom and therefore are unpredictable.
   and not (
-      strings.starts_with(headers.message_id, '<Share-')
-      and strings.ends_with(headers.message_id, '@odspnotify>')
+    strings.starts_with(headers.message_id, '<Share-')
+    and strings.ends_with(headers.message_id, '@odspnotify>')
   )
 
   // fake Sharepoint shares are easy to identify if there are any links
   // that don't point to microsoft[.]com or *.sharepoint[.]com
   and not all(body.links,
-              .href_url.domain.root_domain in ("1drv.ms", "aka.ms", "microsoft.com", "sharepoint.com")
+              .href_url.domain.root_domain in (
+                "1drv.ms",
+                "aka.ms",
+                "microsoft.com",
+                "sharepoint.com"
+              )
   )
   and sender.email.domain.root_domain not in $org_domains
   and sender.email.domain.root_domain not in (
@@ -150,10 +169,10 @@ source: |
     "onedrive.com",
     "sharepointonline.com",
     "yammer.com",
-    //ignore microsoft privacy statement links
+    // ignore microsoft privacy statement links
     "aka.ms"
   )
-  
+
   // negate highly trusted sender domains unless they fail DMARC authentication
   and (
     (
@@ -163,9 +182,7 @@ source: |
     or sender.email.domain.root_domain not in $high_trust_sender_root_domains
   )
   and (
-    (
-      not profile.by_sender().solicited
-    )
+    (not profile.by_sender().solicited)
     or (
       profile.by_sender().any_messages_malicious_or_spam
       and not profile.by_sender().any_false_positives
