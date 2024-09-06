@@ -4,7 +4,11 @@ type: "rule"
 severity: "high"
 source: |
   type.inbound
+
+  // sender is a freemail domain
   and sender.email.domain.root_domain in $free_email_providers
+
+  // attachment filename is the same as the subject
   and any(attachments,
           strings.ilevenshtein(strings.concat(subject.subject,
                                               ".",
@@ -13,6 +17,8 @@ source: |
                                .file_name
           ) <= 1
   )
+  
+  // body contains a US address, or the body is the subject
   and (
     regex.icontains(body.current_thread.text,
                     '\d+\s[\w\s.]+(?:\n)?[\w\s]+\s[A-Z]{2}\s\d{5}(?:-\d{4})?(?:\n)?'
@@ -20,6 +26,7 @@ source: |
     or subject.subject == body.current_thread.text
   )
   
+  // there's a PDF attachment with an image at a depth of one, measuring 148x148 and containing a QR code that is a BTC address
   and any(attachments,
           .file_type == "pdf"
           and any(file.explode(.),
