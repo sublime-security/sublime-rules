@@ -20,11 +20,30 @@ source: |
   // remove messages that have <pre> tag which would indicate a code comment
   and not strings.icontains(body.html.raw, '<pre>')
   
+  // remove messages that have unordered lists (common on notifications from actions)
+  and not (
+      strings.icontains(body.html.raw, '</ul>') 
+      and strings.icontains(body.html.raw, '</li>')
+  )
+  
   // do not match messages where the sender display name is in the org display names.  
   // This attempts to avoid catching internal employees commenting on org repos
   and not any($org_display_names, . =~ sender.display_name)
   
-  // match messages with suspicious links
+  // there is only a single external link
+  and length(filter(body.links,
+                    // filter any links that go back to github
+                    .href_url.domain.root_domain not in (
+                      'github.com',
+                      'githubusercontent.com',
+                      'github.io',
+                      'githubsupport.com',
+                      'githubstatus.com'
+                    )
+             )
+  ) == 1
+  
+  // that single link is suspicious
   and any(
           // filter any links that go back to github
           filter(body.links,
@@ -44,7 +63,6 @@ source: |
           )
           or .href_url.domain.root_domain in $url_shorteners
   )
-
 attack_types:
   - "Malware/Ransomware"
 tactics_and_techniques:
