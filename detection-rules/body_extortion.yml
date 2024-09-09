@@ -24,8 +24,25 @@ source: |
       ),
       regex.icontains(body.current_thread.text, "pervert|perversion|masturbat"),
       regex.icontains(body.current_thread.text, '\d\d hours'),
-      regex.icontains(body.current_thread.text, 'bitcoin|\bbtc\b|blockchain'),
-      strings.icontains(body.current_thread.text, "permanently delete"),
+    (
+      regex.icontains(body.current_thread.text, 'bitcoin|\bbtc\b|blockchain')
+      // negate cryptocurrency newsletters
+      and not (
+        any(body.links,
+            strings.icontains(.display_text, "unsubscribe")
+            and (
+              strings.icontains(.href_url.path, "unsubscribe")
+              // handle mimecast URL rewrites
+              or (
+                .href_url.domain.root_domain == 'mimecastprotect.com'
+                and strings.icontains(.href_url.query_params,
+                                      sender.email.domain.root_domain
+                )
+              ) 
+            )
+        )
+      )
+    ),
       (
         strings.icontains(body.current_thread.text, "contact the police")
         and regex.icontains(body.current_thread.text,
