@@ -4,13 +4,33 @@ type: "rule"
 severity: "high"
 source: |
   type.inbound
-  and length(attachments) == 1
   // we don't look for links because it could be a QR code
   and any(attachments,
           (.content_type == "message/rfc822" or .file_extension =~ "eml")
           // credential theft language in the attached EML
-          and any(ml.nlu_classifier(file.parse_eml(.).body.html.display_text).intents,
+          and any(ml.nlu_classifier(file.parse_eml(.).body.current_thread.text).intents,
                   .name == "cred_theft" and .confidence == "high"
+          )
+          and not strings.like(file.parse_eml(.).sender.email.local_part,
+                               "*postmaster*",
+                               "*mailer-daemon*",
+                               "*administrator*"
+          )
+          // negate Mimecast Attachment Protection
+          and not (
+            any(attachments,
+                .file_name == 'We sent you safe versions of your files'
+            )
+            and strings.contains(body.current_thread.text,
+                                 'Mimecast Attachment Protection has deemed this file to be safe, but always exercise caution when opening files.'
+            )
+          )
+          // negate Microsoft Dynamic Delivery
+          and not (
+            length(file.parse_eml(.).attachments) == 0
+            and strings.icontains(file.parse_eml(.).body.current_thread.text,
+                                         "Your attachments are currently being scanned by Safe Attachments"
+            )
           )
   )
   // exclude bounce backs & read receipts

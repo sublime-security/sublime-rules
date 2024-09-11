@@ -1,6 +1,6 @@
-name: "Extortion / sextortion (first-time sender)"
+name: "Extortion / sextortion (untrusted sender)"
 description: |
-  Detects extortion and sextortion attempts by analyzing the email body text from a first-time sender.
+  Detects extortion and sextortion attempts by analyzing the email body text from an untrusted sender.
 references:
   - "https://krebsonsecurity.com/2018/07/sextortion-scam-uses-recipients-hacked-passwords/"
 type: "rule"
@@ -8,29 +8,68 @@ severity: "low"
 source: |
   type.inbound
   and (
-    any(ml.nlu_classifier(body.current_thread.text).intents,
-        .name == "extortion" and .confidence == "high"
+    (
+      any(ml.nlu_classifier(body.current_thread.text).intents,
+          .name == "extortion" and .confidence == "high"
+      )
+      and any(ml.nlu_classifier(body.current_thread.text).entities,
+              .name == "financial"
+      )
     )
-    and any(ml.nlu_classifier(body.current_thread.text).entities,
-            .name == "financial"
+    // manual indicators failsafe
+    or 3 of (
+      regex.icontains(body.current_thread.text, "((spy|mal)ware|trojan)"),
+      regex.icontains(body.current_thread.text,
+                      "porn|adult (web)?site|webcam|masturbating|jerking off|pleasuring yourself|getting off"
+      ),
+      regex.icontains(body.current_thread.text, "pervert|perversion|masturbat"),
+      regex.icontains(body.current_thread.text, '\d\d hours'),
+      strings.icontains(body.current_thread.text, "permanently delete"),
+    (
+      regex.icontains(body.current_thread.text, 'bitcoin|\bbtc\b|blockchain')
+      // negate cryptocurrency newsletters
+      and not (
+        any(body.links,
+            strings.icontains(.display_text, "unsubscribe")
+            and (
+              strings.icontains(.href_url.path, "unsubscribe")
+              // handle mimecast URL rewrites
+              or (
+                .href_url.domain.root_domain == 'mimecastprotect.com'
+                and strings.icontains(.href_url.query_params,
+                                      sender.email.domain.root_domain
+                )
+              ) 
+            )
+        )
+      )
+    ),
+      (
+        strings.icontains(body.current_thread.text, "contact the police")
+        and regex.icontains(body.current_thread.text,
+                            '(\b[13][a-km-zA-HJ-NP-Z0-9]{24,33}\b)|\bX[1-9A-HJ-NP-Za-km-z]{33}\b|\b(0x[a-fA-F0-9]{40})\b|\b[LM3][a-km-zA-HJ-NP-Z1-9]{26,33}\b|\b[48][0-9AB][1-9A-HJ-NP-Za-km-z]{93}\b'
+        )
+      ),
+      regex.icontains(body.current_thread.text, 'bc1q.{0,50}\b')
     )
   )
   and (
-    (
-      sender.email.domain.root_domain in $free_email_providers
-      and sender.email.email not in $sender_emails
-    )
+    not profile.by_sender().solicited
     or (
-      sender.email.domain.root_domain not in $free_email_providers
-      and sender.email.domain.domain not in $sender_domains
+      profile.by_sender().any_messages_malicious_or_spam
+      and not profile.by_sender().any_false_positives
     )
+    or any(headers.hops, any(.fields, .name == "X-Google-Group-Id"))
   
     // many extortion emails spoof sender domains and fail sender authentication
-    or any(headers.hops,
-           .authentication_results.dmarc == "fail"
-           or .authentication_results.compauth.verdict not in ("pass", "softpass")
+    or (
+      not headers.auth_summary.dmarc.pass
+      or headers.auth_summary.dmarc.pass is null
+      or not headers.auth_summary.spf.pass
     )
   )
+  and length(body.current_thread.text) < 6000
+
 attack_types:
   - "Extortion"
 tactics_and_techniques:

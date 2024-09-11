@@ -1,5 +1,5 @@
 name: "Brand impersonation: Okta"
-description: "Impersonation of Okta an Identity and access management company."
+description: "Impersonation of Okta, an identity and access management company."
 type: "rule"
 severity: "medium"
 source: |
@@ -9,7 +9,11 @@ source: |
     or strings.ilike(sender.email.domain.domain, '*Okta*')
     or strings.ilike(subject.subject, '*Okta*')
   )
-  and not(
+  and not (
+    length(headers.references) > 0
+    or any(headers.hops, any(.fields, strings.ilike(.name, "In-Reply-To")))
+  )
+  and not (
     sender.email.domain.root_domain in~ (
       'oktacdn.com',
       'okta.com',
@@ -18,9 +22,7 @@ source: |
       'oktapreview.com',
       'polaris.me'
     )
-    and any(distinct(headers.hops, .authentication_results.dmarc is not null),
-           strings.ilike(.authentication_results.dmarc, "*pass")
-    )
+    and headers.auth_summary.dmarc.pass
   )
   and any(ml.logo_detect(beta.message_screenshot()).brands,
           .name == "Okta" and .confidence in ("medium", "high")
@@ -32,20 +34,18 @@ source: |
       and not profile.by_sender().any_false_positives
     )
   )
-  
+  // negate okta relay
+  and not any(distinct(headers.domains, .domain is not null),
+              .domain == "mailrelay.okta.com"
+  )
   // negate highly trusted sender domains unless they fail DMARC authentication
   and (
     (
       sender.email.domain.root_domain in $high_trust_sender_root_domains
-      and (
-        any(distinct(headers.hops, .authentication_results.dmarc is not null),
-            strings.ilike(.authentication_results.dmarc, "*fail")
-        )
-      )
+      and not headers.auth_summary.dmarc.pass
     )
     or sender.email.domain.root_domain not in $high_trust_sender_root_domains
   )
-
 
 attack_types:
   - "Credential Phishing"
