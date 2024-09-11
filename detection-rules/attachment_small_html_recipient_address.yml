@@ -1,5 +1,5 @@
-name: "Attachment: HTML smuggling containing recipient email address"
-description: "HTML attachment is small and contains a recipients email address."
+name: "HTML smuggling containing recipient email address"
+description: "HTML attachment (or HTML attachment in attached email) is small and contains a recipients email address."
 type: "rule"
 severity: "medium"
 source: |
@@ -8,6 +8,7 @@ source: |
     any(attachments,
         (
           .file_extension in~ ("html", "htm", "shtml", "dhtml")
+          or .content_type == "message/rfc822"
           or .file_type == "html"
           or .content_type == "text/html"
         )
@@ -15,7 +16,10 @@ source: |
                 .size < 10000
                 and length(.scan.strings.strings) < 20
                 and any(recipients.to,
-                        any(..scan.strings.strings, strings.icontains(., ..email.email)) and .email.domain.valid
+                        any(..scan.strings.strings,
+                            strings.icontains(., ..email.email)
+                        )
+                        and .email.domain.valid
                 )
         )
     )
@@ -30,19 +34,34 @@ source: |
                    and .size < 10000
                    and length(.scan.strings.strings) < 20
                    and any(recipients.to,
-                           any(..scan.strings.strings, strings.icontains(., ..email.email)) and .email.domain.valid
+                           any(..scan.strings.strings,
+                               strings.icontains(., ..email.email)
+                           )
+                           and .email.domain.valid
                    )
            )
     )
   )
-  // first-time sender
+  and not any(attachments,
+            any(file.parse_eml(.).attachments,
+                .content_type == "message/delivery-status"
+            )
+      )
+  // bounce-back negations
+  and not (
+    any(attachments,
+        .content_type in ("message/delivery-status", "text/calendar")
+    )
+  )
   and (
-    profile.by_sender().prevalence in ("new", "outlier")
+    not profile.by_sender().solicited
     or (
       profile.by_sender().any_messages_malicious_or_spam
       and not profile.by_sender().any_false_positives
     )
   )
+tags:
+  - "Attack surface reduction"
 attack_types:
   - "Credential Phishing"
   - "Malware/Ransomware"

@@ -9,28 +9,20 @@ source: |
   
   // Legitimate Docusign sending infratructure
   and (
-      sender.email.domain.root_domain in ('docusign.net', 'docusign.com')
-    // check for DMARC fail for spoofs
-      and any(distinct(headers.hops, .authentication_results.dmarc is not null),
-              strings.ilike(.authentication_results.dmarc, "pass")
-      )
-    )
+    sender.email.domain.root_domain in ('docusign.net', 'docusign.com')
+    // check for SPF or DMARC passed
+    and (headers.auth_summary.spf.pass or headers.auth_summary.dmarc.pass)
+  )
   
   // Docusign Logo 
   and any(ml.logo_detect(beta.message_screenshot()).brands, .name == "DocuSign")
   
   // Callback Phishing
-  and strings.ilike(body.current_thread.text,
-                    "*mcafee*",
-                    "*norton*",
-                    "*geek squad*",
-                    "*paypal*",
-                    "*ebay*",
-                    "*symantec*",
-                    "*best buy*",
-                    "*lifelock*"
+  and regex.icontains(body.current_thread.text,
+                      (
+                        "mcafee|norton|geek.{0,5}squad|paypal|ebay|symantec|best buy|lifelock"
+                      )
   )
-  
   and 3 of (
     strings.ilike(body.current_thread.text, '*purchase*'),
     strings.ilike(body.current_thread.text, '*payment*'),
@@ -48,7 +40,9 @@ source: |
     strings.ilike(body.current_thread.text, '*refund*')
   )
   // phone number regex
-  and regex.icontains(body.current_thread.text, '\+?(\d{1}.)?\(?\d{3}?\)?.\d{3}.?\d{4}')
+  and any([body.current_thread.text, subject.subject],
+          regex.icontains(., '\b\+?(\d{1}.)?\(?\d{3}?\)?.~?.?\d{3}.?~?.\d{4}\b')
+  )
 
 attack_types:
   - "Callback Phishing"

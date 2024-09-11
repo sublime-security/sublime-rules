@@ -11,11 +11,8 @@ source: |
         strings.istarts_with(subject.subject, "RE:")
         or strings.istarts_with(subject.subject, "FW:")
         or strings.istarts_with(subject.subject, "FWD:")
-      )
-      and (
-        (length(headers.references) == 0 and headers.in_reply_to is null)
-        or not any(headers.hops,
-                   any(.fields, strings.ilike(.name, "In-Reply-To"))
+        or regex.imatch(subject.subject,
+                        '(\[[^\]]+\]\s?){0,3}(re|fwd?|automat.*)\s?:.*'
         )
       )
     )
@@ -25,24 +22,50 @@ source: |
       not (
         (
           strings.istarts_with(subject.subject, "RE:")
+          or strings.istarts_with(subject.subject, "R:")
+          or strings.istarts_with(subject.subject, "ODG:")
+          or strings.istarts_with(subject.subject, "答复:")
+          or strings.istarts_with(subject.subject, "AW:")
+          or strings.istarts_with(subject.subject, "TR:")
           or strings.istarts_with(subject.subject, "FWD:")
         )
       )
-      and 3 of (
-        strings.icontains(body.html.display_text, "from:"),
-        strings.icontains(body.html.display_text, "to:"),
-        strings.icontains(body.html.display_text, "sent:"),
-        strings.icontains(body.html.display_text, "subject:")
+      and any([body.current_thread.text, body.html.display_text, body.plain.raw],
+              3 of (
+                strings.icontains(., "from:"),
+                strings.icontains(., "to:"),
+                strings.icontains(., "sent:"),
+                strings.icontains(., "date:"),
+                strings.icontains(., "cc:"),
+                strings.icontains(., "subject:")
+              )
       )
       and (
-        strings.ilevenshtein(body.current_thread.text, body.html.display_text) > 100
+        length(body.current_thread.text) + 100 < length(body.html.display_text)
       )
     )
   )
+
+  // negating bouncebacks
+  and not any(attachments,
+              .content_type in ("message/delivery-status", "message/rfc822")
+  )
+  // negating Google Calendar invites
+  and (
+    (
+      headers.return_path.domain.domain is not null
+      and headers.return_path.domain.domain != 'calendar-server.bounces.google.com'
+    )
+    or headers.return_path.domain.domain is null
+  )
   
-  // unusual sender (email address rarely sends to your organization)
-  and profile.by_sender().prevalence in ("new", "outlier", "rare")
+  and (
+    length(headers.references) == 0 
+    or headers.in_reply_to is null
+  )
   
+  // and not solicited
+  and not profile.by_sender().solicited
   and 4 of (
     // language attempting to engage
     (
@@ -55,7 +78,12 @@ source: |
     ),
   
     // invoicing language
-    any(ml.nlu_classifier(body.current_thread.text).tags, .name == "invoice"),
+    (
+      any(ml.nlu_classifier(body.current_thread.text).tags, .name == "invoice")
+      or any(ml.nlu_classifier(body.current_thread.text).entities,
+             .text == "invoice"
+      )
+    ),
   
     // urgency request
     any(ml.nlu_classifier(body.current_thread.text).entities, .name == "urgency"),
@@ -88,33 +116,56 @@ source: |
         .href_url.domain.root_domain != sender.email.domain.root_domain
     ),
   
+    // body contains name of VIP
+    (
+      any($org_vips, strings.icontains(body.html.inner_text, .display_name))
+      or any($org_vips, strings.icontains(body.plain.raw, .display_name))
+    ),
+  
     // new body domain
-    any(body.links, beta.whois(.href_url.domain).days_old < 30),
+    any(body.links, network.whois(.href_url.domain).days_old < 30),
   
     // new sender domain
-    beta.whois(sender.email.domain).days_old < 30,
+    network.whois(sender.email.domain).days_old < 30,
   
     // new sender
-    profile.by_sender().days_known < 7
+    profile.by_sender().days_known < 7,
+  
+    // excessive whitespace
+    (
+      regex.icontains(body.html.raw, '((<br\s*/?>\s*){20,}|\n{20,})')
+      or regex.icontains(body.html.raw, '(<p[^>]*>\s*<br\s*/?>\s*</p>\s*){30,}')
+      or regex.icontains(body.html.raw,
+                         '(<p class=".*?"><span style=".*?"><o:p>&nbsp;</o:p></span></p>\s*){30,}'
+      )
+      or regex.icontains(body.html.raw, '(<p>&nbsp;</p>\s*){7,}')
+      or regex.icontains(body.html.raw, '(<p>&nbsp;</p><br>\s*){7,}')
+      or regex.icontains(body.html.raw, '(<p[^>]*>\s*&nbsp;<br>\s*</p>\s*){5,}')
+      or regex.icontains(body.html.raw, '(<p[^>]*>&nbsp;</p>\s*){7,}')
+    ),
+  
+    // body contains recipient SLD
+    any(recipients.to,
+        strings.icontains(body.current_thread.text, .email.domain.sld)
+    )
   )
   
   // negate highly trusted sender domains unless they fail DMARC authentication
   and (
     (
       sender.email.domain.root_domain in $high_trust_sender_root_domains
-      and (
-        any(distinct(headers.hops, .authentication_results.dmarc is not null),
-            strings.ilike(.authentication_results.dmarc, "*fail")
-        )
-      )
+      and not headers.auth_summary.dmarc.pass
     )
     or sender.email.domain.root_domain not in $high_trust_sender_root_domains
   )
   and not profile.by_sender().any_false_positives
 
+tags:
+  - "Attack surface reduction"
 attack_types:
   - "BEC/Fraud"
   - "Credential Phishing"
+  - "Spam"
 tactics_and_techniques:
   - "Evasion"
   - "Social engineering"

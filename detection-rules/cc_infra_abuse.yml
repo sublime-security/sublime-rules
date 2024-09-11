@@ -13,7 +13,7 @@ source: |
       length(attachments) <= 3
       and (
         any(attachments,
-            .file_type in $file_types_images
+            (.file_type in $file_types_images or .file_type == "pdf")
             and any(file.explode(.),
                     .scan.qr.type is not null
                     and .scan.qr.url.domain.root_domain == "rs6.net"
@@ -62,11 +62,8 @@ source: |
             )
         )
       )
-      and any(distinct(headers.hops, .authentication_results.dmarc is not null),
-              .index == 0
-              and strings.ilike(.authentication_results.dmarc, "*pass")
+      and headers.auth_summary.dmarc.pass
       )
-    )
     or any(headers.references, strings.iends_with(., "ccsend.com"))
   )
   // negating legit replies
@@ -76,6 +73,7 @@ source: |
       or strings.istarts_with(subject.subject, "FW:")
       or strings.istarts_with(subject.subject, "FWD:")
       or strings.istarts_with(subject.subject, "Automatic reply:")
+      or regex.imatch(subject.subject, '(\[[^\]]+\]\s?){0,3}(re|fwd?|automat.*)\s?:.*')
     )
     and (
       length(headers.references) > 0
@@ -86,15 +84,12 @@ source: |
   and (
     (
       sender.email.domain.root_domain in $high_trust_sender_root_domains
-      and (
-        any(distinct(headers.hops, .authentication_results.dmarc is not null),
-            strings.ilike(.authentication_results.dmarc, "*fail")
-        )
-      )
+      and not headers.auth_summary.dmarc.pass
     )
     or sender.email.domain.root_domain not in $high_trust_sender_root_domains
   )
   and profile.by_sender().prevalence in ("new", "outlier", "rare")
+
 
 attack_types:
   - "Credential Phishing"
@@ -105,5 +100,6 @@ tactics_and_techniques:
 detection_methods:
   - "Content analysis"
   - "Header analysis"
+  - "QR code analysis"
   - "Sender analysis"
 id: "8c5e8e4c-c610-5ece-b82a-214c637cba09"
