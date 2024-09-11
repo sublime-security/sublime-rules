@@ -27,15 +27,15 @@ source: |
                    any(ml.nlu_classifier(.scan.ocr.raw).intents,
                        .name == "cred_theft" and .confidence != "low"
                    )
-                   or regex.icontains(.scan.ocr.raw,
+                   or (regex.icontains(.scan.ocr.raw,
                                       "((re)?view|access|complete(d)?) document(s)?",
-                                      "[^d][^o][^c][^u]sign",
+                                      "[^d][^o][^cd][^ue]sign",
                                       "important edocs",
                                       // German (Document (check|check|sign|sent))
                                       "Dokument (überprüfen|prüfen|unterschreiben|geschickt)",
                                       // German (important|urgent|immediate)
                                       "(wichtig|dringend|sofort)"
-                   )
+                   ) and not strings.count(.scan.ocr.raw, "\n\n\n\n\n\n\n\n\n\n") > 3 )
                  )
           )
         )
@@ -48,7 +48,7 @@ source: |
                     )
         )
     )
-  
+
     // accomidate truncated pngs and GIF files which can cause logodetect/OCR failures
     or any(attachments,
            (
@@ -105,7 +105,7 @@ source: |
     )
   )
   and not profile.by_sender().any_false_positives
-  
+
   // negate docusign 'via' messages
   and not (
     any(headers.hops,

@@ -17,10 +17,17 @@ source: |
   )
   and (
     sender.email.domain.root_domain in $free_email_providers
+    or sender.email.domain.tld in $suspicious_tlds
     or network.whois(sender.email.domain).found == false
+    or headers.mailer in~ ("Microsoft CDO for Windows 2000")
+    or (
+      length(recipients.to) == 1
+      and all(recipients.to, .email.domain.domain not in $org_domains)
+    )
   )
   and (
     strings.ilike(body.current_thread.text,
+                  "*mcfee*",
                   "*mcafee*",
                   "*norton*",
                   "*geek*squad*",
@@ -28,13 +35,16 @@ source: |
                   "*ebay*",
                   "*symantec*",
                   "*best buy*",
-                  "*lifelock*"
+                  "*lifelock*",
+                  "*utilities premium*",
+                  "*pc security*"
     )
+    or regex.icontains(body.current_thread.text, "pay.{0,10}pal")
     or any(ml.logo_detect(beta.message_screenshot()).brands,
            .name in ("PayPal", "Norton", "GeekSquad", "Ebay", "McAfee")
     )
   )
-  and length(body.current_thread.text) < 1500
+  and length(body.current_thread.text) < 1750
   and (
     (
       3 of (
@@ -95,9 +105,13 @@ source: |
       )
     )
   )
-  and sender.email.domain.root_domain not in (
-    // paypal domain
-    "xoom.com"
+  // not high trust sender domains
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and not headers.auth_summary.dmarc.pass
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
   )
   and not strings.ends_with(headers.message_id, "@shopify.com>")
 

@@ -1,0 +1,27 @@
+name: "Attachment contains OLE relationship to IP address"
+type: "query"
+source: |
+  map(filter(attachments,
+             (
+               .file_extension in~ $file_extensions_macros
+               or .file_extension in~ $file_extensions_common_archives
+               or (
+                 .file_extension is null
+                 and .file_type == "unknown"
+                 and .content_type == "application/octet-stream"
+                 and .size < 100000000
+               )
+             )
+      ),
+      map(filter(file.oletools(.).relationships,
+                 regex.contains(.target_url.path,
+                                    '([0-9]{2,3}\.){3}[0-9]{2,3}'
+                 )
+                 and not regex.icontains(.target_url.path,
+                                         '(10\.(?:\d{1,2}|1\d{2}|2[0-4]\d|25[0-5])\.(?:\d{1,2}|1\d{2}|2[0-4]\d|25[0-5])\.(?:\d{1,2}|1\d{2}|2[0-4]\d|25[0-5]))|(172\.(?:1[6-9]|2\d|3[0-1])\.(?:\d{1,2}|1\d{2}|2[0-4]\d|25[0-5])\.(?:\d{1,2}|1\d{2}|2[0-4]\d|25[0-5]))|(192\.168\.(?:\d{1,2}|1\d{2}|2[0-4]\d|25[0-5])\.(?:\d{1,2}|1\d{2}|2[0-4]\d|25[0-5]))'
+                 )
+          ),
+          .target_url.url
+      )
+  )
+severity: "medium"
