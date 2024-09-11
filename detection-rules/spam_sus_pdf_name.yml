@@ -1,0 +1,46 @@
+name: "Spam: Multiple recipients, PDF attachment, and suspicious file name"
+description: "Message is addressed to many recipients and has a PDF attachment with a suspicious file name. The file name patterns listed here are consistant with mass spam, usually containing sexual imagery."
+type: "rule"
+severity: "low"
+source: |
+  type.inbound
+  and length(recipients.to) > 3
+  and all(attachments, .file_extension == "pdf")
+  and (
+    (length(headers.references) == 0 and headers.in_reply_to is null)
+    or (
+      not any(headers.hops, any(.fields, strings.ilike(.name, "In-Reply-To")))
+      and not any(headers.hops, strings.ilike(.signature.headers, "*:reply-to"))
+    )
+  )
+  and (
+    any(attachments,
+        strings.ilike(.file_name,
+                      "*#*",
+                      "*home*",
+                      "*portrait*",
+                      "*private*",
+                      "*view*",
+                      "*photo*",
+                      "*vid*",
+                      "*image*",
+                      "*pics*",
+                      "*movie*"
+        )
+    )
+    or any(attachments, strings.ilevenshtein(.file_name, subject.subject) < 5)
+  )
+tags:
+  - "Attack surface reduction"
+attack_types:
+  - "Spam"
+tactics_and_techniques:
+  - "Evasion"
+  - "PDF"
+  - "Social engineering"
+detection_methods:
+  - "File analysis"
+  - "Header analysis"
+id: "ec470180-dbc7-574d-8a07-50ec54f6ce89"
+testing_pr: 965
+testing_sha: 01574147ad265ce4031f8012cff79ffde0f6b5d0
