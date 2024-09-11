@@ -4,24 +4,51 @@ type: "rule"
 severity: "low"
 source: |
   type.inbound
-  and sender.email.domain.root_domain == "onmicrosoft.com"
+  and (
+    sender.email.domain.root_domain == "onmicrosoft.com"
+    or (
+      strings.icontains(sender.display_name, "onmicrosoft.com")
+      and sender.email.domain.valid == false
+    )
+  )
   and length(recipients.to) < 2
   and length(body.links) > 0
+  // bounce-back negations
+  and not strings.like(sender.email.local_part, "*postmaster*", "*mailer-daemon*", "*administrator*")
   and not any(attachments,
               .content_type in (
                 "message/rfc822",
                 "message/delivery-status",
                 "text/calendar"
               )
+              or (.content_type == "text/plain" and .file_extension == "ics")
   )
-  // negate out of office auto-reply
+  // negating legit replies
   and not (
-    strings.istarts_with(subject.subject, "Automatic reply:")
+    (
+      strings.istarts_with(subject.subject, "RE:")
+      or strings.istarts_with(subject.subject, "FW:")
+      or strings.istarts_with(subject.subject, "FWD:")
+      or regex.imatch(subject.subject, '(\[[^\]]+\]\s?){0,3}(re|fwd?|automat.*)\s?:.*')
+      or strings.istarts_with(subject.subject, "Réponse automatique")
+    )
     and (
       length(headers.references) > 0
-      or any(headers.hops, any(.fields, strings.ilike(.name, "In-Reply-To")))
+      and any(headers.hops, any(.fields, strings.ilike(.name, "In-Reply-To")))
     )
   )
+  // negating auto-replies
+  and not (
+    any(headers.hops,
+        any(.fields, .name =~ "auto-submitted" and .value =~ "auto-generated")
+        and any(.fields,
+                .name =~ "X-MS-Exchange-Generated-Message-Source"
+                and .value not in ("Antispam Quarantine Agent")
+        )
+    )
+  )
+  // construct the proper sender domain and check against known recipients
+  and not strings.concat(sender.email.domain.subdomain,  ".", sender.email.domain.tld) in $recipient_domains
   and (
     not profile.by_sender().solicited
     or (
@@ -29,6 +56,7 @@ source: |
       and not profile.by_sender().any_false_positives
     )
   )
+  and not sender.email.domain.domain in $org_domains
 tags:
  - "Attack surface reduction"
 attack_types:
