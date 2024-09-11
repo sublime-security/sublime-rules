@@ -1,0 +1,38 @@
+name: "Link: QR code in EML attachment with credential phishing indicators"
+description: "This rule detects QR codes in EML attachments that return a phishing disposition when analyzed, or are leveraging a known open redirect. "
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and length(attachments) == 1
+  and any(attachments,
+          (.content_type == "message/rfc822" or .file_extension =~ "eml")
+          // credential theft language in the attached EML
+          and any(file.explode(.),
+                  .depth > 0
+                  and .scan.qr.type == "url"
+  
+                  // linkanalysis phishing disposition
+                  and any([ml.link_analysis(.scan.qr.url)],
+                          .credphish.disposition == "phishing"
+                          or any(..scan.qr.url.rewrite.encoders,
+                                 strings.icontains(., "open_redirect")
+                          )
+                  )
+                  and .scan.qr.url.domain.root_domain not in $org_domains
+          )
+  )
+
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Evasion"
+  - "Open redirect"
+  - "QR code"
+detection_methods:
+  - "Computer Vision"
+  - "Content analysis"
+  - "File analysis"
+  - "QR code analysis"
+
+id: "9908ed3a-4c01-5a8d-82f9-78794b367c6e"

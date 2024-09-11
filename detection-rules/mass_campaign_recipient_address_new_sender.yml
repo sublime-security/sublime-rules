@@ -1,4 +1,4 @@
-name: "Mass campaign: recipient address in subject, body, and link (first-time sender)"
+name: "Mass campaign: recipient address in subject, body, and link (untrusted sender)"
 description: |
   This detects a pattern commonly observed in mass phishing campaigns.
 
@@ -24,19 +24,36 @@ source: |
   )
   and (
     any(recipients.to,
-        strings.icontains(subject.subject, .email.email)
-        or strings.icontains(subject.subject, .email.local_part)
+        (
+          strings.icontains(subject.subject, .email.email)
+          or strings.icontains(subject.subject, .email.local_part)
+        )
+        and (.email.domain.valid or strings.icontains(.display_name, "undisclosed"))
     )
   )
-  and any([body.html.inner_text, body.plain.raw],
-          any(recipients.to, strings.icontains(.., .email.email))
-  )
-  and any(body.links, any(recipients.to, strings.icontains(..href_url.query_params, .email.email)))
-  and any(ml.nlu_classifier(coalesce(body.html.display_text, body.plain.raw)).intents,
-          .name in ("cred_theft") and .confidence == "high"
+  and any(recipients.to, strings.icontains(body.current_thread.text, .email.email))
+  and any(body.links,
+          any(recipients.to,
+              strings.icontains(..href_url.query_params, .email.email)
+          )
+          and (
+            (
+              not strings.icontains(.display_text, "unsubscribe")
+              and not strings.icontains(.href_url.path, "unsubscribe")
+            )
+          )
   )
   and any(ml.nlu_classifier(body.current_thread.text).intents,
           .name in ("cred_theft") and .confidence == "high"
+  )
+  
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and not headers.auth_summary.dmarc.pass
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
   )
 attack_types:
   - "Credential Phishing"

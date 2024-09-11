@@ -13,18 +13,14 @@ source: |
   and length(recipients.cc) == 0
   and length(recipients.bcc) == 0
   and any(body.links,
-          beta.linkanalysis(.).credphish.disposition == "phishing"
-          and beta.linkanalysis(.).credphish.confidence in ("medium", "high")
+          ml.link_analysis(.).credphish.disposition == "phishing"
+          and ml.link_analysis(.).credphish.confidence in ("medium", "high")
   )
   // negate highly trusted sender domains unless they fail DMARC authentication
   and (
     (
       sender.email.domain.root_domain in $high_trust_sender_root_domains
-      and (
-        any(distinct(headers.hops, .authentication_results.dmarc is not null),
-            strings.ilike(.authentication_results.dmarc, "*fail")
-        )
-      )
+      and not headers.auth_summary.dmarc.pass
     )
     or sender.email.domain.root_domain not in $high_trust_sender_root_domains
   )
