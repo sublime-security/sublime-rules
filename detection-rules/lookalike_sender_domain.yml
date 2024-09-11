@@ -6,10 +6,12 @@ severity: "high"
 source: |
   type.inbound
   and any($org_domains,
+          length(sender.email.domain.sld) > 3
+          
           // this rule can be duplicated in order to tune the threshold
-          strings.ilevenshtein(sender.email.domain.domain, .) == 1
+          and strings.ilevenshtein(sender.email.domain.domain, .) == 1
+          and sender.email.domain.domain not in $org_domains
   )
-
   and (
     (
       profile.by_sender().prevalence in ("new", "outlier")
@@ -20,21 +22,15 @@ source: |
       and not profile.by_sender().any_false_positives
     )
   )
-
+  
   // negate highly trusted sender domains unless they fail DMARC authentication
-  and
-  (
+  and (
     (
       sender.email.domain.root_domain in $high_trust_sender_root_domains
-      and (
-        any(distinct(headers.hops, .authentication_results.dmarc is not null),
-            strings.ilike(.authentication_results.dmarc, "*fail")
-        )
-      )
+      and not headers.auth_summary.dmarc.pass
     )
     or sender.email.domain.root_domain not in $high_trust_sender_root_domains
   )
-
   and not profile.by_sender().any_false_positives
 attack_types:
   - "BEC/Fraud"

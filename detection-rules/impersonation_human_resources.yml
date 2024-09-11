@@ -6,7 +6,12 @@ source: |
   type.inbound
   and sender.email.domain.domain not in $org_domains
   and regex.icontains(sender.display_name,
-                      '(\bh\W?r\W?\b|human resources|hr depart(ment)?|employee relations)'
+                      '(\bh\W?r\W?\b|human\s?resources|hr depart(ment)?|employee relations)'
+  )
+  
+  and not (
+    strings.icontains(sender.display_name, sender.email.domain.domain)
+    and sender.email.domain.tld == "hr"
   )
   
   // negate replies
@@ -16,7 +21,7 @@ source: |
   )
   // Negate common marketing mailers
   and not regex.icontains(sender.display_name,
-                          'HR (Events|Expert|Support Center|Studies|Knowledge Cloud|News Library)|HR and People Operations'
+                          'HR (?:Events|Expert|Support Center|Studies|Knowledge Cloud|News Library|Crowd|Solutions|Interests)|HR and People Operations'
   )
   and not (
     any(headers.hops,
@@ -36,10 +41,7 @@ source: |
             )
         )
       )
-      and any(distinct(headers.hops, .authentication_results.dmarc is not null),
-              .index == 0
-              and strings.ilike(.authentication_results.dmarc, "*pass")
-      )
+      and headers.auth_summary.dmarc.pass
     )
     or any(headers.references, strings.iends_with(., "ccsend.com"))
   )
@@ -81,11 +83,7 @@ source: |
   and (
     (
       sender.email.domain.root_domain in $high_trust_sender_root_domains
-      and (
-        any(distinct(headers.hops, .authentication_results.dmarc is not null),
-            strings.ilike(.authentication_results.dmarc, "*fail")
-        )
-      )
+      and not headers.auth_summary.dmarc.pass
     )
     or sender.email.domain.root_domain not in $high_trust_sender_root_domains
   )
