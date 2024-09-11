@@ -10,7 +10,22 @@ source: |
           and strings.icontains(.href_url.query_params, "redirect")
   )
   and sender.email.domain.root_domain != 'calgary.ca'
-
+  and (
+    not profile.by_sender().solicited
+    or (
+      profile.by_sender().any_messages_malicious_or_spam
+      and not profile.by_sender().any_false_positives
+    )
+  )
+  
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and not headers.auth_summary.dmarc.pass
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
 attack_types:
   - "Credential Phishing"
 tactics_and_techniques:
