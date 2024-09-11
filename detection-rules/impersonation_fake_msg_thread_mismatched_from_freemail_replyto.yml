@@ -1,4 +1,4 @@
-name: "Fake Message Thread - First Time Sender with a Mismatched Freemail Reply-To Address"
+name: "Fake Message Thread - Untrusted Sender with a Mismatched Freemail Reply-To Address"
 description: |
   Fake Message Threads or Chain Reuse is a common confidence technique exploited by threat actors to bolster credibility.
   This is typically used in conjunction with a reply-to address that is not the same as the sender address. 
@@ -30,10 +30,15 @@ source: |
 
   // Check for Message Thread Indicators
   and (
-    strings.istarts_with(subject.subject, "RE:")
-    or any([body.plain.raw, body.html.display_text],
-           regex.icontains(.,
-                           "From:[ a-z0-9<>_@\\.]{0,80}Sent:[ a-z0-9<>_@\\.:]{0,40}To:[ a-z0-9<>_@\\.;]{0,300}(Cc:)?.{0,300}Subject:"
+    regex.icontains(subject.subject, '\b(?:RE|FWD?)\s*:')
+    or any([body.current_thread.text, body.html.display_text, body.plain.raw],
+           3 of (
+             strings.icontains(., "from:"),
+             strings.icontains(., "to:"),
+             strings.icontains(., "sent:"),
+             strings.icontains(., "date:"),
+             strings.icontains(., "cc:"),
+             strings.icontains(., "subject:")
            )
     )
   )
@@ -41,7 +46,7 @@ source: |
   // Check for the Presence of References or In-Reply-To properties
   and (
     length(headers.references) == 0
-    or not any(headers.hops, any(.fields, strings.ilike(.name, "In-Reply-To")))
+    or headers.in_reply_to is null
   )
 attack_types:
   - "BEC/Fraud"
