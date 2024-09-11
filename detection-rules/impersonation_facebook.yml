@@ -1,6 +1,6 @@
 name: "Brand impersonation: Meta/Facebook"
 description: |
-  Impersonation of Meta or Meta's subsidary Facebook.
+  Impersonation of Meta or Meta's subsidiary Facebook.
 references:
   - "https://www.techrepublic.com/article/google-and-amazon-most-impersonated-brands-in-phishing-attacks/"
 type: "rule"
@@ -23,7 +23,7 @@ source: |
     )
     or (
       (
-        strings.ilike(sender.display_name, '*facebook*', '*meta*')
+        regex.icontains(sender.display_name, '\bfacebook\b', '\bmeta\b', '\bmeta.*support\b')
         or strings.ilevenshtein(sender.display_name, 'facebook') <= 2
       )
       and (
@@ -36,6 +36,18 @@ source: |
         )
       )
     )
+    or 
+    // or the body contains a facebook/meta footer with the address citing "community support" 
+    (
+      strings.icontains(body.current_thread.text,
+                        "Meta Platforms, Inc., Attention: Community Support, 1 Facebook Way, Menlo Park, CA 94025"
+      )
+      // and it contains a link to spawn a chat with facebook - this is not the way support operates
+      and any(body.links,
+              strings.ends_with(.href_url.domain.domain, 'facebook.com')
+              and strings.starts_with(.href_url.path, '/msg/')
+      )
+    )
   )
   and sender.email.domain.root_domain not in~ (
     'facebook.com',
@@ -46,6 +58,8 @@ source: |
     'metamail.com',
     'medallia.com'
   )
+  // negate metaenterprise links
+  and not any(headers.reply_to, .email.email == "noreply@facebookmail.com")
   and (
     (
       profile.by_sender().prevalence != "common"
