@@ -7,16 +7,28 @@ source: |
   type.inbound
 
   // Sharepoint body content looks like this
-  and any([body.current_thread.text, body.plain.raw],
-          strings.ilike(.,
-                        "*shared a file with you*",
-                        "*shared with you*",
-                        "*invited you to access a file*"
-          )
-          // or the current thread is empty but has an image (image as content)
-          or . == "" and any(attachments, .file_type in $file_types_images)
+  and (
+    any([body.current_thread.text, body.plain.raw],
+        strings.ilike(.,
+                      "*shared a file with you*",
+                      "*shared with you*",
+                      "*invited you to access a file*"
+        )
+    )
+    // or the current thread is empty but has an image (image as content) with logo_detect of MS
+    or (
+      body.current_thread.text == ""
+      and any(attachments,
+              .file_type in $file_types_images
+              and any(ml.logo_detect(.).brands,
+                      strings.starts_with(.name, "Microsoft")
+              )
+      )
+    )
+    // the subject contains indicators of sharepoint shares
+    or strings.ilike(subject.subject, "*shared*", "*updated*")
   )
-  and strings.ilike(subject.subject, "*share*", "*updated*")
+  // contains logic that impersonates Microsoft
   and (
     any(ml.logo_detect(beta.message_screenshot()).brands,
         strings.starts_with(.name, "Microsoft")
@@ -191,6 +203,7 @@ source: |
     )
   )
   and not profile.by_sender().any_false_positives
+
 
 attack_types:
   - "Credential Phishing"
