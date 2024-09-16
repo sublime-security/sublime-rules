@@ -7,7 +7,11 @@ source: |
   type.inbound
   and (
     // Display name after replacing unicode confusables is stripe
-    strings.replace_confusables(sender.display_name) =~ 'stripe'
+    (
+        sender.display_name =~ 'stripe'
+        or strings.istarts_with(sender.display_name, 'stripe ') 
+        or strings.replace_confusables(sender.display_name) =~ 'stripe'
+    )
     or (
       // the edit distance is 1 or 2
       strings.ilevenshtein(strings.replace_confusables(sender.display_name), 'stripe') <= 2
@@ -19,11 +23,11 @@ source: |
   )
   and sender.email.domain.root_domain not in~ ('stripe.com')
   and sender.email.email not in $recipient_emails
-  
+
   // Stripe adds a custom header
   // don't match messages with the header
   and not any(headers.hops, any(.fields, .name == "X-Stripe-EID")) 
-  
+
   // negate highly trusted sender domains unless they fail DMARC authentication
   and (
     (
