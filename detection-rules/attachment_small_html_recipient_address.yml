@@ -4,7 +4,6 @@ type: "rule"
 severity: "medium"
 source: |
   type.inbound
-  and type.inbound
   and (
     any(attachments,
         (
@@ -49,26 +48,19 @@ source: |
             )
       )
   // bounce-back negations
-  and (
-    (
-      strings.like(sender.email.local_part,
-                   "*postmaster*",
-                   "*mailer-daemon*",
-                   "*administrator*"
-      )
-      and not any(attachments,
-                  .content_type in (
-                    "message/rfc822",
-                    "message/delivery-status",
-                    "text/calendar"
-                  )
-      )
+  and not (
+    any(attachments,
+        .content_type in ("message/delivery-status", "text/calendar")
     )
-    or not strings.like(sender.email.local_part,
-                        "*postmaster*",
-                        "*mailer-daemon*",
-                        "*administrator*"
+  )
+  // negate bouncebacks from proofpoint
+  and not (
+    sender.display_name == "Mail Delivery Subsystem"
+    and strings.ends_with(headers.message_id, "pphosted.com>")
+    and any(headers.hops,
+            .index == 0 and strings.contains(.received.server.raw, "pphosted.com")
     )
+    and any(attachments, .content_type == "message/rfc822")
   )
   and (
     not profile.by_sender().solicited
@@ -77,6 +69,8 @@ source: |
       and not profile.by_sender().any_false_positives
     )
   )
+tags:
+  - "Attack surface reduction"
 attack_types:
   - "Credential Phishing"
   - "Malware/Ransomware"

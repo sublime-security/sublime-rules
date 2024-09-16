@@ -49,12 +49,13 @@ source: |
   
     // or display text contains suspicious terms
     or any(body.links,
-           regex.icontains(.display_text, "Congrat|Survey|package|delivery|claim")
+           regex.icontains(.display_text, 'Congrat|Survey|package|delivery|\bclaim\b')
+           and not .href_url.domain.root_domain == "surveymonkey.com"
     )
   
     // compauth failure
     or any(headers.hops,
-           .authentication_results.compauth.verdict not in ("pass", "softpass")
+           .authentication_results.compauth.verdict not in ("pass", "softpass", "none")
     )
   
     // all links display text is null or aka.ms
@@ -68,6 +69,7 @@ source: |
                       or .href_url.domain.root_domain in (
                         "aka.ms",
                         "mimecast.com",
+                        "mimecastprotect.com",
                         "cisco.com"
                       )
                     )
@@ -76,7 +78,7 @@ source: |
     )
     or (
       // fake thread check
-      regex.imatch(subject.subject, '(re|fw(d)?\s?:).*')
+      regex.imatch(subject.subject, '(\[[^\]]+\]\s?){0,3}(re|fwd?)\s?:.*')
       and (
         (length(headers.references) == 0 and headers.in_reply_to is null)
         or not any(headers.hops,
