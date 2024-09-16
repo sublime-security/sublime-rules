@@ -325,6 +325,27 @@ source: |
      )
      and (sender.email.local_part in ('postmaster', 'mailer-daemon'))
  )
+
+ // negate Microsoft "welcome to the X group" notifications
+ and not (
+   headers.auth_summary.dmarc.pass
+   and length(attachments) == 6
+   and length(filter(attachments,
+                     strings.istarts_with(.file_name, "GuestWelcomeEmail")
+              )
+   ) == 5
+   and length(filter(body.links,
+                     (
+                       .href_url.domain.domain not in (
+                         "outlook.office365.com",
+                         "aka.ms",
+                         "go.microsoft.com"
+                       )
+                     )
+                     and not .href_url.domain.domain == sender.email.domain.domain
+              )
+   ) == 0
+ )
  
  // negate highly trusted sender domains unless they fail DMARC authentication
  and (
