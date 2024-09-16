@@ -5,16 +5,60 @@ type: "rule"
 severity: "medium"
 source: |
   type.inbound
-
+  
   // Sharepoint body content looks like this
-  and any([body.current_thread.text, body.plain.raw],
+  and (
+    (
+      any([body.current_thread.text, body.plain.raw],
           strings.ilike(.,
                         "*shared a file with you*",
                         "*shared with you*",
                         "*invited you to access a file*"
           )
+      )
+      and strings.ilike(subject.subject, "*shared*", "*updated*")
+    )
+    or any([
+             "Contigo", // Spanish
+             "Avec vous", // French
+             "Mit Ihnen", // German
+             "Con te", // Italian
+             "Com você", // Portuguese
+             "Met u", // Dutch
+             "С вами", // Russian
+             "与你", // Chinese (Simplified)
+             "與您", // Chinese (Traditional)
+             "あなたと", // Japanese
+             "당신과", // Korean
+             "معك", // Arabic
+             "آپ کے ساتھ", // Urdu
+             "আপনার সাথে", // Bengali
+             "आपके साथ", // Hindi
+             "Sizinle", // Turkish // Azerbaijani
+             "Med dig", // Swedish
+             "Z tobą", // Polish
+             "З вами", // Ukrainian
+             "Önnel", // Hungarian
+             "Μαζί σας", // Greek
+             "איתך", // Hebrew
+             "กับคุณ", // Thai
+             "Với bạn", // Vietnamese
+             "Dengan Anda", // Indonesian // Malay
+             "Nawe", // Swahili
+             "Cu dumneavoastră", // Romanian
+             "S vámi", // Czech
+             "Med deg", // Norwegian
+             "S vami", // Slovak
+             "Med dig", // Danish
+             "Amb vostè", // Catalan
+             "Teiega", // Estonian
+             "S vama", // Serbian
+           ],
+           strings.icontains(subject.subject, .)
+    )
   )
-  and strings.ilike(subject.subject, "*shared*", "*updated*")
+  
+  // contains logic that impersonates Microsoft
   and (
     any(ml.logo_detect(beta.message_screenshot()).brands,
         strings.starts_with(.name, "Microsoft")
@@ -141,13 +185,13 @@ source: |
       )
     )
   )
-
+  
   // Negate messages when the message-id indciates the message is from MS actual. DKIM/SPF domains can be custom and therefore are unpredictable.
   and not (
     strings.starts_with(headers.message_id, '<Share-')
     and strings.ends_with(headers.message_id, '@odspnotify>')
   )
-
+  
   // fake Sharepoint shares are easy to identify if there are any links
   // that don't point to microsoft[.]com or *.sharepoint[.]com
   and not all(body.links,
@@ -172,7 +216,7 @@ source: |
     // ignore microsoft privacy statement links
     "aka.ms"
   )
-
+  
   // negate highly trusted sender domains unless they fail DMARC authentication
   and (
     (
@@ -189,7 +233,6 @@ source: |
     )
   )
   and not profile.by_sender().any_false_positives
-
 attack_types:
   - "Credential Phishing"
   - "Malware/Ransomware"
