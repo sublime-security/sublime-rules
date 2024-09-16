@@ -14,10 +14,14 @@ source: |
           and network.whois(.email.domain).days_old <= 30
   )
   // request is being made
-  and any(ml.nlu_classifier(body.current_thread.text).entities, .name == "request")
+  and any(ml.nlu_classifier(body.current_thread.text).entities,
+          .name == "request"
+  )
   // there's financial/urgency OR a tag of medium/high confidence
   and (
-    any(ml.nlu_classifier(body.current_thread.text).entities, .name in ("financial", "urgency"))
+    any(ml.nlu_classifier(body.current_thread.text).entities,
+        .name in ("financial", "urgency")
+    )
     or any(ml.nlu_classifier(body.current_thread.text).tags,
            .name is not null and .confidence in ("medium", "high")
     )
@@ -34,7 +38,15 @@ source: |
       and not profile.by_sender().any_false_positives
     )
   )
-  and not profile.by_sender().any_false_positives
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and not headers.auth_summary.dmarc.pass
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+
 attack_types:
   - "BEC/Fraud"
 tactics_and_techniques:
