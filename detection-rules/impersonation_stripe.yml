@@ -3,7 +3,7 @@ description: |
   Impersonation of Stripe, usually for credential theft.
 type: "rule"
 severity: "high"
-source: "type.inbound\nand (\n  // Display name after replacing unicode confusables is stripe\n  strings.replace_confusables(sender.display_name) =~ 'stripe'\n  or (\n    // the edit distance is 1 or 2\n    strings.ilevenshtein(strings.replace_confusables(sender.display_name), 'stripe') <= 2\n    // the length is the same as \"stripe\"\n    and length(sender.display_name) == 6 \n    // and not one of these english words that matches the edit distance\n    and not sender.display_name in~ (\"strive\", \"stride\", \"strife\", \"strike\", \"strobe\", \"streps\", \"string\", \"scribe\")\n  )\n)\nand sender.email.domain.root_domain not in~ ('stripe.com')\nand sender.email.email not in $recipient_emails\n\n// Stripe adds a custom header\n// don't match messages with the header\nand not any(headers.hops, any(.fields, .name == \"X-Stripe-EID\")) \n\n// negate highly trusted sender domains unless they fail DMARC authentication\nand (\n  (\n    sender.email.domain.root_domain in $high_trust_sender_root_domains\n    and not headers.auth_summary.dmarc.pass\n  )\n  or sender.email.domain.root_domain not in $high_trust_sender_root_domains\n)\n"
+source: "type.inbound\nand (\n  // Display name after replacing unicode confusables is stripe\n  (\n      sender.display_name =~ 'stripe'\n      or strings.istarts_with(sender.display_name, 'stripe ') \n      or strings.replace_confusables(sender.display_name) =~ 'stripe'\n  )\n  or (\n    // the edit distance is 1 or 2\n    strings.ilevenshtein(strings.replace_confusables(sender.display_name), 'stripe') <= 2\n    // the length is the same as \"stripe\"\n    and length(sender.display_name) == 6 \n    // and not one of these english words that matches the edit distance\n    and not sender.display_name in~ (\"strive\", \"stride\", \"strife\", \"strike\", \"strobe\", \"streps\", \"string\", \"scribe\")\n  )\n)\nand sender.email.domain.root_domain not in~ ('stripe.com')\nand sender.email.email not in $recipient_emails\n\n// Stripe adds a custom header\n// don't match messages with the header\nand not any(headers.hops, any(.fields, .name == \"X-Stripe-EID\")) \n\n// negate highly trusted sender domains unless they fail DMARC authentication\nand (\n  (\n    sender.email.domain.root_domain in $high_trust_sender_root_domains\n    and not headers.auth_summary.dmarc.pass\n  )\n  or sender.email.domain.root_domain not in $high_trust_sender_root_domains\n)\n"
 attack_types:
   - "Credential Phishing"
 tactics_and_techniques:
@@ -15,4 +15,4 @@ detection_methods:
   - "Sender analysis"
 id: "862d4654-4a32-50c1-a441-b3a5106be174"
 testing_pr: 1809
-testing_sha: d6045526daa73a5d588535fa5b39d0977129fe8f
+testing_sha: 217c1db17dab340107c7964d95089c96fa13ac6e
