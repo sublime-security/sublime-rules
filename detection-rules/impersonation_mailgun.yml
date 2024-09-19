@@ -23,14 +23,19 @@ source: |
   and not (
     // sent from mailgun actual
     (
-      sender.email.domain.root_domain in ('mailgun.com', 'mailgun.net')
+      sender.email.domain.root_domain in (
+          'mailgun.com', 'mailgun.net', // official mailgun domains
+          'mailgunwarmup.com' // an unrelated b2b firm
+      )
       and headers.auth_summary.dmarc.pass
     )
     or 
     // some domains have "mailgun" as a subdomain and are sent via mailgun
     // these are unlikely to be impersonations
     (
-      strings.icontains(sender.email.domain.domain, "mailgun")
+      (strings.icontains(sender.email.domain.domain, "mailgun")
+      or strings.icontains(sender.email.local_part, "mailgun")
+      )
       and (
         // if mailgun action was in the header.hops very likely not impersonation
         // sample: https://platform.sublime.security/messages/ff12d4c08177c5505c29fc133201011c802029736f5ca28ee2acfffb60c02581
@@ -43,7 +48,7 @@ source: |
                           )
                    )
                )
-        ) > 4
+        ) >= 3
       )
     )
   )
