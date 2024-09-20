@@ -82,22 +82,27 @@ source: |
     )
     
     // suspicious content
-    
     and (
-      1 of (
+      2 of (
         strings.ilike(body.current_thread.text, "*assigned*new team*"),
         strings.ilike(body.current_thread.text, "*Microsoft Office 365*"),
         strings.ilike(body.current_thread.text, "*internal planner*"),
-        strings.ilike(body.current_thread.text, "*internal task*")
+        strings.ilike(body.current_thread.text, "*internal task*"),
+        any(recipients.to,
+            strings.icontains(body.current_thread.text, .email.domain.sld)
+        )
       )
       or (
         any(ml.nlu_classifier(body.current_thread.text).intents,
             .name == "cred_theft" and .confidence in~ ("medium", "high")
         )
       )
+      // multiple links, but all the same root domain
+      or (
+        length(distinct(body.links, .href_url.domain.root_domain)) == 1
+        and length(body.links) > 2
+      )
     )
-    
-    
     and sender.email.domain.root_domain not in (
       "bing.com",
       "microsoft.com",
