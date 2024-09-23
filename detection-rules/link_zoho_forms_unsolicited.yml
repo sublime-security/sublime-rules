@@ -1,0 +1,38 @@
+name: "Link: Zoho Form Link from Unsolicited Sender"
+description: "This detection rule matches on messaging containing at least one link to forms.zohopublic.com from an unsolicited sender.  Zoho provides a free plan enabling users to create custom websites and file hosting.  This services has been abused by threat actors to host landing pages via forms directing victims to a next stage of credential phishing."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and any(body.links,
+          // webflow link
+          .href_url.domain.domain == 'forms.zohopublic.com'
+  )
+  // not solicited or from malicious/spam user with no FPs
+  and (
+    not profile.by_sender().solicited
+    or (
+      profile.by_sender().any_messages_malicious_or_spam
+      and not profile.by_sender().any_false_positives
+    )
+  )
+
+  // not from high trust sender root domains
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and not headers.auth_summary.dmarc.pass
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+attack_types:
+  - "Callback Phishing"
+tactics_and_techniques:
+  - "Free file host"
+detection_methods:
+  - "Content analysis"
+  - "URL analysis"
+  - "Sender analysis"
+id: "eb04a9f2-c40b-5fcc-97de-bee7111bc3d8"
+testing_pr: 1940
+testing_sha: 9c0d84111d48ab5819a7936b6cee90216e2be193
