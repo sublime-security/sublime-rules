@@ -10,7 +10,7 @@ severity: "medium"
 source: |
   type.inbound
   and length(attachments) == 0
-  and sender.email.domain.root_domain == "paypal.com"
+  and sender.email.domain.root_domain in ("paypal.com", "paypal.com.mx", "paypal.com.br", "paypal.com.ar")
   and not any(headers.hops, .authentication_results.dmarc == "fail")
   and (
     strings.ilike(body.html.display_text, "*seller note*")
@@ -21,34 +21,34 @@ source: |
       // icontains a phone number
       (
         regex.icontains(strings.replace_confusables(body.current_thread.text),
-                        '.*\+?(\d{1}.)?\(?\d{3}?\)?.\d{3}.?\d{4}.*\n'
+                        '.*\+?([lo0-9]{1}.)?\(?[lo0-9]{3}?\)?.[lo0-9]{3}.?[lo0-9]{4}.*\n'
         )
         or regex.icontains(strings.replace_confusables(body.current_thread.text),
-                           '.*\+\d{1,3}[0-9]{10}.*\n'
+                           '.*\+[lo0-9]{1,3}[lo0-9]{10}.*\n'
         )
         or // +12028001238
-   regex.icontains(strings.replace_confusables(body.current_thread.text),
-                   '.*[0-9]{3}\.[0-9]{3}\.[0-9]{4}.*\n'
+       regex.icontains(strings.replace_confusables(body.current_thread.text),
+                   '.*[lo0-9]{3}\.[lo0-9]{3}\.[lo0-9]{4}.*\n'
         )
         or // 202-800-1238
-   regex.icontains(strings.replace_confusables(body.current_thread.text),
-                   '.*[0-9]{3}-[0-9]{3}-[0-9]{4}.*\n'
+       regex.icontains(strings.replace_confusables(body.current_thread.text),
+                   '.*[lo0-9]{3}-[lo0-9]{3}-[lo0-9]{4}.*\n'
         )
         or // (202) 800-1238
-   regex.icontains(strings.replace_confusables(body.current_thread.text),
-                   '.*\([0-9]{3}\)\s[0-9]{3}-[0-9]{4}.*\n'
+       regex.icontains(strings.replace_confusables(body.current_thread.text),
+                   '.*\([lo0-9]{3}\)\s[lo0-9]{3}-[lo0-9]{4}.*\n'
         )
         or // (202)-800-1238
-   regex.icontains(strings.replace_confusables(body.current_thread.text),
-                   '.*\([0-9]{3}\)-[0-9]{3}-[0-9]{4}.*\n'
-        ) // 8123456789
-        or (
+       regex.icontains(strings.replace_confusables(body.current_thread.text),
+                   '.*\([lo0-9]{3}\)-[lo0-9]{3}-[lo0-9]{4}.*\n'
+        )
+        or ( // 8123456789
           regex.icontains(strings.replace_confusables(body.current_thread.text),
-                          '.*8\d{9}.*\n'
+                          '.*8[lo0-9]{9}.*\n'
           )
           and regex.icontains(strings.replace_confusables(body.current_thread.text
                               ),
-                              '\+1'
+                              '\+[1l]'
           )
         )
       )
@@ -56,13 +56,23 @@ source: |
         (
           4 of (
             strings.ilike(body.html.inner_text, '*you did not*'),
+            strings.ilike(body.html.inner_text, '*is not for*'),
+            regex.icontains(body.html.inner_text, "didn\'t ma[kd]e this"),
+            strings.ilike(body.html.inner_text, "*Fruad Alert*"),
+            strings.ilike(body.html.inner_text, '*using your PayPal*'),
             strings.ilike(body.html.inner_text, '*subscription*'),
             strings.ilike(body.html.inner_text, '*antivirus*'),
             strings.ilike(body.html.inner_text, '*order*'),
             strings.ilike(body.html.inner_text, '*support*'),
             strings.ilike(body.html.inner_text, '*receipt*'),
             strings.ilike(body.html.inner_text, '*invoice*'),
+            strings.ilike(body.html.inner_text, '*Purchase*'),
+            strings.ilike(body.html.inner_text, '*Market*Value*'),
+            strings.ilike(body.html.inner_text, '*BTC*'),
             strings.ilike(body.html.inner_text, '*call*'),
+            strings.ilike(body.html.inner_text, '*get in touch with our*'),
+            strings.ilike(body.html.inner_text, '*quickly inform*'),
+            strings.ilike(body.html.inner_text, '*detected unusual transactions*'),
             strings.ilike(body.html.inner_text, '*cancel*'),
             strings.ilike(body.html.inner_text, '*renew*'),
             strings.ilike(body.html.inner_text, '*refund*'),
