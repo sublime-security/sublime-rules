@@ -4,14 +4,18 @@ type: "rule"
 severity: "high"
 source: |
   type.inbound
-
+  
   // sender is a freemail domain
   and sender.email.domain.root_domain in $free_email_providers
-
+  
   // attachment filename is the same as the subject
   and any(attachments,
-          strings.ilevenshtein(strings.concat(subject.subject,".",
-                                .file_extension), .file_name) <= 1
+          strings.ilevenshtein(strings.concat(subject.subject,
+                                              ".",
+                                              .file_extension
+                               ),
+                               .file_name
+          ) <= 1
   )
   
   // body contains a US address, or the body is the subject
@@ -26,15 +30,26 @@ source: |
   and any(attachments,
           .file_type == "pdf"
           and any(file.explode(.),
-                  (.depth == 1 and .flavors.mime == "image/jpeg")
-                  and .scan.exiftool.image_height == 148
-                  and .scan.exiftool.image_width == 148
-                  and regex.match(.scan.qr.data,
-                                  '(1[a-km-zA-HJ-NP-Z1-9]{25,34}|3[a-km-zA-HJ-NP-Z1-9]{25,34}|bc1[qp-z0-9]{39,59})'
+                  (
+                    (.depth == 1 and .flavors.mime == "image/jpeg")
+                    and (
+                      .scan.exiftool.image_height == 148
+                      and .scan.exiftool.image_width == 148
+                      and regex.match(.scan.qr.data,
+                                      '(1[a-km-zA-HJ-NP-Z1-9]{25,34}|3[a-km-zA-HJ-NP-Z1-9]{25,34}|bc1[qp-z0-9]{39,59})'
+                      )
+                    )
+                  )
+                  or (
+                    any(.scan.strings.strings,
+                        regex.icontains(., 'Amount\s?:?\s?(?:\$\s?\d|\d+\s?\$?)')
+                    )
+                    and any(.scan.strings.strings,
+                            regex.icontains(., '(\bBTC\b|\bLTC\b|Wallet)')
+                    )
                   )
           )
   )
-  
 
 attack_types:
   - "BEC/Fraud"
