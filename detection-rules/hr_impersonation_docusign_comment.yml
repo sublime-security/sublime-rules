@@ -1,48 +1,45 @@
 name: "HR Impersonation via DocuSign comment"
-description: "This rule inspects messages originating from legitimate DocuSign infrastructure, with a DocuSign logo and engaging language in the body that matches HR Impersonation criteria."
+description: "This rule inspects messages originating from legitimate DocuSign infrastructure, with engaging language in the body that matches HR Impersonation criteria."
 type: "rule"
 severity: "high"
 source: |
   type.inbound
   and length(attachments) == 0
-    
+  
   // Legitimate Docusign sending infratructure
   and (
-      sender.email.domain.root_domain in ('docusign.net', 'docusign.com')
-      // check for SPF or DMARC passed
-      and (headers.auth_summary.spf.pass or headers.auth_summary.dmarc.pass)
-    )
-    
-  // Docusign Logo 
-  and any(ml.logo_detect(beta.message_screenshot()).brands, .name == "DocuSign")
-    
+    sender.email.domain.root_domain in ('docusign.net', 'docusign.com')
+    // check for SPF or DMARC passed
+    and (headers.auth_summary.spf.pass or headers.auth_summary.dmarc.pass)
+  )
+  
   // HR Impersonation in body
   and regex.icontains(body.current_thread.text,
-                        (
-                          '(\bh\W?r\W?\b|human\s?resources|hr depart(ment)?|employee relations)'
-                        )
-    )
+                      (
+                        '(\bh\W?r\W?\b|human\s?resources|hr depart(ment)?|employee relations)'
+                      )
+  )
   
   // Request and Urgency
   and any(ml.nlu_classifier(body.current_thread.text).entities,
-            .name == "request"
-    )
+          .name == "request"
+  )
   and any(ml.nlu_classifier(body.current_thread.text).entities,
-            .name in ("urgency", "financial")
-    )
+          .name in ("urgency", "financial")
+  )
   and (
-      any(ml.nlu_classifier(body.current_thread.text).intents, .name != "benign")
-      or length(ml.nlu_classifier(body.current_thread.text).intents) == 0 // not benign but not malicious either
-    )
+    any(ml.nlu_classifier(body.current_thread.text).intents, .name != "benign")
+    or length(ml.nlu_classifier(body.current_thread.text).intents) == 0 // not benign but not malicious either
+  )
   
   // Negate legitimate HR docusigns originating from within the org
-  and not (
-      all(headers.reply_to, .email.domain.root_domain in $org_domains))
+  and not (all(headers.reply_to, .email.domain.root_domain in $org_domains))
   
   // Negate replies
   and (
-      length(headers.references) == 0
-      or not any(headers.hops, any(.fields, strings.ilike(.name, "In-Reply-To"))))
+    length(headers.references) == 0
+    or not any(headers.hops, any(.fields, strings.ilike(.name, "In-Reply-To")))
+  )
 
 attack_types:
   - "BEC/Fraud"
