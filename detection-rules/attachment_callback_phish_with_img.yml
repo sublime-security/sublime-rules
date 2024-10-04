@@ -16,7 +16,18 @@ source: |
       and not profile.by_sender().any_false_positives
     )
   )
-  and sender.email.domain.root_domain in $free_email_providers
+  and (
+    sender.email.domain.root_domain in $free_email_providers
+    or sender.email.domain.root_domain in ("onmicrosoft.com")
+    or (
+      (
+        length(recipients.to) == 0
+        or all(recipients.to, .display_name == "Undisclosed recipients")
+      )
+      and length(recipients.cc) == 0
+      and length(recipients.bcc) == 0
+    )
+  )
   and any(attachments,
           // exclude images taken with mobile cameras and screenshots from android
           .file_type in $file_types_images
@@ -32,6 +43,10 @@ source: |
                   and not any(.scan.exiftool.fields,
                               .key == "DeviceManufacturer"
                               and .value == "Apple Computer Inc."
+                  )
+                  and not any(.scan.exiftool.fields,
+                            .key == "UserComment"
+                            and .value == "Screenshot"
                   )
                   and 4 of (
                     strings.icontains(.scan.ocr.raw, "purchase"),

@@ -8,25 +8,25 @@ source: |
   and length(attachments) == 1
   and any(attachments,
           (.content_type == "message/rfc822" or .file_extension =~ "eml")
-
+  
           // identifies suspicious URLs in the attached EML
           and any(file.parse_eml(.).body.links,
                   (
-                    beta.linkanalysis(., mode="aggressive").credphish.disposition == "phishing"
-                    and beta.linkanalysis(., mode="aggressive").credphish.confidence in (
+                    ml.link_analysis(., mode="aggressive").credphish.disposition == "phishing"
+                    and ml.link_analysis(., mode="aggressive").credphish.confidence in (
                       "medium",
                       "high"
                     )
                   )
-
+  
                   // or any links in the final dom lead to a suspicious tld
-                  or any(beta.linkanalysis(.).final_dom.links,
+                  or any(ml.link_analysis(.).final_dom.links,
                          .href_url.domain.tld in $suspicious_tlds
-                         or beta.linkanalysis(.href_url).effective_url.domain.tld in $suspicious_tlds
+                         or ml.link_analysis(.href_url).effective_url.domain.tld in $suspicious_tlds
                   )
-
+  
                   // link redirects to a suspicious TLD
-                  or any(beta.linkanalysis(., mode="aggressive").redirect_history,
+                  or any(ml.link_analysis(., mode="aggressive").redirect_history,
                          .domain.tld in $suspicious_tlds
                   )
                   or (
@@ -34,30 +34,28 @@ source: |
                     // 3 or more different domains with 2 or more different TLDs
                     // careful because click trackers will always make this at least 2
                     // different domains and not unlikely 2 or more TLDs
-                    length(distinct(map(beta.linkanalysis(., mode="aggressive").redirect_history,
+                    length(distinct(map(ml.link_analysis(., mode="aggressive").redirect_history,
                                         .domain.tld
                                     )
                            )
                     ) >= 2
-                    and length(distinct(map(beta.linkanalysis(.,
-                                                              mode="aggressive"
-                                            ).redirect_history,
+                    and length(distinct(map(ml.link_analysis(., mode="aggressive").redirect_history,
                                             .domain.domain
                                         )
                                )
                     ) >= 3
                   )
           )
-
+  
           // identifies other suspicious indicators
           and (
             // engaging language in the original body
-            any(ml.nlu_classifier(body.html.display_text).entities,
+            any(ml.nlu_classifier(body.current_thread.text).entities,
                 .name == "request"
             )
-
+  
             // // engaging language in the attached EML
-            or any(ml.nlu_classifier(file.parse_eml(.).body.html.display_text).entities,
+            or any(ml.nlu_classifier(file.parse_eml(.).body.current_thread.text).entities,
                    .name == "request"
             )
             // recipient SLD impersonated in the subject or display name
@@ -114,6 +112,7 @@ source: |
                                "clos.*of.*account.*processed",
                                "confirm.your.account",
                                "courier.*able",
+                               "crediential.*notif",
                                "deactivation.*in.*progress",
                                "delivery.*attempt.*failed",
                                "document.received",
@@ -205,10 +204,15 @@ source: |
           )
   )
   // exclude bounce backs & read receipts
-  and not strings.like(sender.email.local_part,
-                       "*postmaster*",
-                       "*mailer-daemon*",
-                       "*administrator*"
+  and not strings.ilike(sender.email.local_part,
+                        "*postmaster*",
+                        "*mailer-daemon*",
+                        "*administrator*"
+  )
+  // exclude optonline deprecated mailbox returns
+  and (
+    not strings.starts_with(sender.display_name, "Auto-reply")
+    and sender.email.domain.root_domain == "optonline.net"
   )
   and not regex.icontains(subject.subject, "^(undeliverable|read:)")
   and not any(attachments, .content_type == "message/delivery-status")
