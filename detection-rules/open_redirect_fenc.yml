@@ -1,15 +1,18 @@
-name: "Open redirect: Dell"
+name: "Open Redirect: fenc.com"
 description: |
-  Message contains use of the Dell open redirect, but the sender is not Dell.
+  Message contains use of the fenc.com open redirect. This has been exploited in the wild.
 type: "rule"
 severity: "medium"
 source: |
   type.inbound
   and any(body.links,
-          .href_url.domain.domain == 't.em.home.dell.com'
-          and .href_url.path =~ '/r/'
+          .href_url.domain.root_domain == "fenc.com"
+          and .href_url.path =~ "/redirector.aspx"
+          and regex.icontains(.href_url.query_params, 'y=(?:https?|(?:\/|%2f)(?:\/|%2f))')
+          and not regex.icontains(.href_url.query_params, 'y=[^\&]*fenc\.com') 
+  
   )
-  and sender.email.domain.root_domain not in ('dell.com', 'dell.ca')
+  and not sender.email.domain.root_domain == "fenc.com"
   and (
     not profile.by_sender().solicited
     or (
@@ -26,8 +29,6 @@ source: |
     )
     or sender.email.domain.root_domain not in $high_trust_sender_root_domains
   )
-tags:
-  - "Attack surface reduction"
 attack_types:
   - "Credential Phishing"
   - "Malware/Ransomware"
@@ -36,4 +37,4 @@ tactics_and_techniques:
 detection_methods:
   - "Sender analysis"
   - "URL analysis"
-id: "718c2b0f-7ac3-5473-bb7c-12900b3da54a"
+id: "6ff1ab52-70e2-5135-8715-a3b1cc57e10f"
