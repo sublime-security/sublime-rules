@@ -14,12 +14,20 @@ source: |
   and any(attachments,
           (.file_type in $file_types_images or .file_type == "pdf")
           and (
-            strings.ilike(.file_name, "*norton*")
+            (
+              strings.ilike(.file_name, "*norton*")
+              and not (
+                any(recipients.to, strings.iends_with(.display_name, "Norton"))
+              )
+            )
             or any(file.explode(.),
                    regex.icontains(.scan.ocr.raw,
                                    ".*norton.?60.*",
                                    ".*lifelock.*",
-                                   ".*norton.?security.*"
+                                   ".*norton.?security.*",
+                                   ".*norton.?anti.?virus.*",
+                                   ".*Norton.{2,3}subscription.*"
+
                    )
             )
           )
@@ -42,8 +50,18 @@ source: |
       and sender.email.domain.domain not in $sender_domains
       and (
         sender.email.domain.root_domain not in $tranco_1m
-        or any(headers.reply_to, .email.domain.domain != sender.email.domain.domain)
+        or any(headers.reply_to,
+               .email.domain.domain != sender.email.domain.domain
+        )
       )
+    )
+    or (
+      (
+        length(recipients.to) == 0
+        or all(recipients.to, .display_name == "Undisclosed recipients")
+      )
+      and length(recipients.cc) == 0
+      and length(recipients.bcc) == 0
     )
   )
 attack_types:

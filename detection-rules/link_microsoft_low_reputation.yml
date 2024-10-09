@@ -330,6 +330,37 @@ source: |
    "sharepointonline.com",
    "yammer.com",
  )
+
+ // negate legitimate Office 365 bouncebacks
+ and not (
+     length(attachments) > 0
+     and all(attachments,
+         .content_type in ("message/delivery-status", "message/rfc822")
+     )
+     and (sender.email.local_part in ('postmaster', 'mailer-daemon'))
+ )
+
+ // negate Microsoft "welcome to the X group" notifications
+ and not (
+   headers.auth_summary.dmarc.pass
+   and length(attachments) == 6
+   and length(filter(attachments,
+                     strings.istarts_with(.file_name, "GuestWelcomeEmail")
+              )
+   ) == 5
+   and length(filter(body.links,
+                     (
+                       .href_url.domain.domain not in (
+                         "outlook.office365.com",
+                         "aka.ms",
+                         "go.microsoft.com"
+                       )
+                     )
+                     and not .href_url.domain.domain == sender.email.domain.domain
+              )
+   ) == 0
+   and subject.subject == strings.replace_confusables(subject.subject)
+ )
  
  // negate highly trusted sender domains unless they fail DMARC authentication
  and (

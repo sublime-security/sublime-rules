@@ -6,42 +6,43 @@ source: |
   type.inbound
   and any(filter(body.links, .href_url.domain.domain == "forms.office.com"),
           // avoid doing Link Analysis if the display-text has strong indications of phishing
-          any([
-                "REVIEW",
-                "PROPOSAL",
-                "DOCUMENT",
-                "PASSWORD",
-                "eFax",
-                "Restore",
-                "OPEN",
-                "Secure",
-                "Messaging",
-                "Reset",
-                "Account",
-                "Verify",
-                "Login",
-                "Notification",
-                "Alert",
-                "Urgent",
-                "Immediate",
-                "Access",
-                "Support",
-                "Update",
-                "Download",
-                "Attachment",
-                "Service",
-                "Payment",
-                "Remittance",
-                "Invoice"
-              ],
-              // replace confusables - observed ITW
-              strings.icontains(strings.replace_confusables(..display_text), .)
-              // add confidence to these strings by using profile.by_sender()
-              and (
-                  not profile.by_sender().solicited
-                  and profile.by_sender().prevalence in ('new', 'outlier')
-              )
-  
+          (
+            any([
+                  "REVIEW",
+                  "PROPOSAL",
+                  "DOCUMENT",
+                  "PASSWORD",
+                  "eFax",
+                  "Restore",
+                  "OPEN",
+                  "Secure",
+                  "Messaging",
+                  "Reset",
+                  "Account",
+                  "Verify",
+                  "Login",
+                  "Notification",
+                  "Alert",
+                  "Urgent",
+                  "Immediate",
+                  "Access",
+                  "Support",
+                  "Update",
+                  "Download",
+                  "Attachment",
+                  "Service",
+                  "Payment",
+                  "Remittance",
+                  "Invoice"
+                ],
+                // replace confusables - observed ITW
+                strings.icontains(strings.replace_confusables(..display_text), .)
+            // add confidence to these strings by using profile.by_sender()
+            )
+            and (
+              not profile.by_sender().solicited
+              and profile.by_sender().prevalence in ('new', 'outlier')
+            )
           )
           or 
           // look at the final_dom.raw
@@ -103,9 +104,11 @@ source: |
                               )
                        )
             ) <= 2
+            and not strings.contains(ml.link_analysis(., mode="aggressive").final_dom.raw,
+                                     'role="progressbar" aria-label="Page 1 of '
+            )
           )
   )
-
 attack_types:
   - "Credential Phishing"
 tactics_and_techniques:
