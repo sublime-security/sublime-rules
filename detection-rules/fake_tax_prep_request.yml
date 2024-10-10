@@ -4,7 +4,7 @@ type: "rule"
 severity: "high"
 source: |
   type.inbound
-  and length(body.current_thread.text) < 1000
+  and length(body.current_thread.text) < 1250
   // there are no links, all the links are to aka.ms, or an extraction from a warning banner that match the senders domain
   and (
     length(body.links) == 0
@@ -21,15 +21,39 @@ source: |
   and length(attachments) == 0
   and strings.ilike(subject.subject, "*tax*")
   and strings.icontains(body.current_thread.text, "tax")
-  and strings.like(body.current_thread.text, "*return*", "*record*", "*CPA*")
+  and strings.like(body.current_thread.text,
+                   "*return*",
+                   "*record*",
+                   "*CPA*",
+                   "*filing*"
+  )
   and (
     strings.ilike(body.current_thread.text,
                   "*necessary documents*",
                   "*required documents*",
+                  "*paperwork*need*",
                   "*in search of*",
                   "*tax service*",
+                  "*professional help*",
                   "*prepare*tax return*",
                   "*service*tax return*"
+    )
+    // suspicious patterns
+    or (
+      strings.icontains(body.current_thread.text, sender.display_name)
+      and 2 of (
+        (
+          length(headers.reply_to) > 0
+          and all(headers.reply_to,
+                  .email.domain.root_domain != sender.email.domain.root_domain
+          )
+        ),
+        (
+          headers.return_path.email is not null
+          and headers.return_path.email != sender.email.email
+        ),
+        headers.return_path.domain.root_domain in ("amazonses.com")
+      )
     )
   )
   and (

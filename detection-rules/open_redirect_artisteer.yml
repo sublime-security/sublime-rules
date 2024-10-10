@@ -1,0 +1,36 @@
+name: "Open redirect: Artisteer"
+description: "Message contains use of the Artisteer open redirect, but the sender is not Artisteer. This has been exploited in the wild."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and any(body.links,
+          .href_url.domain.root_domain == 'artisteer.com'
+          and strings.icontains(.href_url.query_params, 'redirect_url=')
+          and strings.icontains(.href_url.query_params, 'p=affr')
+  )
+  and sender.email.domain.root_domain != 'artisteer.com'
+  and (
+    not profile.by_sender().solicited
+    or (
+      profile.by_sender().any_messages_malicious_or_spam
+      and not profile.by_sender().any_false_positives
+    )
+  )
+  
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and not headers.auth_summary.dmarc.pass
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Open redirect"
+detection_methods:
+  - "Sender analysis"
+  - "URL analysis"
+id: "1f65eec3-4162-5f56-b66a-09a54204f80b"

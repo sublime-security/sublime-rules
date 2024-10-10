@@ -1,0 +1,121 @@
+name: "Link: Multistage Landing - Microsoft Forms Abuse"
+description: "The detection rule matches on message groups which make use of Microsoft Forms as a landing page. The landing page contains links which are newly registered, use free file or subdomain hosts, url shortners or when visited are phishing pages, lead to a captcha or rediret to a top website."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and any(filter(body.links, .href_url.domain.domain == "forms.office.com"),
+          // avoid doing Link Analysis if the display-text has strong indications of phishing
+          (
+            any([
+                  "REVIEW",
+                  "PROPOSAL",
+                  "DOCUMENT",
+                  "PASSWORD",
+                  "eFax",
+                  "Restore",
+                  "OPEN",
+                  "Secure",
+                  "Messaging",
+                  "Reset",
+                  "Account",
+                  "Verify",
+                  "Login",
+                  "Notification",
+                  "Alert",
+                  "Urgent",
+                  "Immediate",
+                  "Access",
+                  "Support",
+                  "Update",
+                  "Download",
+                  "Attachment",
+                  "Service",
+                  "Payment",
+                  "Remittance",
+                  "Invoice"
+                ],
+                // replace confusables - observed ITW
+                strings.icontains(strings.replace_confusables(..display_text), .)
+            // add confidence to these strings by using profile.by_sender()
+            )
+            and (
+              not profile.by_sender().solicited
+              and profile.by_sender().prevalence in ('new', 'outlier')
+            )
+          )
+          or 
+          // look at the final_dom.raw
+          // if the page has been taken down, match
+          strings.icontains(ml.link_analysis(., mode="aggressive").final_dom.raw,
+                            'This form was blocked due to privacy or safety concerns.'
+          )
+          // this logic checks for three abnormal cases
+          // 1) no questions
+          // 2) questions, but no inputs
+          // 3) a bunch of new lines (used to push down the submit button of the form)
+          // AND 
+          // // there is one or two links that isn't "standard" on the form
+          or (
+            (
+              // 1) doesn't contain any descriptive questions or questions
+              strings.icontains(ml.link_analysis(., mode="aggressive").final_dom.raw,
+                                // closes the question-list div
+                                '<div id="question-list"></div>'
+              )
+              or 
+              // 2) Contains questions, but no inputs
+              (
+                // has a question
+                strings.icontains(ml.link_analysis(., mode="aggressive").final_dom.raw,
+                                  // starts a new div
+                                  'id="question-list"><div>'
+                )
+                // no inputs
+                and not strings.icontains(ml.link_analysis(., mode="aggressive").final_dom.raw,
+                                          '<input '
+                )
+                // no required fields
+                and not strings.icontains(ml.link_analysis(., mode="aggressive").final_dom.raw,
+                                          '<span>Required</span>'
+                )
+              )
+              or 
+              // 3) a bunch of new lines (used to push down the submit button of the form)
+              (
+                strings.icount(ml.link_analysis(., mode="aggressive").final_dom.raw,
+                               '<br><br>'
+                ) > 20
+                or strings.icount(ml.link_analysis(., mode="aggressive").final_dom.raw,
+                                  '\n\n'
+                ) > 20
+              )
+            )
+            // AND 
+            and 
+            // there is one or two links to another page
+            0 < length(filter(ml.link_analysis(.).final_dom.links,
+                              .display_text is null
+                              or (
+                                .display_text !~ "Privacy and cookies"
+                                and .display_text !~ "terms of use"
+                                and .display_text !~ "report abuse"
+                                and .href_url.domain.root_domain != 'microsoft.com'
+                              )
+                       )
+            ) <= 2
+            and not strings.contains(ml.link_analysis(., mode="aggressive").final_dom.raw,
+                                     'role="progressbar" aria-label="Page 1 of '
+            )
+          )
+  )
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Social engineering"
+detection_methods:
+  - "HTML analysis"
+  - "URL analysis"
+  - "Content analysis"
+id: "85a2cd12-af74-5451-8bfb-4f36f71eecb7"

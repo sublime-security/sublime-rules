@@ -9,14 +9,38 @@ source: |
     // fake file attachment preview in original email
     any(attachments,
         .file_type in $file_types_images
-        and any(ml.logo_detect(.).brands, .name == "FakeAttachment")
+        and (
+          any(ml.logo_detect(.).brands, .name == "FakeAttachment")
+          or (
+            .size < 30000
+            and any(file.explode(.),
+                    strings.icontains(.scan.ocr.raw, 'sent you')
+                    // the attached image includes a filesize string
+                    and regex.icontains(.scan.ocr.raw,
+                                        '\b\d+.\d{1,2}\s?(k|m)b(\s|$)'
+                    )
+            )
+          )
+        )
     )
     // fake file attachment preview in attached EML
     or any(attachments,
            (.content_type == "message/rfc822" or .file_extension == "eml")
            and any(file.parse_eml(.).attachments,
                    .file_type in $file_types_images
-                   and any(ml.logo_detect(.).brands, .name == "FakeAttachment")
+                   and (
+                     any(ml.logo_detect(.).brands, .name == "FakeAttachment")
+                     or (
+                       .size < 30000
+                       and any(file.explode(.),
+                               strings.icontains(.scan.ocr.raw, 'sent you')
+                               // the attached image includes a filesize string
+                               and regex.icontains(.scan.ocr.raw,
+                                                   '\b\d+.\d{1,2}\s?(k|m)b(\s|$)'
+                               )
+                       )
+                     )
+                   )
            )
     )
   )
@@ -29,7 +53,6 @@ source: |
     )
     or sender.email.domain.root_domain not in $high_trust_sender_root_domains
   )
-  
   and (
     not profile.by_sender().solicited
     or profile.by_sender().any_messages_malicious_or_spam
