@@ -1,15 +1,18 @@
-name: "Open redirect: Dell"
+name: "Open Redirect: phoenixartstudio.net"
 description: |
-  Message contains use of the Dell open redirect, but the sender is not Dell.
+  Message contains use of the Phoenix Art Studio redirect. This has been exploited in the wild.
 type: "rule"
 severity: "medium"
 source: |
   type.inbound
   and any(body.links,
-          .href_url.domain.domain == 't.em.home.dell.com'
-          and .href_url.path =~ '/r/'
+          .href_url.domain.root_domain == "phoenixartstudio.net"
+          // the redirect field
+          and regex.icontains(.href_url.query_params, 'keyvalue=\d+(?:&|$)')
+          and strings.icontains(.href_url.query_params, '&page=')
+          and not regex.icontains(.href_url.query_params, '&page=[^\&]*phoenixartstudio\.net(?:\&|\/|$)')
   )
-  and sender.email.domain.root_domain not in ('dell.com', 'dell.ca')
+  and not sender.email.domain.root_domain in ("phoenixartstudio.net")
   and (
     not profile.by_sender().solicited
     or (
@@ -26,8 +29,6 @@ source: |
     )
     or sender.email.domain.root_domain not in $high_trust_sender_root_domains
   )
-tags:
-  - "Attack surface reduction"
 attack_types:
   - "Credential Phishing"
   - "Malware/Ransomware"
@@ -36,4 +37,4 @@ tactics_and_techniques:
 detection_methods:
   - "Sender analysis"
   - "URL analysis"
-id: "718c2b0f-7ac3-5473-bb7c-12900b3da54a"
+id: "7b83c3ab-a09a-5667-ae23-fba5b19c9f2f"
