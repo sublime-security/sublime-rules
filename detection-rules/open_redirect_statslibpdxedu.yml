@@ -1,15 +1,17 @@
-name: "Open redirect: Dell"
+name: "Open Redirect: stats.lib.pdx.edu"
 description: |
-  Message contains use of the Dell open redirect, but the sender is not Dell.
+  Message contains use of the stats.lib.pdx.edu open redirect. This has been exploited in the wild.
 type: "rule"
 severity: "medium"
 source: |
   type.inbound
-  and any(body.links,
-          .href_url.domain.domain == 't.em.home.dell.com'
-          and .href_url.path =~ '/r/'
-  )
-  and sender.email.domain.root_domain not in ('dell.com', 'dell.ca')
+    and any(body.links,
+            .href_url.domain.domain == "stats.lib.pdx.edu"
+            and strings.icontains(.href_url.path, "/proxy.php")
+            and strings.icontains(.href_url.query_params, 'url=')
+            // negate use of the redirect by stats.lib.pdx.edu
+            and not regex.icontains(.href_url.query_params, 'url=[^&]*stats\.lib\.pdx\.edu')
+    ) 
   and (
     not profile.by_sender().solicited
     or (
@@ -26,8 +28,6 @@ source: |
     )
     or sender.email.domain.root_domain not in $high_trust_sender_root_domains
   )
-tags:
-  - "Attack surface reduction"
 attack_types:
   - "Credential Phishing"
   - "Malware/Ransomware"
@@ -36,4 +36,4 @@ tactics_and_techniques:
 detection_methods:
   - "Sender analysis"
   - "URL analysis"
-id: "718c2b0f-7ac3-5473-bb7c-12900b3da54a"
+id: "0fe96183-7eb9-590d-8c77-a1075de5b2ba"

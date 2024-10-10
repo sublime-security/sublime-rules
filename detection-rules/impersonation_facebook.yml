@@ -50,13 +50,21 @@ source: |
     or 
     // or the body contains a facebook/meta footer with the address citing "community support" 
     (
-      strings.icontains(body.current_thread.text,
-                        "Meta Platforms, Inc., Attention: Community Support, 1 Facebook Way, Menlo Park, CA 94025"
+      regex.icontains(body.current_thread.text,
+                      "Meta Platforms, Inc., Attention: Community Support, 1 (Facebook|Meta) Way, Menlo Park, CA 94025"
       )
       // and it contains a link to spawn a chat with facebook - this is not the way support operates
-      and any(body.links,
-              strings.ends_with(.href_url.domain.domain, 'facebook.com')
-              and strings.starts_with(.href_url.path, '/msg/')
+      and (
+        any(body.links,
+            strings.ends_with(.href_url.domain.domain, 'facebook.com')
+            and strings.starts_with(.href_url.path, '/msg/')
+        )
+        or (
+          any(ml.nlu_classifier(body.current_thread.text).intents,
+              .name in ("cred_theft", "callback_scam", "steal_pii")
+              and .confidence in ("high")
+          )
+        )
       )
     )
   )
