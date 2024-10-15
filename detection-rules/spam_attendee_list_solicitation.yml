@@ -28,31 +28,43 @@ source: |
     )
     // if there are indicators of a previous thread, also inspect the previous thread
     or (
-      any([body.html.display_text, body.plain.raw],
-          3 of (
-            strings.icontains(., "from:"),
-            strings.icontains(., "to:"),
-            strings.icontains(., "sent:"),
-            strings.icontains(., "date:"),
-            strings.icontains(., "cc:"),
-            strings.icontains(., "subject:")
-          )
-          // match _after_ the previous thread indciators
-          and (
-            regex.icontains(.,
-                            "(from|to|sent|date|cc|subject):.*(Attendee|Member|Participant|User|Visitor|Registrant|Buyer|Email)(s)?[^\n\r]{0,20}(list|database)"
-            )
-            or regex.icontains(.,
-                               "(from|to|sent|date|cc|subject):.*(list|database)[^\n\r]{0,20}(Attendee|Member|Participant|User|Visitor|Registrant|Buyer|Email)(s)?"
-            )
-            or regex.icontains(.,
-                               '(from|to|sent|date|cc|subject):.*((demand|lead\b|marketing)[^\n\r]{0,20}(manager|head|lead|supervisor|executive))'
-            )
-          )
-          and regex.icontains(.,
-                              "(from|to|sent|date|cc|subject):.*(interested|accessing|purchas|obtain|acuir|sample)"
-          )
-          and not regex.icontains(., "(debit card|transaction.{0,20}processed)")
+      // contains references to the previous thread
+      2 of (
+        regex.icontains(body.current_thread.text, '(?:get|got|had) a chance'),
+        regex.icontains(body.current_thread.text,
+                        '(?:below|previous|last|prior) email'
+        ),
+        regex.icontains(body.current_thread.text, 'follow(?:ing)? up'),
+        regex.icontains(body.current_thread.text, '(contacts?|attendees?) list'),
+        strings.icontains(body.current_thread.text, 'heard back'),
+      )
+      and any([body.html.display_text, body.plain.raw],
+              3 of (
+                strings.icontains(., "from:"),
+                strings.icontains(., "to:"),
+                strings.icontains(., "sent:"),
+                strings.icontains(., "date:"),
+                strings.icontains(., "cc:"),
+                strings.icontains(., "subject:")
+              )
+              // match _after_ the previous thread indciators
+              and (
+                regex.icontains(.,
+                                "(from|to|sent|date|cc|subject):.*(Attendee|Member|Participant|User|Visitor|Registrant|Buyer|Email)(s)?[^\n\r]{0,20}(list|database)"
+                )
+                or regex.icontains(.,
+                                   "(from|to|sent|date|cc|subject):.*(list|database)[^\n\r]{0,20}(Attendee|Member|Participant|User|Visitor|Registrant|Buyer|Email)(s)?"
+                )
+                or regex.icontains(.,
+                                   '(from|to|sent|date|cc|subject):.*((demand|lead\b|marketing)[^\n\r]{0,20}(manager|head|lead|supervisor|executive))'
+                )
+              )
+              and regex.icontains(.,
+                                  "(from|to|sent|date|cc|subject):.*(interested|accessing|purchas|obtain|acuir|sample)"
+              )
+              and not regex.icontains(.,
+                                      "(debit card|transaction.{0,20}processed)"
+              )
       )
     )
   )
