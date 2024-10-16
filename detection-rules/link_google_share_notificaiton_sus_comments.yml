@@ -30,6 +30,26 @@ source: |
                        '</div>\s*<div style="margin-top:24px; color:#5F6368">[^<]*(?:<[^\/][^<]*)*(?:file (?:access (?:request|invite)|sent to you)|(?:s(?:ent you|hared) a|open shared) file|d(?:rive file request|ocument shared)|(?:invited|request|click) to view|view (?:shared document|a file)|pending file request)[^<]*(?:<[^\/][^<]*)*</div>\s*</td>'
     )
   )
+  // not where the sender display name of the message is within org_display_names
+  and not (
+    // the message is from google actual
+    sender.email.email in (
+      'comments-noreply@docs.google.com',
+      'drive-shares-dm-noreply@google.com',
+      'drive-shares-noreply@google.com',
+      'calendar-notification@google.com'
+    )
+    and headers.auth_summary.dmarc.pass
+    // but the sender display name is within org_display_names
+    and any($org_display_names,
+            strings.istarts_with(sender.display_name,
+                                 strings.concat(., " (via Google ")
+            )
+            or strings.istarts_with(sender.display_name,
+                                    strings.concat(., " (Google ")
+            )
+    )
+  )
 attack_types:
   - "Credential Phishing"
 tactics_and_techniques:
