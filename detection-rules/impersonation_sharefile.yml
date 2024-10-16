@@ -15,8 +15,19 @@ source: |
   )
   and (length(body.links) > 0 or length(attachments) > 0)
   and not (
-    sender.email.domain.root_domain in ('sf-notifications.com', 'sharefile.com')
+    sender.email.domain.root_domain in (
+      'sf-notifications.com', 'sharefile.com', 
+      'cloud.com' // cloud.com is the parent org of ShareFile
+    )
     and headers.auth_summary.dmarc.pass
+  )
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and not headers.auth_summary.dmarc.pass
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
   )
 attack_types:
   - "Credential Phishing"
