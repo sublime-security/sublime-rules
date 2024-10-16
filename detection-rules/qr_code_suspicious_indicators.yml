@@ -45,6 +45,17 @@ source: |
                   )
                   // exclude contact cards
                   and not strings.istarts_with(.scan.qr.data, "BEGIN:VCARD")
+  
+                  // negate QR codes to legit Servicio de Administración Tributaria (SAT) Gov links
+                  and not (
+                      .scan.qr.url.domain.root_domain is not null 
+                      and .scan.qr.url.domain.root_domain in ('sat.gob.mx')
+                  )
+                  and not (
+                    .scan.qr.data is not null 
+                    and strings.icontains(.scan.qr.data, 'sat.gob.mx')
+                  )
+                  
           )
       )
       or (
@@ -340,7 +351,7 @@ source: |
     )
     or profile.by_sender().any_messages_malicious_or_spam
   )
-
+  
   and not profile.by_sender().any_false_positives
   
   // negate highly trusted sender domains unless they fail DMARC authentication
@@ -351,7 +362,6 @@ source: |
     )
     or sender.email.domain.root_domain not in $high_trust_sender_root_domains
   )
-
 attack_types:
   - "Credential Phishing"
 tactics_and_techniques:
