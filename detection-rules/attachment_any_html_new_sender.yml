@@ -10,7 +10,9 @@ type: "rule"
 severity: "medium"
 source: |
   type.inbound
-  and any(attachments, .file_extension in~ ('htm', 'html') or .file_type == "html")
+  and any(attachments,
+          .file_extension in~ ('htm', 'html') or .file_type == "html"
+  )
   and (
     (
       profile.by_sender().prevalence in ("new", "outlier")
@@ -19,7 +21,7 @@ source: |
     or profile.by_sender().any_messages_malicious_or_spam
   )
   and not profile.by_sender().any_false_positives
-
+  
   // negate highly trusted sender domains unless they fail DMARC authentication
   and (
     (
@@ -28,7 +30,197 @@ source: |
     )
     or sender.email.domain.root_domain not in $high_trust_sender_root_domains
   )
-
+  
+  // not Cisco Secure Messages
+  and not (
+  any(attachments, strings.istarts_with(.file_name, "securedoc_") and .size > 0)
+  and length(attachments) == 1 // only ever one attachment
+      
+  and any(
+        filter(attachments, strings.istarts_with(.file_name, "securedoc_")), 
+        
+        3 of (
+          // html attachment starts with known header
+          regex.icontains(file.parse_html(.).raw, '^<!-- saved from url=\(\d+\)https:\/\/res\.cisco\.com(:443)? -->\r\n<!DOCTYPE HTML PUBLIC \"-\/\/W3C\/\/DTD HTML 4.01 Transitional\/\/EN\"\n\s\"http:\/\/www\.w3\.org\/TR\/html4\/loose\.dtd\"><html\nlang=\"[^\"]+\"><head><base href=\"https?:\/\/res\.cisco\.com\/envelopeopener\/'),
+      
+         (
+           // the sender is in the html attachment where it should be
+          (
+              sender.display_name is null 
+              and 1 of (strings.icontains(file.parse_html(.).raw, strings.concat("<input\ntype=hidden\nname=fr\nvalue=\"", sender.email.email, "\">")),
+              strings.icontains(file.parse_html(.).raw, strings.concat("<td\nclass=evpWindow\ncolspan=2><span\nid=emailFrom\nclass=email>", sender.email.email, "</span></td></tr>")))
+          )
+          or
+          // if there is a display name it's handled differently
+          (
+              sender.display_name is not null
+              and 1 of (strings.icontains(file.parse_html(.).raw, strings.concat("<input\ntype=hidden\nname=fr\nvalue=\"", sender.display_name, " &lt;", sender.email.email, "&gt;", "\">")),
+  strings.icontains(file.parse_html(.).raw, strings.concat("<input\ntype=hidden\nname=fr\nvalue=\"&quot;", sender.display_name, "&quot; &lt;", sender.email.email, "&gt;", "\">")),
+              strings.icontains(file.parse_html(.).raw, strings.concat("<td\nclass=evpWindow\ncolspan=2><span\nid=emailFrom\nclass=email>", sender.display_name, " &lt;", sender.email.email, "&gt;", "</span></td></tr>")))
+          )
+        ),
+      
+        // the subject is within the html attachment
+        // external tags placed in the subject create issues here
+        ( 
+          // normal subject without any trailing spaces
+          strings.icontains(file.parse_html(.).raw, strings.concat("<input\ntype=hidden\nname=sub\nvalue=\"", subject.subject, "\">"))
+          // subject.subject strips out trailing spaces
+          // https://platform.sublime.security/messages/9b37ceeebe29c5de975975cd980012fa69d5ae216cda5e116f59430136db996e
+          or strings.icontains(file.parse_html(.).raw, strings.concat("<input\ntype=hidden\nname=sub\nvalue=\"", subject.subject, " \">"))
+          // normal subject without any trailling spaces
+          or strings.icontains(file.parse_html(.).raw, strings.concat("<title>Secure Registered Envelope:", subject.subject, "\n</title>"))
+          // subject.subject strips out trailing spaces
+          // https://platform.sublime.security/messages/9b37ceeebe29c5de975975cd980012fa69d5ae216cda5e116f59430136db996e
+          or strings.icontains(file.parse_html(.).raw, strings.concat("<title>Secure Registered Envelope:", subject.subject, " \n</title>"))
+          ),    
+          // the recipient address shows up as an option at least one
+          all(recipients.to, 
+            strings.icount(file.parse_html(..).raw, strings.concat("<option value=\"", .email.email, "\"")) >= 2
+            or 
+            strings.icontains(file.parse_html(..).raw, strings.concat("<input\ntype=hidden\nname=recipient\nvalue=\"", .email.email, "\">"))
+          ),
+          // Ironport Header 
+          any(headers.hops, any(.fields, 
+              .name =~ "X-IronPort-DK-Sig" or
+              (.name == 'Content-Type' and regex.imatch(.value, 'multipart\/mixed; boundary=\"===============\d+==\"')) 
+            )
+          )
+        )
+        
+      )
+  )
+  
+  // not PPFT Secure Messages
+  and not (
+    any(attachments, .file_name in ('SecureMessageAtt.html') and .size > 0)
+  
+    // PPROFPOINT Secure Message
+    // if all three of the headers are there, VERY likely legit
+    and (
+      3 of (
+        any(headers.hops,
+            strings.istarts_with(.received.source.raw, "pps.filterd")
+        ),
+        any(headers.hops,
+            any(.fields,
+                .name =~ "X-ProofpointSecure"
+                and .value == 'Encrypted; app="filterd"'
+            )
+        ),
+        any(headers.hops,
+            any(.fields,
+                .name == "Content-Type"
+                and strings.starts_with(.value,
+                                        'multipart/mixed; boundary="PROOFPOINT_BOUNDARY_'
+                )
+            )
+        )
+      )
+      or 3 of (
+        (
+          // two or three attachments which are well known filenames
+          2 <= length(filter(attachments,
+                             .file_name in (
+                               'lock.gif',
+                               // logos some in different formats
+                               'logo.jpeg',
+                               'logo.gif',
+                               'logo.png',
+                               // the HTML Attachment
+                               'SecureMessageAtt.html'
+                             )
+                             and .size != 0
+                      )
+          ) <= 3
+        ),
+  
+        // if the message contains two links
+        (
+          1 <= length(filter(body.links,
+                             ( // the "click here" link
+                               // sometimes this is missing
+                               // https://platform.sublime.security/messages/81a919b203361e3a93fdad68c88ba42dff238bbe9a79d5a0f03bd97290ccf49c
+                               .href_url.path == "/formpostdir/securereader"
+                               and strings.icontains(.href_url.query_params,
+                                                     'id='
+                               )
+                               and strings.icontains(.href_url.query_params,
+                                                     '&brand='
+                               )
+                             )
+                             or 
+                             // the "help" link
+                             // sometimes this is missing
+                             // https://platform.sublime.security/messages/f66cbc7503b2a64b74806434bb43c0de50908f954cc6fd8628107cf1c7047eea
+                             (
+                               .href_url.path == "/securereader/help.jsf"
+                               and strings.icontains(.href_url.query_params,
+                                                     'lang='
+                               )
+                             )
+                      )
+          ) <= 2
+        ),
+  
+        // and one of the three header headers
+        (
+          1 of (
+            any(headers.hops,
+                strings.istarts_with(.received.source.raw, "pps.filterd")
+            ),
+            any(headers.hops,
+                any(.fields,
+                    .name =~ "X-ProofpointSecure"
+                    and .value == 'Encrypted; app="filterd"'
+                )
+            ),
+            any(headers.hops,
+                any(.fields,
+                    .name == "Content-Type"
+                    and strings.starts_with(.value,
+                                            'multipart/mixed; boundary="PROOFPOINT_BOUNDARY_'
+                    )
+                )
+            )
+          )
+        ),
+  
+        // and the HTML attachment contains four links with the same root_domain
+        (
+          any(filter(attachments, .file_name == "SecureMessageAtt.html"),
+              // there are four spots where a domain shows up
+              4 of (
+                regex.icontains(file.parse_html(.).raw,
+                                '<form method="post" name="theForm" target=_top action="[^\"]+">'
+                ),
+                regex.icontains(file.parse_html(.).raw,
+                                '<tr><td><IMG SRC="[^\"]+\/securereader\/Image\?c=logo&b=\d&i=\d+&rnd=\d\.\d+"'
+                ),
+                regex.icontains(file.parse_html(.).raw,
+                                '<td align=right><img src="[^\"]+\/securereader\/Image\?c=lock&b=\d&rnd=\d\.\d+"'
+                ),
+                regex.icontains(file.parse_html(.).raw, ' <A HREF="[^\"]+" '),
+              )
+          )
+        ),
+        (
+          any(filter(attachments, .file_name == "SecureMessageAtt.html"),
+              any(file.explode(.),
+                  .depth == 0
+                  and length(distinct(map(filter(.scan.url.urls,
+                                                 .domain.root_domain != "w3.org"
+                                          ),
+                                          .domain.root_domain
+                                      )
+                             )
+                  ) == 1
+              )
+          )
+        )
+      )
+    )
+  )
 tags:
   - "Attack surface reduction"
 tactics_and_techniques:
