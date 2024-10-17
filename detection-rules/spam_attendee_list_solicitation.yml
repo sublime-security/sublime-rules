@@ -7,20 +7,84 @@ source: |
   and length(body.current_thread.text) < 2000
   and length(body.links) < 5
   and (
-    any([subject.subject, body.current_thread.text],
-        regex.icontains(.,
-                        '(Attendee|Member|Participant|User|Visitor|Registrant|Buyer|Email|Contact)(s)?(\s\w*){0,9}(list|database)'
+    (
+      (
+        any([subject.subject, body.current_thread.text],
+            (
+              regex.icontains(.,
+                              '(Attendee|Buyer|Contact|Decision Maker|Email|Member|Participant|Professional|Registrant|User|Visitor)(s)?(\s\w*){0,9}(list|database)'
+              )
+              and not (
+                regex.icount(., "email list") == 1
+                and regex.icontains(.,
+                                    '(?:unsub|remove)(\s\w*){0,5}email list',
+                                    'email list(\s\w*){0,5}(?:unsub|remove)'
+                )
+              )
+            )
+            or regex.icontains(.,
+                               '(list|database)(\s\w*){0,9}(Attendee|Buyer|Contact|Decision Maker|Email|Member|Participant|Professional|Registrant|User|Visitor)(s)?'
+            )
+            or strings.icontains(., 'list of ')
         )
-        or regex.icontains(.,
-                           '(list|database)(\s\w*){0,9}(Attendee|Member|Participant|User|Visitor|Registrant|Buyer|Email|Contact)(s)?'
-        )
+      )
+      and regex.icontains(body.current_thread.text,
+                          "(interested|accessing|purchas|obtain|acuir|sample)"
+      )
+      and not regex.icontains(body.current_thread.text,
+                              "(debit card|transaction.{0,20}processed)"
+      )
     )
-  )
-  and regex.icontains(body.current_thread.text,
-                      "(interested|accessing|purchas|obtain|acuir|sample)"
-  )
-  and not regex.icontains(body.current_thread.text,
-                          "(debit card|transaction.{0,20}processed)"
+    // if there are indicators of a previous thread, also inspect the previous thread
+    or (
+      // contains references to the previous thread
+      2 of (
+        regex.icontains(body.current_thread.text, '(?:get|got|had) a chance'),
+        regex.icontains(body.current_thread.text,
+                        '(?:below|previous|last|prior) email'
+        ),
+        regex.icontains(body.current_thread.text, 'follow(?:ing)? up'),
+        regex.icontains(body.current_thread.text, '(contacts?|attendees?) list'),
+        strings.icontains(body.current_thread.text, 'heard back'),
+      )
+      and any([body.html.display_text, body.plain.raw],
+              (
+                3 of (
+                  strings.icontains(., "from:"),
+                  strings.icontains(., "to:"),
+                  strings.icontains(., "sent:"),
+                  strings.icontains(., "date:"),
+                  strings.icontains(., "cc:"),
+                  strings.icontains(., "subject:")
+                )
+                or strings.icontains(.,
+                                     strings.concat(sender.display_name,
+                                                    " <",
+                                                    sender.email.email,
+                                                    "> wrote:"
+                                     )
+                )
+              )
+              // match _after_ the previous thread indciators
+              and (
+                regex.icontains(.,
+                                '(from|to|sent|date|cc|subject|wrote):.*(Attendee|Buyer|Contact|Decision Maker|Email|Member|Participant|Professional|Registrant|User|Visitor)(s)?(\s\w*){0,9}(list|database)'
+                )
+                or regex.icontains(.,
+                                   '(from|to|sent|date|cc|subject|wrote):.*(list|database)(\s\w*){0,9}(Attendee|Buyer|Contact|Decision Maker|Email|Member|Participant|Professional|Registrant|User|Visitor)(s)?'
+                )
+                or (
+                  2 of (
+                    strings.icontains(., "provide counts"),
+                    regex.icontains(., "(?:verified|fresh) data"),
+                    strings.icontains(., "precise targeting"),
+                    strings.icontains(., "deliverability")
+                  )
+                  and regex.icontains(., "(?:list|database)")
+                )
+              )
+      )
+    )
   )
 
 tags:
