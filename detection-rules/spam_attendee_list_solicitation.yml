@@ -10,29 +10,20 @@ source: |
     (
       (
         any([subject.subject, body.current_thread.text],
-            (
-              regex.icontains(.,
-                              '(Attendee|Buyer|Contact|Decision Maker|Email|Member|Participant|Professional|Registrant|User|Visitor)(s)?(\s\w*){0,9}(list(s|\b)|database)'
-              )
-              and not (
-                regex.icount(., "email list") == 1
-                and regex.icontains(.,
-                                    '(?:unsub|remove)(\s\w*){0,5}email list',
-                                    'email list(\s\w*){0,5}(?:unsub|remove)'
-                )
-              )
+            regex.icontains(.,
+                            '(?:Attendee|Buyer|Contact|Decision Maker|Email|Member|Participant|Professional|Registrant|User|Visitor)(?:[[:punct:]]*s)?(?:\s\w*){0,9}(?:list|database)'
             )
             or regex.icontains(.,
-                               '(list|database)(\s\w*){0,9}(Attendee|Buyer|Contact|Decision Maker|Email|Member|Participant|Professional|Registrant|User|Visitor)(s)?'
+                               '(?:list|database)(?:[[:punct:]]*s)?(\s\w*){0,9}(?:Attendee|Buyer|Contact|Decision Maker|Email|Member|Participant|Professional|Registrant|User|Visitor)s?'
             )
             or strings.icontains(., 'list of ')
         )
       )
       and regex.icontains(body.current_thread.text,
-                          "(interested|accessing|purchas|obtain|acuir|sample)"
+                          "(?:interested|accessing|purchas|obtain|acuir|sample)"
       )
       and not regex.icontains(body.current_thread.text,
-                              "(debit card|transaction.{0,20}processed)"
+                              "(?:debit card|transaction.{0,20}processed)"
       )
     )
     // if there are indicators of a previous thread, also inspect the previous thread
@@ -44,7 +35,7 @@ source: |
                         '(?:below|previous|last|prior) email'
         ),
         regex.icontains(body.current_thread.text, 'follow(?:ing)? up'),
-        regex.icontains(body.current_thread.text, '(contacts?|attendees?) list'),
+        regex.icontains(body.current_thread.text, '(?:contact|attendee)s? list'),
         strings.icontains(body.current_thread.text, 'heard back'),
       )
       and any([body.html.display_text, body.plain.raw],
@@ -68,10 +59,10 @@ source: |
               // match _after_ the previous thread indciators
               and (
                 regex.icontains(.,
-                                '(from|to|sent|date|cc|subject|wrote):.*(Attendee|Buyer|Contact|Decision Maker|Email|Member|Participant|Professional|Registrant|User|Visitor)(s)?(\s\w*){0,9}(list|database)'
+                                '(?:from|to|sent|date|cc|subject|wrote):.*(?:Attendee|Buyer|Contact|Decision Maker|Email|Member|Participant|Professional|Registrant|User|Visitor)(?:[[:punct:]]*s)?(?:\s\w*){0,9}(?:list|database)'
                 )
                 or regex.icontains(.,
-                                   '(from|to|sent|date|cc|subject|wrote):.*(list|database)(\s\w*){0,9}(Attendee|Buyer|Contact|Decision Maker|Email|Member|Participant|Professional|Registrant|User|Visitor)(s)?'
+                                   '(?:from|to|sent|date|cc|subject|wrote):.*(?:list|database)(?:[[:punct:]]*s)?(\s\w*){0,9}(?:Attendee|Buyer|Contact|Decision Maker|Email|Member|Participant|Professional|Registrant|User|Visitor)s?'
                 )
                 or (
                   2 of (
@@ -86,6 +77,9 @@ source: |
       )
     )
   )
+  
+  and not profile.by_sender().solicited
+  and not profile.by_sender().any_false_positives
 tags:
   - "Attack surface reduction"
 attack_types:
