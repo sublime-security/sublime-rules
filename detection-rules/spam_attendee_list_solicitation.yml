@@ -10,13 +10,21 @@ source: |
     (
       (
         any([subject.subject, body.current_thread.text],
-            regex.icontains(.,
-                            '(?:Attendee|Buyer|Contact|Decision Maker|Email|Member|Participant|Professional|Registrant|User|Visitor)(?:[[:punct:]]*s)?(?:\s\w*){0,9}(?:list|database)'
+            (
+              regex.icontains(.,
+                              '(?:Attendee|Buyer|Contact|Decision Maker|Email|Member|Participant|Professional|Registrant|User|Visitor)(?:[[:punct:]]*s)?(?:\s\w*){0,9}(?:list|database)'
+              )
+              and not (
+                regex.icount(., "email list") == 1
+                and regex.icontains(.,
+                                    '(?:unsub|remove|safe)[[:punct:]]*s?(?:\s\w*){0,9}email list',
+                                    'email list[[:punct:]]*s?(\s\w*){0,5}(?:unsub|remove|safe)'
+                )
+              )
             )
             or regex.icontains(.,
                                '(?:list|database)(?:[[:punct:]]*s)?(\s\w*){0,9}(?:Attendee|Buyer|Contact|Decision Maker|Email|Member|Participant|Professional|Registrant|User|Visitor)s?'
             )
-            or strings.icontains(., 'list of ')
         )
       )
       and regex.icontains(body.current_thread.text,
@@ -77,7 +85,7 @@ source: |
       )
     )
   )
-  
+
   and not profile.by_sender().solicited
   and not profile.by_sender().any_false_positives
 tags:
