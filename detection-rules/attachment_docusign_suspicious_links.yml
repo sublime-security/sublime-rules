@@ -1,5 +1,5 @@
-name: "Brand impersonation: DocuSign image attachment lure with no DocuSign links"
-description: "Detects DocuSign phishing messages with no DocuSign links, a DocuSign logo attached, from an untrusted sender."
+name: "Brand impersonation: DocuSign branded attachment lure with no DocuSign links"
+description: "Detects DocuSign phishing messages with no DocuSign links, a DocuSign logo or verbage within an image or PDF attachment, from an untrusted sender."
 type: "rule"
 severity: "high"
 source: |
@@ -11,14 +11,27 @@ source: |
     )
     or (
       length(attachments) > 0
-      and all(attachments, .file_type in $file_types_images)
+      and all(attachments,
+              .file_type in $file_types_images or .file_type == 'pdf'
+      )
     )
   )
-  and any(body.links,
-          not strings.ilike(.href_url.domain.root_domain, "docusign.*")
+  and (
+    // if there are links, ensure they are not docusign links
+    (
+      length(body.links) != 0
+      and any(body.links,
+              not strings.ilike(.href_url.domain.root_domain, "docusign.*")
+      )
+    )
+    // sometimes there are no body links and it's all in the PDF attachment
+    or length(body.links) == 0
   )
   and (
-    any(attachments,
+    // check the image or pdf attachments for Docusign 
+    any(filter(attachments,
+               .file_type in $file_types_images or .file_type == 'pdf'
+        ),
         (
           any(ml.logo_detect(.).brands, .name == "DocuSign")
           or any(file.explode(.),
@@ -27,15 +40,18 @@ source: |
                    any(ml.nlu_classifier(.scan.ocr.raw).intents,
                        .name == "cred_theft" and .confidence != "low"
                    )
-                   or (regex.icontains(.scan.ocr.raw,
-                                      "((re)?view|access|complete(d)?) document(s)?",
-                                      "[^d][^o][^cd][^ue]sign",
-                                      "important edocs",
-                                      // German (Document (check|check|sign|sent))
-                                      "Dokument (überprüfen|prüfen|unterschreiben|geschickt)",
-                                      // German (important|urgent|immediate)
-                                      "(wichtig|dringend|sofort)"
-                   ) and not strings.count(.scan.ocr.raw, "\n\n\n\n\n\n\n\n\n\n") > 3 )
+                   or (
+                     regex.icontains(.scan.ocr.raw,
+                                     "((re)?view|access|complete(d)?) document(s)?",
+                                     "[^d][^o][^cd][^ue]sign",
+                                     "important edocs",
+                                     // German (Document (check|check|sign|sent))
+                                     "Dokument (überprüfen|prüfen|unterschreiben|geschickt)",
+                                     // German (important|urgent|immediate)
+                                     "(wichtig|dringend|sofort)"
+                     )
+                     and not strings.count(.scan.ocr.raw, "\n\n\n\n\n\n\n\n\n\n") > 3
+                   )
                  )
           )
         )
@@ -46,6 +62,7 @@ source: |
                                             "*DocuSign Envelope ID*"
                       )
                     )
+                    or (.depth == 0 and .scan.exiftool.page_count > 10 and length(.scan.strings.strings) > 8000)
         )
     )
 
@@ -120,7 +137,6 @@ source: |
   and not any(headers.hops,
               regex.imatch(.received.server.raw, ".+.docusign.(net|com)")
   )
-
 attack_types:
   - "Credential Phishing"
 tactics_and_techniques:

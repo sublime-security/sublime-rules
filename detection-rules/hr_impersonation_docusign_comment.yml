@@ -1,5 +1,5 @@
-name: "HR Impersonation via DocuSign comment"
-description: "This rule inspects messages originating from legitimate DocuSign infrastructure, with engaging language in the body that matches HR Impersonation criteria."
+name: "HR Impersonation via E-sign Agreement Comment"
+description: "This rule inspects messages originating from legitimate e-signature platform infrastructure, with engaging language in the body that matches HR Impersonation criteria."
 type: "rule"
 severity: "high"
 source: |
@@ -8,7 +8,11 @@ source: |
   
   // Legitimate Docusign sending infratructure
   and (
-    sender.email.domain.root_domain in ('docusign.net', 'docusign.com')
+    sender.email.domain.root_domain in (
+      'docusign.net',
+      'docusign.com',
+      'hellosign.com'
+    )
     // check for SPF or DMARC passed
     and (headers.auth_summary.spf.pass or headers.auth_summary.dmarc.pass)
   )
@@ -21,11 +25,16 @@ source: |
   )
   
   // Request and Urgency
-  and any(ml.nlu_classifier(body.current_thread.text).entities,
-          .name == "request"
-  )
-  and any(ml.nlu_classifier(body.current_thread.text).entities,
-          .name in ("urgency", "financial")
+  and (
+    any(ml.nlu_classifier(body.current_thread.text).entities, .name == "request")
+    and (
+      any(ml.nlu_classifier(body.current_thread.text).intents,
+          .name == "cred_theft" and .confidence == "high"
+      )
+      or any(ml.nlu_classifier(body.current_thread.text).entities,
+             .name in ("urgency", "financial")
+      )
+    )
   )
   and (
     any(ml.nlu_classifier(body.current_thread.text).intents, .name != "benign")
