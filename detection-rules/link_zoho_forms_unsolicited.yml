@@ -4,18 +4,39 @@ type: "rule"
 severity: "medium"
 source: |
   type.inbound
-  and any(body.links,
-          // zoho forms link
-          .href_url.domain.domain == 'forms.zohopublic.com'
-          // remove a common FP for linking directly 
-          and not strings.istarts_with(.href_url.path, '/quickbooking/')
+  // filter links to zoho forms
+  and any(filter(body.links,
+                 // zoho forms link
+                 .href_url.domain.domain == 'forms.zohopublic.com'
+                 // remove a common FP for linking directly 
+                 and not strings.istarts_with(.href_url.path, '/quickbooking/')
+          ),
+          // remove FPs by checking there is only one link
           // ensure the link is within the current_thread
+          (
+            strings.contains(body.current_thread.text, .display_text)
+            or strings.contains(body.current_thread.text, .href_url.url)
+          )
+          // and ensure that link only occurs once within body.html
           and (
-              strings.contains(body.current_thread.text, .display_text)
-              or 
-              strings.contains(body.current_thread.text, .href_url.url)
+            (
+              body.html.raw is not null
+              and (
+                strings.count(body.html.raw, .display_text) == 1
+                or strings.count(body.html.raw, .href_url.url) == 1
+              )
+            )
+            or (
+              // and ensure that link only occurs once within plaintext if html.raw is null
+              body.plain.raw is not null
+              and (
+                strings.count(body.plain.raw, .display_text) == 1
+                or strings.count(body.plain.raw, .href_url.url) == 1
+              )
+            )
           )
   )
+  
   // dont match messages with lots of links or long bodies, often marketing messages
   and length(body.links) < 20
   and length(body.current_thread.text) < 900
