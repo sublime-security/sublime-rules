@@ -10,7 +10,7 @@ source: |
   and headers.auth_summary.spf.pass
   and headers.auth_summary.dmarc.pass
   and strings.ends_with(headers.auth_summary.spf.details.designator,
-                         '.intuit.com'
+                        '.intuit.com'
   )
   
   // remove payment confirmation messages
@@ -23,7 +23,12 @@ source: |
   and not any(headers.reply_to, .email.email in $recipient_emails)
   
   // new reply-to
-  and any(headers.reply_to, network.whois(.email.domain).days_old < 30)
+  and any(filter(headers.reply_to,
+                 // negate .com.au which doesn't provide created date for domains
+                 .email.domain.tld not in ('com.au')
+          ),
+          network.whois(.email.domain).days_old < 30
+  )
 tags:
  - "Attack surface reduction"
 attack_types:
