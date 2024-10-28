@@ -1,15 +1,17 @@
-name: "Open redirect: Dell"
+name: "Open Redirect: ringaraja.net"
 description: |
-  Message contains use of the Dell open redirect, but the sender is not Dell.
+  Message contains use of the ringaraja.net open redirect. This has been exploited in the wild.
 type: "rule"
 severity: "medium"
 source: |
   type.inbound
   and any(body.links,
-          .href_url.domain.domain == 't.em.home.dell.com'
-          and .href_url.path =~ '/r/'
-  )
-  and sender.email.domain.root_domain not in ('dell.com', 'dell.ca')
+          .href_url.domain.root_domain == "ringaraja.net"
+          and .href_url.path =~ "/portleti/katalogponudnikov/result.asp"
+          and strings.icontains(.href_url.query_params, 'url=')
+          // negate use of the redirect by ringaraja
+          and not regex.icontains(.href_url.query_params, 'url=[^&]*ringaraja\.net')
+  ) 
   and (
     not profile.by_sender().solicited
     or (
@@ -17,7 +19,7 @@ source: |
       and not profile.by_sender().any_false_positives
     )
   )
-  
+
   // negate highly trusted sender domains unless they fail DMARC authentication
   and (
     (
@@ -26,8 +28,6 @@ source: |
     )
     or sender.email.domain.root_domain not in $high_trust_sender_root_domains
   )
-tags:
-  - "Attack surface reduction"
 attack_types:
   - "Credential Phishing"
   - "Malware/Ransomware"
@@ -36,4 +36,4 @@ tactics_and_techniques:
 detection_methods:
   - "Sender analysis"
   - "URL analysis"
-id: "718c2b0f-7ac3-5473-bb7c-12900b3da54a"
+id: "4d9594f4-1e96-5afd-a575-8a16d2d79698"
