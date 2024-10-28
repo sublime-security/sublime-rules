@@ -101,7 +101,7 @@ jobs:
         run: |
           echo '{"rules_or_queries": [' > bulk_validate_request.json
           
-          file_count=$(ls -1 {*-rules/*.yml,insights/**/*.yml} | wc -l)
+          file_count=$(ls -1 {*-rules/*.yml,insights/**/*.yml,automations/*.yml} | wc -l)
           counter=0
   
           for f in *-rules/*.yml
@@ -118,6 +118,15 @@ jobs:
             counter=$((counter + 1))
             yq -o=json eval 'del(.type) | .source = "length([\n\n" + .source + "\n]) >= 0"' "$f" >> bulk_validate_request.json
           
+            if [[ $counter -ne $file_count ]]; then
+              echo "," >> bulk_validate_request.json
+            fi
+          done
+
+          for f in automations/*.yml
+          do
+            counter=$((counter + 1))
+            yq -o=json eval 'del(.type)' "$f" >> bulk_validate_request.json
             if [[ $counter -ne $file_count ]]; then
               echo "," >> bulk_validate_request.json
             fi
