@@ -1,0 +1,180 @@
+name: "Suspicious Sharepoint Link and Body Content"
+description: "Email links to Sharepoint with either suspicious display text or non-matching link attributes (link does not match any known sender attributes), along with suspicious body text."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  
+  and (
+    any(ml.nlu_classifier(body.current_thread.text).intents,
+        .name == "cred_theft" and .confidence in ("high")
+    )
+    or any(ml.nlu_classifier(body.current_thread.text).tags,
+           .name == "invoice" and .confidence in ("medium", "high")
+    )
+  )
+  
+  // not from Sharepoint itself
+  and (
+    not any(headers.hops,
+            .authentication_results.compauth.verdict is not null
+            and .authentication_results.compauth.verdict == "pass"
+            and sender.email.domain.domain in (
+              "microsoft.com",
+              "sharepointonline.com"
+            )
+    )
+  )
+  
+  
+  // https://github.com/sublime-security/sublime-rules/blob/main/detection-rules/link_sharepoint_sus_name.yml
+  and (
+    any(filter(body.links,
+               (
+                 .href_url.domain.root_domain == "sharepoint.com"
+                 or .href_url.domain.root_domain == "1drv.ms"
+                 // handle urls with mimecast rewriting
+                 or (
+                   .href_url.domain.root_domain == 'mimecastprotect.com'
+                   and strings.icontains(.href_url.query_params,
+                                         '.sharepoint.com'
+                   )
+                 )
+               )
+               and .display_text != "Open"
+        ),
+  
+        // the file name does not include lowercase letters, while allowing for non letter chars
+        regex.match(.display_text, '^[^a-z]+$')
+  
+        // suspicious Sharepoint links
+        // typically Sharepoint links that come from the same tenant as the email will contain the sender's domain or "username" (the local_part in this case)
+        or (
+          not strings.icontains(.href_url.domain.domain, sender.email.domain.sld)
+          and not strings.icontains(.href_url.path, sender.email.local_part)
+        )
+  
+        // file sharing service references
+        or strings.icontains(.display_text, 'dropbox')
+        or strings.icontains(.display_text, 'docusign')
+  
+        // file name lures
+        // secure theme
+        or regex.icontains(.display_text, 'secured?.*(?:file|document|docs|fax)')
+        or regex.icontains(.display_text, 'important.*(?:file|document|docs|fax)')
+        or regex.icontains(.display_text, 'shared?.*(?:file|document|docs|fax)')
+        or regex.icontains(.display_text, 'protected.*(?:file|document|docs|fax)')
+        or regex.icontains(.display_text, 'encrypted.*(?:file|document|docs|fax)')
+  
+        // scanner theme
+        or strings.icontains(.display_text, 'scanne[rd]_')
+        // image themed
+        or strings.icontains(.display_text, '_IMG_')
+        or regex.icontains(.display_text, '^IMG[_-](?:\d|\W)+$')
+  
+        // digits
+        or regex.icontains(.display_text, 'doc(?:ument)?\s?\d+$')
+        or regex.icontains(.display_text, '^\d+$')
+  
+        // onedrive theme
+        or strings.icontains(.display_text, 'one_docx')
+        or strings.icontains(.display_text, 'OneDrive')
+        or regex.icontains(.display_text, 'A document.*One.?Drive')
+  
+        // action in file name
+        or strings.icontains(.display_text, 'click here')
+        or strings.icontains(.display_text, 'Download PDF')
+        or strings.icontains(.display_text, 'Validate')
+  
+        // limited file name to "confidential"
+        or .display_text =~ 'Confidentiality'
+        or .display_text =~ 'Confidential'
+  
+        // invoice themes
+        or any(ml.nlu_classifier(.display_text).entities, .name == "financial")
+        or strings.icontains(.display_text, 'payment')
+        or strings.icontains(.display_text, 'invoice')
+        or regex.icontains(.display_text, 'INV(?:_|\s)?\d+$')
+        // starts with INV_ or INV\x20
+        or regex.icontains(.display_text, '^INV(?:_|\s)')
+        or regex.icontains(.display_text, 'P[O0]\W+?\d+$')
+        or strings.icontains(.display_text, 'receipt')
+        or strings.icontains(.display_text, 'billing')
+        or (
+          strings.icontains(.display_text, 'statement')
+          and not .display_text =~ "Privacy Statement"
+        )
+        or strings.icontains(.display_text, 'Past Due')
+        or regex.icontains(.display_text, 'Remit(tance)?')
+        or strings.icontains(.display_text, 'Purchase Order')
+  
+        // contract language
+        or strings.icontains(.display_text, 'settlement')
+        or strings.icontains(.display_text, 'contract agreement')
+        or regex.icontains(.display_text, 'Pr[0o]p[0o]sal')
+        or strings.icontains(.display_text, 'contract doc')
+  
+        // the document name is the same as the org name
+        // as determined by the footer 
+        or (
+          strings.icontains(body.current_thread.text,
+                            strings.concat('This email is generated through ',
+                                           .display_text
+                            )
+          )
+          and strings.icontains(body.current_thread.text,
+                                strings.concat("\'s use of Microsoft 365 and may contain content that is controlled by ",
+                                               .display_text
+                                )
+          )
+        )
+  
+        // use NLU to extract the org name from the Link and compare to the org
+        // as determined by the footer
+        or any(
+               // create a list of org names
+               // if the display_text contains things like "Acme Co. - RFQ"
+               // the "org" via NLU often becomes "Acme Co. -"
+               map(filter(ml.nlu_classifier(.display_text).entities,
+                          .name == "org"
+                          and .text is not null
+                          and not strings.icontains(.text, "Microsoft 365")
+                   ),
+                   .text
+               ),
+               // if we run NLU a second time, it cleans up the extra parts
+               any(ml.nlu_classifier(.).entities,
+                   strings.icontains(body.current_thread.text,
+                                     strings.concat('This email is generated through ',
+                                                    .text
+                                     )
+                   )
+                   and strings.icontains(body.current_thread.text,
+                                         strings.concat("\'s use of Microsoft 365 and may contain content that is controlled by ",
+                                                        .text
+                                         )
+                   )
+               )
+        )
+    )
+  )
+  
+  // and it's not an internal share
+  and not any(headers.hops,
+              any(.fields,
+                  .name == "X-MS-Exchange-CrossTenant-AuthAs"
+                  and .value == "Internal"
+              )
+  )
+
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Evasion"
+  - "Free file host"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Header analysis"
+  - "Natural Language Understanding"
+  - "URL analysis"
