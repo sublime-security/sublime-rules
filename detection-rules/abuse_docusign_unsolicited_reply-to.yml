@@ -2,47 +2,7 @@ name: "Service Abuse: DocuSign Share From an Unsolicited Reply-To Address"
 description: "DocuSign shares which contain a reply-to address or domain that has not been previously observed by the recipient organization."
 type: "rule"
 severity: "high"
-source: |
-  type.inbound
-
-  // message is from docusign actual
-  and sender.email.domain.root_domain == 'docusign.net'
-  and (headers.auth_summary.spf.pass or headers.auth_summary.dmarc.pass)
-
-
-  // not a completed DocuSign
-  // reminders are sent automatically and can be just as malicious as the initial
-  // users often decline malicious ones
-  and not strings.istarts_with(subject.subject, "Completed:")
-
-  // reply-to email address has never been sent an email by the org
-  and not (
-    any(headers.reply_to, .email.email in $recipient_emails)
-    // if the reply-to email address is NOT in free_email_providers, check the domain in recipient_domains
-    or any(filter(headers.reply_to,
-                  // filter the list to only emails that are not in free_email_providers
-                  (
-                    .email.domain.domain not in $free_email_providers
-                    or .email.domain.root_domain not in $free_email_providers
-                  )
-           ),
-           .email.domain.domain in $recipient_domains
-    )
-  )
-  // reply-to address has never sent an email to the org
-  and not (
-    any(headers.reply_to, .email.email in $sender_emails)
-    // if the reply-to address is NOT in free_email_providers, check the domain in sender_domains
-    or any(filter(headers.reply_to,
-                  // filter the list to only emails that are not in free_email_providers
-                  (
-                    .email.domain.domain not in $free_email_providers
-                    or .email.domain.domain not in $free_email_providers
-                  )
-           ),
-           .email.domain.root_domain in $sender_domains
-    )
-  )
+source: "type.inbound\n\n// message is from docusign actual\nand sender.email.domain.root_domain == 'docusign.net'\nand (headers.auth_summary.spf.pass or headers.auth_summary.dmarc.pass)\n\n\n// not a completed DocuSign\n// reminders are sent automatically and can be just as malicious as the initial\n// users often decline malicious ones\nand not strings.istarts_with(subject.subject, \"Completed:\")\n\nand length(headers.reply_to) > 0 \n// reply-to email address has never been sent an email by the org\nand not (\n  any(headers.reply_to, .email.email in $recipient_emails)\n  // if the reply-to email address is NOT in free_email_providers, check the domain in recipient_domains\n  or any(filter(headers.reply_to,\n                // filter the list to only emails that are not in free_email_providers\n                (\n                  .email.domain.domain not in $free_email_providers\n                  or .email.domain.root_domain not in $free_email_providers\n                )\n         ),\n         .email.domain.domain in $recipient_domains\n  )\n)\n// reply-to address has never sent an email to the org\nand not (\n  any(headers.reply_to, .email.email in $sender_emails)\n  // if the reply-to address is NOT in free_email_providers, check the domain in sender_domains\n  or any(filter(headers.reply_to,\n                // filter the list to only emails that are not in free_email_providers\n                (\n                  .email.domain.domain not in $free_email_providers\n                  or .email.domain.domain not in $free_email_providers\n                )\n         ),\n         .email.domain.root_domain in $sender_domains\n  )\n)\n"
 attack_types:
   - "Credential Phishing"
 tactics_and_techniques:
@@ -55,4 +15,4 @@ detection_methods:
   - "Sender analysis"
 id: "2f12d616-f47a-5259-8946-ac2e01940f6f"
 testing_pr: 2044
-testing_sha: d4e42291355913f6ef6d899dcdef4aa88d2c2094
+testing_sha: 481d3d4e2f6179b6bd6eadcc877e7220b26c4ae9
