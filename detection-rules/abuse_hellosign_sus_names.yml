@@ -15,6 +15,20 @@ source: |
   and strings.icontains(subject.subject, ' - Signature Requested')
   and not strings.icontains(subject.subject, 'You just signed')
   and not strings.contains(body.current_thread.text, '@cdpesign.com') // negate CDP Esign which reuses hellosign
+  // negate messages where the "on_behalf_of_email" is within the org_domains
+  and not any(headers.hops,
+              any(.fields,
+                  .name == "X-Mailgun-Variables"
+                  and any($org_domains,
+                          // we're not able to do an exact match because the sender email
+                          // is dynamic in nature
+                          // but the "on_behalf_of_email" is always before "on_behalf_of_guid"
+                          strings.icontains(..value,
+                                            strings.concat("@", ., "\", \"on_behalf_of_guid")
+                          )
+                  )
+              )
+  )
   and (
     // contains the word dropbox
     // the subject is in the format of "<actor controlled title> - Signature Requested by <actor controlled name>"
