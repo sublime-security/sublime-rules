@@ -1,0 +1,47 @@
+name: "Vendor Compromise: Suspicious Recipient Pattern With Credential Theft Indicators"
+description: "A known sender in your environment is using suspicious recipients pattern, credential theft language, and links to a phishing page."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and profile.by_sender().prevalence in ("common", "uncommon") // vendor compromise
+  // suspicious recipient pattern
+  and 1 of (
+    length(recipients.to) == 0,
+    all(recipients.to, .display_name == "Undisclosed recipients"),
+    ( // To matches Sender (From) but not Return-Path
+      length(recipients.to) == 1
+      and any(recipients.to,
+              .email.email == sender.email.email and .email.domain.valid
+      )
+      and headers.return_path.email is not null
+      and headers.return_path.email != sender.email.email
+    ),
+    length(recipients.bcc) > 0
+  )
+  and any(ml.nlu_classifier(body.current_thread.text).intents,
+          .name == "cred_theft" and .confidence == "high"
+  )
+  // ignore links to the sender's domain, commonly found in email signatures
+  and 1 < length(filter(body.links,
+                        .href_url.domain.root_domain != sender.email.domain.root_domain
+                 )
+  ) < 5
+  and any(filter(body.links,
+                 .href_url.domain.root_domain != sender.email.domain.root_domain
+          ),
+          length(ml.link_analysis(.).redirect_history) > 1
+          and ml.link_analysis(.).credphish.disposition == "phishing"
+  )
+
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Evasion"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Natural Language Understanding"
+  - "Sender analysis"
+  - "URL analysis"
+  - "URL screenshot"
