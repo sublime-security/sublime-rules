@@ -1,0 +1,32 @@
+name: "Suspicious sender display name with long procedurally generated text blob"
+description: "This rule identifies sender display names containing long strings of nonsensical or procedurally generated characters,which are often used in phishing or spam campaigns for campaign tracking and identification, as well as to bypass detection filters."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and regex.icontains(sender.display_name, '\b[\w\p{L}\p{N}]{35,}\b')
+  // negate org domains unless they fail DMARC authentication
+  and (
+    (
+      sender.email.domain.root_domain in $org_domains
+      and not headers.auth_summary.dmarc.pass
+    )
+    or sender.email.domain.root_domain not in $org_domains
+  )
+  
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and not headers.auth_summary.dmarc.pass
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Evasion"
+detection_methods:
+  - "Content analysis"
+  - "Sender analysis"
