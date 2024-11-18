@@ -1,0 +1,102 @@
+name: "Benefits Enrollment Impersonation"
+description: "Detects unauthorized messages about benefit enrollment periods and healthcare selections from external senders that contain urgent language or requests for action. Excludes legitimate HR communications, marketing mailers, and trusted sender domains with valid authentication."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and sender.email.domain.domain not in $org_domains
+  and length(body.current_thread.text) < 2500
+  and 1 of (
+    regex.icontains(subject.subject,
+                    '(open|benefits?) enrol{1,2}ment', // catches both enrolment and enrollment
+                    'benefit(s)? (plan|choice|selection|deadline|period)',
+                    'hr benefits',
+                    'annual enrol{1,2}ment',
+                    'healthcare (choice|selection|opt.?in)',
+                    '(fsa|hsa|401k) (enrol{1,2}ment|selection)',
+                    'dependent (coverage|verification)',
+                    '(health|dental|vision|insurance|medical) enrol{1,2}ment'
+    ),
+    regex.icontains(body.current_thread.text,
+                    '(open|benefits?) enrol{1,2}ment',
+                    'benefit(s)? (plan|choice|selection|deadline|period)',
+                    'hr benefits',
+                    'annual enrol{1,2}ment',
+                    'healthcare (choice|selection|opt.?in)',
+                    '(fsa|hsa|401k) (enrol{1,2}ment|selection)',
+                    'dependent (coverage|verification)',
+                    '(health|dental|vision|insurance|medical) enrol{1,2}ment',
+                    '(urgent|immediate) action required.*(benefit|enrol{1,2}ment)',
+                    'coverage.*(expire|terminate)',
+                    'last (day|chance).*(enrol{1,2}|select)',
+                    '(login|sign.?in).*(benefit portal|hr portal)',
+                    '(verify|update|confirm).*(benefit.*selection)'
+    )
+  )
+  and 1 of (
+    any(ml.nlu_classifier(body.current_thread.text).entities,
+        .name in ("urgency", "request")
+    ),
+    any(ml.nlu_classifier(body.current_thread.text).intents, .name != "benign"),
+    (length(body.current_thread.text) < 250 and length(attachments) == 1)
+  )
+  
+  // negate replies
+  and (
+    length(headers.references) == 0
+    or not any(headers.hops, any(.fields, strings.ilike(.name, "In-Reply-To")))
+  )
+  
+  // Negate common marketing mailers
+  and not regex.icontains(sender.display_name,
+                          'HR (?:Events|Expert|Support Center|Studies|Knowledge Cloud|News Library|Crowd|Solutions|Interests)|HR and People Operations'
+  )
+  and not (
+    any(headers.hops,
+        strings.icontains(.authentication_results.spf_details.designator,
+                          "constantcontact.com"
+        )
+    )
+    or any(headers.hops,
+           strings.icontains(.received_spf.designator, "constantcontact.com")
+    )
+    or (
+      (
+        any(headers.hops,
+            .index == 0
+            and any(.authentication_results.dkim_details,
+                    .domain == "auth.ccsend.com"
+            )
+        )
+      )
+      and headers.auth_summary.dmarc.pass
+    )
+    or any(headers.references, strings.iends_with(., "ccsend.com"))
+  )
+  and (
+    profile.by_sender().prevalence in ("new", "outlier")
+    or (
+      profile.by_sender().any_messages_malicious_or_spam
+      and not profile.by_sender().any_false_positives
+    )
+  )
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and not headers.auth_summary.dmarc.pass
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Evasion"
+  - "Impersonation: Employee"
+  - "Out of band pivot"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Header analysis"
+  - "Sender analysis"
