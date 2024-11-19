@@ -5,6 +5,16 @@ severity: "medium"
 source: |
   type.inbound
   and length(attachments) == 1
+  and (
+    length(body.current_thread.text) < 300
+    or body.current_thread.text is null
+    or any(ml.nlu_classifier(body.current_thread.text).intents,
+           .name in ("cred_theft", "steal_pii")
+    )
+  )
+  and not any(ml.nlu_classifier(body.current_thread.text).intents,
+          .name == "benign" and .confidence == "high"
+  )
   and any(attachments,
           (.file_extension == "eml" or .content_type == "message/rfc822")
           and (
@@ -23,65 +33,6 @@ source: |
             )
           )
           and file.parse_eml(.).sender.email.domain.root_domain not in $org_domains
-  )
-  // not a thread, or a fake thread
-  and (
-    not (
-      (
-        strings.istarts_with(subject.subject, "RE:")
-        or strings.istarts_with(subject.subject, "FW:")
-        or strings.istarts_with(subject.subject, "FWD:")
-        or strings.istarts_with(subject.subject, "Automatic reply:")
-        or regex.imatch(subject.subject,
-                        '(\[[^\]]+\]\s?){0,3}(re|fwd?|automat.*)\s?:.*'
-        )
-      )
-      and (
-        length(headers.references) > 0
-        or any(headers.hops, any(.fields, strings.ilike(.name, "In-Reply-To")))
-      )
-    )
-    // fake thread
-    or (
-      (
-        (
-          strings.istarts_with(subject.subject, "RE:")
-          or strings.istarts_with(subject.subject, "FW:")
-          or strings.istarts_with(subject.subject, "FWD:")
-          or regex.imatch(subject.subject,
-                          '(\[[^\]]+\]\s?){0,3}(re|fwd?|automat.*)\s?:.*'
-          )
-        )
-      )
-      // fake thread, but no indication in the subject line
-      // current_thread pulls the recent thread, but the full body contains the fake "original" email
-      or (
-        not (
-          (
-            strings.istarts_with(subject.subject, "RE:")
-            or strings.istarts_with(subject.subject, "R:")
-            or strings.istarts_with(subject.subject, "ODG:")
-            or strings.istarts_with(subject.subject, "答复:")
-            or strings.istarts_with(subject.subject, "AW:")
-            or strings.istarts_with(subject.subject, "TR:")
-            or strings.istarts_with(subject.subject, "FWD:")
-          )
-        )
-        and any([body.current_thread.text, body.html.display_text, body.plain.raw],
-                3 of (
-                  strings.icontains(., "from:"),
-                  strings.icontains(., "to:"),
-                  strings.icontains(., "sent:"),
-                  strings.icontains(., "date:"),
-                  strings.icontains(., "cc:"),
-                  strings.icontains(., "subject:")
-                )
-        )
-        and (
-          length(body.current_thread.text) + 100 < length(body.html.display_text)
-        )
-      )
-    )
   )
   and (
     not profile.by_sender().solicited
