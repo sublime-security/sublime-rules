@@ -1,20 +1,12 @@
-name: "PayPal Invoice Abuse"
-description: |
-  A fraudulent invoice/receipt found in the body of the message sent by exploiting Paypal's invoicing service.
-  Callback Phishing is an attempt by an attacker to solicit the victim (recipient) to call a phone number. 
-  The resulting interaction could lead to a multitude of attacks ranging from Financial theft, Remote Access Trojan (RAT) Installation or Ransomware Deployment.
+name: "Service Abuse: Payoneer Callback Scam"
+description: "A fraudulent invoice/receipt found in the body of the message sent by leveraging Payoneer's invoicing service. Callback Phishing is an attempt by an attacker to solicit the victim (recipient) to call a phone number. The resulting interaction could lead to a multitude of attacks ranging from Financial theft, Remote Access Trojan (RAT) Installation or Ransomware Deployment."
 type: "rule"
-references:
-  - "https://anderegg.ca/2023/02/01/a-novel-paypal-scam"
 severity: "medium"
 source: |
   type.inbound
   and length(attachments) == 0
-  and sender.email.domain.root_domain in ("paypal.com", "paypal.com.mx", "paypal.com.br", "paypal.com.ar", "paypal.co.uk")
-  and (
-    strings.ilike(body.html.display_text, "*seller note*")
-    or strings.ilike(body.html.display_text, "*Note from *")
-  )
+  and sender.email.domain.root_domain in ("payoneer.com")
+  
   and (
     (
       // icontains a phone number
@@ -53,6 +45,8 @@ source: |
       )
       and (
         (
+          // list of keywords taken from
+          // https://github.com/sublime-security/sublime-rules/blob/main/detection-rules/paypal_invoice_abuse.yml
           4 of (
             strings.ilike(body.html.inner_text, '*you did not*'),
             strings.ilike(body.html.inner_text, '*is not for*'),
@@ -83,9 +77,6 @@ source: |
             regex.icontains(body.html.inner_text, 'help.{0,3}desk'),
           )
         )
-        or regex.icontains(body.current_thread.text,
-                           'note from.{0,50}(?:call|reach|contact|paypal)'
-        )
       )
     )
     or (
@@ -96,14 +87,16 @@ source: |
     )
     or strings.ilike(body.html.inner_text, '*kindly*')
   )
+  
+
 attack_types:
-  - "BEC/Fraud"
   - "Callback Phishing"
+  - "BEC/Fraud"
 tactics_and_techniques:
   - "Evasion"
   - "Social engineering"
 detection_methods:
-  - "Content analysis"
-  - "Header analysis"
   - "Sender analysis"
-id: "0ff7a0d4-164d-5ff1-8765-783fa2008b0f"
+  - "Header analysis"
+  - "Content analysis"
+id: "b7fb174c-c5a0-567a-8090-6ca142d94562"
