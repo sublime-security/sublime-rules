@@ -1,0 +1,38 @@
+name: "Non-RFC Compliant Calendar Files from unsolicited sender"
+description: "Detects calendar (.ics) files that do not follow RFC standards by lacking required UID identifiers while containing specific calendar components (VTODO, VJOURNAL, VFREEBUSY, or VEVENT)."
+type: "rule"
+severity: ""
+source: |
+  type.inbound
+  and any(attachments,
+          (
+            .file_type in $file_extensions_common_archives
+            or .file_extension == "ics"
+            or .content_type == "text/calendar"
+          )
+          and any(file.explode(.),
+                  (.file_extension == "ics" or .flavors.mime == "text/calendar")
+                  and not any(.scan.strings.strings,
+                              strings.starts_with(., "UID:")
+                  )
+                  and any(.scan.strings.strings,
+                          strings.ilike(.,
+                                        "*VTODO*",
+                                        "*VJOURNAL*",
+                                        "*VFREEBUSY*",
+                                        "*VEVENT*"
+                          )
+                  )
+          )
+  )
+  and not profile.by_sender().solicited
+tags:
+ - "Attack surface reduction"
+tactics_and_techniques:
+  - "Evasion"
+  - "Social engineering"
+detection_methods:
+  - "Archive analysis"
+  - "Content analysis"
+  - "File analysis"
+  - "Sender analysis"
