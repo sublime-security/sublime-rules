@@ -1,0 +1,70 @@
+name: "Brand impersonation: Charles Schwab"
+description: "Impersonation of Charles Schwab & Co"
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and (
+    // display name contains charles schwab
+    (
+      strings.ilike(strings.replace_confusables(sender.display_name),
+                    '*charles schwab*'
+      )
+      // no spaces
+      or strings.ilike(strings.replace_confusables(sender.display_name),
+                       '*charlesschwab*'
+      )
+      // levenshtein distince similar to schwab
+      or strings.ilevenshtein(strings.replace_confusables(sender.display_name),
+                              'charles schwab'
+      ) <= 1
+      // sender domain contains schwab
+      or strings.ilike(strings.replace_confusables(sender.email.domain.domain),
+                       '*schwab*'
+      )
+    )
+  )
+
+  // and the sender is not in org_domains or from charles shwab domains and passes auth
+  and (
+    (
+      (
+        sender.email.domain.root_domain in $org_domains
+        or sender.email.domain.root_domain in (
+          "schwab.com",
+          "aboutschwab.com.",
+          "schwabmoneywise.com"
+        )
+      )
+      and not headers.auth_summary.dmarc.pass
+    )
+    or (
+      sender.email.domain.root_domain not in $org_domains
+      and sender.email.domain.root_domain not in (
+        "schwab.com",
+        "aboutschwab.com.",
+        "schwabmoneywise.com"
+      )
+    )
+  )
+  // and the sender is not from high trust sender root domains
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and not headers.auth_summary.dmarc.pass
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+  and not profile.by_sender().solicited
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Lookalike domain"
+  - "Social engineering"
+detection_methods:
+  - "Header analysis"
+  - "Sender analysis"
+id: "7abde595-bd69-5b79-8031-2c5a12b1767e"
+testing_pr: 2144
+testing_sha: cd90828b69a82928a91ef98eeebb0442d480ba11
