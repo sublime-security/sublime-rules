@@ -14,11 +14,51 @@ source: |
             )
           )
   )
-  and not profile.by_sender().solicited
-attack_types:
-  - "BEC/Fraud"
-  - "Credential Phishing"
-  - "Malware/Ransomware"
+
+  and (
+    // ignore personal <> work emails
+    // where the sender and mailbox's display name are the same
+    length(recipients.to) > 0
+    or length(recipients.cc) > 0
+    or sender.display_name != mailbox.display_name
+  )
+  // bounce-back negations
+  and not strings.like(sender.email.local_part,
+                       "*postmaster*",
+                       "*mailer-daemon*",
+                       "*administrator*"
+  )
+
+  and (
+    (
+      profile.by_sender().prevalence in ("new", "outlier")
+      and not profile.by_sender().solicited
+    )
+    or (
+      profile.by_sender().any_messages_malicious_or_spam
+      and not profile.by_sender().any_false_positives
+    )
+  )
+
+  // negate org domains unless they fail DMARC authentication
+  and (
+    (
+      sender.email.domain.root_domain in $org_domains
+      and not headers.auth_summary.dmarc.pass
+    )
+    or sender.email.domain.root_domain not in $org_domains
+  )
+
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and not headers.auth_summary.dmarc.pass
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+tags:
+  - "Attack surface reduction"
 tactics_and_techniques:
   - "Impersonation: VIP"
   - "Spoofing"
@@ -27,4 +67,4 @@ detection_methods:
   - "Sender analysis"
 id: "74035fdc-78c4-5a29-83d8-c1060ead4e28"
 testing_pr: 2140
-testing_sha: 03f38e0ee3dac49d283ad8a237caf52a5502f642
+testing_sha: 966c9fb9b84b3012a562babd0eef023a7295dbcd
