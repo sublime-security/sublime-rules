@@ -1,0 +1,71 @@
+name: "Brand Impersonation: Capital One "
+description: "This detection rule identifies inbound messages containing Capital One branding indicators in display names, sender addresses, message content, or embedded logos, while excluding legitimate Capital One domains and authenticated communications from known trusted senders."
+type: "rule"
+severity: ""
+source: |
+  type.inbound
+  and 
+    // display name contains captialone
+    (
+      strings.icontains(strings.replace_confusables(sender.display_name),
+                        'Capital One'
+      )
+      // no spaces
+      or strings.icontains(strings.replace_confusables(sender.display_name),
+                           'Capital One'
+      )
+      // levenshtein distince similar to captial one
+      or strings.ilevenshtein(strings.replace_confusables(sender.display_name),
+                              'Capital One'
+      ) <= 2
+      // sender localpart contains captialone
+      or strings.icontains(strings.replace_confusables(sender.email.local_part),
+                           'capitalone'
+      )
+      // indicators in the footer
+      or strings.ilike(strings.replace_confusables(body.current_thread.text),
+                       'Capital One Financial Corp'
+      )
+      or strings.ilike(strings.replace_confusables(body.current_thread.text),
+                       '1680 Capital One Drive'
+      )
+      or any(ml.logo_detect(beta.message_screenshot()).brands, .name == "Capital One Bank" and .confidence != "low")
+    
+  )
+  and not (
+    sender.email.domain.root_domain in $org_domains
+    or (
+      sender.email.domain.root_domain in (
+        "capitalone.com",
+        "capitaloneshopping.com",
+        "capitalonesoftware.com",
+        "olbanking.com", // a fiserv.one domain
+        "bynder.com", // Digital Assest Mgmt
+        "gcs-web.com", // investor relations run by capital one
+        "capitalonearena.com", // the arena
+        "monumentalsports.com", // the company that owns a bunch of teams that play at the arena?
+      )
+      and headers.auth_summary.dmarc.pass
+    )
+  )
+  
+  // and the sender is not from high trust sender root domains
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and not headers.auth_summary.dmarc.pass
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+  
+
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Lookalike domain"
+  - "Social engineering"
+detection_methods:
+  - "Computer Vision"
+  - "Sender analysis"
+  - "Header analysis"
