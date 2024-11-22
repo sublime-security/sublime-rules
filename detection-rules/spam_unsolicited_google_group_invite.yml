@@ -1,0 +1,39 @@
+name: "Google Groups Invite From Unsolicited External User"
+description: "This detection rule detects a Google Group invitation from an external sender and the inviting user is not recognized within the organization's existing recipient list."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and sender.email.email == "noreply@groups.google.com"
+  and strings.istarts_with(subject.subject, 'Invitation to join ')
+  // the invite is not from an $org_domain user
+  and not any($org_domains,
+              strings.icontains(body.current_thread.text,
+                                strings.concat('@', ., ' invited you to join the ')
+              )
+  )
+  // the sender is new to this org
+  and not any($recipient_emails,
+              strings.icontains(body.current_thread.text,
+                                strings.concat(
+                                               // it is neccessary to include the trailing comma from the
+                                               // recipient email/name because often a blank entry 
+                                               // is the first entry in $recipient_emails, which causes
+                                               // the logic to match without some sort of leading text before it.
+                                               ', ',
+                                               .,
+                                               ' invited you to join the '
+                                )
+              )
+  )
+tags:
+ - "Attack surface reduction"
+attack_types:
+  - "Spam"
+tactics_and_techniques:
+  - "Evasion"
+  - "Social engineering"
+detection_methods:
+  - "Header analysis"
+  - "Content analysis"
+  - "Sender analysis"
