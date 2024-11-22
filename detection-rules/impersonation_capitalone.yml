@@ -1,7 +1,7 @@
-name: "Brand Impersonation: Capital One "
+name: "Brand Impersonation: Capital One"
 description: "This detection rule identifies inbound messages containing Capital One branding indicators in display names, sender addresses, message content, or embedded logos, while excluding legitimate Capital One domains and authenticated communications from known trusted senders."
 type: "rule"
-severity: ""
+severity: "high"
 source: "type.inbound\nand \n  // display name contains captialone\n  (\n    strings.icontains(strings.replace_confusables(sender.display_name),\n                      'Capital One'\n    )\n    // no spaces\n    or strings.icontains(strings.replace_confusables(sender.display_name),\n                         'Capital One'\n    )\n    // levenshtein distince similar to captial one\n    or strings.ilevenshtein(strings.replace_confusables(sender.display_name),\n                            'Capital One'\n    ) <= 2\n    // sender localpart contains captialone\n    or strings.icontains(strings.replace_confusables(sender.email.local_part),\n                         'capitalone'\n    )\n    // indicators in the footer\n    or strings.ilike(strings.replace_confusables(body.current_thread.text),\n                     'Capital One Financial Corp'\n    )\n    or strings.ilike(strings.replace_confusables(body.current_thread.text),\n                     '1680 Capital One Drive'\n    )\n    or any(ml.logo_detect(beta.message_screenshot()).brands, .name == \"Capital One Bank\" and .confidence != \"low\")\n  \n)\nand not (\n  sender.email.domain.root_domain in $org_domains\n  or (\n    sender.email.domain.root_domain in (\n      \"capitalone.com\",\n      \"capitaloneshopping.com\",\n      \"capitalonesoftware.com\",\n      \"olbanking.com\", // a fiserv.one domain\n      \"bynder.com\", // Digital Assest Mgmt\n      \"gcs-web.com\", // investor relations run by capital one\n      \"capitalonearena.com\", // the arena\n      \"monumentalsports.com\", // the company that owns a bunch of teams that play at the arena?\n    )\n    and headers.auth_summary.dmarc.pass\n  )\n)\n\n// and the sender is not from high trust sender root domains\nand (\n  (\n    sender.email.domain.root_domain in $high_trust_sender_root_domains\n    and not headers.auth_summary.dmarc.pass\n  )\n  or sender.email.domain.root_domain not in $high_trust_sender_root_domains\n)\n"
 attack_types:
   - "Credential Phishing"
@@ -15,4 +15,4 @@ detection_methods:
   - "Header analysis"
 id: "d53848e4-fc40-5bd1-ad5e-c9c4e85a669f"
 testing_pr: 2151
-testing_sha: 08a1b0833c38627a22731582d818d53e61bc1309
+testing_sha: 74139e76373f352b20e37ee70b8baea39bc9127e
