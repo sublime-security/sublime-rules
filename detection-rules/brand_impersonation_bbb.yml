@@ -1,0 +1,43 @@
+name: "Brand impersonation: the Better Business Bureau (BBB)"
+description: "Detect impersonation of the Better Business Bureau (BBB)"
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and (
+    // display name contains bbb
+    (
+      regex.icontains(strings.replace_confusables(sender.display_name),
+                      '(?:\bBBB\b|better business bureau)'
+      )
+      // or levenshtein distance similar to the full name
+      or strings.ilevenshtein(strings.replace_confusables(sender.display_name),
+                              'better business bureau'
+      ) <= 1
+    )
+    // and the sender is not in org_domains or from the bbb and passes auth
+    and not (
+      sender.email.domain.root_domain in ("bbb.org")
+      and headers.auth_summary.dmarc.pass
+    )
+  )
+  // and the sender is not from high trust sender root domains
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and not headers.auth_summary.dmarc.pass
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+  
+  // not solicited
+  and not profile.by_sender().solicited
+  
+attack_types:
+  - "Credential Phishing"
+  - "BEC/Fraud"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Social engineering"
+detection_methods:
+  - "Sender analysis"
