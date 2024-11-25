@@ -9,11 +9,6 @@ rule MALFORMED_OLE_HEADER
         $pk_start = { 50 4B }
         $normal_pk = { 50 4B 03 04 }
         
-        // Define the forbidden starting signatures
-        $pk_local = { 50 4B 03 04 }    // Local file header
-        $pk_empty = { 50 4B 05 06 }    // Empty archive marker
-        $pk_span = { 50 4B 07 08 }     // Spanned archive marker
-        
     condition:
         $pk_start at 0 and
         
