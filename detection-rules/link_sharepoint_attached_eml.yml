@@ -1,0 +1,86 @@
+name: "Link: SharePoint Nested Message Forgery"
+description: "This detection rule identifies messages with an EML attachment containing SharePoint links, where the inner and outer messages share multiple matching characteristics, suggesting message content manipulation."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and not any(body.links, .href_url.domain.root_domain == "sharepoint.com")
+  and any(
+          // filter to just eml attachments
+          filter(attachments,
+                 .content_type == "message/rfc822" or .file_extension == "eml"
+          ),
+          // any body links go to sharepoint
+          any(file.parse_eml(.).body.links,
+              .href_url.domain.root_domain == "sharepoint.com"
+              and regex.icontains(.href_url.path, '/:[a-z]:/')
+          )
+          and 2 of (
+            // the recipients of the outer and inner messages are the same
+            // or there is no outer recipients
+            (
+              (
+                all(map(file.parse_eml(.).recipients.to, .email.email),
+                    . in map(recipients.to, .email.email)
+                )
+                and all(map(file.parse_eml(.).recipients.bcc, .email.email),
+                        . in map(recipients.bcc, .email.email)
+                )
+                and all(map(file.parse_eml(.).recipients.cc, .email.email),
+                        . in map(recipients.cc, .email.email)
+                )
+              )
+              or length(recipients.to) == 0
+              or all(recipients.to, .email.email == "")
+            ),
+            // the sender of the outer and inner messages are the same
+            file.parse_eml(.).sender.email.email == sender.email.email,
+
+            // the subject of the outer and inner messages are the same
+            strings.icontains(subject.subject, file.parse_eml(.).subject.subject),
+
+            // the inner message has the recipient and sender as the same address
+            // without any other recipients and matches the outer message sender
+            (
+              sum(
+                  [
+                  length(filter(file.parse_eml(.).recipients.to, .email.email != "")),
+                  length(filter(file.parse_eml(.).recipients.bcc, .email.email != "")),
+                  length(filter(file.parse_eml(.).recipients.cc, .email.email != ""))
+              ]
+              ) == 1
+              and (
+                all(file.parse_eml(.).recipients.to,
+                    .email.email == file.parse_eml(..).sender.email.email
+                )
+              )
+              and file.parse_eml(.).sender.email.email == sender.email.email
+            ),
+
+            // the outer recipieint is the sender of the inner message
+            (
+              sum(
+                  [
+                  length(filter(file.parse_eml(.).recipients.to, .email.email != "")),
+                  length(filter(file.parse_eml(.).recipients.bcc, .email.email != "")),
+                  length(filter(file.parse_eml(.).recipients.cc, .email.email != ""))
+              ]
+              ) == 1
+              and all(recipients.to,
+                      .email.email == file.parse_eml(..).sender.email.email
+              )
+            )
+          )
+  )
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Evasion"
+  - "Out of band pivot"
+detection_methods:
+  - "File analysis"
+  - "URL analysis"
+  - "Header analysis"
+id: "eab46d4b-39c9-568a-bb72-bf93f4cf997e"
+testing_pr: 2177
+testing_sha: 9a85dc28e5032f8d895ac762b4cd6ec5dd3eb16f
