@@ -5,12 +5,16 @@ type: "rule"
 severity: "high"
 source: |
   type.inbound
-  and length(filter(attachments, .file_type in $file_types_images or .file_type == "pdf")
+  and length(filter(attachments,
+                    .file_type in $file_types_images or .file_type == "pdf"
+             )
   ) < 10
   and any(attachments,
           (.file_type in $file_types_images or .file_type == "pdf")
-          and regex.icontains(beta.ocr(.).text,
-                              "trying to reach you.*microsoft teams"
+          and any(file.explode(.),
+                  regex.icontains(.scan.ocr.raw,
+                                  "trying to reach you.*microsoft teams"
+                  )
           )
   )
   and sender.email.domain.root_domain not in (
