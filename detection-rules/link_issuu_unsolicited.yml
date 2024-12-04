@@ -1,0 +1,42 @@
+name: "Link: Issuu Link from Unsolicited Sender"
+description: "This detection rule matches on messaging containing at least one link to issuu..com from an unsolicited sender. issuu.com provides a free plan enabling users to create custom flipbooks and file hosting.  This services has been abused by threat actors to host landing pages directing victims to a next stage of credential phishing."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and any(body.links,
+          // issuu link
+          .href_url.domain.root_domain == 'issuu.com'
+          and strings.icontains(.href_url.path, "/docs/")
+  )
+  // not solicited or from malicious/spam user with no FPs
+  and (
+    not profile.by_sender().solicited
+    or (
+      profile.by_sender().any_messages_malicious_or_spam
+      and not profile.by_sender().any_false_positives
+    )
+  )
+
+  // not from high trust sender root domains
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and not headers.auth_summary.dmarc.pass
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+tags:
+  - "Attack surface reduction"
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Free file host"
+  - "Free subdomain host"
+detection_methods:
+  - "Content analysis"
+  - "URL analysis"
+  - "Sender analysis"
+id: "3e38b7fe-9ec1-5738-bff4-387ff4f9c750"
+testing_pr: 2192
+testing_sha: 082eb9b6f6bbabeddcbfb217a9bace842c48486f
