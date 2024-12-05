@@ -18,7 +18,6 @@ source: |
                     '(health|dental|vision|insurance|medical) enrol{1,2}ment'
     )
     or regex.icontains(body.current_thread.text,
-                       '(open|benefits?) enrol{1,2}ment',
                        'benefit(s)? (plan|choice|selection|deadline|period)',
                        'hr benefits',
                        'annual enrol{1,2}ment',
@@ -33,7 +32,7 @@ source: |
                        '(verify|update|confirm).{0,20}(benefit.{0,20}selection)'
     )
   )
-  and 1 of (
+  and 2 of (
     any(ml.nlu_classifier(body.current_thread.text).entities,
         .name in ("urgency", "request")
     ),
@@ -52,6 +51,7 @@ source: |
                           'HR (?:Events|Expert|Support Center|Studies|Knowledge Cloud|News Library|Crowd|Solutions|Interests)|HR and People Operations'
   )
   and not (
+    // Constant Contact
     any(headers.hops,
         strings.icontains(.authentication_results.spf_details.designator,
                           "constantcontact.com"
@@ -72,6 +72,19 @@ source: |
       and headers.auth_summary.dmarc.pass
     )
     or any(headers.references, strings.iends_with(., "ccsend.com"))
+    // Hubspot
+    or any(headers.hops,
+           strings.icontains(.authentication_results.spf_details.designator,
+                             "hubspotemail.net"
+           )
+    )
+  )
+  and sender.email.domain.root_domain not in~ (
+    'medicare.gov',
+    'farmers.com',
+    'uhc.com',
+    'blueshieldca.com',
+    'corestream.com'
   )
   and (
     profile.by_sender().prevalence in ("new", "outlier")
