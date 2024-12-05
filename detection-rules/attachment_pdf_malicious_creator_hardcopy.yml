@@ -1,0 +1,39 @@
+name: "Attachment: Decoy PDF Creator (HardCopy)"
+description: "This detection rule matches on messages containing one or more Decoy PDF attachments with metadata discovered to have been assoicated with malicious email campaigns featuring multiple lures."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+    and 0 < length(distinct(filter(attachments, .file_type == "pdf"), .md5)) <= 5
+    and any(distinct(filter(attachments, .file_type == "pdf"), .md5),
+            .size <= 250000
+            and any(file.explode(.),
+                    .scan.exiftool.producer =~ "Lexmark MX722adhe"
+                    or strings.icontains(.scan.exiftool.producer, "Lexmark")
+                    or .scan.exiftool.title =~ "Scanned Document"
+                    or (
+                      any(.scan.exiftool.fields,
+                          .key in ("CreatorTool", "Creator")
+                          and .value in~ ('HardCopy', 'Hard Copy')
+                      )
+                    )
+            )
+    )
+    and (
+      not profile.by_sender().solicited
+      or (
+        profile.by_sender().any_messages_malicious_or_spam
+        and not profile.by_sender().any_false_positives
+      )
+    )
+    and not profile.by_sender().any_false_positives
+
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "PDF"
+detection_methods:
+  - "File analysis"
+  - "Content analysis"
+  - "Sender analysis"
