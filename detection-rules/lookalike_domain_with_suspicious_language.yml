@@ -1,0 +1,19 @@
+name: "Suspected Lookalike domain with suspicious language"
+description: "This rule identifies messages where links use typosquatting or lookalike domains similar to the sender domain, with at least one domain being either unregistered or recently registered (≤90 days). The messages must also contain indicators of business email compromise (BEC), credential theft, or abusive language patterns like financial terms or polite phrasing such as kindly. This layered approach targets phishing attempts combining domain deception with manipulative content"
+type: "rule"
+severity: "high"
+source: "type.inbound\n\n// levenshtein distance (edit distance) between the SLD of the link and the sender domain is greater than 0 and less than or equal to 2.\n// This detects typosquatting or domains that are deceptively similar to the sender.\n\nand any(body.links,\n        length(.href_url.domain.sld) > 3\n        and 0 < strings.levenshtein(.href_url.domain.sld,\n                                    sender.email.domain.sld\n        ) <= 2\n        //exclude onmicrosoft.com\n        and not sender.email.domain.root_domain == \"onmicrosoft.com\"\n        and ( \n          // domains are not registered or registered within 90d\n          network.whois(.href_url.domain).found == false\n          or network.whois(.href_url.domain).days_old <= 90\n          or network.whois(sender.email.domain).found == false\n          or network.whois(sender.email.domain).days_old <= 90\n        )\n)\n// the mesasge is intent is BEC or Cred Theft, or is talking about financial invoicing/banking language, or a request contains \"kindly\"\nand any(ml.nlu_classifier(body.current_thread.text).intents,\n        .name in (\"bec\", \"cred_theft\")\n        or any(ml.nlu_classifier(body.current_thread.text).entities,\n               .name == \"financial\"\n               and (\n                 .text in (\"invoice\", \"banking information\")\n                 or .name == \"request\" and strings.icontains(.text, \"kindly\")\n               )\n        )\n)\n"
+attack_types:
+  - "BEC/Fraud"
+tactics_and_techniques:
+  - "Evasion"
+  - "Lookalike domain"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Natural Language Understanding"
+  - "Sender analysis"
+  - "Whois"
+id: "3674ced0-691c-5faa-9ced-922e7201dc29"
+testing_pr: 2197
+testing_sha: f0b99c7e4e4a60750a9a62be8bfdfabf3b99c27a
