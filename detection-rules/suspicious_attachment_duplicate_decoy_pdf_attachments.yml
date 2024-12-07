@@ -4,23 +4,31 @@ type: "rule"
 severity: "medium"
 source: |
   type.inbound
-  and length(attachments) > 1
-  and all(attachments, .file_type == "pdf")
+  and length(filter(attachments, .file_type == "pdf")) > 1
   and (
-    length(distinct(attachments, .file_name)) == 1
-    or length(distinct(attachments, .md5)) == 1
+    // the number of pdf attachments is greater than the number of distant filenames for the pdf attachments
+    // this indicates at least two of the attachments contain the same name
+    length(
+        filter(attachments, .file_type == "pdf")
+    ) > 
+    length(
+        distinct(filter(attachments, .file_type == "pdf"), .file_name)
+    )
+    or
+    // all PDFs are the same MD5
+    length(distinct(filter(attachments, .file_type == "pdf"), .md5)) == 1
   )
-  and all(attachments,
-          .file_type == "pdf"
-          and any(file.explode(.),
-                  .depth == 0
-                  and (
-                    length(.scan.url.urls) > 0
-                    or length(.scan.pdf.urls) > 0
-                    or length(body.links) > 0
-                  )
-                  and .scan.ocr.raw is null
-          )
+  // there must be at least one link either in the PDF or in the body
+  and
+  (
+    any(filter(attachments, .file_type == "pdf"),
+        any(filter(file.explode(.), .depth == 0),
+            length(.scan.url.urls) > 0 or length(.scan.pdf.urls) > 0
+        )
+    )
+    // in some cases the PDF is blank/contains no links
+    // but there must be a CTA somewhere, so check 
+    or length(body.links) > 0
   )
 attack_types:
   - "Credential Phishing"
