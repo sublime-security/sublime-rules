@@ -6,7 +6,7 @@ source: |
   type.inbound
   and sender.email.domain.domain not in $org_domains
   and (
-    length(body.current_thread.text) < 2500 
+    length(body.current_thread.text) < 2500
     or body.current_thread.text is null
   )
   and (
@@ -34,77 +34,109 @@ source: |
                        '(login|sign.?in).{0,20}(benefit portal|hr portal)',
                        '(verify|update|confirm).{0,20}(benefit.{0,20}selection)'
     )
+    or any(attachments, regex.icontains(.file_name, 
+                       'fileDoc-Review',
+                       '(open|benefits?) enrol{1,2}ment',
+                       'annual enrol{1,2}ment',
+                       '(fsa|hsa|401k) (enrol{1,2}ment|selection)',
+                       '(urgent|immediate) action required.{0,20}(benefit|enrol{1,2}ment)',
+          )
+      )
   )
   and 2 of (
     any(ml.nlu_classifier(body.current_thread.text).entities,
         .name in ("urgency", "request")
     ),
-    any(ml.nlu_classifier(body.current_thread.text).intents, .name != "benign"),
-    (length(body.current_thread.text) < 250 and length(attachments) == 1)
+      any(ml.nlu_classifier(body.current_thread.text).intents, .name != "benign"),
+    (
+      (length(body.current_thread.text) < 250 and length(attachments) == 1)
+      or (body.current_thread.text is null and length(attachments) == 1)
+    ),
+    // lure in attachment
+    (
+      any(attachments,
+          (
+            .file_type in $file_types_images
+            or .file_type in ("pdf", "docx", "doc")
+            or .file_extension in $file_extensions_macros
+          )
+          and any(filter(file.explode(.), .scan.ocr.raw is not null),
+                  (
+                    any(ml.nlu_classifier(.scan.ocr.raw).intents,
+                        .name != "benign"
+                    )
+                    or any(ml.nlu_classifier(.scan.ocr.raw).entities,
+                            .name in ("urgency", "request")
+                    )
+                  )
+              )
+          )
+      )
   )
-  
-  // negate replies
-  and (
-    length(headers.references) == 0
-    or not any(headers.hops, any(.fields, strings.ilike(.name, "In-Reply-To")))
-  )
-  
-  // Negate common marketing mailers
-  and not regex.icontains(sender.display_name,
-                          'HR (?:Events|Expert|Support Center|Studies|Knowledge Cloud|News Library|Crowd|Solutions|Interests)|HR and People Operations'
-  )
-  and not (
-    // Constant Contact
-    any(headers.hops,
-        strings.icontains(.authentication_results.spf_details.designator,
-                          "constantcontact.com"
-        )
-    )
-    or any(headers.hops,
-           strings.icontains(.received_spf.designator, "constantcontact.com")
-    )
-    or (
-      (
-        any(headers.hops,
-            .index == 0
-            and any(.authentication_results.dkim_details,
-                    .domain == "auth.ccsend.com"
-            )
+      // negate replies
+      and (
+        length(headers.references) == 0
+        or not any(headers.hops,
+                   any(.fields, strings.ilike(.name, "In-Reply-To"))
         )
       )
-      and headers.auth_summary.dmarc.pass
-    )
-    or any(headers.references, strings.iends_with(., "ccsend.com"))
-    // Hubspot
-    or any(headers.hops,
-           strings.icontains(.authentication_results.spf_details.designator,
-                             "hubspotemail.net"
-           )
-    )
-  )
-  and sender.email.domain.root_domain not in~ (
-    'medicare.gov',
-    'farmers.com',
-    'uhc.com',
-    'blueshieldca.com',
-    'corestream.com'
-  )
-  and (
-    profile.by_sender().prevalence in ("new", "outlier")
-    or (
-      profile.by_sender().any_messages_malicious_or_spam
-      and not profile.by_sender().any_false_positives
-    )
-  )
-  // negate highly trusted sender domains unless they fail DMARC authentication
-  and (
-    (
-      sender.email.domain.root_domain in $high_trust_sender_root_domains
-      and not headers.auth_summary.dmarc.pass
-    )
-    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
-  )
-
+  
+      // Negate common marketing mailers
+      and not regex.icontains(sender.display_name,
+                              'HR (?:Events|Expert|Support Center|Studies|Knowledge Cloud|News Library|Crowd|Solutions|Interests)|HR and People Operations'
+      )
+      and not (
+        // Constant Contact
+        any(headers.hops,
+            strings.icontains(.authentication_results.spf_details.designator,
+                              "constantcontact.com"
+            )
+        )
+        or any(headers.hops,
+               strings.icontains(.received_spf.designator, "constantcontact.com")
+        )
+        or (
+          (
+            any(headers.hops,
+                .index == 0
+                and any(.authentication_results.dkim_details,
+                        .domain == "auth.ccsend.com"
+                )
+            )
+          )
+          and headers.auth_summary.dmarc.pass
+        )
+        or any(headers.references, strings.iends_with(., "ccsend.com"))
+        // Hubspot
+        or any(headers.hops,
+               strings.icontains(.authentication_results.spf_details.designator,
+                                 "hubspotemail.net"
+               )
+        )
+      )
+      and sender.email.domain.root_domain not in~ (
+        'medicare.gov',
+        'farmers.com',
+        'uhc.com',
+        'blueshieldca.com',
+        'corestream.com'
+      )
+      and (
+        profile.by_sender().prevalence in ("new", "outlier")
+        or (
+          profile.by_sender().any_messages_malicious_or_spam
+          and not profile.by_sender().any_false_positives
+        )
+      )
+      // negate highly trusted sender domains unless they fail DMARC authentication
+      and (
+        (
+          sender.email.domain.root_domain in $high_trust_sender_root_domains
+          and not headers.auth_summary.dmarc.pass
+        )
+        or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+      )
+  
 attack_types:
   - "Credential Phishing"
 tactics_and_techniques:
