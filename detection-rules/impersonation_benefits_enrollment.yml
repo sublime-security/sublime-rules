@@ -5,7 +5,9 @@ severity: "high"
 source: |
   type.inbound
   and sender.email.domain.domain not in $org_domains
-  and length(body.current_thread.text) < 2500
+  and (
+    length(body.current_thread.text) < 2500 or body.current_thread.text is null
+  )
   and (
     regex.icontains(subject.subject,
                     '(open|benefits?) enrol{1,2}ment', // catches both enrolment and enrollment
@@ -31,15 +33,46 @@ source: |
                        '(login|sign.?in).{0,20}(benefit portal|hr portal)',
                        '(verify|update|confirm).{0,20}(benefit.{0,20}selection)'
     )
+    or any(attachments,
+           regex.icontains(.file_name,
+                           'fileDoc-Review',
+                           '(open|benefits?) enrol{1,2}ment',
+                           'annual enrol{1,2}ment',
+                           '(fsa|hsa|401k) (enrol{1,2}ment|selection)',
+                           '(urgent|immediate) action required.{0,20}(benefit|enrol{1,2}ment)',
+           )
+    )
   )
   and 2 of (
     any(ml.nlu_classifier(body.current_thread.text).entities,
         .name in ("urgency", "request")
     ),
     any(ml.nlu_classifier(body.current_thread.text).intents, .name != "benign"),
-    (length(body.current_thread.text) < 250 and length(attachments) == 1)
+    (
+      (length(body.current_thread.text) < 250 and length(attachments) == 1)
+      or (body.current_thread.text is null and length(attachments) == 1)
+    ),
+    // lure in attachment
+    (
+      any(attachments,
+          (
+            .file_type in $file_types_images
+            or .file_type in ("pdf", "docx", "doc")
+            or .file_extension in $file_extensions_macros
+          )
+          and any(filter(file.explode(.), .scan.ocr.raw is not null),
+                  (
+                    any(ml.nlu_classifier(.scan.ocr.raw).intents,
+                        .name != "benign"
+                    )
+                    or any(ml.nlu_classifier(.scan.ocr.raw).entities,
+                           .name in ("urgency", "request")
+                    )
+                  )
+          )
+      )
+    )
   )
-
   // negate replies
   and (
     length(headers.references) == 0
@@ -114,4 +147,4 @@ detection_methods:
   - "Sender analysis"
 id: "5a6eb5a8-2d91-5ed8-a0d2-fb3cc2fef40b"
 testing_pr: 2130
-testing_sha: 9b89fd8f37a5f6d4f87328efde446fd250a10930
+testing_sha: df9c68a84d84ea051f05d489f42d3d3d7692eb25
