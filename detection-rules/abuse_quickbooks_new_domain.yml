@@ -1,0 +1,45 @@
+name: "Service Abuse: QuickBooks Notification From New Domain"
+description: "This Attack Surface Reduction (ASR) rule matches on QuickBooks notifications with recently registered reply-to domains."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  
+  // Legitimate Intuit sending infratructure
+  and sender.email.email == "quickbooks@notification.intuit.com"
+  and headers.auth_summary.spf.pass
+  and headers.auth_summary.dmarc.pass
+  and strings.ends_with(headers.auth_summary.spf.details.designator,
+                        '.intuit.com'
+  )
+  
+  // remove payment confirmation messages
+  and not strings.starts_with(subject.subject, 'Payment confirmation:')
+  
+  // the message needs to have a reply-to address
+  and length(headers.reply_to) > 0
+  
+  // reply-to email address has never received an email from your org
+  and not any(headers.reply_to, .email.email in $recipient_emails)
+  
+  // new reply-to
+  and any(filter(headers.reply_to,
+                 // negate .com.au which doesn't provide created date for domains
+                 .email.domain.tld not in ('com.au')
+          ),
+          network.whois(.email.domain).days_old < 30
+  )
+tags:
+ - "Attack surface reduction"
+attack_types:
+  - "Callback Phishing"
+  - "Credential Phishing"
+  - "BEC/Fraud"
+tactics_and_techniques:
+  - "Evasion"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Sender analysis"
+  - "Header analysis"
+id: "c4f46473-0f5a-56d6-bb7e-489460bdb20f"
