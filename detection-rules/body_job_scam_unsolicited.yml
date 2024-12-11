@@ -5,15 +5,31 @@ type: "rule"
 severity: "low"
 source: |
   type.inbound
-  and any(ml.nlu_classifier(body.current_thread.text).intents,
-          .name in ("job_scam")
-          and .confidence == "high"
-          and (
-            any(ml.nlu_classifier(body.current_thread.text).entities,
-                .name == "financial"
-            )
-            or strings.icontains(body.current_thread.text, "kindly")
+  and (
+    any(ml.nlu_classifier(body.current_thread.text).intents,
+        .name in ("job_scam") and .confidence == "high"
+    )
+  )
+  and (
+    any(ml.nlu_classifier(body.current_thread.text).entities,
+        .name == "financial"
+    )
+    or strings.icontains(body.current_thread.text, "kindly")
+    or (
+      any(ml.nlu_classifier(body.current_thread.text).entities,
+          .name in ("greeting", "salutation")
+      )
+      and (
+        (
+          length(recipients.to) == 0
+          or length(recipients.bcc) > 0
+          or (
+            all(recipients.to, .email.domain.valid == false)
+            and all(recipients.cc, .email.domain.valid == false)
           )
+        )
+      )
+    )
   )
   and (
     not profile.by_sender().solicited
