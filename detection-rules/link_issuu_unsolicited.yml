@@ -4,11 +4,22 @@ type: "rule"
 severity: "medium"
 source: |
   type.inbound
-  and any(body.links,
-          // issuu link
-          .href_url.domain.root_domain == 'issuu.com'
-          and strings.icontains(.href_url.path, "/docs/")
+  and any(filter(body.links,
+                 // issuu link
+                 .href_url.domain.root_domain == 'issuu.com'
+                 and strings.icontains(.href_url.path, "/docs/")
+          ),
+          (
+            .href_url.query_params is null
+            // reduce alerting on newsletters, flyers, etc
+            // by ensure there are not any marketing focused query param keys like utm_source
+            or regex.imatch(.href_url.query_params, '^fr=[^\&]+$')
+          )
   )
+  
+  // to further reduce noise from newsletters/flyers inspect the number of imbedded images
+  and strings.icount(body.html.raw, '<img') < 15
+  
   // not solicited or from malicious/spam user with no FPs
   and (
     not profile.by_sender().solicited
@@ -16,6 +27,12 @@ source: |
       profile.by_sender().any_messages_malicious_or_spam
       and not profile.by_sender().any_false_positives
     )
+  )
+  
+  // netgate common senders which have not been marked as malicious
+  and not (
+      profile.by_sender().prevalence in ("common", "rare")
+      and profile.by_sender().any_messages_malicious_or_spam == false
   )
   
   // not from high trust sender root domains
