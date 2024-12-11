@@ -1,0 +1,178 @@
+name: "Service Abuse: HelloSign Share with Suspicious Sender or Document Name"
+description: "The detection rule is designed to identify messages sent from HelloSign that notify recipients about a shared file and contain suspicious content either in the document or the sender's display name."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  
+  // Legitimate Dropbox sending infrastructure
+  and sender.email.email == "noreply@mail.hellosign.com"
+  and headers.auth_summary.spf.pass
+  and headers.auth_summary.dmarc.pass
+  and strings.ends_with(headers.auth_summary.spf.details.designator,
+                        '.hellosign.com'
+  )
+  and strings.icontains(subject.subject, ' - Signature Requested')
+  and not strings.icontains(subject.subject, 'You just signed')
+  and not strings.contains(body.current_thread.text, '@cdpesign.com') // negate CDP Esign which reuses hellosign
+  // negate messages where the "on_behalf_of_email" is within the org_domains
+  and not any(headers.hops,
+              any(.fields,
+                  .name == "X-Mailgun-Variables"
+                  and any($org_domains,
+                          // we're not able to do an exact match because the sender email
+                          // is dynamic in nature
+                          // but the "on_behalf_of_email" is always before "on_behalf_of_guid"
+                          strings.icontains(..value,
+                                            strings.concat("@", ., "\", \"on_behalf_of_guid")
+                          )
+                  )
+              )
+  )
+  and (
+    // contains the word dropbox
+    // the subject is in the format of "<actor controlled title> - Signature Requested by <actor controlled name>"
+    strings.icontains(subject.subject, 'dropbox')
+    or strings.icontains(subject.subject, 'sharefile')
+    or strings.icontains(subject.subject, 'helloshare')
+  
+    // sender names part of the subject
+    or (
+      // Billing Accounting
+      regex.icontains(subject.subject,
+                      ' - Signature Requested by .*Accounts? (?:Payable|Receivable)',
+                      ' - Signature Requested by .*Billing Support'
+      )
+  
+      // HR/Payroll/Legal/etc
+      or regex.icontains(subject.subject,
+                         ' - Signature Requested by .*Compliance HR'
+      )
+      or regex.icontains(subject.subject,
+                         ' - Signature Requested by .*(?:Compliance|Executive|Finance|\bHR\b|Human Resources|\bIT\b|Legal|Payroll|Purchasing|Operations|Security|Training|Support).*(?:Department|Team)?'
+      )
+      or regex.icontains(subject.subject,
+                         ' - Signature Requested by .*Corporate Communications'
+      )
+      or regex.icontains(subject.subject,
+                         ' - Signature Requested by .*Employee Relations'
+      )
+      or regex.icontains(subject.subject,
+                         ' - Signature Requested by .*Office Manager'
+      )
+      or regex.icontains(subject.subject,
+                         ' - Signature Requested by .*Risk Management'
+      )
+      or regex.icontains(subject.subject,
+                         ' - Signature Requested by .*Payroll Admin(?:istrator)'
+      )
+  
+      // IT related
+      or regex.icontains(subject.subject,
+                         ' - Signature Requested by .*IT Support',
+                         ' - Signature Requested by .*Information Technology',
+                         ' - Signature Requested by .*(?:Network|System)? Admin(?:istrator)',
+                         ' - Signature Requested by .*Help Desk',
+                         ' - Signature Requested by .*Tech(?:nical) Support'
+      )
+  
+    )
+    // filename analysis
+    // the filename is also contianed in the subject line
+    or (
+      // scanner themed
+      regex.icontains(subject.subject, 'scanne[rd].* - Signature Requested by')
+      // image theme
+      or regex.icontains(subject.subject, '_IMG_.* - Signature Requested by')
+      or regex.icontains(subject.subject,
+                         'IMG[_-](?:\d|\W)+.* - Signature Requested by'
+      )
+  
+  
+      // Invoice Themes
+      or regex.icontains(subject.subject, 'Invoice.* - Signature Requested by')
+      or regex.icontains(subject.subject, 'INV\b.* - Signature Requested by')
+      or regex.icontains(subject.subject, 'Payment.* - Signature Requested by')
+      or regex.icontains(subject.subject, 'ACH.* - Signature Requested by')
+      or regex.icontains(subject.subject,
+                         'Wire Confirmation.* - Signature Requested by'
+      )
+      or regex.icontains(subject.subject,
+                         'P[O0]\W+?\d+\".* - Signature Requested by'
+      )
+      or regex.icontains(subject.subject,
+                         'P[O0](?:\W+?|\d+).* - Signature Requested by'
+      )
+      or regex.icontains(subject.subject, 'receipt.* - Signature Requested by')
+      or regex.icontains(subject.subject, 'Billing.* - Signature Requested by')
+      or regex.icontains(subject.subject, 'statement.* - Signature Requested by')
+      or regex.icontains(subject.subject, 'Past Due.* - Signature Requested by')
+      or regex.icontains(subject.subject,
+                         'Remit(?:tance)?.* - Signature Requested by'
+      )
+      or regex.icontains(subject.subject,
+                         'Purchase Order.* - Signature Requested by'
+      )
+      or regex.icontains(subject.subject, 'Settlement.* - Signature Requested by')
+  
+      // contract language
+      or regex.icontains(subject.subject,
+                         'Pr[0o]p[0o]sal.* - Signature Requested by'
+      )
+  
+      or regex.icontains(subject.subject, 'Claim Doc.* - Signature Requested by')
+  
+      // Payroll/HR
+      or regex.icontains(subject.subject, 'Payroll.* - Signature Requested by')
+      or regex.icontains(subject.subject,
+                         'Employee Pay\b.* - Signature Requested by'
+      )
+      or regex.icontains(subject.subject, 'Salary.* - Signature Requested by')
+      or regex.icontains(subject.subject,
+                         'Benefit Enrollment.* - Signature Requested by'
+      )
+      or regex.icontains(subject.subject, 'Employee Handbook.* - Signature Requested by'
+      )
+      or regex.icontains(subject.subject, 'Reimbursement Approved.* - Signature Requested by'
+      )
+  
+      // shared files/extenstion/urgency/CTA
+      or regex.icontains(subject.subject, 'Urgent.* - Signature Requested by')
+      or regex.icontains(subject.subject, 'Important.* - Signature Requested by')
+      or regex.icontains(subject.subject, 'Secure.* - Signature Requested by')
+      or regex.icontains(subject.subject, 'Encrypt.* - Signature Requested by')
+      or regex.icontains(subject.subject, 'shared.* - Signature Requested by')
+      or regex.icontains(subject.subject, 'protected.* - Signature Requested by')
+      or regex.icontains(subject.subject, 'Validate.* - Signature Requested by')
+      or regex.icontains(subject.subject, 'Action Required.* - Signature Requested by')
+      or regex.icontains(subject.subject, 'Final Notice.* - Signature Requested by')
+      or regex.icontains(subject.subject, 'Review(?: and| & |\s+)?Sign.* - Signature Requested by')
+      or regex.icontains(subject.subject, 'Download PDF.* - Signature Requested by'
+      )
+  
+      // all caps filename allowing for numbers, punct and spaces, and an optional file extenstion
+      or regex.contains(subject.subject,
+                        '[A-Z0-9[:punct:]\s]+(?:\.[a-zA-Z]{3,5}).* - Signature Requested by'
+      )
+      or regex.icontains(subject.subject,
+                         '.*(?:shared|sent).* - Signature Requested by'
+      )
+  
+      // MFA theme
+      or regex.icontains(subject.subject,
+                         'Verification Code.* - Signature Requested by'
+      )
+      or regex.icontains(subject.subject, '\bMFA\b.* - Signature Requested by')
+    )
+  )
+attack_types:
+  - "Callback Phishing"
+  - "BEC/Fraud"
+tactics_and_techniques:
+  - "Evasion"
+  - "Social engineering"
+detection_methods:
+  - "Sender analysis"
+  - "Header analysis"
+  - "Content analysis"
+id: "464d98f3-38b4-5a72-b0d5-e3a148f88025"
