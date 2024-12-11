@@ -1,0 +1,66 @@
+name: "New Account Verification Code From Common IdP Vendor"
+description: "Identifies incoming verification codes from Apple, GitHub, Microsoft, Google, Slack, and Facebook, typically associated with new account creation. We recommend commenting out vendors where your users already have accounts, as this may flag verification codes for existing accounts."
+type: "rule"
+references: 
+  - "https://pushsecurity.com/blog/a-new-class-of-phishing-verification-phishing-and-cross-idp-impersonation/"
+source: |
+  type.inbound
+  and (
+    // Apple
+    (
+      sender.email.domain.domain == "id.apple.com"
+      and strings.icontains(body.current_thread.text, 'verify this email address')
+      and regex.icontains(body.current_thread.text,
+                          '\d{6}' // 6-digit verification code
+      )
+    )
+    // GitHub
+    or (
+      sender.email.email == 'noreply@github.com'
+      and strings.icontains(body.current_thread.text,
+                            'created a new GitHub account'
+      )
+      and regex.icontains(body.current_thread.text,
+                          '\d{8}' // 8-digit verification code
+      )
+    )
+    // Microsoft
+    or (
+      sender.email.domain.domain == "accountprotection.microsoft.com"
+      and strings.icontains(body.current_thread.text,
+                            'finish setting up your Microsoft account'
+      )
+      and regex.icontains(body.current_thread.text,
+                          '\d{6}' // 6-digit verification code
+      )
+    )
+    // Google
+    or (
+      sender.email.email == "noreply@google.com"
+      and strings.icontains(body.current_thread.text,
+                            'verify this email is yours'
+      )
+      and regex.icontains(body.current_thread.text,
+                          '\d{6}' // 6-digit verification code
+      )
+    )
+    // Slack
+    // NOTE: Slack's "new account" verification codes and existing account verification codes use the same template; this will not differentiate between a new signup and a regular log in attempt
+    or (
+      sender.email.domain.domain == "slack.com"
+      and strings.icontains(body.current_thread.text,
+                            'confirm your email address'
+      )
+      and regex.icontains(body.current_thread.text,
+                          '[a-z0-9]{3}-[a-z0-9]{3}' // 6-character verification code
+      )
+    )
+    // Facebook
+    or (
+      sender.email.email == "registration@facebookmail.com"
+      and strings.icontains(body.current_thread.text, 'complete your Facebook registration')
+      and regex.icontains(body.current_thread.text,
+                          'FB-\d{5}' // 5-digit verification code
+      )
+    )
+  )
