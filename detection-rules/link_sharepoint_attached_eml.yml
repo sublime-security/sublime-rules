@@ -29,6 +29,18 @@ source: |
                 and all(map(file.parse_eml(.).recipients.cc, .email.email),
                         . in map(recipients.cc, .email.email)
                 )
+                // make sure the are the same length
+                and sum([
+                          length(recipients.to),
+                          length(recipients.bcc),
+                          length(recipients.cc)
+                        ]
+                ) == sum([
+                           length(file.parse_eml(.).recipients.to),
+                           length(file.parse_eml(.).recipients.bcc),
+                           length(file.parse_eml(.).recipients.cc)
+                         ]
+                )
               )
               or length(recipients.to) == 0
               or all(recipients.to, .email.email == "")
@@ -43,11 +55,11 @@ source: |
             // without any other recipients and matches the outer message sender
             (
               sum(
-                  [
-                  length(filter(file.parse_eml(.).recipients.to, .email.email != "")),
-                  length(filter(file.parse_eml(.).recipients.bcc, .email.email != "")),
-                  length(filter(file.parse_eml(.).recipients.cc, .email.email != ""))
-              ]
+                [
+                    length(filter(file.parse_eml(.).recipients.to, .email.email != "")),
+                    length(filter(file.parse_eml(.).recipients.bcc, .email.email != "")),
+                    length(filter(file.parse_eml(.).recipients.cc, .email.email != ""))
+                ]
               ) == 1
               and (
                 all(file.parse_eml(.).recipients.to,
@@ -60,11 +72,11 @@ source: |
             // the outer recipieint is the sender of the inner message
             (
               sum(
-                  [
-                  length(filter(file.parse_eml(.).recipients.to, .email.email != "")),
-                  length(filter(file.parse_eml(.).recipients.bcc, .email.email != "")),
-                  length(filter(file.parse_eml(.).recipients.cc, .email.email != ""))
-              ]
+                [
+                    length(filter(file.parse_eml(.).recipients.to, .email.email != "")),
+                    length(filter(file.parse_eml(.).recipients.bcc, .email.email != "")),
+                    length(filter(file.parse_eml(.).recipients.cc, .email.email != ""))
+                ]
               ) == 1
               and all(recipients.to,
                       .email.email == file.parse_eml(..).sender.email.email
@@ -73,7 +85,16 @@ source: |
           )
   )
   
-
+  // exclude bounce backs & read receipts
+  and not strings.like(sender.email.local_part,
+                       "*postmaster*",
+                       "*mailer-daemon*",
+                       "*administrator*"
+  )
+  and not regex.icontains(subject.subject, "^(undeliverable|read:)")
+  and not any(attachments, .content_type == "message/delivery-status")
+  // if the "References" is in the body of the message, it's probably a bounce
+  and not any(headers.references, strings.contains(body.html.display_text, .))
 attack_types:
   - "Credential Phishing"
 tactics_and_techniques:
