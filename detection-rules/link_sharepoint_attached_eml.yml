@@ -5,10 +5,18 @@ severity: "medium"
 source: |
   type.inbound
   and not any(body.links, .href_url.domain.root_domain == "sharepoint.com")
+  // ensure there is only a single .eml attachment
+  and length(filter(attachments,
+                    (
+                      .content_type == "message/rfc822"
+                      or .file_extension == "eml"
+                    )
+             )
+  ) == 1
   and any(
           // filter to just eml attachments
           filter(attachments,
-                 .content_type == "message/rfc822" or .file_extension == "eml"
+                 (.content_type == "message/rfc822" or .file_extension == "eml")
           ),
           // any body links go to sharepoint
           any(file.parse_eml(.).body.links,
@@ -54,12 +62,20 @@ source: |
             // the inner message has the recipient and sender as the same address
             // without any other recipients and matches the outer message sender
             (
-              sum(
-                [
-                    length(filter(file.parse_eml(.).recipients.to, .email.email != "")),
-                    length(filter(file.parse_eml(.).recipients.bcc, .email.email != "")),
-                    length(filter(file.parse_eml(.).recipients.cc, .email.email != ""))
-                ]
+              sum([
+                    length(filter(file.parse_eml(.).recipients.to,
+                                  .email.email != ""
+                           )
+                    ),
+                    length(filter(file.parse_eml(.).recipients.bcc,
+                                  .email.email != ""
+                           )
+                    ),
+                    length(filter(file.parse_eml(.).recipients.cc,
+                                  .email.email != ""
+                           )
+                    )
+                  ]
               ) == 1
               and (
                 all(file.parse_eml(.).recipients.to,
@@ -71,12 +87,20 @@ source: |
   
             // the outer recipieint is the sender of the inner message
             (
-              sum(
-                [
-                    length(filter(file.parse_eml(.).recipients.to, .email.email != "")),
-                    length(filter(file.parse_eml(.).recipients.bcc, .email.email != "")),
-                    length(filter(file.parse_eml(.).recipients.cc, .email.email != ""))
-                ]
+              sum([
+                    length(filter(file.parse_eml(.).recipients.to,
+                                  .email.email != ""
+                           )
+                    ),
+                    length(filter(file.parse_eml(.).recipients.bcc,
+                                  .email.email != ""
+                           )
+                    ),
+                    length(filter(file.parse_eml(.).recipients.cc,
+                                  .email.email != ""
+                           )
+                    )
+                  ]
               ) == 1
               and all(recipients.to,
                       .email.email == file.parse_eml(..).sender.email.email
@@ -95,6 +119,7 @@ source: |
   and not any(attachments, .content_type == "message/delivery-status")
   // if the "References" is in the body of the message, it's probably a bounce
   and not any(headers.references, strings.contains(body.html.display_text, .))
+
 attack_types:
   - "Credential Phishing"
 tactics_and_techniques:
