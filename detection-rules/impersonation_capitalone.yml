@@ -5,32 +5,38 @@ severity: "high"
 source: |
   type.inbound
   and 
-    // display name contains captialone
+  // display name contains captialone
+  (
     (
       strings.icontains(strings.replace_confusables(sender.display_name),
                         'Capital One'
       )
-      // no spaces
-      or strings.icontains(strings.replace_confusables(sender.display_name),
-                           'Capital One'
+      and not strings.icontains(strings.replace_confusables(sender.display_name),
+                                'Capital One Arena'
       )
-      // levenshtein distince similar to captial one
-      or strings.ilevenshtein(strings.replace_confusables(sender.display_name),
-                              'Capital One'
-      ) <= 2
-      // sender localpart contains captialone
-      or strings.icontains(strings.replace_confusables(sender.email.local_part),
-                           'capitalone'
-      )
-      // indicators in the footer
-      or strings.ilike(strings.replace_confusables(body.current_thread.text),
-                       'Capital One Financial Corp'
-      )
-      or strings.ilike(strings.replace_confusables(body.current_thread.text),
-                       '1680 Capital One Drive'
-      )
-      or any(ml.logo_detect(beta.message_screenshot()).brands, .name == "Capital One Bank" and .confidence != "low")
-    
+    )
+    // no spaces
+    or strings.icontains(strings.replace_confusables(sender.display_name),
+                         'CapitalOne'
+    )
+    // levenshtein distince similar to captial one
+    or strings.ilevenshtein(strings.replace_confusables(sender.display_name),
+                            'Capital One'
+    ) <= 2
+    // sender localpart contains captialone
+    or strings.icontains(strings.replace_confusables(sender.email.local_part),
+                         'capitalone'
+    )
+    // indicators in the footer
+    or strings.ilike(strings.replace_confusables(body.current_thread.text),
+                     'Capital One Financial Corp'
+    )
+    or strings.ilike(strings.replace_confusables(body.current_thread.text),
+                     '1680 Capital One Drive'
+    )
+    or any(ml.logo_detect(beta.message_screenshot()).brands,
+           .name == "Capital One Bank" and .confidence != "low"
+    )
   )
   and not (
     sender.email.domain.root_domain in $org_domains
@@ -40,6 +46,8 @@ source: |
         "capitalone.com",
         "capitaloneshopping.com",
         "capitalonesoftware.com",
+        "capitalonebooking.com",
+        "capitalonetravel.com",
         "olbanking.com", // a fiserv.one domain
         "bynder.com", // Digital Assest Mgmt
         "gcs-web.com", // investor relations run by capital one
@@ -49,6 +57,12 @@ source: |
       )
       and headers.auth_summary.dmarc.pass
     )
+  )
+  // avoid FPs on branded cards by checking for common disclaimer text
+  // Capital One uses Visa and Mastercard
+  // https://www.capitalone.com/learn-grow/money-management/is-capital-one-visa-or-mastercard/
+  and not strings.icontains(body.current_thread.text,
+                            'Mastercard is a registered trademark, and the circles design is a trademark of Mastercard International Incorporated'
   )
   
   // and the sender is not from high trust sender root domains
