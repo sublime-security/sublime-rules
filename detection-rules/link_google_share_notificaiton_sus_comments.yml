@@ -3,7 +3,8 @@ description: "This detection rule matches on messages which contain suspicious l
 type: "rule"
 severity: "high"
 source: |
-  type.inbound and
+  type.inbound
+  and 
   // message is from google actual
   sender.email.domain.domain == 'google.com'
   and (
@@ -41,13 +42,19 @@ source: |
     )
     and headers.auth_summary.dmarc.pass
     // but the sender display name is within org_display_names
-    and any($org_display_names,
-            strings.istarts_with(sender.display_name,
-                                 strings.concat(., " (via Google ")
-            )
-            or strings.istarts_with(sender.display_name,
-                                    strings.concat(., " (Google ")
-            )
+    and (
+      any($org_display_names,
+          strings.istarts_with(sender.display_name,
+                               strings.concat(., " (via Google ")
+          )
+          or strings.istarts_with(sender.display_name,
+                                  strings.concat(., " (Google ")
+          )
+      )
+      or (
+        length(headers.reply_to) == 1
+        and all(headers.reply_to, .email.domain.domain in $org_domains)
+      )
     )
   )
 attack_types:
