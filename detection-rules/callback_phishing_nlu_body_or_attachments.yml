@@ -9,21 +9,26 @@ source: |
   and (
     any(attachments,
         (.file_type in $file_types_images or .file_type == "pdf")
-        and any(file.explode(.),
+        and (
+          any(ml.nlu_classifier(beta.ocr(.).text).intents,
+              .name == "callback_scam" and .confidence in ("medium", "high")
+          )
+          or any(file.explode(.),
   
-                // exclude images taken with mobile cameras and screenshots from android
-                not any(.scan.exiftool.fields,
-                        .key == "Model"
-                        or (
-                          .key == "Software"
-                          and strings.starts_with(.value, "Android")
-                        )
-                        or (.key == "UserComment" and .value == "Screenshot")
-                )
-                and any(ml.nlu_classifier(.scan.ocr.raw).intents,
-                        .name == "callback_scam"
-                        and .confidence in ("medium", "high")
-                )
+                 // exclude images taken with mobile cameras and screenshots from android
+                 not any(.scan.exiftool.fields,
+                         .key == "Model"
+                         or (
+                           .key == "Software"
+                           and strings.starts_with(.value, "Android")
+                         )
+                         or (.key == "UserComment" and .value == "Screenshot")
+                 )
+                 and any(ml.nlu_classifier(.scan.ocr.raw).intents,
+                         .name == "callback_scam"
+                         and .confidence in ("medium", "high")
+                 )
+          )
         )
         and (
           // negate noreply unless a logo is found in the attachment

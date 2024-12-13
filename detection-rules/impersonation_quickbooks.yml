@@ -12,8 +12,19 @@ source: |
     )
     or strings.ilike(body.current_thread.text, "*invoice*")
   )
-  and any(ml.logo_detect(beta.message_screenshot()).brands,
-          .name == "Quickbooks" and .confidence in ("medium", "high")
+  and (
+    any(ml.logo_detect(beta.message_screenshot()).brands,
+        .name == "Quickbooks" and .confidence in ("medium", "high")
+    )
+    // contains the address and copyright 
+    or 
+    (
+      strings.icontains(body.current_thread.text,
+                        '2800 E. Commerce Center Place, Tucson, AZ 85706'
+      )
+      and regex.icontains(body.current_thread.text, '©\s*(?:\d+)\s*Intuit')
+    )
+    or strings.icontains(body.current_thread.text, 'Powered by QuickBooks')
   )
   and sender.email.domain.root_domain not in~ (
     'intuit.com',
@@ -50,7 +61,8 @@ source: |
     // or no valid links
     or length(filter(body.links, .href_url.domain.domain is not null)) == 0
   )
-  
+  // negate common sender of quickbooks reseller
+  and not strings.icontains(body.current_thread.text, 'Purchasing Reviews, Inc')
   // negate highly trusted sender domains unless they fail DMARC authentication
   and (
     (
