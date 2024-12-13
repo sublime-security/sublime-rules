@@ -1,0 +1,63 @@
+name: "Attachment: EML with Suspicious Indicators"
+description: "Attached EML contains suspicious indicators, such as a missing sender email or short HTML body."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and length(attachments) == 1
+  and (
+    length(body.current_thread.text) < 300
+    or body.current_thread.text is null
+    or any(ml.nlu_classifier(body.current_thread.text).intents,
+           .name in ("cred_theft", "steal_pii")
+    )
+  )
+  and not any(ml.nlu_classifier(body.current_thread.text).intents,
+          .name == "benign" and .confidence == "high"
+  )
+  and any(attachments,
+          (.file_extension == "eml" or .content_type == "message/rfc822")
+          and (
+            // suspicious indicators
+            file.parse_eml(.).sender.email.email == ""
+            or length(file.parse_eml(.).body.html.raw) < 10
+            or length(file.parse_eml(.).headers.hops) < 2
+          )
+          and not (
+            all(file.parse_eml(.).body.links,
+                .href_url.domain.root_domain in ("aka.ms", "office365.com")
+                or .href_url.url == "#additionalatt"
+            )
+            and strings.icontains(file.parse_eml(.).body.current_thread.text,
+                                  "We’re making sure your attachments are safe"
+            )
+          )
+          and file.parse_eml(.).sender.email.domain.root_domain not in $org_domains
+  )
+  and (
+    not profile.by_sender().solicited
+    or (
+      profile.by_sender().any_messages_malicious_or_spam
+      and not profile.by_sender().any_false_positives
+    )
+  )
+  
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and not headers.auth_summary.dmarc.pass
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Evasion"
+  - "HTML smuggling"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "File analysis"
+id: "deb5d08d-92b7-5f7b-a7b0-e5053221c2f5"
