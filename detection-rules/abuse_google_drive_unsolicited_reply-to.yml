@@ -1,24 +1,18 @@
-name: "Service Abuse: DocuSign Share From an Unsolicited Reply-To Address"
-description: "DocuSign shares which contain a reply-to address or domain that has not been previously observed by the recipient organization."
+name: "Service Abuse: Google Drive Share From an Unsolicited Reply-To Address"
+description: "Identifies messages appearing to come from Google Drive sharing notifications that contain a reply-to address not previously seen in organizational communications. This tactic exploits trust in legitimate Google services while attempting to establish unauthorized communication channels."
 type: "rule"
 severity: "medium"
 source: |
   type.inbound
+  and sender.email.email in (
+    'drive-shares-dm-noreaply@google.com',
+    'drive-shares-noreply@google.com',
+  )
+  and not any(headers.reply_to, .email.domain.domain in $org_domains)
   
-  // message is from docusign actual
-  and sender.email.domain.root_domain == 'docusign.net'
-  and not any(headers.reply_to, .email.domain.domain == 'docusign.com')
-  and (headers.auth_summary.spf.pass or headers.auth_summary.dmarc.pass)
+  // the message needs to have a reply-to address
+  and length(headers.reply_to) > 0
   
-  
-  // not a completed DocuSign
-  // reminders are sent automatically and can be just as malicious as the initial
-  // users often decline malicious ones
-  and not strings.istarts_with(subject.subject, "Completed: ")
-  and not strings.istarts_with(subject.subject, "Here is your signed document: ")
-  and not strings.istarts_with(subject.subject, "Voided: ")
-  
-  and length(headers.reply_to) > 0 
   // reply-to email address has never been sent an email by the org
   and not (
     any(headers.reply_to, .email.email in $recipient_emails)
@@ -44,19 +38,20 @@ source: |
                     or .email.domain.domain not in $free_email_providers
                   )
            ),
-           .email.domain.domain in $sender_domains
+           .email.domain.root_domain in $sender_domains
     )
   )
 tags:
  - "Attack surface reduction"
 attack_types:
+  - "BEC/Fraud"
+  - "Callback Phishing"
   - "Credential Phishing"
 tactics_and_techniques:
-  - "Evasion"
-  - "Free file host"
+  - "Free email provider"
   - "Social engineering"
+  - "Free file host"
 detection_methods:
-  - "Content analysis"
   - "Header analysis"
   - "Sender analysis"
-id: "2f12d616-f47a-5259-8946-ac2e01940f6f"
+id: "4581ec0c-aed2-50ed-8e16-2c9ca1d350ff"
