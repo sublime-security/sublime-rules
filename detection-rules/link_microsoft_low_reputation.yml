@@ -4,7 +4,7 @@ type: "rule"
 severity: "medium"
 source: |
  type.inbound
- and 0 < length(body.links) < 100
+ and 0 < length(body.links) < 50
  // suspicious link 
  and any(body.links,
          (
@@ -70,7 +70,8 @@ source: |
        .file_type in $file_types_images
        and any(ml.logo_detect(.).brands, strings.starts_with(.name, "Microsoft"))
    )
-   or strings.istarts_with(body.current_thread.text, "Microsoft ")
+   or strings.istarts_with(strings.replace_confusables(body.current_thread.text), "Microsoft ")
+   or regex.imatch(strings.replace_confusables(body.current_thread.text), '[\n\s]*[o0O]ff[il1]ce\b.*')
    or any(ml.logo_detect(beta.message_screenshot()).brands,
           strings.starts_with(.name, "Microsoft")
    )
@@ -331,7 +332,7 @@ source: |
    "sharepointonline.com",
    "yammer.com",
  )
-
+ 
  // negate legitimate Office 365 bouncebacks
  and not (
      length(attachments) > 0
@@ -340,7 +341,7 @@ source: |
      )
      and (sender.email.local_part in ('postmaster', 'mailer-daemon'))
  )
-
+ 
  // negate Microsoft "welcome to the X group" notifications
  and not (
    headers.auth_summary.dmarc.pass
