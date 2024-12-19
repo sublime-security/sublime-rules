@@ -1,0 +1,59 @@
+name: "Service Abuse: Dropbox Share From an Unsolicited Reply-To Address"
+description: "This rule detects Dropbox share notifications which contain a reply-to address or domain that has not been previously observed sending messages to or receiving messages from the recipient organization."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  
+  // Legitimate Dropbox sending infratructure
+  and sender.email.email == "no-reply@dropbox.com"
+  and headers.auth_summary.spf.pass
+  and headers.auth_summary.dmarc.pass
+  and strings.ends_with(headers.auth_summary.spf.details.designator,
+                        '.dropbox.com'
+  )
+  and strings.icontains(subject.subject, 'shared')
+  and strings.icontains(subject.subject, 'with you')
+  
+  and length(headers.reply_to) > 0
+  // reply-to email address has never been sent an email by the org
+  and not (
+    any(headers.reply_to, .email.email in $recipient_emails)
+    // if the reply-to email address is NOT in free_email_providers, check the domain in recipient_domains
+    or any(filter(headers.reply_to,
+                  // filter the list to only emails that are not in free_email_providers
+                  (
+                    .email.domain.domain not in $free_email_providers
+                    or .email.domain.root_domain not in $free_email_providers
+                  )
+           ),
+           .email.domain.domain in $recipient_domains
+    )
+  )
+  // reply-to address has never sent an email to the org
+  and not (
+    any(headers.reply_to, .email.email in $sender_emails)
+    // if the reply-to address is NOT in free_email_providers, check the domain in sender_domains
+    or any(filter(headers.reply_to,
+                  // filter the list to only emails that are not in free_email_providers
+                  (
+                    .email.domain.domain not in $free_email_providers
+                    or .email.domain.root_domain not in $free_email_providers
+                  )
+           ),
+           .email.domain.domain in $sender_domains
+    )
+  )
+tags:
+ - "Attack surface reduction"
+attack_types:
+  - "Callback Phishing"
+  - "BEC/Fraud"
+tactics_and_techniques:
+  - "Evasion"
+  - "Social engineering"
+detection_methods:
+  - "Sender analysis"
+  - "Header analysis"
+  - "Content analysis"
+id: "50a1499f-bb59-5ee0-b4f4-e3cc84a5c41e"
