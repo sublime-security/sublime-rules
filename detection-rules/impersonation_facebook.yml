@@ -8,6 +8,8 @@ severity: "low"
 source: |
   type.inbound
   and (
+    // sender display name is a strong enough indicator
+    // that it can be used without any other impersonation logic
     (
       strings.ilike(sender.display_name,
                     '*facebook ads*',
@@ -21,10 +23,16 @@ source: |
       or (
         strings.ilevenshtein(sender.display_name, 'meta support') <= 2
         // negation for Zeta Support
-        and not (sender.display_name == "Zeta Support" and sender.email.domain.root_domain == 'zetaglobal.net')
+        and not (
+          sender.display_name == "Zeta Support"
+          and sender.email.domain.root_domain == 'zetaglobal.net'
+        )
       )
       or strings.ilike(sender.email.domain.domain, '*facebook*')
     )
+    // the use of these keywords (facebook, meta, meta.*support)
+    // or the levenshtien distance to facebook
+    // are less strong and thus need to be combined with logo detection or nlu 
     or (
       (
         (
@@ -49,6 +57,17 @@ source: |
                .name in ("cred_theft", "callback_scam", "steal_pii")
                and .confidence in ("high")
         )
+      )
+    )
+    // salesforce sender combined with logo detection and nlu is enough
+    or (
+      sender.email.domain.root_domain == "salesforce.com"
+      and any(ml.logo_detect(beta.message_screenshot()).brands,
+              .name in ("Facebook", "Meta")
+      )
+      and any(ml.nlu_classifier(body.current_thread.text).intents,
+              .name in ("cred_theft", "callback_scam", "steal_pii")
+              and .confidence in ("high")
       )
     )
     or 
@@ -92,7 +111,8 @@ source: |
       profile.by_sender().any_messages_malicious_or_spam
       and not profile.by_sender().any_false_positives
     )
-    or sender.email.email == "noreply@salesforce.com"
+    // if saleforce is being abused, sender profiles aren't very useful
+    or sender.email.email in ("noreply@salesforce.com", "support@salesforce.com")
     // sent via Google group
     or any(headers.hops, any(.fields, .name == "X-Google-Group-Id"))
   )
