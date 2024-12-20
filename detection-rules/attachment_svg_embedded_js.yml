@@ -15,26 +15,13 @@ source: |
             .file_extension =~ "svg"
             or .file_extension in $file_extensions_common_archives
           )
-          and any(file.explode(.),
-                  .file_extension == "svg"
-                  and (
-                    (
-                      "script" in~ .scan.xml.tags
-                      // unclear if this is necessary, but it's been observed
-                      // in all payloads we've seen, so we'll include it
-                      // as an extra FP precaution
-                      and any(.scan.strings.strings,
-                              strings.icontains(., "CDATA")
-                      )
-                    )
-                    or any(.scan.strings.strings,
-                           strings.ilike(.,
-                                         "*onload*",
-                                         "*window.location.href*",
-                                         "*onerror*"
-                           )
-                    )
-                  )
+          and strings.ilike(file.parse_text(.).text,
+                            "*onload*",
+                            "*window.location.href*",
+                            "*onerror*",
+                            "*CDATA*",
+                            "*<script>*",
+                            "*</script>*"
           )
   )
   and (
