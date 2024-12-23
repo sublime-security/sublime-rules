@@ -4,12 +4,25 @@ type: "rule"
 severity: "high"
 source: |
   type.inbound
-  and any(body.links,
-          // it is a new.express.adobe.com page
-          .href_url.domain.domain == "new.express.adobe.com"
-          and strings.starts_with(.href_url.path, "/webpage/")
-  
-          // filter down the links on  express.adobe.com page to those that are external to adobe
+  and any(filter(body.links,
+                 // the link is a new.express.adobe.com page
+                 .href_url.domain.domain == "new.express.adobe.com"
+                 and strings.starts_with(.href_url.path, "/webpage/")
+          ),
+          // filter down the links on express.adobe.com page to those that are external to adobe
+          // check that the length of external links is reasonable
+          length(distinct(filter(ml.link_analysis(., mode="aggressive").final_dom.links,
+                                 // filter any links on the adobe express page which are
+                                 // on express.adobe.com
+                                 .href_url.domain.domain != 'new.express.adobe.com'
+                                 // or www.adobe.com (privacy page/report abuse/etc)
+                                 and .href_url.domain.domain != 'www.adobe.com'
+                                 // relative links (no domains)
+                                 and .href_url.domain.domain is not null
+                          ),
+                          .href_url.domain.domain
+                 )
+          ) <= 10
           and any(filter(ml.link_analysis(., mode="aggressive").final_dom.links,
                          // filter any links on the adobe express page which are
                          // on express.adobe.com
@@ -60,6 +73,7 @@ source: |
                   )
           )
   )
+  and profile.by_sender().prevalence != "common"
 attack_types:
   - "Credential Phishing"
 tactics_and_techniques:
