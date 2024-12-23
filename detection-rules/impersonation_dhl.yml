@@ -10,11 +10,10 @@ source: |
   type.inbound
   and (
     regex.icontains(sender.display_name, '\bDHL\b')
-    or  (
-    strings.ilike(sender.email.domain.domain, '*DHL*')
+    or (
+      strings.ilike(sender.email.domain.domain, '*DHL*')
       and length(sender.email.domain.domain) > 15
     )
-    or strings.icontains(sender.email.local_part, "DHL")
     or strings.ilike(subject.subject, '*DHL notification*')
     or regex.contains(subject.subject, '\bD.{0,2}H.{0,2}L.{0,2}\b')
   )
@@ -27,6 +26,8 @@ source: |
            .name == "DHL" and .confidence in ("medium", "high")
     )
     or regex.icontains(body.current_thread.text, '\bDHL\b')
+    // it contains a QR code
+    or any(file.explode(beta.message_screenshot()), .scan.qr.url.url is not null)
     or (
       any(file.explode(beta.message_screenshot()),
           strings.ilike(.scan.ocr.raw,
@@ -82,6 +83,7 @@ source: |
     'dpdhl.com',
     'dhl.de',
     'dhl.fr',
+    'dhl.pl',
     'dhlexpress.fr', // legit dhl site
     'dhlending.com',
     'inmotion.dhl',
@@ -89,7 +91,7 @@ source: |
     'dhltariff.co.uk',
     'dhlindia-kyc.com',
     'dpogroup.com',
-    '4flow-service.com'  // shipping service
+    '4flow-service.com' // shipping service
   )
   and (
     profile.by_sender().prevalence in ("new", "outlier")
@@ -118,4 +120,4 @@ detection_methods:
   - "Sender analysis"
 id: "be4b4ae0-d393-5f8b-b984-5cf4ad7cbeb5"
 testing_pr: 2092
-testing_sha: 887850c57ec5ab818ca244973935d850558b6dd3
+testing_sha: 40aa3de289d231c867ad1099318931971f7b8d98
