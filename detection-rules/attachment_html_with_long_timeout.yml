@@ -1,0 +1,28 @@
+name: "Attachment: HTML file with abnormally long timeout"
+description: "Detects inbound messages containing HTML attachments that use abnormally long setTimeout functions as a potential sandbox evasion technique."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and any(attachments,
+          (
+            .file_extension in~ ("html", "htm", "shtml", "dhtml")
+            or .file_type == "html"
+          )
+          and 
+  
+            regex.icontains(file.parse_html(.).raw, 'setTimeout\(\(\) =>.*?\d{4}\);')
+          )
+          and not headers.return_path.domain.root_domain == "phriendlyphishing.com"
+  
+
+attack_types:
+  - "Malware/Ransomware"
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "HTML smuggling"
+  - "Scripting"
+detection_methods:
+  - "File analysis"
+  - "HTML analysis"
+  - "Header analysis"
