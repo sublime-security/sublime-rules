@@ -4,67 +4,44 @@ type: "rule"
 severity: "high"
 source: |
   type.inbound
-  and 
-  // display name contains captialone
-  (
-    (
-      strings.icontains(strings.replace_confusables(sender.display_name),
-                        'Capital One'
-      )
-      and not strings.icontains(strings.replace_confusables(sender.display_name),
-                                'Capital One Arena'
-      )
-    )
-    // no spaces
-    or strings.icontains(strings.replace_confusables(sender.display_name),
-                         'CapitalOne'
-    )
-    // levenshtein distince similar to captial one
-    or strings.ilevenshtein(strings.replace_confusables(sender.display_name),
-                            'Capital One'
-    ) <= 2
-    // sender localpart contains captialone
-    or strings.icontains(strings.replace_confusables(sender.email.local_part),
-                         'capitalone'
-    )
-    // indicators in the footer
-    or strings.ilike(strings.replace_confusables(body.current_thread.text),
-                     'Capital One Financial Corp'
-    )
-    or strings.ilike(strings.replace_confusables(body.current_thread.text),
-                     '1680 Capital One Drive'
+  and (
+    any([
+          strings.replace_confusables(sender.display_name),
+          strings.replace_confusables(subject.subject),
+          // domain parts of sender
+          sender.email.local_part,
+          sender.email.domain.sld
+        ],
+        // quick checks first
+        strings.icontains(., 'Capital One')
+        or strings.icontains(., 'CapitalOne')
+  
+        // slower checks next
+        or regex.icontains(., 'Capital.?One')
+        // levenshtein distince similar to captial one
+        or strings.ilevenshtein(., 'Capital One') <= 2
     )
     or any(ml.logo_detect(beta.message_screenshot()).brands,
            .name == "Capital One Bank" and .confidence != "low"
     )
   )
   and not (
-    sender.email.domain.root_domain in $org_domains
-    or (
-      sender.email.domain.root_domain in (
-        "capitalone.co.uk",
-        "capitalone.com",
-        "capitaloneshopping.com",
-        "capitalonesoftware.com",
-        "capitalonebooking.com",
-        "capitalonetravel.com",
-        "olbanking.com", // a fiserv.one domain
-        "bynder.com", // Digital Assest Mgmt
-        "gcs-web.com", // investor relations run by capital one
-        "capitalonearena.com", // the arena
-        "monumentalsports.com", // the company that owns a bunch of teams that play at the arena?
-        "ticketmaster.com", // sell and advertises tickets at Capital One Arena
-      )
-      and headers.auth_summary.dmarc.pass
+    sender.email.domain.root_domain in (
+      "capitalone.co.uk",
+      "capitalone.com",
+      "capitaloneshopping.com",
+      "capitalonesoftware.com",
+      "capitalonebooking.com",
+      "capitalonetravel.com",
+    // "olbanking.com", // a fiserv.one domain
+    // "bynder.com", // Digital Assest Mgmt
+    // "gcs-web.com", // investor relations run by capital one
+    // "capitalonearena.com", // the arena
+    // "monumentalsports.com", // the company that owns a bunch of teams that play at the arena?
+    // "ticketmaster.com", // sell and advertises tickets at Capital One Arena
     )
+    and headers.auth_summary.dmarc.pass
   )
-  // avoid FPs on branded cards by checking for common disclaimer text
-  // Capital One uses Visa and Mastercard
-  // https://www.capitalone.com/learn-grow/money-management/is-capital-one-visa-or-mastercard/
-  and not strings.icontains(body.current_thread.text,
-                            'Mastercard is a registered trademark, and the circles design is a trademark of Mastercard International Incorporated'
-  )
-  
   // and the sender is not from high trust sender root domains
   and (
     (
@@ -72,6 +49,108 @@ source: |
       and not headers.auth_summary.dmarc.pass
     )
     or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+  and // suspicious indicators here
+   (
+    // // password theme
+    (
+      strings.icontains(body.html.display_text, "new password")
+      or regex.icontains(body.html.display_text,
+                         '(?:credentials?|password)\s*(?:\w+\s+){0,3}\s*(?:compromise|reset|expir(?:ation|ed)|update|invalid|incorrect|changed|(?:mis)?match)',
+                         '(?:compromise|reset|expir(?:ation|ed)|update|invalid|incorrect|changed|(?:mis)?match)\s*(?:\w+\s+){0,3}\s*(?:credentials?|password)',
+                         '(?:short|weak|chang(?:e|ing)|reset)\s*(?:\w+\s+){0,3}\s*(?:credentials?|password)',
+                         '(?:credentials?|password)\s*(?:\w+\s+){0,3}\s*(?:short|weak|chang(?:e|ing)|reset)',
+      )
+    )
+    // // login failures
+    or (
+      strings.icontains(body.html.display_text, "unusual number of")
+      or strings.icontains(body.html.display_text, "security breach")
+      or strings.icontains(body.html.display_text, "security alert")
+      or strings.icontains(body.html.display_text, "account remains secure")
+      or strings.icontains(body.html.display_text, "please verify your account")
+      or strings.icontains(body.html.display_text, "suspicious activity detected")
+      or strings.icontains(body.html.display_text, "temporarily locked out")
+      or regex.icontains(body.html.display_text,
+                         '(?:invalid|unrecognized|unauthorized|fail(?:ed|ure)?|suspicious|unusual|attempt(?:ed)?|tried to)\s*(?:\w+\s+){0,3}\s*(?:log(?:.?in)?|sign(?:.?in)?|account|access|activity)',
+                         '(?:log(?:.?in)?|sign(?:.?in)?|account|access|activity)\s*(?:\w+\s+){0,3}\s*(?:invalid|unrecognized|fail(?:ed|ure)?|suspicious|unusual|attempt(?:ed)?)'
+      )
+    )
+    // // account locked
+    or (
+      strings.icontains(body.html.display_text, "been suspend")
+      or strings.icontains(body.html.display_text, "to restore access")
+      or strings.icontains(body.html.display_text, "will be restored")
+      or strings.icontains(body.html.display_text, "security reasons")
+      or strings.icontains(body.html.display_text,
+                           "temporarily restricted access"
+      )
+      or regex.icontains(body.html.display_text,
+                         'acc(?:ou)?n?t\s*(?:\w+\s+){0,3}\s*(?:authenticat(?:e|ion)|activity|ho[li]d|terminat|[il1]{2}m[il1]t(?:s|ed|ation)|b?locked|de-?activat|suspen(?:ed|sion)|restrict(?:ed|ion)?|expir(?:ed?|ing)|v[il]o[li]at|verif(?:y|ication))',
+                         '(?:authenticat(?:e|ion)|activity|ho[li]d|terminat|[il1]{2}m[il1]t(?:s|ed|ation)|b?locked|de-?activat|suspen(?:ed|sion)|restrict(?:ed|ion)?|expir(?:ed?|ing)|v[il]o[li]at|verif(?:y|ication))\s*(?:\w+\s+){0,3}\s*acc(?:ou)?n?t'
+      )
+    )
+    // // secure messages
+    or (
+      regex.icontains(body.html.display_text,
+                      '(?:encrypt(?:ion|ed)?|secur(?:e|ity)) (?:\w+\s+){0,3}\s*message'
+      )
+      or strings.icontains(body.html.display_text, "document portal")
+      or regex.icontains(body.html.display_text,
+                         "has been (?:encrypt|sent secure)"
+      )
+      or regex.icontains(body.html.display_text,
+                         'encryption (?:\w+\s+){0,3}\s*tech'
+      )
+    )
+    // // documents to view
+    or (
+      // we can skip the regex if the diplay_text doesn't contain document
+      // this might need to be removed if the regex is expanded
+      strings.icontains(body.html.display_text, 'document')
+      and regex.icontains(body.html.display_text,
+                          'document\s*(?:\w+\s+){0,3}\s*(?:ready|posted|review|available|online)',
+                          '(?:ready|posted|review|available|online)\s*(?:\w+\s+){0,3}\s*document'
+      )
+    )
+    // // account/profile details 
+    or (
+      strings.icontains(body.html.display_text, "about your account")
+      or strings.icontains(body.html.display_text, "action required")
+      or regex.icontains(body.html.display_text,
+                         '(update|\bedit|modify|revise|verif(?:y|ication)|discrepanc(?:y|ies)|mismatch(?:es)?|inconsistenc(?:y|ies)?|difference(?:s)?|anomal(?:y|ies)?|irregularit(?:y|ies)?)\s*(?:\w+\s+){0,4}\s*(?:account|detail|record|data|info(?:rmation)?)',
+                         '(?:account|detail|record|data|info(?:rmation)?)\s*(?:\w+\s+){0,4}\s*(update|\bedit|modify|revise|verif(?:y|ication)|discrepanc(?:y|ies)|mismatch(?:es)?|inconsistenc(?:y|ies)?|difference(?:s)?|anomal(?:y|ies)?|irregularit(?:y|ies)?)'
+      )
+    )
+    // // other calls to action that are unexpected
+    or (strings.icontains(body.html.display_text, "download the attachment"))
+  
+    // the links contain suspect wording
+    or any(filter(body.links,
+                  any([
+                        'login',
+                        'log in',
+                        'sign in',
+                        'confirm',
+                        'i recongize it',
+                        "something\'s wrong",
+                        "view",
+                        "message",
+                        "restore",
+                        "acccount"
+                      ],
+                      strings.icontains(..display_text, .)
+                  )
+           ),
+           .href_url.domain.root_domain != "capitalone.com"
+    )
+    // the message contains a disclaimer but then isn't 
+    or (
+      regex.icontains(body.current_thread.text,
+                      'To ensure delivery, add [^\@]+@[^\s]*capitalone.com to your address book.'
+      )
+      and sender.email.domain.root_domain != "capitalone.com"
+    )
   )
 attack_types:
   - "Credential Phishing"
