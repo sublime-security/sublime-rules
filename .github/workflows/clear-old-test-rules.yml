@@ -26,12 +26,15 @@ jobs:
         uses: actions/github-script@v4
         with:
           script: |
-            github.pulls.list({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              state: 'open'
-            }).then((result) => {
-              const openPRs = result.data.map(pr => pr.number);
+            github.paginate(
+              github.pulls.list,
+              {
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                state: 'open',
+              },
+              (response) => response.data.map((pr) => pr.number)
+            ).then((openPRs) => {
               console.log(`::set-output name=open_prs::${openPRs.join(',')}`);
             });
 
@@ -43,6 +46,8 @@ jobs:
             echo "This is a forked repository. Skipping the job."
             exit 0
           fi
+          
+          echo "Open PRs: [$OPEN_PRS]"
 
           echo "Scheduled cleanup" > message.txt
           echo "" >> message.txt
@@ -61,6 +66,7 @@ jobs:
               fi
             done
           
+            echo "$file is in open PR: $in_open_pr. File PR num: $file_pr_num"
             if [[ "$in_open_pr" = "false" ]]; then
                 rm $file
                 echo "Removed $file_pr_num" >> ../message.txt
