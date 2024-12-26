@@ -1,0 +1,39 @@
+name: "Potential EchoSpoofing Attack"
+description: Using misconfiguration between Proofpoint and Outlook, threat actors can created spoofed emails that passes DKIM, DMARC, and SPF checks.
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and headers.auth_summary.dmarc.pass
+  and headers.auth_summary.spf.pass
+  // We are looking for a hop chain of the format: threat actor -> outlook -> proofpoint -> vicitm.
+  // Check the first hop.
+  and all(filter(headers.hops, .index == 0),
+      // Not sent by Outlook.
+      not strings.icontains(.received.source.raw, ".outlook.com")
+      // Received by Outlook
+      and strings.icontains(.received.server.raw, ".outlook.com")
+      // Delivered via Frontend Transport
+      and .received.link.raw == "Frontend Transport"
+  )
+  
+  // Second hop should be betweem Outlook servers.
+  and all(filter(headers.hops, .index == 1),
+      // Sent by outlook.
+      strings.icontains(.received.source.raw, ".outlook.com")
+      // Received by outlook
+      and (strings.icontains(.received.server.raw, ".outlook.com") or strings.icontains(.received.server.raw, ".office365.com"))
+      // Delivered via Frontend Transport
+      and .received.link.raw == "Frontend Transport"
+  )
+  
+  // The auth check should be against Proofpoint's hop.
+  and all(filter(headers.hops, .index == headers.auth_summary.dmarc.received_hop),
+      strings.icontains(.received.source.raw, "pps.filterd")
+      and strings.icontains(.received.server.raw, ".pphosted.com")
+  )
+  
+tags:
+  - "Brand impersonation"
+  
+id: "8c2d200f-7bb6-5414-972d-66c6fa71fca2"
