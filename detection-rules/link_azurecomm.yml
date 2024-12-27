@@ -1,0 +1,41 @@
+name: "Link: Azure Communication Services From New Sender"
+description: "Detects messages with azurecomm.net links containing URL parameters from senders who either are newly observed or have a history of malicious activity without false positives."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and any(body.links,
+          .href_url.domain.root_domain == "azurecomm.net"
+          and strings.icontains(.href_url.query_params, "url=")
+          // legit senders often redirect to the root domain of the sender
+          and not strings.icontains(.href_url.query_params, sender.email.domain.root_domain)
+  )
+  and (
+    (
+      profile.by_sender().any_messages_malicious_or_spam
+      and not profile.by_sender().any_false_positives
+    )
+    or profile.by_sender_email().prevalence == "new"
+  )
+  
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and not headers.auth_summary.dmarc.pass
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+  
+tags:
+ - "Attack surface reduction"
+attack_types:
+  - "Callback Phishing"
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Open redirect"
+  - "Social engineering"
+detection_methods:
+  - "Header analysis"
+  - "URL analysis"
+  - "Sender analysis"
