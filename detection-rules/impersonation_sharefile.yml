@@ -61,6 +61,20 @@ source: |
     )
     and headers.auth_summary.dmarc.pass
   )
+  // ShareFile also allows you customers to send from customer domains/mail servers
+  // https://docs.sharefile.com/en-us/sharefile/configure/admin-settings/advanced-preferences.html#smtp-server
+  // when this happens, we cannot depend on the sender.email.domain.root_domain
+  // there does appear to be a custom header value added though. 
+  and not (
+  any(headers.hops,
+          .index == 0
+          and any(.fields,
+                  .name == "X-SMTPAPI"
+                  and strings.icontains(.value, 'sf_event_id')
+          )
+  )
+  )
+  
   // negate highly trusted sender domains unless they fail DMARC authentication
   and (
     (
