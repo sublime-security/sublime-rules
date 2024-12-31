@@ -2,50 +2,7 @@ name: "Brand Impersonation: ShareFile"
 description: "This detection rule matches on the impersonation of the file sharing site ShareFile.  Threat actors have been observed abusing this brand to deliver messages with links to crediential phishing pages. "
 type: "rule"
 severity: "medium"
-source: |
-  type.inbound
-  and (
-    strings.icontains(sender.display_name, 'ShareFile')
-    or strings.icontains(subject.subject, 'ShareFile')
-    or strings.ilevenshtein(sender.display_name, 'ShareFile') <= 2
-    or strings.icontains(sender.email.domain.domain, 'sharefile')
-    or strings.icontains(body.current_thread.text,
-                         'Click here to change how often ShareFile sends emails'
-    )
-    or strings.icontains(body.current_thread.text,
-                         'ShareFile is a tool for sending, receiving, and organizing your business files online'
-    )
-    or strings.icontains(body.current_thread.text, 'Powered By Citrix ShareFile')
-    // any of the attached images contain sharefile wording
-    or (
-      0 < length(attachments) <= 3
-      and all(attachments, .file_type in $file_types_images)
-      and any(attachments,
-              any(file.explode(.),
-                  strings.contains(.scan.ocr.raw,
-                                   'uses ShareFile to share documents securely'
-                  )
-              )
-      )
-    )
-  )
-  and (length(body.links) > 0 or length(attachments) > 0)
-  and not (
-    sender.email.domain.root_domain in (
-      'sf-notifications.com',
-      'sharefile.com',
-      'cloud.com' // cloud.com is the parent org of ShareFile
-    )
-    and headers.auth_summary.dmarc.pass
-  )
-  // negate highly trusted sender domains unless they fail DMARC authentication
-  and (
-    (
-      sender.email.domain.root_domain in $high_trust_sender_root_domains
-      and not headers.auth_summary.dmarc.pass
-    )
-    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
-  )
+source: "type.inbound\nand (\n  0 < length(body.links) < 100\n  or 0 < length(filter(attachments, .file_type in $file_types_images)) < 5\n)\nand (\n  strings.icontains(sender.display_name, 'ShareFile')\n  or strings.icontains(subject.subject, 'ShareFile Attachments')\n  or strings.ilevenshtein(sender.display_name, 'ShareFile') <= 2\n  or strings.icontains(sender.email.domain.domain, 'sharefile')\n  // message body\n  or strings.icontains(body.current_thread.text, 'ShareFile Attachments')\n  or strings.icontains(body.current_thread.text,\n                       'Click here to change how often ShareFile sends emails'\n  )\n  or strings.icontains(body.current_thread.text,\n                       'uses ShareFile to share documents securely'\n  )\n  or strings.icontains(body.current_thread.text,\n                       'ShareFile is a tool for sending, receiving, and organizing your business files online'\n  )\n  or strings.icontains(body.current_thread.text, 'Powered By Citrix ShareFile')\n  or regex.icontains(body.current_thread.text, '© 20\\d\\d ShareFile')\n\n  // any of the attached images contain the same message body wording\n  or (\n    0 < length(attachments) <= 5\n    and all(attachments, .file_type in $file_types_images)\n    and any(attachments,\n            any(file.explode(.),\n                strings.icontains(.scan.ocr.raw, 'ShareFile Attachments')\n                or strings.icontains(.scan.ocr.raw,\n                                     'Click here to change how often ShareFile sends emails'\n                )\n                or strings.icontains(.scan.ocr.raw,\n                                     'uses ShareFile to share documents securely'\n                )\n                or strings.icontains(.scan.ocr.raw,\n                                     'ShareFile is a tool for sending, receiving, and organizing your business files online'\n                )\n                or strings.icontains(.scan.ocr.raw,\n                                     'Powered By Citrix ShareFile'\n                )\n                or regex.icontains(body.current_thread.text,\n                                   '© 20\\d\\d ShareFile'\n                )\n            )\n    )\n  )\n)\nand not (\n  sender.email.domain.root_domain in (\n    'sf-notifications.com',\n    'sharefile.com',\n    'cloud.com' // cloud.com is the parent org of ShareFile\n  )\n  and headers.auth_summary.dmarc.pass\n)\n// ShareFile also allows you customers to send from customer domains/mail servers\n// https://docs.sharefile.com/en-us/sharefile/configure/admin-settings/advanced-preferences.html#smtp-server\n// when this happens, we cannot depend on the sender.email.domain.root_domain\n// there does appear to be a custom header value added though. \nand not (\nany(headers.hops,\n        .index == 0\n        and any(.fields,\n                .name == \"X-SMTPAPI\"\n                and strings.icontains(.value, 'sf_event_id')\n        )\n)\n)\n\n// negate highly trusted sender domains unless they fail DMARC authentication\nand (\n  (\n    sender.email.domain.root_domain in $high_trust_sender_root_domains\n    and not headers.auth_summary.dmarc.pass\n  )\n  or sender.email.domain.root_domain not in $high_trust_sender_root_domains\n)\n"
 attack_types:
   - "Credential Phishing"
 tactics_and_techniques:
@@ -58,4 +15,4 @@ detection_methods:
   - "Sender analysis"
 id: "f8330307-67fe-5b49-b850-bfdc17955aea"
 testing_pr: 2252
-testing_sha: 3782076b83ce1b2ba43f6ac45bc12f8e9497c135
+testing_sha: 62e3f970bf8cf8296b3582e0831bf6fd5d4bd0fc
