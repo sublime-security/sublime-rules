@@ -127,34 +127,23 @@ source: |
   
     // the links contain suspect wording
     or (
-      any(filter(body.links,
-                 any([
-                       'login',
-                       'log in',
-                       'sign in',
-                       'confirm',
-                       'i recongize it',
-                       "something\'s wrong",
-                       "view",
-                       "message",
-                       "restore",
-                       "acccount"
-                     ],
-                     strings.icontains(..display_text, .)
-                 )
-          ),
-          .href_url.domain.root_domain != "capitalone.com"
+      0 < length(body.links) <= 50
+      and any(body.links,
+              (
+                regex.icontains(.display_text, '(?:log|sign).?in')
+                or strings.icontains(.display_text, 'confirm')
+                or strings.icontains(.display_text, 'i recongize it')
+                or strings.icontains(.display_text, "something\'s wrong")
+                or regex.icontains(.display_text,
+                                   '(?:re)?view\s*(?:\w+\s*){0,3}\s*(?:document|message|now|account)'
+                )
+                or strings.icontains(.display_text, 'message')
+                or regex.icontains(.display_text,
+                                   'restore\s*(?:\w+\s*){0,3}\s*(?:account|access)'
+                )
+              )
+              and .href_url.domain.root_domain != "capitalone.com"
       )
-      // use distinct "urls" (without query params) to determine number of links
-      and 0 < length(distinct(body.links,
-                              // strip out query params to determine 
-                              // the unique number of links
-                              strings.concat(.href_url.scheme,
-                                             .href_url.domain.domain,
-                                             .href_url.path
-                              )
-                     )
-      ) <= 10
     )
     // the message contains a disclaimer but then isn't 
     or (
