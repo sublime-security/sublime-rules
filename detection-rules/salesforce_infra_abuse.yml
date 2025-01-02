@@ -8,11 +8,17 @@ source: |
   // we look at the return-path because many times in the abuse
   // we've seen, the From is a custom domain
   and headers.return_path.domain.root_domain == "salesforce.com"
-  
-  // legit salesforce email addresses that haven't been observed to be abused
-  and sender.email.email not in ("support@salesforce.com")
   and length(attachments) == 0
-  and length(body.links) > 0
+  // theare are external links (not org or SF domains)
+  and length(filter(body.links,
+                    .href_url.domain.domain not in $org_domains
+                    and .href_url.domain.root_domain not in (
+                      "salesforce.com",
+                      "force.com",
+                      "site.com" // salesforce CRM 
+                    )
+             )
+  ) > 0
   and any(ml.nlu_classifier(body.current_thread.text).intents,
           .name == "cred_theft" and .confidence == "high"
   )
@@ -23,7 +29,8 @@ source: |
               .href_url.domain.root_domain != sender.email.domain.root_domain
               and .href_url.domain.root_domain not in (
                 "salesforce.com",
-                "force.com"
+                "force.com",
+                "site.com"
               )
       )
     ),
@@ -48,6 +55,7 @@ source: |
                     "account (will be )?block",
                     "account.*de-?activat",
                     "account.*locked",
+                    "account.*restrict",
                     "account.*re-verification",
                     "account.*security",
                     "account.*suspension",
@@ -151,6 +159,8 @@ source: |
                     "your (customer )?account .as",
                     "your.office.365",
                     "your.online.access",
+                    "Critical.Notice",
+                    "Restore.Access",
                     // https://github.com/sublime-security/static-files/blob/master/suspicious_subjects.txt
                     "account has been limited",
                     "action required",
@@ -215,6 +225,7 @@ source: |
                     "w2",
                     "you have notifications pending",
                     "your account",
+                    'your (?:\w+\s+){0,1}\s*account',
                     "your amazon order",
                     "your document settlement",
                     "your order with amazon",
@@ -229,7 +240,8 @@ source: |
       sender.email.domain.domain == "salesforce.com"
       and any(headers.hops,
               any(.fields,
-                  .name == "X-SFDC-EmailCategory" and .value == "apiMassMail"
+                  .name == "X-SFDC-EmailCategory"
+                  and .value in ("apiMassMail", "networksNewUser")
               )
       )
     )
@@ -255,7 +267,6 @@ source: |
       )
     )
   )
-
 attack_types:
   - "Credential Phishing"
 tactics_and_techniques:
