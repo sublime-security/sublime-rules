@@ -1,15 +1,26 @@
 name: "Link: Common Hidden Directory Observed"
 description: "Links in the message point to sensitive system directories like .git, .env, or .well-known that could expose confidential configuration data or system files. Actors will often abuse these directories to hide credential phishing landing pages of compromised sites."
+references:
+  - "https://datatracker.ietf.org/doc/html/rfc8615"
+  - "https://www.iana.org/assignments/well-known-uris/well-known-uris.xhtml"
 type: "rule"
 severity: "medium"
 source: |
   type.inbound
-  and length(body.links) < 10
+  and 0 < length(body.links) <= 10
   and any(body.links,
           (
             strings.icontains(.href_url.path, "/.well-known/")
+            
+            // https://datatracker.ietf.org/doc/html/rfc9116
             and not strings.ends_with(.href_url.path, '/.well-known/security.txt')
+            
+            // https://datatracker.ietf.org/doc/html/rfc7517
+            // NOT registered with IANA
             and not strings.ends_with(.href_url.path, '/.well-known/jwks.json')
+            
+            // https://www.w3.org/TR/change-password-url/#semantics
+            and not strings.ends_with(.href_url.path, '/.well-known/change-password')
           )
           or strings.icontains(.href_url.path, "/.js/")
           or strings.icontains(.href_url.path, "/.env/")
@@ -23,6 +34,8 @@ source: |
           or strings.icontains(.href_url.path, "/.bashrc/")
           or strings.icontains(.href_url.path, "/.zshrc/")
           or strings.icontains(.href_url.path, "/.profile/")
+
+
   )
   // negate highly trusted sender domains unless they fail DMARC authentication
   and (
