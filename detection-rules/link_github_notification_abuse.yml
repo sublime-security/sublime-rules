@@ -1,0 +1,96 @@
+name: "GitHub Notification Abuse"
+description: "This detection rule matches GitHub notifications which contain links to free file hosts, free subdomain hosts, and url shortners.  This has been seen in previous campaigns where malicious actors leveraged existing issues on public GitHub repositories by adding comments with links to Info Stealer malware."
+references: 
+   - "https://www.bleepingcomputer.com/news/security/github-comments-abused-to-push-password-stealing-malware-masked-as-fixes/"
+   - "https://www.bleepingcomputer.com/news/security/clever-github-scanner-campaign-abusing-repos-to-push-malware/"
+   - "https://www.bleepingcomputer.com/news/security/gitloker-attacks-abuse-github-notifications-to-push-malicious-oauth-apps/"
+type: "rule"
+severity: "low"
+source: |
+  type.inbound
+  // actual GitHub notifications
+  and sender.email.email == "notifications@github.com"
+  and all(headers.reply_to, .email.domain.domain == "reply.github.com")
+  and headers.return_path.email == "noreply@github.com"
+  and headers.auth_summary.spf.pass
+  and headers.auth_summary.dmarc.pass
+  
+  // remove github bots
+  and not strings.iends_with(sender.display_name, "[bot]")
+  
+  // only match messages with short bodies
+  and length(body.current_thread.text) <= 500
+  
+  // remove messages that have <pre> tag which would indicate a code comment
+  and not strings.icontains(body.html.raw, '<pre>')
+  
+  // remove messages that have unordered lists (common on notifications from actions)
+  and not (
+      strings.icontains(body.html.raw, '</ul>') 
+      and strings.icontains(body.html.raw, '</li>')
+  )
+  
+  // do not match messages where the sender display name is in the org display names.  
+  // This attempts to avoid catching internal employees commenting on org repos
+  and not any($org_display_names, . =~ sender.display_name)
+  
+  // there is only a single external link
+  and length(distinct(filter(body.links,
+                    // filter any links that go back to github
+                    .href_url.domain.root_domain not in (
+                      'github.com',
+                      'githubusercontent.com',
+                      'github.io',
+                      'githubsupport.com',
+                      'githubstatus.com'
+                    )
+                    // remove embedded images
+                    and not (
+                      strings.ends_with(.href_url.url, ".jpg")
+                      or strings.ends_with(.href_url.url, "png")
+                      or strings.ends_with(.href_url.url, ".svg")
+                      or strings.ends_with(.href_url.url, ".gif")
+                      )
+                    // remove aws codesuite links
+                    and not (
+                        .href_url.domain.root_domain == "amazon.com"
+                        and strings.istarts_with(.href_url.path, '/codesuite/')
+                    )
+              ), .href_url.domain.domain)
+  ) == 1
+  
+  // that single link is suspicious
+  and any(
+          // filter any links that go back to github
+          filter(body.links,
+                 .href_url.domain.root_domain not in (
+                   'github.com',
+                   'githubusercontent.com',
+                   'github.io',
+                   'githubsupport.com',
+                   'githubstatus.com'
+                 )
+          ),
+          // see if the remaining links are within several lists
+          .href_url.domain.root_domain in $free_file_hosts
+          or (
+            .href_url.domain.root_domain in $free_subdomain_hosts
+            and .href_url.domain.subdomain is not null
+          )
+          or .href_url.domain.root_domain in $url_shorteners
+          // the domain is less than 20 days old
+          or network.whois(.href_url.domain).days_old < 20
+  )
+tags:
+ - "Attack surface reduction"
+attack_types:
+  - "Malware/Ransomware"
+tactics_and_techniques:
+  - "Free subdomain host"
+  - "Free file host"
+  - "Evasion"
+detection_methods:
+  - "Header analysis"
+  - "Content analysis"
+  - "URL analysis"
+id: "eabdee5e-1c96-543f-9786-26fda9cbe2d0"
