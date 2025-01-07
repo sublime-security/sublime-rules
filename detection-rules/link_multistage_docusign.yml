@@ -10,15 +10,7 @@ source: |
   
   // message is from docusign actual
   and sender.email.domain.root_domain == 'docusign.net'
-  and headers.auth_summary.spf.pass
-  and (
-    headers.auth_summary.spf.details.designator == 'docusign.net'
-    // observed subdomains of docusign being used (camail.docusign.net)
-    or strings.ends_with(headers.auth_summary.spf.details.designator,
-                         '.docusign.net'
-    )
-  )
-  and headers.auth_summary.dmarc.pass
+  and (headers.auth_summary.spf.pass or headers.auth_summary.dmarc.pass)
   
   // filter out all the links, keeping only the links of interest
   and any(filter(body.links,
@@ -36,6 +28,7 @@ source: |
           any(filter(ml.link_analysis(., mode="aggressive").final_dom.links,
                      .href_url.domain.root_domain != 'docusign.net'
                      and .href_url.domain.root_domain != 'docusign.com'
+                     and .href_url.domain.root_domain not in $org_domains
                      // relative links (no domains)
                      and .href_url.domain.domain is not null
               ),

@@ -1,18 +1,18 @@
-name: "Service Abuse: Google Drive Share From an Unsolicited Reply-To Address"
-description: "Identifies messages appearing to come from Google Drive sharing notifications that contain a reply-to address not previously seen in organizational communications. This tactic exploits trust in legitimate Google services while attempting to establish unauthorized communication channels."
+name: "Service Abuse: DocSend Share From an Unsolicited Reply-To Address"
+description: "DocSend shares which contain a reply-to address or domain that has not been previously observed by the recipient organization."
 type: "rule"
-severity: "medium"
+severity: "high"
 source: |
   type.inbound
-  and sender.email.email in (
-    'drive-shares-dm-noreply@google.com',
-    'drive-shares-noreply@google.com',
-  )
-  and not any(headers.reply_to, .email.domain.domain in $org_domains)
-  
+
+  // Legitimate DocSend sending infratructure
+  and sender.email.email == "no-reply@docsend.com"
+  and headers.auth_summary.spf.pass
+  and headers.auth_summary.dmarc.pass
+
   // the message needs to have a reply-to address
   and length(headers.reply_to) > 0
-  
+
   // reply-to email address has never been sent an email by the org
   and not (
     any(headers.reply_to, .email.email in $recipient_emails)
@@ -44,14 +44,13 @@ source: |
 tags:
  - "Attack surface reduction"
 attack_types:
-  - "BEC/Fraud"
-  - "Callback Phishing"
   - "Credential Phishing"
 tactics_and_techniques:
-  - "Free email provider"
-  - "Social engineering"
+  - "Evasion"
   - "Free file host"
+  - "Social engineering"
 detection_methods:
+  - "Content analysis"
   - "Header analysis"
   - "Sender analysis"
-id: "4581ec0c-aed2-50ed-8e16-2c9ca1d350ff"
+id: "b377e64c-21bd-5040-86ec-534e545a42db"
