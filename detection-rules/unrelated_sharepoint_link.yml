@@ -4,8 +4,11 @@ type: "rule"
 severity: "medium"
 source: |
   type.inbound
-
+  and any(beta.ml_topic(body.html.display_text).topics,
+          .name == "File Sharing and Cloud Services" and .confidence == "high"
+  )
   and 0 < length(body.links) < 10
+  and length(body.html.display_text) < 2000
   and any(filter(body.links, .href_url.domain.root_domain == 'sharepoint.com'),
           // Normalize Levenshtein distance by string length (0 = identical, 0.7+ = different)
           // Working with what we have in MQL, considering we dont have max() or any other forms of string distancing
@@ -66,19 +69,18 @@ source: |
 
           // it is either a OneNote or PDF file, or unknown
           and (
-            strings.icontains(.href_url.path, '/:o:/')
-            or strings.icontains(.href_url.path, '/:b:/')
-            or strings.icontains(.href_url.path, '/:u:/')
+            strings.icontains(.href_url.path, '/:o:/p')
+            or strings.icontains(.href_url.path, '/:b:/p')
+            or strings.icontains(.href_url.path, '/:u:/p')
           )
 
-          // a future negation like this would be great
-          // and any($org_domains, .domain.subdomain != ..href_url.domain.subdomain)
+  // a future negation like this would be great
+  // and any($org_domains, .domain.subdomain != ..href_url.domain.subdomain)
   )
 
   // a way to negate long threads
   // the full thread must be less than 6 times the length of the current thread
   and length(body.html.inner_text) < 6 * length(body.current_thread.text)
-
   and sender.email.domain.root_domain not in (
     "sharepoint.com",
     "sharepointonline.com"
@@ -110,4 +112,4 @@ detection_methods:
   - "HTML analysis"
 id: "6870f489-5581-53f0-a6f7-a03e259fb073"
 testing_pr: 2230
-testing_sha: 4059bf56bf8205c946ac5a78d55376b31d69de20
+testing_sha: 7941170dc19f917c2ba79c9c79e2cb14c6470957
