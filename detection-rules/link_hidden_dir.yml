@@ -5,7 +5,37 @@ references:
   - "https://www.iana.org/assignments/well-known-uris/well-known-uris.xhtml"
 type: "rule"
 severity: "medium"
-source: "type.inbound\nand 0 < length(body.links) <= 10\nand any(body.links,\n        (\n          strings.icontains(.href_url.path, \"/.well-known/\")\n          \n          // https://datatracker.ietf.org/doc/html/rfc9116\n          and not strings.ends_with(.href_url.path, '/.well-known/security.txt')\n          \n          // https://datatracker.ietf.org/doc/html/rfc7517\n          // NOT registered with IANA\n          and not strings.ends_with(.href_url.path, '/.well-known/jwks.json')\n          \n          // https://www.w3.org/TR/change-password-url/#semantics\n          and not strings.ends_with(.href_url.path, '/.well-known/change-password')\n        )\n        or strings.icontains(.href_url.path, \"/.js/\")\n        or strings.icontains(.href_url.path, \"/.env/\")\n        or strings.icontains(.href_url.path, \"/.git/\")\n        or strings.icontains(.href_url.path, \"/.svn/\")\n        or strings.icontains(.href_url.path, \"/.hg/\")\n        or strings.icontains(.href_url.path, \"/.DS_Store/\")\n        or strings.icontains(.href_url.path, \"/.htpasswd/\")\n        or strings.icontains(.href_url.path, \"/.htaccess/\")\n        or strings.icontains(.href_url.path, \"/.bash_history/\")\n        or strings.icontains(.href_url.path, \"/.bashrc/\")\n        or strings.icontains(.href_url.path, \"/.zshrc/\")\n        or strings.icontains(.href_url.path, \"/.profile/\")\n\n\n)\n// negate highly trusted sender domains unless they fail DMARC authentication\nand (\n  (\n    sender.email.domain.root_domain in $high_trust_sender_root_domains\n    and not headers.auth_summary.dmarc.pass\n  )\n  or sender.email.domain.root_domain not in $high_trust_sender_root_domains\n)\n"
+source: |
+  type.inbound
+  and 0 < length(body.links) <= 10
+  and any(body.links,
+          (
+            strings.icontains(.href_url.path, "/.well-known/")
+            and regex.icontains(.href_url.path, '\/\.well-known\/[^\/]+\/')
+          )
+          or strings.icontains(.href_url.path, "/.js/")
+          or strings.icontains(.href_url.path, "/.env/")
+          or strings.icontains(.href_url.path, "/.git/")
+          or strings.icontains(.href_url.path, "/.svn/")
+          or strings.icontains(.href_url.path, "/.hg/")
+          or strings.icontains(.href_url.path, "/.DS_Store/")
+          or strings.icontains(.href_url.path, "/.htpasswd/")
+          or strings.icontains(.href_url.path, "/.htaccess/")
+          or strings.icontains(.href_url.path, "/.bash_history/")
+          or strings.icontains(.href_url.path, "/.bashrc/")
+          or strings.icontains(.href_url.path, "/.zshrc/")
+          or strings.icontains(.href_url.path, "/.profile/")
+
+
+  )
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and not headers.auth_summary.dmarc.pass
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
 tags:
   - "Attack surface reduction"
 attack_types:
@@ -17,4 +47,4 @@ detection_methods:
   - "HTML analysis"
 id: "9f316da6-821c-5fed-b967-80fc0e740626"
 testing_pr: 2250
-testing_sha: cada3ba7b355702ab7fabb7c78af1db1e7b038b1
+testing_sha: 58b7cd250dfa8544fe7125e71a55c941c1660ff2
