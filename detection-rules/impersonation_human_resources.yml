@@ -68,9 +68,23 @@ source: |
   and any(ml.nlu_classifier(body.current_thread.text).entities,
           .name in ("urgency", "financial")
   )
+  // additional suspicious indicator
   and (
     any(ml.nlu_classifier(body.current_thread.text).intents, .name != "benign")
     or length(ml.nlu_classifier(body.current_thread.text).intents) == 0 // not benign but not malicious either
+    // 1-2 all caps body links
+    or 0 < length(filter(body.links,
+                         not (
+                           strings.ilike(.display_text,
+                                         "*unsubscribe*",
+                                         "update your preferences",
+                                         "add us to your address book"
+                           )
+                           or .href_url.domain.root_domain == 'aka.ms'
+                         )
+                         and regex.match(.display_text, '[A-Z ]+')
+                  ),
+    ) < 3
   )
   and (
     profile.by_sender().prevalence in ("new", "outlier")
