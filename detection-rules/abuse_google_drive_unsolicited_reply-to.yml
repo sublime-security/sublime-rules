@@ -1,0 +1,57 @@
+name: "Service Abuse: Google Drive Share From an Unsolicited Reply-To Address"
+description: "Identifies messages appearing to come from Google Drive sharing notifications that contain a reply-to address not previously seen in organizational communications. This tactic exploits trust in legitimate Google services while attempting to establish unauthorized communication channels."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and sender.email.email in (
+    'drive-shares-dm-noreply@google.com',
+    'drive-shares-noreply@google.com',
+  )
+  and not any(headers.reply_to, .email.domain.domain in $org_domains)
+  
+  // the message needs to have a reply-to address
+  and length(headers.reply_to) > 0
+  
+  // reply-to email address has never been sent an email by the org
+  and not (
+    any(headers.reply_to, .email.email in $recipient_emails)
+    // if the reply-to email address is NOT in free_email_providers, check the domain in recipient_domains
+    or any(filter(headers.reply_to,
+                  // filter the list to only emails that are not in free_email_providers
+                  (
+                    .email.domain.domain not in $free_email_providers
+                    or .email.domain.root_domain not in $free_email_providers
+                  )
+           ),
+           .email.domain.domain in $recipient_domains
+    )
+  )
+  // reply-to address has never sent an email to the org
+  and not (
+    any(headers.reply_to, .email.email in $sender_emails)
+    // if the reply-to address is NOT in free_email_providers, check the domain in sender_domains
+    or any(filter(headers.reply_to,
+                  // filter the list to only emails that are not in free_email_providers
+                  (
+                    .email.domain.domain not in $free_email_providers
+                    or .email.domain.root_domain not in $free_email_providers
+                  )
+           ),
+           .email.domain.domain in $sender_domains
+    )
+  )
+tags:
+ - "Attack surface reduction"
+attack_types:
+  - "BEC/Fraud"
+  - "Callback Phishing"
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Free email provider"
+  - "Social engineering"
+  - "Free file host"
+detection_methods:
+  - "Header analysis"
+  - "Sender analysis"
+id: "4581ec0c-aed2-50ed-8e16-2c9ca1d350ff"
