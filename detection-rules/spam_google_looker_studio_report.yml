@@ -1,0 +1,36 @@
+name: "Spam: Sexually Explict Looker Studio Report"
+description: "Detects suspicious Looker Studio Reports which containing inappropriate content or suspicious patterns. The rule looks for reports from non-organizational domains that contain emojis or explicit keywords within the report."
+type: "rule"
+severity: "low"
+source: |
+  type.inbound
+  // 
+  //  Warning: This rule contains sexually explict keywords
+  // 
+  and sender.email.email == "looker-studio-noreply@google.com"
+  // the invite is not from an $org_domain user
+  and all(headers.reply_to,
+          .email.domain.domain not in $org_domains
+          and .email.email not in $recipient_emails
+          and .email.email not in $sender_emails
+  )
+  and (
+    // it contains an emoji in the group name
+    regex.icontains(subject.subject,
+                    '[\x{1F300}-\x{1F5FF}\x{1F600}-\x{1F64F}\x{1F680}-\x{1F6FF}\x{1F700}-\x{1F77F}\x{1F780}-\x{1F7FF}\x{1F900}-\x{1F9FF}\x{2600}-\x{26FF}\x{2700}-\x{27BF}\x{2300}-\x{23FF}] - '
+    )
+    // the description of the group contains sexually explict keywords 
+    or regex.icontains(body.current_thread.text,
+                       'View the\s*(?:\w+\s+){0,3}\s*report.*(?:sex|horny|cock|fuck|\bass\b|pussy|dick|tits|cum|girlfriend|boyfriend|naked|porn|video|webcam|masturbate|orgasm|breasts|penis|vagina|strip|suck|blowjob|hardcore|xxx|nudes?|sexting|cheating|affair|erotic|lust|desire|intimate|explicit|fetish|kinky|seduce|adult\s*(?:\w+\s+){0,2}\s*community|cam shows|local (?:girls?|women|single)|hook.?up|bed partner).*https?://'
+    )
+  )
+  
+
+attack_types:
+  - "Spam"
+tactics_and_techniques:
+  - "Social engineering"
+  - "Free email provider"
+detection_methods:
+  - "Content analysis"
+  - "Sender analysis"
