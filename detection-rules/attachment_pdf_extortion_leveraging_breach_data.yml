@@ -10,18 +10,21 @@ source: |
   
   // attachment filename is the same as the subject
   and any(attachments,
-          strings.ilevenshtein(strings.concat(subject.subject,
-                                              ".",
-                                              .file_extension
-                               ),
-                               .file_name
-          ) <= 1
+          (
+            strings.ilevenshtein(strings.concat(subject.subject,
+                                                ".",
+                                                .file_extension
+                                 ),
+                                 .file_name
+            ) <= 1
+          )
+          or strings.contains(.file_name, subject.subject)
   )
   
   // body contains a US address, or the body is the subject
   and (
     regex.icontains(body.current_thread.text,
-                    '\d+\s[\w\s.]+(?:\n)?[\w\s]+\s[A-Z]{2}\s\d{5}(?:-\d{4})?(?:\n)?',
+                    '\d+\s[\w\s.]+(?:\n)?[\w\s]+\s[A-Z]{2}\s\d{5}(?:-\d{4})?(?:\n)?|\d+\s[\w\s.]+(?:Street|St|Avenue|Ave|Boulevard|Blvd|Road|Rd|Drive|Dr|Lane|Ln|Court|Ct|Way|Place|Pl|Terrace|Ter|Circle|Cir|Parkway|Pkwy|Trail|Trl|Highway|Hwy|Loop)\b\.?',
                     // a Canadian address
                     '\d+\s[\w\s.]+(?:\n)?[\w\s]+\s((?:Ontario|ON)|(?:Quebec|QC)|(?:Nova Scotia|NS)|(?:New Brunswick|NB)|(?:Manitoba|MB)|(?:British Columbia|BC)|(?:Prince Edward Island|PEI?)|(?:Saskatchewan|SK)|(?:Alberta|AB)|(?:Newfoundland and Labrador|NL)|(?:Yukon|YT)|(?:Northwest Territories|NT)|(?:Nunavut|NU))\s*[ABCEGHJ-NPRSTVXY]\d[ABCEGHJ-NPRSTV-Z][ -]?\d[ABCEGHJ-NPRSTV-Z]\d'
     )
@@ -44,10 +47,14 @@ source: |
                   )
                   or (
                     any(.scan.strings.strings,
-                        regex.icontains(., 'Amount(?:\s*\w+){0,3}\s*:?\s*(?:USD\s*)?(?:\$\s?\d+|\d+\s?\$?)')
+                        regex.icontains(.,
+                                        'Amount(?:\s*\w+){0,3}\s*:?\s*(?:USD\s*)?(?:\$\s?\d+|\d+\s?\$?)'
+                        )
                     )
                     and any(.scan.strings.strings,
-                            regex.icontains(., '(\bBITCOIN\b|\bBTC\b|\bLTC\b|Wallet)')
+                            regex.icontains(.,
+                                            '(\bBITCOIN\b|\bBTC\b|\bLTC\b|Wallet)'
+                            )
                     )
                   )
           )
