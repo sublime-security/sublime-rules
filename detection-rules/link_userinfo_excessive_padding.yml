@@ -6,6 +6,12 @@ source: |
   type.inbound
   and 0 < length(body.links) < 100
   and any(body.links,
+          // Detects deceptive URLs where the URL appears to start with a trusted domain (e.g., youtube.com@),
+          // but the actual destination domain is something else (e.g., malicious-site.com).
+          // In such cases, browsers interpret the portion before the '@' symbol as a username (e.g., youtube.com),
+          // and the URL resolves to the domain after the '@' symbol (malicious-site.com).
+          // This technique is often used in phishing attacks to trick users into trusting the link by showing a familiar domain.
+          // (?:%(?:25)?[a-f0-9]{2}){30,} is the key part which detects 30 or more URL encoded values before an @ (or a URL encoded @)
           regex.icontains(coalesce(.href_url.rewrite.original, .href_url.url),
                        'https?(?:(?:%3a|\:)?(?:\/|%2f){2})[^\/]+(?:%(?:25)?[a-f0-9]{2}){30,}(?:@|%(?:25)?40)[^\/]+(?:\/|%(?:25)?2f)'
           )
