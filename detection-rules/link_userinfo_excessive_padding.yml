@@ -4,16 +4,60 @@ type: "rule"
 severity: "medium"
 source: |
   type.inbound
-  and 0 < length(body.links) < 100
+  and 0 < length(body.links) < 50
   and any(body.links,
           // Detects deceptive URLs where the URL appears to start with a trusted domain (e.g., youtube.com@),
           // but the actual destination domain is something else (e.g., malicious-site.com).
           // In such cases, browsers interpret the portion before the '@' symbol as a username (e.g., youtube.com),
           // and the URL resolves to the domain after the '@' symbol (malicious-site.com).
           // This technique is often used in phishing attacks to trick users into trusting the link by showing a familiar domain.
-          // (?:%(?:25)?[a-f0-9]{2}){30,} is the key part which detects 30 or more URL encoded values before an @ (or a URL encoded @)
-          regex.icontains(coalesce(.href_url.rewrite.original, .href_url.url),
-                       'https?(?:(?:%3a|\:)?(?:\/|%2f){2})[^\/]+(?:%(?:25)?[a-f0-9]{2}){30,}(?:@|%(?:25)?40)[^\/]+(?:\/|%(?:25)?2f)'
+  
+          // when there is no url decoder involved
+          // https://platform.sublime.security/messages/72f918e98e440ec3c36d975fd17d711043c33557ff6e479a28ce8a08df2ca966
+          // or when the decoding was the result of an actual written url
+          // https://platform.sublime.security/messages/cc3be575cbf401cf49ecb3042cc479b7e719c6f9a27cea4242185b069ef0a769
+          // we can inspect use .href_url.url  directly 
+          (
+            regex.icontains(.href_url.url,
+                            // handles non-rewritten by anchoring to the start
+                            '^https?://[^\/]{30,}@[^\/]+\/',
+            )
+            and not regex.icontains(.href_url.url,
+                                    // don't match when the userinfo is formed correctly
+                                    '^https?://[^\:]+\:[^\@]+@[^\/]+\/',
+            )
+          )
+          or 
+          // // https://platform.sublime.security/messages/99098e1bfef6c69bce82dc438822c4b21e7761885f0fd09d5eb76a77c04b836c
+          // // when the url rewrite decoder, but the url is not actually rewritten
+          // // most common when google amp is the domain after the userinfo
+          (
+            regex.icontains(.href_url.rewrite.original,
+                            // handles non-rewritten by anchoring to the start
+                            '^https?://[^\/]{30,}@[^\/]+\/',
+            )
+            and not regex.icontains(.href_url.rewrite.original,
+                                    // don't match when the userinfo is formed correctly
+                                    '^https?://[^\:]+\:[^\@]+@[^\/]+\/',
+            )
+          )
+          or 
+          // when the URL is actually rewrittten within a url query parameter, we have to account for the url 
+          // encoding
+          // https://platform.sublime.security/messages/aa03c1968eed658fdd0cd34bedb9c4807e7f9f2ca632c7d20ddd0ee2c57db485
+          (
+            .href_url.rewrite.original is not null
+            and regex.icontains(.href_url.rewrite.original,
+                                '=https?%3a(?:%2f){2}[^\&]{30,}(?:@|%(?:25)?40)[^\&]+(?:\/|%(?:25)?2f)'
+            )
+            // due to the lack of lookaround support within RE2 we have to negate matches where the URL encoded @ 
+            // occurs after 
+            and not regex.icontains(.href_url.rewrite.original,
+                                    // the @ is after a url encoded /
+                                    '=https?%3a(?:%2f){2}[^\&]+(?:%(?:25)?2f)[^\&]*(?:@|%(?:25)?40)',
+                                    // the @ is after a url encoded ?
+                                    '=https?%3a(?:%2f){2}[^\&]+(?:%(?:25)?3f)[^\&]*(?:@|%(?:25)?40)'
+            )
           )
   )
 attack_types:
