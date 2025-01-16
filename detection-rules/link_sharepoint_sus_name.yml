@@ -89,14 +89,16 @@ source: |
         or strings.icontains(.display_text, 'contract agreement')
         or regex.icontains(.display_text, 'Pr[0o]p[0o]sal')
         or strings.icontains(.display_text, 'contract doc')
-
+  
         // generic document name AND additional suspicious indicator
         or (
-            regex.imatch(.display_text, 'documents?')
-            and (
-                // Find the share comment in the HTML and check for reply/forward "impersonation"
-                regex.icontains(body.html.raw, '<p style="font-size:16px;color:#323130;margin:40px 20px 28px">(re|fwd?)')
+          regex.imatch(.display_text, 'documents?')
+          and (
+            // Find the share comment in the HTML and check for reply/forward "impersonation"
+            regex.icontains(body.html.raw,
+                            '<p style="font-size:16px;color:#323130;margin:40px 20px 28px">(re|fwd?)'
             )
+          )
         )
   
         // the document name is the same as the org name
@@ -144,16 +146,74 @@ source: |
     )
   )
   
-  // and it's not an internal share
-  and not any(headers.hops,
-              any(.fields,
-                  .name == "X-MS-Exchange-CrossTenant-AuthAs"
-                  and .value == "Internal"
+  // and the sharepoint link is not related to the recipient domain
+  and any(filter(body.links, .href_url.domain.root_domain == 'sharepoint.com'),
+          any(recipients.to,
+              // Normalize Levenshtein distance by string length (0 = identical, 0.7+ = different)
+              // Working with what we have in MQL, considering we dont have max() or any other forms of string distancing
+              (
+                (
+                  strings.iends_with(..href_url.domain.subdomain,
+                                     '-my'
+                  ) // common Sharepoint subdomain suffix
+                  and (
+                    (
+                      strings.ilevenshtein(..href_url.domain.subdomain,
+                                           .email.domain.sld
+                      ) - 3 // subtract aforementioned suffix for more accurate calculation
+                    ) / (
+                      (
+                        (length(..href_url.domain.subdomain) - 3) + length(.email.domain.sld
+                        )
+   + (
+                          (
+                            (length(..href_url.domain.subdomain) - 3) - length(.email.domain.sld
+                            )
+                          ) + (
+                            length(.email.domain.sld) - (
+                              length(..href_url.domain.subdomain) - 3
+                            )
+                          )
+                        )
+                      ) / 2.0 // to ensure we keep the result as a float
+                    )
+                  ) > 0.7 // customizable threshold
+                )
+                or (
+                  not strings.iends_with(..href_url.domain.subdomain,
+                                         '-my'
+                  ) // no suffix, continue with original calculation
+                  and (
+                    strings.ilevenshtein(..href_url.domain.subdomain,
+                                         .email.domain.sld
+                    ) / (
+                      (
+                        length(..href_url.domain.subdomain) + length(.email.domain.sld
+                        )
+   + (
+                          (
+                            length(..href_url.domain.subdomain) - length(.email.domain.sld
+                            )
+                          ) + (
+                            length(.email.domain.sld) - length(..href_url.domain.subdomain
+                            )
+                          )
+                        )
+                      ) / 2.0 // to ensure we keep the result as a float
+                    )
+                  ) > 0.7 // customizable threshold
+                )
               )
+              and not strings.icontains(..href_url.path,
+                                        strings.concat(.email.domain.sld,
+                                                       "_",
+                                                       .email.domain.tld
+                                        )
+              ) // negate sharepoint links that contain recipientdomain_com
+          )
   )
   // and sender has never had email sent to them
   and not profile.by_sender().solicited
-
 attack_types:
   - "Credential Phishing"
 tactics_and_techniques:
