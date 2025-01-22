@@ -151,7 +151,7 @@ source: |
               and .href_url.domain.root_domain != "capitalone.com"
       )
     )
-    // the message contains a disclaimer but then isn't 
+    // the message contains a disclaimer but isn't from capitalone
     or (
       regex.icontains(body.current_thread.text,
                       'To ensure delivery, add [^\@]+@[^\s]*capitalone.com to your address book.'
@@ -164,6 +164,20 @@ source: |
       strings.icontains(subject.subject, 'job')
       or strings.icontains(subject.subject, 'internship')
       or strings.icontains(body.current_thread.text, 'recruiting team')
+  )
+  // negating legit replies/forwards
+  and not (
+    (
+      strings.istarts_with(subject.subject, "RE:")
+      or strings.istarts_with(subject.subject, "FW:")
+      or strings.istarts_with(subject.subject, "FWD:")
+      or regex.imatch(subject.subject, '(\[[^\]]+\]\s?){0,3}(re|fwd?|automat.*)\s?:.*')
+      or strings.istarts_with(subject.subject, "Réponse automatique")
+    )
+    and (
+      length(headers.references) > 0
+      and any(headers.hops, any(.fields, strings.ilike(.name, "In-Reply-To")))
+    )
   )
   // negate bounce backs
   and not (
