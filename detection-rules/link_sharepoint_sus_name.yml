@@ -12,6 +12,7 @@ source: |
   )
   and not strings.ilike(body.current_thread.text, "invited you to edit")
   and (
+    // use the display text of the link to determine the name of the file
     any(filter(body.links,
                (
                  .href_url.domain.root_domain == "sharepoint.com"
@@ -98,7 +99,17 @@ source: |
                 regex.icontains(body.html.raw, '<p style="font-size:16px;color:#323130;margin:40px 20px 28px">(re|fwd?)')
             )
         )
-  
+          
+        // Payroll/HR
+        // section also used in abuse_dropbox_sus_names.yml with modified input
+        or strings.icontains(.display_text, 'Payroll')
+        or strings.icontains(.display_text, 'Employee Pay\b')
+        or strings.icontains(.display_text, 'Salary')
+        or strings.icontains(.display_text, 'Benefit Enrollment')
+        or strings.icontains(.display_text, 'Employee Handbook')
+        or strings.icontains(.display_text, 'Reimbursement Approved')
+        or regex.icontains(.display_text, '(?:Faculty|Staff)\s*(?:\w+\s+){0,3}\s*Eval(?:uation)?')
+
         // the document name is the same as the org name
         // as determined by the footer 
         or (
@@ -151,8 +162,12 @@ source: |
                   and .value == "Internal"
               )
   )
-  // and sender has never had email sent to them
-  and not profile.by_sender().solicited
+  and (
+    // and sender has never had email sent to them
+    profile.by_sender().solicited == false
+    // often times no-reply is soliticed due to various behaviors
+    or sender.email.email == "no-reply@sharepointonline.com"
+  )
 
 attack_types:
   - "Credential Phishing"
