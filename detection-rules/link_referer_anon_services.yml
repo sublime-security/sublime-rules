@@ -2,7 +2,7 @@ name: "Link: Referer Anonymization Service From Untrusted Sender"
 description: "Detects messages containing links that utilize the a referer anonymization service href.li redirection service. The rule examines senders who are either not in a trusted domain list or have failed DMARC authentication despite being from a trusted domain."
 type: "rule"
 severity: "medium"
-source: "type.inbound\nand any(body.links,\n        // href.li\n        (\n          .href_url.domain.root_domain == \"href.li\"\n          and .href_url.query_params is not null\n        )\n        // deref-mail \n        or (\n          strings.istarts_with(.href_url.path, '/mail/client/')\n          and strings.icontains(.href_url.query_params, 'redirectUrl=')\n        )\n)\n// negate highly trusted sender domains unless they fail DMARC authentication\nand (\n  (\n    sender.email.domain.root_domain in $high_trust_sender_root_domains\n    and not headers.auth_summary.dmarc.pass\n  )\n  or sender.email.domain.root_domain not in $high_trust_sender_root_domains\n)\n"
+source: "type.inbound\nand any(body.links,\n        // href.li\n        (\n          .href_url.domain.root_domain == \"href.li\"\n          and .href_url.query_params is not null\n        )\n        // deref-mail \n        or (\n          strings.istarts_with(.href_url.path, '/mail/client/')\n          and strings.icontains(.href_url.query_params, 'redirectUrl=')\n          // this seems to be a common behavior for gmx.de users\n          and not sender.email.domain.domain == \"gmx.de\"\n\n        )\n)\n// negate highly trusted sender domains unless they fail DMARC authentication\nand (\n  (\n    sender.email.domain.root_domain in $high_trust_sender_root_domains\n    and not headers.auth_summary.dmarc.pass\n  )\n  or sender.email.domain.root_domain not in $high_trust_sender_root_domains\n)\n"
 attack_types:
   - "Credential Phishing"
 tactics_and_techniques:
@@ -14,4 +14,4 @@ detection_methods:
   - "Sender analysis"
 id: "9fab2e1e-96d2-504f-b3dd-8af12f0e553d"
 testing_pr: 2338
-testing_sha: df6d00905463772d841e32686c1fd63041f93059
+testing_sha: d357227b25d7b2f6487a51298c8b7fbbf83695bd
