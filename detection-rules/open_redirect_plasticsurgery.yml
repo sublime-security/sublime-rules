@@ -1,0 +1,17 @@
+name: "Open Redirect: plasticsurgery.or.kr"
+description: |
+  Message contains use of the plasticsurgery.or.kr open redirect. This has been exploited in the wild.
+type: "rule"
+severity: "medium"
+source: "type.inbound\nand any(body.links,\n        .href_url.domain.root_domain == \"plasticsurgery.or.kr\"\n        and strings.icontains(.href_url.path, '/bbs/link.php')\n          and strings.icontains(.href_url.query_params, 'code=')\n                    and strings.icontains(.href_url.query_params, 'url=')\n\n          and not regex.icontains(.href_url.query_params, 'url=(?:https?(?:%3a|:))?(?:%2f|\\/){2}[^&]*plasticsurgery\\.or\\.kr(?:\\&|\\/|$)') \n  \n\n)\nand not sender.email.domain.root_domain == \"plasticsurgery.or.kr\"\n// negate highly trusted sender domains unless they fail DMARC authentication\nand (\n  (\n    sender.email.domain.root_domain in $high_trust_sender_root_domains\n    and not headers.auth_summary.dmarc.pass\n  )\n  or sender.email.domain.root_domain not in $high_trust_sender_root_domains\n)\n"
+attack_types:
+  - "Credential Phishing"
+  - "Malware/Ransomware"
+tactics_and_techniques:
+  - "Open redirect"
+detection_methods:
+  - "Sender analysis"
+  - "URL analysis"
+id: "76dbd946-62d1-527f-b50b-fa4548c002d8"
+testing_pr: 2343
+testing_sha: 7276e1bf21089394144c89dac18d31c6704e23ab
