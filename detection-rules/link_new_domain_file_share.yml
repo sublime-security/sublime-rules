@@ -1,0 +1,18 @@
+name: "Link: Newly Registered Domain with File Sharing Theme"
+description: "Detects messages from uncommon senders with the containing links to newly registered domains while discussing file sharing or cloud storage topics."
+type: "rule"
+severity: "medium"
+source: "type.inbound\n// the message must contain links\nand length(body.links) > 0\n// one of those links is to a domain which was registered less or equal to 30 days \nand any(body.links, network.whois(.href_url.domain).days_old <= 30)\n// the topic of the message relates to file sharing and cloud services\nand any(beta.ml_topic(coalesce(body.html.display_text, body.current_thread.text)\n        ).topics,\n        .name == \"File Sharing and Cloud Services\" and .confidence == \"high\"\n)\n// the sender is new or considered an outlier\nand profile.by_sender().prevalence in (\"new\", \"outlier\")\nand not profile.by_sender().any_messages_malicious_or_spam\n"
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Social engineering"
+  - "Evasion"
+detection_methods:
+  - "Content analysis"
+  - "Sender analysis"
+  - "URL analysis"
+  - "Whois"
+id: "013fc331-193d-51ec-b5cd-fce468a92a46"
+testing_pr: 2349
+testing_sha: 67075ce00bf0667cde7314172b40449bfc106e16
