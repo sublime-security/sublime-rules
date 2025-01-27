@@ -10,7 +10,10 @@ source: |
   type.inbound
   and (
     regex.icontains(sender.display_name, '\bDHL\b')
-    or strings.ilike(sender.email.domain.domain, '*DHL*')
+    or (
+      strings.ilike(sender.email.domain.domain, '*DHL*')
+      and length(sender.email.domain.domain) < 15
+    )
     or strings.ilike(subject.subject, '*DHL notification*')
     or regex.contains(subject.subject, '\bD.{0,2}H.{0,2}L.{0,2}\b')
   )
@@ -23,6 +26,8 @@ source: |
            .name == "DHL" and .confidence in ("medium", "high")
     )
     or regex.icontains(body.current_thread.text, '\bDHL\b')
+    // it contains a QR code
+    or any(file.explode(beta.message_screenshot()), .scan.qr.url.url is not null)
     or (
       any(file.explode(beta.message_screenshot()),
           strings.ilike(.scan.ocr.raw,
@@ -78,12 +83,16 @@ source: |
     'dpdhl.com',
     'dhl.de',
     'dhl.fr',
+    'dhl.pl',
+    'dhlexpress.fr', // legit dhl site
     'dhlending.com',
     'inmotion.dhl',
     'dhlparcel.nl',
     'dhltariff.co.uk',
     'dhlindia-kyc.com',
-    'dpogroup.com'
+    'dpogroup.com',
+    '4flow-service.com',  // shipping service
+    'deutschepost.de' // German postal service
   )
   and (
     profile.by_sender().prevalence in ("new", "outlier")
@@ -92,7 +101,7 @@ source: |
       and not profile.by_sender().any_false_positives
     )
   )
-
+  
   // negate highly trusted sender domains unless they fail DMARC authentication
   and (
     (
@@ -101,7 +110,6 @@ source: |
     )
     or sender.email.domain.root_domain not in $high_trust_sender_root_domains
   )
-
 attack_types:
   - "Credential Phishing"
 tactics_and_techniques:

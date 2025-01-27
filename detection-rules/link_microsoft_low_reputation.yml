@@ -4,6 +4,7 @@ type: "rule"
 severity: "medium"
 source: |
  type.inbound
+ and 0 < length(body.links) < 50
  // suspicious link 
  and any(body.links,
          (
@@ -27,7 +28,7 @@ source: |
              .href_url.domain.sld == "google"
              and strings.starts_with(.href_url.path, "/amp/")
            )
-
+ 
           // Recipient email address in link
           or any(body.links,
                  any(recipients.to,
@@ -69,6 +70,8 @@ source: |
        .file_type in $file_types_images
        and any(ml.logo_detect(.).brands, strings.starts_with(.name, "Microsoft"))
    )
+   or strings.istarts_with(strings.replace_confusables(body.current_thread.text), "Microsoft ")
+   or regex.imatch(strings.replace_confusables(body.current_thread.text), '[\n\s]*[o0O]ff[il1]ce\b.*')
    or any(ml.logo_detect(beta.message_screenshot()).brands,
           strings.starts_with(.name, "Microsoft")
    )
@@ -205,7 +208,18 @@ source: |
  
  // suspicious content
  and (
+   // current thread is empty, but an image attachment is branded as microsoft.
+   // common in image as content
    (
+     body.current_thread.text == ""
+     and any(attachments,
+             .file_type in $file_types_images
+             and any(ml.logo_detect(.).brands,
+                     strings.starts_with(.name, "Microsoft")
+             )
+     )
+   )
+   or (
      strings.ilike(body.plain.raw,
                    "*password*",
                    "*document*",
@@ -231,6 +245,7 @@ source: |
                        "*renewal*"
      )
    )
+  
    or (
      any(attachments,
          .file_type in $file_types_images
@@ -318,6 +333,37 @@ source: |
    "yammer.com",
  )
  
+ // negate legitimate Office 365 bouncebacks
+ and not (
+     length(attachments) > 0
+     and all(attachments,
+         .content_type in ("message/delivery-status", "message/rfc822")
+     )
+     and (sender.email.local_part in ('postmaster', 'mailer-daemon'))
+ )
+ 
+ // negate Microsoft "welcome to the X group" notifications
+ and not (
+   headers.auth_summary.dmarc.pass
+   and length(attachments) == 6
+   and length(filter(attachments,
+                     strings.istarts_with(.file_name, "GuestWelcomeEmail")
+              )
+   ) == 5
+   and length(filter(body.links,
+                     (
+                       .href_url.domain.domain not in (
+                         "outlook.office365.com",
+                         "aka.ms",
+                         "go.microsoft.com"
+                       )
+                     )
+                     and not .href_url.domain.domain == sender.email.domain.domain
+              )
+   ) == 0
+   and subject.subject == strings.replace_confusables(subject.subject)
+ )
+ 
  // negate highly trusted sender domains unless they fail DMARC authentication
  and (
    (
@@ -337,9 +383,8 @@ source: |
  
  // exclude marketing jargon from ms partners
  and not regex.icontains(body.current_thread.text,
-                         '(schedul(e|ing)|set up).{0,20}(call|meeting|demo|zoom|conversation|time|tool|discussion)|book.{0,10}(meeting|demo|call|slot|time)|connect.{0,12}(with me|phone|email)|my.{0,10}(calendar|cal)|reserve.{0,10}s[pl]ot|break the ice|want to know more?|miss your chance|if you no longer wish|if you no longer want|if you wish to opt out|low-code (development|approach|solution|journey|platform)|invite.{0,30}(webinar|presentation)'
- )
- 
+                         '(schedul(e|ing)|set up).{0,20}(call|meeting|demo|zoom|conversation|time|tool|discussion)|book.{0,10}(meeting|demo|call|slot|time)|connect.{0,12}(with me|phone|email)|my.{0,10}(calendar|cal)|reserve.{0,10}s[pl]ot|break the ice|want to know more?|miss your chance|if you no longer wish|if you no longer want|if you wish to opt out|low-code (development|approach|solution|journey|platform)|(?:invite|virtual).{0,30}(webinar|presentation)'
+ ) 
 attack_types:
   - "Credential Phishing"
 tactics_and_techniques:

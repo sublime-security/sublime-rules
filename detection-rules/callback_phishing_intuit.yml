@@ -48,34 +48,34 @@ source: |
     // icontains a phone number
     (
       regex.icontains(strings.replace_confusables(body.html.inner_text),
-                      'Bill to\n[^\n]+\+?(\d{1}.)?\(?\d{3}?\)?.\d{3}.?\d{4}.*\n'
+                      '(?:Sold|Bill)[\s\xa0]To(?:\:\s+|\n)[^\n]+\+?(\d{1}.)?\(?\d{3}?\)?.\d{3}.?\d{4}.*\n'
       )
       or regex.icontains(strings.replace_confusables(body.html.inner_text),
-                         'Bill to\n[^\n]+\+\d{1,3}[0-9]{10}.*\n'
+                         '(?:Sold|Bill)[\s\xa0]To(?:\:\s+|\n)[^\n]+\+\d{1,3}[0-9]{10}.*\n'
       )
       or // +12028001238
    regex.icontains(strings.replace_confusables(body.html.inner_text),
-                   'Bill to\n[^\n]+[0-9]{3}\.[0-9]{3}\.[0-9]{4}.*\n'
+                   '(?:Sold|Bill)[\s\xa0]To(?:\:\s+|\n)[^\n]+[0-9]{3}\.[0-9]{3}\.[0-9]{4}.*\n'
       )
       or // 202-800-1238
    regex.icontains(strings.replace_confusables(body.html.inner_text),
-                   'Bill to\n[^\n]+[0-9]{3}-[0-9]{3}-[0-9]{4}.*\n'
+                   '(?:Sold|Bill)[\s\xa0]To(?:\:\s+|\n)[^\n]+[0-9]{3}-[0-9]{3}-[0-9]{4}.*\n'
       )
       or // (202) 800-1238
    regex.icontains(strings.replace_confusables(body.html.inner_text),
-                   'Bill to\n[^\n]+\([0-9]{3}\)\s[0-9]{3}-[0-9]{4}.*\n'
+                   '(?:Sold|Bill)[\s\xa0]To(?:\:\s+|\n)[^\n]+\([0-9]{3}\)\s[0-9]{3}-[0-9]{4}.*\n'
       )
       or // (202)-800-1238
    regex.icontains(strings.replace_confusables(body.html.inner_text),
-                   'Bill to\n[^\n]+\([0-9]{3}\)-[0-9]{3}-[0-9]{4}.*\n'
+                   '(?:Sold|Bill)[\s\xa0]To(?:\:\s+|\n)[^\n]+\([0-9]{3}\)-[0-9]{3}-[0-9]{4}.*\n'
       )
       or // 202 800 1238
    regex.icontains(strings.replace_confusables(body.html.inner_text),
-                   'Bill to\n[^\n]+1\s?[0-9]{3} [0-9]{3} [0-9]{4}.*\n'
+                   '(?:Sold|Bill)[\s\xa0]To(?:\:\s+|\n)[^\n]+1\s?[0-9]{3} [0-9]{3} [0-9]{4}.*\n'
       ) // 8123456789
       or (
         regex.icontains(strings.replace_confusables(body.html.inner_text),
-                        'Bill to\n[^\n]+8\d{9}.*\n'
+                        '(?:Sold|Bill)[\s\xa0]To(?:\:\s+|\n)[^\n]+8\d{9}.*\n'
         )
         and regex.icontains(strings.replace_confusables(body.html.inner_text),
                             '\+1'
@@ -135,6 +135,10 @@ source: |
                           strings.icontains(.scan.ocr.raw, "ebay"),
                           strings.icontains(.scan.ocr.raw, "paypal"),
                         )
+                        // add additional logic for common language for paypal, which is a valid payment method
+                        and not regex.icontains(.scan.ocr.raw, "paypal[^\n]+accepted")
+                        and not regex.icontains(.scan.ocr.raw, "payment.{0,30}(via|by) paypal")
+                        and not regex.icontains(.scan.ocr.raw, '\d{2,4} norton')  // an address, example: 1234 Norton Road
                       )
                   )
                   or any(ml.logo_detect(.).brands,

@@ -6,43 +6,129 @@ source: |
   type.inbound
   and (
     (
-      (length(body.plain.raw) < 500 and length(body.current_thread.text) == 0)
-      or (
-        length(body.html.display_text) < 500
-        and length(body.current_thread.text) == 0
-      )
-      or (length(body.current_thread.text) < 500)
-    )
-    and (
-      strings.ilike(subject.subject, "*picture*", "*photo*", "*image*")
-      or strings.icontains(subject.subject, sender.display_name)
-      or (
-        length(body.html.display_text) < 500
-        and strings.ilike(body.html.display_text,
+      (
+        (
+          (length(body.plain.raw) < 500 and length(body.current_thread.text) == 0)
+          or (
+            length(body.html.display_text) < 500
+            and length(body.current_thread.text) == 0
+          )
+          or (length(body.current_thread.text) < 500)
+        )
+        and strings.ilike(subject.subject,
                           "*picture*",
                           "*photo*",
-                          "*image*"
+                          "*image*",
+                          "*sad news*",
+                          "*new pics*"
         )
       )
-      or strings.ilike(body.plain.raw, "*picture*", "*photo*", "*image*")
-      or strings.ilike(body.current_thread.text,
-                       "*picture*",
-                       "*photo*",
-                       "*image*"
+      or (
+        (
+          (
+            length(body.html.display_text) < 500
+            and length(body.current_thread.text) == 0
+          )
+          and strings.ilike(body.html.display_text,
+                            "*picture*",
+                            "*photo*",
+                            "*image*",
+                            "*sad news*",
+                            "*new pics*"
+          )
+        )
+        or (
+          (length(body.plain.raw) < 500 and length(body.current_thread.text) == 0)
+          and strings.ilike(body.plain.raw,
+                            "*picture*",
+                            "*photo*",
+                            "*image*",
+                            "*sad news*",
+                            "*new pics*"
+          )
+          and not strings.icontains(body.plain.raw, "[cid:image")
+        )
+        or (
+          length(body.current_thread.text) < 500
+          and strings.ilike(body.current_thread.text,
+                            "*picture*",
+                            "*photo*",
+                            "*image*",
+                            "*sad news*",
+                            "*new pics*"
+          )
+        )
+      )
+      or (
+        body.plain.raw is not null
+        and body.html.display_text is null
+        and (
+          length(body.current_thread.text) == 0
+          or (
+            length(body.current_thread.text) < 500
+            // fake forward indicator in the plain text body
+            and (
+              regex.contains(body.plain.raw,
+                             'On (Sunday|Monday|Tuesday|Wednesday|Thursday|Friday|Saturday).{0,50} wrote'
+              )
+              or strings.icontains(body.plain.raw, 'Original Message')
+            )
+            and not regex.contains(body.current_thread.text,
+                                   'On (Sunday|Monday|Tuesday|Wednesday|Thursday|Friday|Saturday).{0,50} wrote'
+            )
+            and not strings.icontains(body.current_thread.text, 'Original Message')
+            and not any(headers.hops, any(.fields, .name == "Resent-From"))
+          )
+        )
+        and strings.ilike(body.plain.raw,
+                          "*picture*",
+                          "*photo*",
+                          "*image*",
+                          "*sad news*",
+                          "*pics*"
+        )
+        and not strings.istarts_with(body.plain.raw, "[cid:image")
+        and strings.icontains(subject.subject, sender.display_name)
       )
     )
+    and length(body.links) < 5
+    and any(body.links,
+            (
+              (
+                network.whois(.href_url.domain).days_old < 30
+                or not network.whois(.href_url.domain).found
+                or network.whois(.href_url.domain).found is null
+              )
+              and .href_url.domain.root_domain != sender.email.domain.root_domain
+            )
+            or (
+              length(.display_text) == 1
+              and .href_url.domain.root_domain in ("facebook.com", "youtube.com")
+            )
+    )
   )
-  and length(body.links) < 5
-  and any(body.links,
-          (
-            network.whois(.href_url.domain).days_old < 30
-            and .display_text is not null
-            and .href_url.domain.root_domain != sender.email.domain.root_domain
-          )
-          or (
-            length(.display_text) == 1
-            and .href_url.domain.root_domain in ("facebook.com", "youtube.com")
-          )
+  and (
+    (
+      (
+        length(headers.references) > 0
+        or not any(headers.hops,
+                   any(.fields, strings.ilike(.name, "In-Reply-To"))
+        )
+      )
+      and not (
+        (
+          strings.istarts_with(subject.subject, "RE:")
+          or strings.istarts_with(subject.subject, "R:")
+          or strings.istarts_with(subject.subject, "ODG:")
+          or strings.istarts_with(subject.subject, "答复:")
+          or strings.istarts_with(subject.subject, "AW:")
+          or strings.istarts_with(subject.subject, "TR:")
+          or strings.istarts_with(subject.subject, "FWD:")
+          or regex.imatch(subject.subject, '(\[[^\]]+\]\s?){0,3}(re|fwd?)\s?:')
+        )
+      )
+    )
+    or length(headers.references) == 0
   )
 
 attack_types:

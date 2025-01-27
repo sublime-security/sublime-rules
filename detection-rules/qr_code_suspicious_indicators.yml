@@ -15,10 +15,16 @@ source: |
     )
     and (
       any(attachments,
-          .file_type in $file_types_images
+          (.file_type in $file_types_images or .file_extension in $file_extensions_macros or .file_type == "pdf")
           and any(file.explode(.),
                   .scan.qr.type is not null
                   and regex.contains(.scan.qr.data, '\.')
+                  and not (strings.icontains(.scan.qr.data, ',') and .scan.qr.type == 'undefined')
+                  // not a json string
+                  and not (
+                      strings.starts_with(.scan.qr.data, '{')
+                      and strings.ends_with(.scan.qr.data, '}')
+                  )
                   // exclude images taken with mobile cameras and screenshots from android
                   and not any(.scan.exiftool.fields,
                               .key == "Model"
@@ -33,11 +39,24 @@ source: |
                               and .value == "Apple Computer Inc."
                   )
                   // exclude images from WhatsApp (mobile)
-                  and not regex.match(.file_name, 'WhatsApp Image \d\d\d\d-\d\d-\d\d at \d\d\.\d\d\.\d\d\.jpeg')
+                  and not regex.match(.file_name, 'WhatsApp Image \d\d\d\d-\d\d-\d\d at.*.jpe?g')
                   and not (
                     .scan.exiftool.image_height > 3000
                     or .scan.exiftool.image_width > 3000
                   )
+                  // exclude contact cards
+                  and not strings.istarts_with(.scan.qr.data, "BEGIN:VCARD")
+  
+                  // negate QR codes to legit Servicio de Administración Tributaria (SAT) Gov links
+                  and not (
+                      .scan.qr.url.domain.root_domain is not null 
+                      and .scan.qr.url.domain.root_domain in ('sat.gob.mx')
+                  )
+                  and not (
+                    .scan.qr.data is not null 
+                    and strings.icontains(.scan.qr.data, 'sat.gob.mx')
+                  )
+                  
           )
       )
       or (
@@ -47,6 +66,8 @@ source: |
                 and .scan.exiftool.image_width < 2000
                 and .scan.qr.type is not null
                 and regex.contains(.scan.qr.data, '\.')
+                // exclude contact cards
+                and not strings.istarts_with(.scan.qr.data, "BEGIN:VCARD")
         )
       )
     )
@@ -123,6 +144,7 @@ source: |
                         "clos.*of.*account.*processed",
                         "confirm.your.account",
                         "courier.*able",
+                        "crediential.*notif",
                         "deactivation.*in.*progress",
                         "delivery.*attempt.*failed",
                         "document.received",
@@ -170,6 +192,7 @@ source: |
                         "on google docs with you",
                         "online doc",
                         "password.*compromised",
+                        "payment advice",
                         "periodic maintenance",
                         "potential(ly)? unauthorized",
                         "refund not approved",
@@ -180,6 +203,7 @@ source: |
                         "secured?.update",
                         "security breach",
                         "securlty",
+                        "seguranca",
                         "signed.*delivery",
                         "status of your .{314}? ?delivery",
                         "susp[il1]+c[il1]+ous.*act[il1]+v[il1]+ty",
@@ -213,6 +237,7 @@ source: |
         )
         or any($suspicious_subjects, strings.icontains(subject.subject, .))
         or regex.icontains(sender.display_name,
+                           "Accounts.?Payable",
                            "Admin",
                            "Administrator",
                            "Alert",
@@ -307,7 +332,7 @@ source: |
              )
       )
       or any(attachments,
-             .file_type in $file_types_images
+             (.file_type in $file_types_images or .file_extension in $file_extensions_macros or .file_type == "pdf")
              and any(file.explode(.),
                      (
                        .scan.qr.url.domain.tld in $suspicious_tlds
@@ -329,7 +354,7 @@ source: |
     )
     or profile.by_sender().any_messages_malicious_or_spam
   )
-
+  
   and not profile.by_sender().any_false_positives
   
   // negate highly trusted sender domains unless they fail DMARC authentication
@@ -340,7 +365,6 @@ source: |
     )
     or sender.email.domain.root_domain not in $high_trust_sender_root_domains
   )
-
 attack_types:
   - "Credential Phishing"
 tactics_and_techniques:

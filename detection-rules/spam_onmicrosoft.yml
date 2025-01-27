@@ -37,6 +37,22 @@ source: |
       and any(headers.hops, any(.fields, strings.ilike(.name, "In-Reply-To")))
     )
   )
+  // negating auto-replies
+  and not (
+    any(headers.hops,
+        any(.fields, .name =~ "auto-submitted" and .value =~ "auto-generated")
+        and any(.fields,
+                .name =~ "X-MS-Exchange-Generated-Message-Source"
+                and .value not in ("Antispam Quarantine Agent")
+        )
+    )
+  )
+  // Microsoft has some legit onmicrosoft domains...
+  and not (
+    sender.email.domain.domain == "microsoft.onmicrosoft.com"
+    and headers.auth_summary.spf.pass
+    and all(body.links, .href_url.domain.root_domain == "microsoft.com")
+  )
   // construct the proper sender domain and check against known recipients
   and not strings.concat(sender.email.domain.subdomain,  ".", sender.email.domain.tld) in $recipient_domains
   and (

@@ -1,0 +1,43 @@
+name: "Brand Impersonation: QuickBooks Notification From Intuit Themed Company Name"
+description: "This detection rule matches on QuickBooks notifications that feature company names impersonating Intuit and QuickBooks."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  
+  // Legitimate Intuit sending infratructure
+  and sender.email.email == "quickbooks@notification.intuit.com"
+  and headers.auth_summary.spf.pass
+  and headers.auth_summary.dmarc.pass
+  and strings.ends_with(headers.auth_summary.spf.details.designator,
+                        '.intuit.com'
+  )
+  and (
+    // subject also contains the company name
+    strings.icontains(subject.subject, "Quickbooks")
+    or strings.icontains(subject.subject, "Intuit")
+    // the reply-to contains Inuit Themes
+    or any(headers.reply_to,
+           (
+             strings.icontains(.email.email, 'intuit')
+             or strings.icontains(.email.domain.domain, 'quickbooks')
+           )
+           and not (.email.domain.root_domain in ('intuit.com', 'quickbooks.com'))
+    )
+    // the "company" part of the message
+    or regex.icontains(body.html.raw,
+                       '<p class="companyName info-line" style="margin: 0; line-height: 1.5em; font-weight: 600;">.*(?:Intuit|Quickbooks).*</p></div>'
+    )
+  )
+attack_types:
+  - "Callback Phishing"
+  - "Credential Phishing"
+  - "BEC/Fraud"
+tactics_and_techniques:
+  - "Evasion"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Sender analysis"
+  - "Header analysis"
+id: "42058fc4-d700-5bc3-9ee9-91641d9343c2"

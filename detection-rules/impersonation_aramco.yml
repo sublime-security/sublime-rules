@@ -12,20 +12,34 @@ source: |
     or strings.ilike(sender.email.domain.domain, '*aramco*')
     or strings.ilike(subject.subject, '*aramco*')
   )
-  and any(ml.nlu_classifier(body.current_thread.text).entities, strings.ilike(.text, "*aramco*"))
   and any(ml.nlu_classifier(body.current_thread.text).entities,
           .name == "financial" or .name == "request"
   )
-  and any(ml.nlu_classifier(body.current_thread.text).entities, .name == "urgency")
-
+  and (
+    (
+      any(ml.nlu_classifier(body.current_thread.text).entities,
+          strings.ilike(.text, "*aramco*")
+      )
+      and any(ml.nlu_classifier(body.current_thread.text).entities,
+              .name == "urgency"
+      )
+    )
+    or regex.icount(body.current_thread.text, "vendor|supplier") > 3
+  )
+  
   // Aramco domain negations
   and sender.email.domain.root_domain not in~ (
-    'aramco.com', 'aramcoamericas.com', 'aramcoventures.com', 'aramcoworld.com'
+    'aramco.com',
+    'aramcoamericas.com',
+    'aramcoventures.com',
+    'aramcoworld.com'
   )
   
   // negate emails sent by the Aston Martin Aramco F1 Team
   and sender.email.domain.root_domain != "astonmartinf1.com"
-  
+  and not strings.icontains(subject.subject, 'Aston Martin')
+  and not regex.icontains(subject.subject, 'Formula (?:One|1)', '\bF1\b')
+
   // negate highly trusted sender domains unless they fail DMARC authentication
   and (
     (

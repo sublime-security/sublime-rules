@@ -5,16 +5,34 @@ type: "rule"
 severity: "high"
 source: |
   type.inbound
-  and any(attachments,
-          (.file_type in $file_types_images or .file_type == "pdf")
-          and (
-            any(ml.logo_detect(.).brands,
-                .name == "Adobe" and .confidence in ("medium", "high")
-            )
-            or any(ml.logo_detect(beta.message_screenshot()).brands,
-                   .name == "Adobe"
-            )
+  and (
+    any(attachments,
+        (.file_type in $file_types_images or .file_type == "pdf")
+        and (
+          any(ml.logo_detect(.).brands,
+              .name == "Adobe" and .confidence in ("medium", "high")
           )
+          or any(ml.logo_detect(beta.message_screenshot()).brands,
+                 .name == "Adobe"
+          )
+          or any(file.explode(.),
+                 any(.scan.strings.strings,
+                     regex.icontains(., "adobe (acrobat|sign)")
+                     // negate PDF data, like "xmp:CreatorTool>Adobe Acrobat Pro (64-bit) 24.4.20272</xmp:CreatorTool>"
+                     and not regex.icontains(.,
+                                             "(creatortool|producer|creator).{1,5}adobe acrobat"
+                     )
+                 )
+          )
+        )
+    )
+    or any(attachments,
+           .file_extension in $file_extensions_macros
+           and any(file.explode(.), .depth == 0 and .scan.docx.image_count > 0)
+           and any(file.explode(.),
+                   any(.scan.strings.strings, strings.ilike(., "*adobe*"))
+           )
+    )
   )
   and any(attachments,
           (
@@ -32,7 +50,13 @@ source: |
                   .scan.qr.type == "url"
                   // recipient email address is present in the URL, a common tactic used in credential phishing attacks 
                   and any(recipients.to,
-                          (strings.icontains(..scan.qr.data, .email.email) and (.email.domain.valid or strings.icontains(.display_name, "undisclosed")))
+                          (
+                            strings.icontains(..scan.qr.data, .email.email)
+                            and (
+                              .email.domain.valid
+                              or strings.icontains(.display_name, "undisclosed")
+                            )
+                          )
   
                           // the recipients sld is in the senders display name
                           or any(recipients.to,
@@ -55,6 +79,11 @@ source: |
                           // or the subject contains authentication/urgency verbiage
                           or regex.contains(subject.subject,
                                             "(Authenticat(e|or|ion)|2fa|Multi.Factor|(qr|bar).code|action.require|alert|Att(n|ention):)"
+                          )
+  
+                          // high confidence cred theft in body
+                          or any(ml.nlu_classifier(body.current_thread.text).intents,
+                                 .name == "cred_theft" and .confidence in ("high")
                           )
                   )
               )
@@ -91,7 +120,7 @@ source: |
             )
     )
   )
-
+  
   // negate highly trusted sender domains unless they fail DMARC authentication
   and (
     (
@@ -100,7 +129,6 @@ source: |
     )
     or sender.email.domain.root_domain not in $high_trust_sender_root_domains
   )
-  
   and (
     not profile.by_sender().solicited
     or (

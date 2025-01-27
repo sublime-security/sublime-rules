@@ -6,8 +6,14 @@ severity: "medium"
 source: |
   type.inbound
   and any(body.links,
-          .href_url.domain.domain in $free_file_hosts
-          or .href_url.domain.root_domain in $free_file_hosts
+          (
+            .href_url.domain.domain in $free_file_hosts
+            or .href_url.domain.root_domain in $free_file_hosts
+          )
+          // remove free_file_hosts used to host images as links
+          and not any($file_types_images,
+                      strings.iends_with(..href_url.url, strings.concat('.', .))
+          )
   )
   and sender.email.domain.tld in $suspicious_tlds
   and (

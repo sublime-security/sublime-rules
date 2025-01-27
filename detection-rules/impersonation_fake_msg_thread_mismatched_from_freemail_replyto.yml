@@ -10,7 +10,7 @@ source: |
   type.inbound
   and (
     (
-      profile.by_sender().prevalence in ("new", "outlier")
+      profile.by_sender_email().prevalence in ("new", "outlier")
       and not profile.by_sender().solicited
     )
     or (
@@ -18,16 +18,32 @@ source: |
       and not profile.by_sender().any_false_positives
     )
   )
-
+  
   // Reply-to is a freemail sender but From is not
   and any(headers.reply_to,
           .email.domain.domain in $free_email_providers
           and not .email.domain.domain == sender.email.domain.domain
   )
-
+  
   // Exclude marketing emails
-  and not strings.ilike(sender.email.local_part, "support", "sales", "noreply", "marketing")
-
+  and not strings.ilike(sender.email.local_part,
+                        "support",
+                        "sales",
+                        "noreply",
+                        "marketing"
+  )
+  
+  // Exclude mailing lists
+  and not any(headers.hops,
+              any(.fields,
+                  .name in (
+                    "x-google-group-id",
+                    "list-post",
+                    "mailing-list"
+                  )
+              )
+  )
+  
   // Check for Message Thread Indicators
   and (
     regex.icontains(subject.subject, '\b(?:RE|FWD?)\s*:')
@@ -42,12 +58,9 @@ source: |
            )
     )
   )
-
+  
   // Check for the Presence of References or In-Reply-To properties
-  and (
-    length(headers.references) == 0
-    or headers.in_reply_to is null
-  )
+  and (length(headers.references) == 0 or headers.in_reply_to is null)
 attack_types:
   - "BEC/Fraud"
 tactics_and_techniques:

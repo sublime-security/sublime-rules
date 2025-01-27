@@ -18,10 +18,18 @@ source: |
       )
     )
     or (
-      sender.email.domain.root_domain != 'ledger.com'
+      (
+        // only match ledger actual domains if dmarc fails
+        not (
+          sender.email.domain.root_domain in~ ('ledger.com', 'ledger.fr')
+          and headers.auth_summary.dmarc.pass
+        )
+        or not sender.email.domain.root_domain in~ ('ledger.com', 'ledger.fr')
+      )
       and (
         strings.ilike(sender.email.email, '*-ledger.com*')
         or sender.display_name =~ "ledger"
+        or strings.istarts_with(sender.display_name, "ledger")
         or strings.ilevenshtein(sender.email.domain.sld, "ledger") <= 1
       )
       and (
@@ -42,7 +50,7 @@ source: |
   )
   and sender.email.domain.root_domain not in (
     // Fortune has a newsletter called "The Ledger"
-    'fortune.com', 
+    'fortune.com',
     'velocityledger.com',
     'lever.co',
     'queensledger.com',

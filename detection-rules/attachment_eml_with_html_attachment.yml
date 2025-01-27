@@ -7,40 +7,35 @@ type: "rule"
 severity: "medium"
 source: |
   type.inbound
-
+  
   // has EML attachment
   and any(attachments,
-          .content_type == "message/rfc822"
-          and any(file.explode(.),
-
+          (.file_extension == "eml" or .content_type == "message/rfc822")
+          and any(file.parse_eml(.).attachments,
                   // HTML file inside EML attachment
                   // we've seen files named ".htm.", which results in an empty
                   // .file_extension, so instead we look at .file_name
                   // they should be rare enough in EML attachments to not cause
                   // extraneous FPs
                   strings.ilike(.file_name, "*htm*")
-
-          // optional: we can add additional signals here if necessary
-          // identify at least one additional suspicious signal in the message
-          // and (
-          //     // html smuggling signals
-          //     any(.scan.javascript.identifiers, . == "unescape") or
-          //     any(.scan.strings.strings, regex.icontains(., "eval")) or
-          //     // more signals here if needed
-
-          //     // commonly abused sender TLD
-          //     strings.ilike(sender.email.domain.tld, "*.jp")
-          // )
+                  or .file_type == "html"
+                  or any(file.explode(.), .flavors.mime == "text/html")
           )
   )
-
+  
   // exclude bounce backs & read receipts
-  and not strings.like(sender.email.local_part, "*postmaster*", "*mailer-daemon*", "*administrator*")
+  and not strings.like(sender.email.local_part,
+                       "*postmaster*",
+                       "*mailer-daemon*",
+                       "*administrator*"
+  )
   and not regex.icontains(subject.subject, "^(undeliverable|read:)")
   and not any(attachments, .content_type == "message/delivery-status")
   // if the "References" is in the body of the message, it's probably a bounce
   and not any(headers.references, strings.contains(body.html.display_text, .))
-  and not profile.by_sender().any_false_positives
+  // unsolicited
+  and not profile.by_sender().solicited
+
 
 tags:
   - "Attack surface reduction"

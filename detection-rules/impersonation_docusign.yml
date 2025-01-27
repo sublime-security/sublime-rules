@@ -22,32 +22,105 @@ source: |
       strings.istarts_with(body.html.inner_text, "docusign")
       and not strings.istarts_with(body.current_thread.text, "docusign")
     )
+    or (
+      (
+        regex.icontains(body.html.raw, '<font size="[0-9]"[^\>]*>DocuSign</font>')
+        or regex.icontains(body.html.raw, '\nDocu(?:<[^\>]+>\s*)+Sign<')
+        or regex.icontains(body.html.raw,
+                           '<span[^>]*style="[^"]*">DocuSign<\/span>'
+        )
+        or regex.icontains(body.html.raw,
+                           '<span[^>]*style="[^"]*">(Docu|D(?:ocu?)?)<\/span><span[^>]*style="[^"]*">(Sign|S(?:ign?)?)<\/span>'
+        )
+        or regex.icontains(body.html.raw, '<strong>DocuSign</strong>')
+        or regex.icontains(body.html.raw, '<div class="logo">DocuSign</div>')
+        or regex.icontains(body.html.raw,
+                           'D&#917540;&#917540;o&#917540;&#917540;c︀uS&#917540;&#917540;i︀gn'
+        )
+      )
+      and (
+        regex.icontains(body.html.raw, 'background:\s*rgb\(30,\s*76,\s*161\)')
+        or regex.icontains(body.html.raw,
+                           'background-color:\s*rgb\(30,\s*76,\s*161\)'
+        )
+        or regex.icontains(body.html.raw,
+                           'background-color:\s*rgb\(61,\s*170,\s*73\)'
+        )
+        or regex.icontains(body.html.raw,
+                           '<div[^>]*BACKGROUND-COLOR: #1e4ca1[^>]*>',
+                           '<td[^>]*BACKGROUND-COLOR: #1e4ca1[^>]*>',
+                           '<table[^>]*background-color:\s*#1e4ca1'
+        )
+        or regex.icontains(body.html.raw, 'background-color:#214e9f;')
+        or regex.icontains(body.html.raw, 'background-color:#3260a7')
+        or regex.icontains(body.html.raw, 'background-color:#0056b3')
+        or regex.icontains(body.html.raw, 'BACKGROUND-COLOR:#1e4ca1')
+        or regex.icontains(body.html.raw, 'background-color:#214395')
+        or regex.icontains(body.html.raw,
+                           '<table[^>]*style="[^"]*background:\s*#1E4CA1[^"]*"[^>]*>(.*?)<\/table>'
+        )
+        or regex.icontains(body.html.raw, '<title>Document.{0,50}</title>')
+        or any(body.links, regex.icontains(.display_text, 'view.{0,3}doc'))
+        or any(body.links, regex.contains(.display_text, '\bDOCUMENT'))
+      )
+    )
   )
   
   // identifies the main CTA in the email, eg "Review now" or "Review document"
   // this should always be a known docusign domain,
   // even with branded docusign subdomains
-  and any(body.links,
-          // we've observed invisible characters in the display name
-          // such as U+034f(look carefully): "Revi͏ew Now"
-          (
-            strings.ilevenshtein(.display_text, "Review Now") <= 3
-            or (
-              strings.icontains(.display_text, "Review")
-              and not strings.icontains(.display_text, "Review Us")
-            )
-            or strings.icontains(.display_text, "Now")
-            or strings.icontains(.display_text, "document")
+  and (
+    any(body.links,
+        // we've observed invisible characters in the display name
+        // such as U+034f(look carefully): "Revi͏ew Now"
+        (
+          strings.ilevenshtein(.display_text, "Review Now") <= 3
+          or (
+            strings.icontains(.display_text, "Review")
+            and not strings.icontains(.display_text, "Review Us")
           )
+          or strings.icontains(.display_text, "Now")
+          or strings.icontains(.display_text, "document")
+          or strings.icontains(.display_text, "docusign")
+        )
         and not .href_url.domain.root_domain in ("docusign.com", "docusign.net")
         and not (
           .href_url.domain.root_domain == "mimecastprotect.com"
           and (
             .href_url.query_params is not null
-            and (regex.icontains(.href_url.query_params, 'domain=(?:\w+.)?docusign.net')
-            or regex.icontains(.href_url.query_params, 'domain=(?:\w+.)?docusign.com'))
+            and (
+              regex.icontains(.href_url.query_params,
+                              'domain=(?:\w+.)?docusign.net'
+              )
+              or regex.icontains(.href_url.query_params,
+                                 'domain=(?:\w+.)?docusign.com'
+              )
+            )
           )
         )
+    )
+    // Suspicious attachment
+    or any(attachments,
+           (
+             .file_extension in~ ("html", "htm", "shtml", "dhtml")
+             or .file_extension in~ $file_extensions_common_archives
+             or .file_type == "html"
+             or .content_type == "text/html"
+           )
+           and 1 of (
+             (
+               regex.icontains(file.parse_html(.).raw, '\s{0,}<script.*')
+               and regex.icontains(file.parse_html(.).raw, "</script>")
+             ),
+             strings.ilike(file.parse_html(.).raw,
+                           "*createElement*",
+                           "*appendChild*",
+                           "*createObjectURL*"
+             ),
+             strings.icount(file.parse_html(.).raw, "/*") > 10,
+             any($free_subdomain_hosts, strings.icontains(..file_name, .))
+           )
+    )
   )
   
   // negate highly trusted sender domains unless they fail DMARC authentication
