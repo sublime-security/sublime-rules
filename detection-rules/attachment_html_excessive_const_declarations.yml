@@ -1,4 +1,4 @@
-name: "Attachment: HTML file with excessive 'const' declarations"
+name: "Attachment: HTML file with excessive 'const' declarations and abnormally long timeouts"
 description: "Detects messages with HTML attachments containing multiple 'const' declarations while excluding legitimate Gmail messages. This is evidence of potential code injection or obfuscation techniques."
 type: "rule"
 severity: "high"
@@ -14,6 +14,10 @@ source: |
                                  "<!-- saved from url=.{0,7}https://mail.google.com/mail/u/0/#inbox/"
           )
           and length(file.parse_html(.).raw) < 50000
+          // long timeouts
+          and regex.icontains(file.parse_html(.).raw,
+                              'setTimeout\(\s*function\s*\(.*?\)\s*\{[\s\S]*?\},\s*\d+\);'
+          )
   )
   
   // and the sender is not from high trust sender root domains
@@ -24,7 +28,6 @@ source: |
     )
     or sender.email.domain.root_domain not in $high_trust_sender_root_domains
   )
-
 attack_types:
   - "Malware/Ransomware"
   - "Credential Phishing"
