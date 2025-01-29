@@ -15,7 +15,9 @@ source: |
                           "*shared a file with you*",
                           "*shared with you*",
                           "*invited you to access a file*",
-                          "*you've received a document*"
+                          "*received a document*",
+                          "*shared a document*",
+                          "*shared this document*"
             )
         )
         or any(file.explode(beta.message_screenshot()),
@@ -23,7 +25,9 @@ source: |
                              "*shared a file with you*",
                              "*shared with you*",
                              "*invited you to access a file*",
-                             "*you've received a document*"
+                             "*received a document*",
+                             "*shared a document*",
+                             "*shared this document*"
                )
         )
       )
@@ -40,8 +44,14 @@ source: |
                          "*PowerPoint*",
                          "*OneNote*"
         )
+        or any(body.links, strings.icontains(.display_text, "OPEN DOCUMENT"))
         or subject.subject is null
         or subject.subject == ""
+        // the org as determined by NLU is in the subject
+        or any(ml.nlu_classifier(body.current_thread.text).entities,
+               .name == "org" and strings.icontains(subject.subject, .text)
+        )
+       
       )
     )
     or any([
@@ -210,7 +220,7 @@ source: |
         regex.icontains(body.html.raw, 'rgb\((25[0-5]),\s?(20[0-2]),\s?([0-7])\)')
       )
       or regex.icontains(body.html.raw,
-                       '<a[^>]+style="[^"]*background-color:\s*#[0-9A-F]{2}[5-9A-F]{2}[0-9A-F]{2}[^"]*"[^>]*>[^<]*(?:open)[^<]*</a>' // blue button containing the word "open"
+                         '<a[^>]+style="[^"]*background-color:\s*#[0-9A-F]{2}[5-9A-F]{2}[0-9A-F]{2}[^"]*"[^>]*>[^<]*(?:open)[^<]*</a>' // blue button containing the word "open"
       )
       or (
         any(recipients.to,
@@ -240,6 +250,11 @@ source: |
                 "sharepoint.com"
               )
   )
+  // if there is a Sharepoint link, ensure the link doesn't match any org SLDs
+  and not any(body.links,
+              .href_url.domain.root_domain == "sharepoint.com"
+              and any($org_slds, . == ..href_url.domain.subdomain)
+  )
   and sender.email.domain.root_domain not in $org_domains
   and sender.email.domain.root_domain not in (
     "bing.com",
@@ -264,7 +279,8 @@ source: |
     or sender.email.domain.root_domain not in $high_trust_sender_root_domains
   )
   and (
-    (not profile.by_sender().solicited)
+    profile.by_sender().solicited == false
+    or profile.by_sender_email().prevalence == "new"
     or (
       profile.by_sender().any_messages_malicious_or_spam
       and not profile.by_sender().any_false_positives

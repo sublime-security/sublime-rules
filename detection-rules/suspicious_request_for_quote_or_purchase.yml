@@ -10,7 +10,12 @@ source: |
     (
       (
         length(recipients.to) == 0
-        or all(recipients.to, .display_name == "Undisclosed recipients")
+        or all(recipients.to,
+               .display_name in (
+                 "Undisclosed recipients",
+                 "undisclosed-recipients"
+               )
+        )
       )
       and length(recipients.cc) == 0
       and length(recipients.bcc) == 0
@@ -24,6 +29,7 @@ source: |
       length(headers.reply_to) > 0
       and all(headers.reply_to,
               .email.domain.root_domain != sender.email.domain.root_domain
+              and not .email.domain.root_domain in $org_domains
       )
     )
   )
@@ -39,10 +45,14 @@ source: |
                         '(sign(ed?)|view).{0,10}(purchase order)|Request for a Quot(e|ation)'
         )
       ),
-      (regex.icontains(body.current_thread.text, '(please|kindly).{0,30}quote')),
+      (
+        regex.icontains(body.current_thread.text,
+                        '(please|kindly).{0,30}quot(e|ation)'
+        )
+      ),
       (
         regex.icontains(subject.subject,
-                        '(request for (purchase|quot(e|ation))|\bRFQ\b|\bRFP\b)'
+                        '(request for (purchase|quot(e|ation))|\bRFQ\b|\bRFP\b|bid invit(e|ation))'
         )
       ),
       (
@@ -63,6 +73,22 @@ source: |
             .name == "purchase_order" and .confidence == "high"
         )
       ),
+      (
+        0 < length(filter(body.links,
+                          (
+                            .href_url.domain.domain in $free_subdomain_hosts
+                            or .href_url.domain.domain in $free_file_hosts
+                            or network.whois(.href_url.domain).days_old < 30
+                          )
+                          and (
+                            regex.match(.display_text, '[A-Z ]+')
+                            or any(ml.nlu_classifier(.display_text).entities,
+                                   .name in ("request", "urgency")
+                            )
+                          )
+                   )
+        ) < 3
+      )
     )
     or (
       length(attachments) == 1
