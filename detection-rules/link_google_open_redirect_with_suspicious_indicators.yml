@@ -12,7 +12,13 @@ source: |
     or length(attachments) == 0
   )
   and sender.email.domain.root_domain not in $org_domains
-  
+  // negate auth'ed google messages
+  and not (
+    sender.email.domain.sld == "google"
+    and sender.email.local_part in ("googlealerts-noreply", "comments-noreply")
+    and headers.auth_summary.spf.pass
+    and headers.auth_summary.dmarc.pass
+  )
   // not a reply
   and (
     length(headers.references) == 0
@@ -20,9 +26,12 @@ source: |
   )
   // With a Google Redirect
   and any(body.links,
-          .href_url.domain.sld == "google"
-          and .href_url.path == "/url"
-          and regex.contains(.href_url.query_params, "hl=.{2}&q=http(s)?://")
+          (
+            .href_url.domain.sld == "google"
+            and .href_url.path == "/url"
+            and regex.contains(.href_url.query_params, "hl=.{2}&q=http(s)?://")
+          )
+          or any(.href_url.rewrite.encoders, . == 'google_open_redirect')
   )
   and 2 of (
     // Not a google logo

@@ -11,31 +11,50 @@ source: |
           sender.email.local_part,
           subject.subject
         ],
-        strings.icontains(strings.replace_confusables(.), "mailgun")
+        regex.icontains(strings.replace_confusables(.), "ma[il][il]gun")
     )
-    or regex.icontains(body.html.raw, '<title>.*mailgun.*</title>')
+    or regex.icontains(body.html.raw, 
+      '<title>.*mailgun.*</title>', 'alt\s*=\s*"\s*Mailgun\s*Logo\s*"'
+    )
     or regex.icontains(body.current_thread.text,
                        '[©®]\s*(20\d\d\s*)?Mailgun',
                        'mailgun\s*[©®]'
     )
-    or any(ml.logo_detect(beta.message_screenshot()).brands, .name == "Mailgun" and .confidence in ("medium", "high") )
+    or any(ml.logo_detect(beta.message_screenshot()).brands,
+           .name == "Mailgun" and .confidence in ("medium", "high")
+    )
   )
   and not (
     // sent from mailgun actual
     (
       sender.email.domain.root_domain in (
-          'mailgun.com', 'mailgun.net', // official mailgun domains
-          'mailgunwarmup.com', // an unrelated b2b firm
-          'emailonacid.com' // another sinch email product 
+        'mailgun.com',
+        'mailgun.net', // official mailgun domains
+        'mailgunwarmup.com', // an unrelated b2b firm
+        'emailonacid.com', // another sinch email product 
+        'elior-na.com', // a domain with a simliar logo that catches on logo_detect
+        'brembo.com' // a domain with a simliar logo that catches on logo_detect
       )
       and headers.auth_summary.dmarc.pass
+    )
+    // and not where the recipient include the domain with a simliar logo
+    // and where that recipient shows up in a previous thread
+    or (
+      any(recipients.to, .email.domain.root_domain in ("elior-na.com", "brembo.com"))
+      and any(filter(recipients.to, .email.domain.root_domain in ("elior-na.com", "brembo.com")),
+              (
+                  strings.icontains(body.html.display_text, strings.concat("From: ", .email.email))
+                  or strings.icontains(body.html.display_text, strings.concat("From: ", .display_name))
+              )
+      )
     )
     or 
     // some domains have "mailgun" as a subdomain and are sent via mailgun
     // these are unlikely to be impersonations
     (
-      (strings.icontains(sender.email.domain.domain, "mailgun")
-      or strings.icontains(sender.email.local_part, "mailgun")
+      (
+        strings.icontains(sender.email.domain.domain, "mailgun")
+        or strings.icontains(sender.email.local_part, "mailgun")
       )
       and (
         // if mailgun action was in the header.hops very likely not impersonation

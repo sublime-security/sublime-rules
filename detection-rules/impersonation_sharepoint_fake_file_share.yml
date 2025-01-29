@@ -9,14 +9,50 @@ source: |
   // Sharepoint body content looks like this
   and (
     (
-      any([body.current_thread.text, body.plain.raw],
-          strings.ilike(.,
-                        "*shared a file with you*",
-                        "*shared with you*",
-                        "*invited you to access a file*"
-          )
+      (
+        any([body.current_thread.text, body.plain.raw],
+            strings.ilike(.,
+                          "*shared a file with you*",
+                          "*shared with you*",
+                          "*invited you to access a file*",
+                          "*received a document*",
+                          "*shared a document*",
+                          "*shared this document*"
+            )
+        )
+        or any(file.explode(beta.message_screenshot()),
+               strings.ilike(.scan.ocr.raw,
+                             "*shared a file with you*",
+                             "*shared with you*",
+                             "*invited you to access a file*",
+                             "*received a document*",
+                             "*shared a document*",
+                             "*shared this document*"
+               )
+        )
       )
-      and strings.ilike(subject.subject, "*shared*", "*updated*")
+      and (
+        strings.ilike(subject.subject,
+                      "*shared*",
+                      "*updated*",
+                      "*sign*",
+                      "*review*"
+        )
+        or strings.ilike(subject.subject,
+                         "*Excel*",
+                         "*SharePoint*",
+                         "*PowerPoint*",
+                         "*OneNote*"
+        )
+        or any(body.links, strings.icontains(.display_text, "OPEN DOCUMENT"))
+        or subject.subject is null
+        or subject.subject == ""
+        // the org as determined by NLU is in the subject
+        or any(ml.nlu_classifier(body.current_thread.text).entities,
+               .name == "org" and strings.icontains(subject.subject, .text)
+        )
+       
+      )
     )
     or any([
              "Contigo", // Spanish
@@ -183,6 +219,18 @@ source: |
         regex.icontains(body.html.raw, 'rgb\(([0-4]),\s?(18[0-1]),\s?(24[0])\)'),
         regex.icontains(body.html.raw, 'rgb\((25[0-5]),\s?(20[0-2]),\s?([0-7])\)')
       )
+      or regex.icontains(body.html.raw,
+                         '<a[^>]+style="[^"]*background-color:\s*#[0-9A-F]{2}[5-9A-F]{2}[0-9A-F]{2}[^"]*"[^>]*>[^<]*(?:open)[^<]*</a>' // blue button containing the word "open"
+      )
+      or (
+        any(recipients.to,
+            strings.icontains(body.current_thread.text,
+                              strings.concat(.email.domain.sld,
+                                             " shared a file with you"
+                              )
+            )
+        )
+      )
     )
   )
   
@@ -201,6 +249,11 @@ source: |
                 "microsoft.com",
                 "sharepoint.com"
               )
+  )
+  // if there is a Sharepoint link, ensure the link doesn't match any org SLDs
+  and not any(body.links,
+              .href_url.domain.root_domain == "sharepoint.com"
+              and any($org_slds, . == ..href_url.domain.subdomain)
   )
   and sender.email.domain.root_domain not in $org_domains
   and sender.email.domain.root_domain not in (
@@ -226,7 +279,8 @@ source: |
     or sender.email.domain.root_domain not in $high_trust_sender_root_domains
   )
   and (
-    (not profile.by_sender().solicited)
+    profile.by_sender().solicited == false
+    or profile.by_sender_email().prevalence == "new"
     or (
       profile.by_sender().any_messages_malicious_or_spam
       and not profile.by_sender().any_false_positives

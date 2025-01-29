@@ -20,65 +20,106 @@ source: |
   )
   and headers.auth_summary.dmarc.pass
   
-  // filter out all the links, keeping only the links of interest
-  and any(filter(body.links,
-                 // target the "Open" link
-                 (
-                   .href_url.domain.domain == "drive.google.com"
-                   and strings.icontains(.href_url.path, '/view')
-                   // this isn't controlled by the actor
-                   and .display_text == "Open"
-                 )
-          ),
-          // the Google Drive page has been taken down due to TOS violations
-          strings.icontains(ml.link_analysis(., mode="aggressive").final_dom.display_text, "You can't access this item because it is in violation of our Terms of Service")
-          
-          // if not taken down
-          // filter down the links on the google drive page to those that are external to google
-          or any(filter(ml.link_analysis(., mode="aggressive").final_dom.links,
-                     .href_url.domain.root_domain != 'google.com'
-                     // relative links (no domains)
-                     and .href_url.domain.domain is not null
-              ),
-              (
-                // any of those links domains are new
-                network.whois(.href_url.domain).days_old < 30
-                // go to free file hosts
-                or .href_url.domain.root_domain in $free_file_hosts
-                or .href_url.domain.domain in $free_file_hosts
+  // not where the sender display name is within org_display_names
+  and not any($org_display_names,
+      strings.istarts_with(sender.display_name, strings.concat(., " (via Google "))
+      or strings.istarts_with(sender.display_name, strings.concat(., " (Google "))
+  )
   
-                // go to free subdomains hosts
-                or (
-                  .href_url.domain.root_domain in $free_subdomain_hosts
-                  // where there is a subdomain
-                  and .href_url.domain.subdomain is not null
-                  and .href_url.domain.subdomain != "www"
-                )
-                // go to url shortners
-                or .href_url.domain.root_domain in $url_shorteners
-                or .href_url.domain.domain in $url_shorteners
-                or (
-                  // find any links that mention common "action" words
-                  regex.icontains(.display_text,
-                                  '(?:view|click|show|access|download|continue|goto|Validate|Va[il]idar|login|verify|account)'
+  // threat actors dont want others to edit the share
+  and not strings.icontains(body.current_thread.text, 'invited you to edit')
+  
+  and (
+    // check the shared filed name for suspicious indicators
+    // alerting keywords
+    regex.icontains(strings.replace_confusables(subject.subject),
+                    ': \".*(?:Immediate|Urgent|Critical|Alert|Warning|Urgent|Important|Critical Alert|Security Notice)[!:\-]?[^\"]*\"'
+    )
+    // account issues
+    or regex.icontains(strings.replace_confusables(subject.subject),
+                       ': \".*(?:Online|Bank(?:ing)?|User|Account|Access|[[:punct:]\s]?(?:ID)|Transactions)\b.*\b(?:Security|Recover|Blocked|Suspen(?:ded|sion)|Restricted|Locked|Disabled|Frozen|Closed)[^\"]*\"'
+    )
+    // keywords themed as Suspicious
+    or regex.icontains(strings.replace_confusables(subject.subject),
+                       ': \".*(Suspicious|Unauthorized|Unrecognized|Fraudulent|Scam)\b.*\b(Activity|Transaction|Log[- ]?In|Access|Entry|Sign[- ]?In|Detected)[^\"]*\"'
+    )
+    // account/identify verification keywords
+    or regex.icontains(strings.replace_confusables(subject.subject),
+                       ': \".*(?:(?:Verify|Confirm|Update|Review|Complete)\b.*\b(Your (Identity|Account|Online[- ]?ID|Billing Information))|(?:(?:Action|Attention|Verification|Review)[[:punct:]\s](?:Needed|Required)))[^\"]*\"'
+    )
+    
+    or
+    ( // filenames that in References/ID keywords
+      regex.icontains(strings.replace_confusables(subject.subject),
+                      ': \".*[[:punct:]\s]+\w+[[:punct:]\s]*[a-zA-Z]*[0-9][a-zA-Z0-9]*\"$'
+      )
+      // the above regex is a bit "open", so close it by checking it with a more specific "ending" pattern.
+      and regex.icontains(strings.replace_confusables(subject.subject), '[[:punct:]]\s*[a-z0-9]{5,}\"$')
+    )
+  
+    // finally get ready to do link analysis
+    // filter out all the links, keeping only the links of interest
+    or any(filter(body.links,
+                  // target the "Open" link
+                  (
+                    .href_url.domain.domain == "drive.google.com"
+                    and strings.icontains(.href_url.path, '/view')
+                    // this isn't controlled by the actor
+                    and .display_text == "Open"
                   )
-                  and (
-                    // and when visiting those links, are phishing
-                    ml.link_analysis(., mode="aggressive").credphish.disposition == "phishing"
+           ),
+           // the Google Drive page has been taken down due to TOS violations
+           strings.icontains(ml.link_analysis(., mode="aggressive").final_dom.display_text,
+                             "You can't access this item because it is in violation of our Terms of Service"
+           )
   
-                    // hit a captcha page
-                    or ml.link_analysis(., mode="aggressive").credphish.contains_captcha
+           // if not taken down
+           // filter down the links on the google drive page to those that are external to google
+           or any(filter(ml.link_analysis(., mode="aggressive").final_dom.links,
+                         .href_url.domain.root_domain != 'google.com'
+                         // relative links (no domains)
+                         and .href_url.domain.domain is not null
+                  ),
+                  (
+                    // any of those links domains are new
+                    network.whois(.href_url.domain).days_old < 30
+                    // go to free file hosts
+                    or .href_url.domain.root_domain in $free_file_hosts
+                    or .href_url.domain.domain in $free_file_hosts
   
-                    // or the page redirects to common website, observed when evasion happens
+                    // go to free subdomains hosts
                     or (
-                      length(ml.link_analysis(., mode="aggressive").redirect_history
-                      ) > 0
-                      and ml.link_analysis(., mode="aggressive").effective_url.domain.root_domain in $tranco_10k
+                      .href_url.domain.root_domain in $free_subdomain_hosts
+                      // where there is a subdomain
+                      and .href_url.domain.subdomain is not null
+                      and .href_url.domain.subdomain != "www"
+                    )
+                    // go to url shortners
+                    or .href_url.domain.root_domain in $url_shorteners
+                    or .href_url.domain.domain in $url_shorteners
+                    or (
+                      // find any links that mention common "action" words
+                      regex.icontains(.display_text,
+                                      '(?:view|click|show|access|download|continue|goto|Validate|Va[il]idar|login|verify|account)'
+                      )
+                      and (
+                        // and when visiting those links, are phishing
+                        ml.link_analysis(., mode="aggressive").credphish.disposition == "phishing"
+  
+                        // hit a captcha page
+                        or ml.link_analysis(., mode="aggressive").credphish.contains_captcha
+  
+                        // or the page redirects to common website, observed when evasion happens
+                        or (
+                          length(ml.link_analysis(., mode="aggressive").redirect_history
+                          ) > 0
+                          and ml.link_analysis(., mode="aggressive").effective_url.domain.root_domain in $tranco_10k
+                        )
+                      )
                     )
                   )
-                )
-              )
-          )
+           )
+    )
   )
 attack_types:
   - "Credential Phishing"

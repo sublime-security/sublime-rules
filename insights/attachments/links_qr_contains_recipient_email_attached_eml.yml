@@ -1,0 +1,22 @@
+name: "Recipient Email in QR Code Link of Attached EML"
+type: "query"
+source: |
+  map(attachments,
+      map(file.parse_eml(.).attachments,
+          map(filter(file.explode(.),
+                     .scan.qr.type == "url"
+                     and (
+                       any(file.parse_eml(...).recipients.to,
+                           strings.contains(..scan.qr.url.url, .email.email)
+                       )
+                       or 
+                       any(recipients.to,
+                              strings.contains(..scan.qr.url.url, .email.email)
+                       )
+                     )
+              ),
+              .scan.qr.url.url
+          )
+      )
+  )
+severity: "high"

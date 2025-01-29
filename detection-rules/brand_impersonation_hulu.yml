@@ -5,8 +5,15 @@ severity: "medium"
 source: |
   type.inbound
   and (
-    strings.ilike(sender.display_name, '*hulu*')
-    or strings.ilevenshtein(sender.display_name, 'hulu') <= 1
+    regex.icontains(sender.display_name, '\bhulu\b')
+    or (
+      strings.ilevenshtein(sender.display_name, 'hulu') <= 1
+      and not (
+        // lulu.com is a self publisher
+        sender.display_name =~ "lulu"
+        and sender.email.domain.root_domain == "lulu.com"
+      )
+    )
     or strings.ilike(sender.email.domain.domain, '*hulu*')
     or (
       (
@@ -17,16 +24,18 @@ source: |
         )
       )
       and any(ml.logo_detect(beta.message_screenshot()).brands,
-              .name == "Hulu"
-              and .confidence in ("medium", "high")
+              .name == "Hulu" and .confidence in ("medium", "high")
       )
     )
   )
-  and sender.email.domain.root_domain not in (
-    'hulu.com'
+  and (
+    sender.email.domain.root_domain not in ('hulu.com', 'hulumail.com', 'hulu.jp', 'hulu-japan.jp')
+    or (
+      sender.email.domain.root_domain in ('hulu.com', 'hulumail.com', 'hulu.jp', 'hulu-japan.jp')
+      and not headers.auth_summary.dmarc.pass
+    )
   )
   and not profile.by_sender().solicited
-
 attack_types:
   - "Credential Phishing"
   - "Spam"

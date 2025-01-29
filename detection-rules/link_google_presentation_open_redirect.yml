@@ -4,35 +4,25 @@ type: "rule"
 severity: "medium"
 source: |
   type.inbound
+  and not strings.icontains(body.current_thread.text, 'invited you to edit')
   and any(body.links,
           // body link is to a google doc presentation
           .href_url.domain.domain == "docs.google.com"
           and strings.istarts_with(.href_url.path, '/presentation/')
   
           // prefilter some to avoid clicking on _every_ google presentation link
-          // the link appears as plain text in the and makes up the majority of the the current thread
-          and (
-            ( // determine if the plain text url link is in the current thread and not a previous one.
-              strings.icontains(body.current_thread.text, .href_url.url)
-              // the length of the url + 20% is greater than the length of the body (which includes the url)
-              and length(.href_url.url) * 1.20 >= length(body.current_thread.text)
-            )
-            or ( // the display text appears in the current thread and makes up the majority of the the current thread
+          and ( 
+            ( 
+              // https://platform.sublime.security/messages/b94de99b5c7c49cad1b3374d3c2885fb042de4ed6006467ca41e5c4f74e79095
               // make sure the display text is in the current thread and not a previous one.
               strings.icontains(body.current_thread.text, .display_text)
-              // the display text length of the link + 20% is greater than the length of the body (which includes the display text)
-              and (
-                length(.display_text) * 1.20 >= length(body.current_thread.text)
-                // display text ends in some random chars that includes a number
-                // https://platform.sublime.security/messages/b94de99b5c7c49cad1b3374d3c2885fb042de4ed6006467ca41e5c4f74e79095
-                or (
-                  // the regex ends with a word that is 4-10 long
-                  regex.icontains(.display_text, '[[:punct:]\s][a-zA-Z0-9]{5,9}$')
-                  // that word has to include a letter AND a number
-                  and regex.icontains(.display_text, '[[:punct:]\s](?:[a-z0-9]*[a-z][0-9][a-z0-9]*|[a-z0-9]*[0-9][a-z][a-z0-9]*)$')
-                  and strings.iends_with(.href_url.path, '/pub')
-                )
+              // the display_text ends with a word that is 4-10 long
+              and regex.icontains(.display_text, '[[:punct:]\s][a-z0-9]{5,9}$')
+              // that word has to include a letter AND a number
+              and regex.icontains(.display_text,
+                                  '[[:punct:]\s](?:[a-z0-9]*[a-z][0-9][a-z0-9]*|[a-z0-9]*[0-9][a-z][a-z0-9]*)$'
               )
+              and strings.iends_with(.href_url.path, '/pub')
             )
             or 
             // finally send the link to link analysis that presentation...
@@ -79,6 +69,28 @@ source: |
             )
           )
   )
+  // when the sender is not google, the sender should not be a common prevalence
+  and (
+    ( // the message is not from google actual
+      sender.email.email not in (
+        'comments-noreply@docs.google.com',
+        'drive-shares-dm-noreply@google.com',
+        'drive-shares-noreply@google.com',
+        'calendar-notification@google.com'
+      )
+      // ensure the sender prevalence is not common
+      and profile.by_sender().prevalence != "common"
+    )
+    // or the message is from google actual
+    or (
+      sender.email.email in (
+        'comments-noreply@docs.google.com',
+        'drive-shares-dm-noreply@google.com',
+        'drive-shares-noreply@google.com',
+        'calendar-notification@google.com'
+      )
+    )
+  )
   
   // not where the sender display name of the message is within org_display_names
   and not (
@@ -90,6 +102,7 @@ source: |
       'calendar-notification@google.com'
     )
     and headers.auth_summary.dmarc.pass
+  
     // but the sender display name is within org_display_names
     and any($org_display_names,
             strings.istarts_with(sender.display_name,

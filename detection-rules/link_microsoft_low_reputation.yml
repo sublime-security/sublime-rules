@@ -4,6 +4,7 @@ type: "rule"
 severity: "medium"
 source: |
  type.inbound
+ and 0 < length(body.links) < 50
  // suspicious link 
  and any(body.links,
          (
@@ -69,7 +70,8 @@ source: |
        .file_type in $file_types_images
        and any(ml.logo_detect(.).brands, strings.starts_with(.name, "Microsoft"))
    )
-   or strings.istarts_with(body.current_thread.text, "Microsoft ")
+   or strings.istarts_with(strings.replace_confusables(body.current_thread.text), "Microsoft ")
+   or regex.imatch(strings.replace_confusables(body.current_thread.text), '[\n\s]*[o0O]ff[il1]ce\b.*')
    or any(ml.logo_detect(beta.message_screenshot()).brands,
           strings.starts_with(.name, "Microsoft")
    )
@@ -330,7 +332,7 @@ source: |
    "sharepointonline.com",
    "yammer.com",
  )
-
+ 
  // negate legitimate Office 365 bouncebacks
  and not (
      length(attachments) > 0
@@ -339,7 +341,7 @@ source: |
      )
      and (sender.email.local_part in ('postmaster', 'mailer-daemon'))
  )
-
+ 
  // negate Microsoft "welcome to the X group" notifications
  and not (
    headers.auth_summary.dmarc.pass
@@ -381,7 +383,7 @@ source: |
  
  // exclude marketing jargon from ms partners
  and not regex.icontains(body.current_thread.text,
-                         '(schedul(e|ing)|set up).{0,20}(call|meeting|demo|zoom|conversation|time|tool|discussion)|book.{0,10}(meeting|demo|call|slot|time)|connect.{0,12}(with me|phone|email)|my.{0,10}(calendar|cal)|reserve.{0,10}s[pl]ot|break the ice|want to know more?|miss your chance|if you no longer wish|if you no longer want|if you wish to opt out|low-code (development|approach|solution|journey|platform)|invite.{0,30}(webinar|presentation)'
+                         '(schedul(e|ing)|set up).{0,20}(call|meeting|demo|zoom|conversation|time|tool|discussion)|book.{0,10}(meeting|demo|call|slot|time)|connect.{0,12}(with me|phone|email)|my.{0,10}(calendar|cal)|reserve.{0,10}s[pl]ot|break the ice|want to know more?|miss your chance|if you no longer wish|if you no longer want|if you wish to opt out|low-code (development|approach|solution|journey|platform)|(?:invite|virtual).{0,30}(webinar|presentation)'
  ) 
 attack_types:
   - "Credential Phishing"
