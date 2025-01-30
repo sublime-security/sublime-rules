@@ -1,4 +1,4 @@
-name: "Inbound Message Via Newly Observed Distribution List"
+name: "Inbound Message from Popular Service Via Newly Observed Distribution List"
 description: "Detects when a message comes through a distribution list by matching on return paths containing Sender Rewrite Scheme (SRS) from a previously unknown domain sender to a single recipient who has never interacted with the organization. This method has been observed being abused by threat actors to deliver callback phishing."
 type: "rule"
 severity: "medium"
@@ -7,10 +7,15 @@ source: |
   and length(recipients.to) == 1
   and length(recipients.cc) == 0
   and length(recipients.bcc) == 0
+  // abuse involves a popular service
+  and sender.email.domain.root_domain in $majestic_million
+
   // message is not from a free mail provider, we have only observed sevice providers abused
   and sender.email.domain.root_domain not in $free_email_providers
   and sender.email.domain.domain not in $free_email_providers
+  
   and not any(recipients.to, .email.email =~ sender.email.email)
+
   // uses Sender Rewrite Scheme indicating the message traversed a distribtion list or other automatic relay
   and strings.icontains(headers.return_path.local_part, "+SRS=")
   
