@@ -1,0 +1,123 @@
+name: "Scam: Piano giveaway"
+description: "This rule is designed to identify and mitigate a specific type of fraudulent activity commonly targeted at educational institutions. This rule operates by analyzing incoming email content for certain characteristics indicative of a scam involving the offer of a free piano, often framed within the context of downsizing or a giveaway."
+type: "rule"
+severity: "medium"
+source: |
+  length(body.links) < 10
+  and length(body.current_thread.text) < 1500
+  and (
+    // items and brands
+    // Guitars
+    strings.ilike(body.current_thread.text,
+                  '(?:Gibson|Fender|Lowden|Martin|Taylor|Ibanez)\s*[^\r\n]{0,50}\s*guitar',
+    )
+    // Piano/Keyboards
+    or regex.icontains(body.current_thread.text,
+                       '(?:Yamaha|Kawai|Baldwin|Roland|Stei?nway(?: (?:&|and) Sons?)?)\s*[^\r\n]{0,50}(?:baby.grand|piano|baby.grand.piano|keyboard)',
+    )
+    // Violins & Orchestral 
+    or regex.icontains(body.current_thread.text,
+                       '(?:Stradivarius|Guarneri|Yamaha|Stentor|Eastman|Cremona|Cecilio|Mendini)\s*[^\r\n]{0,50}(violin|viola|cello|celli)',
+    )
+    // brass/wind/woodwinds
+    or regex.icontains(body.current_thread.text,
+                       '(?:Bach|Yamaha|Selmer|Conn|King|Jupiter|Buffet Crampon |Pearl)\s*[^\r\n]{0,50}(trombone|trumpet|saxophone|clarinet|flute)'
+    )
+  
+    // generic
+    or strings.ilike(body.current_thread.text, '* musical instruments *')
+  )
+  and (
+    // often a person is moving
+    strings.ilike(body.current_thread.text,
+                  '* downsizing *',
+                  '* relocating *',
+                  '* relocation *',
+                  '* moving *'
+    )
+    or strings.ilike(body.current_thread.text,
+                     '* give away*',
+                     '* generously offering *',
+                     '*a loving home*',
+                     '*find a new home *',
+                     '*rehome these instruments *'
+    )
+    // generally somone died
+    or regex.icontains(body.current_thread.text,
+                       'inherited instruments',
+                       'late (?:husband|father|dad|wife|mother|mom)',
+                       '(?:husband|father|dad|wife|mother|mom)[^\r\n]{0,50}estate'
+    )
+    // passion/love for the item
+    or strings.ilike(body.current_thread.text,
+                     '* genuinely cherish *',
+                     '* cherished possessions *',
+                     '* passionate instrument *',
+                     '* had a passion for music *'
+    )
+  )
+  and (
+    // it talks about a shipping fee upfront
+    regex.icontains(body.current_thread.text,
+                    'shipping (?:fee|cost|arrangement)',
+                    '(?:responsible|pay) for shipping',
+                    'no (?:local\s)?pick.?up',
+                    'delivery only',
+                    'moving company'
+    )
+    or strings.ilike(body.current_thread.text,
+                     '* if you will take it *',
+                     '* or have someone *',
+                     '* indicate your interest *',
+                     '* to someone you know*'
+                     
+    )
+    or regex.icontains(body.current_thread.text,
+                       'if you (?:will be|are) interested',
+                       'who (?:will|would) appreciate'
+    )
+    or (
+      // there's an email in the body 
+      regex.contains(body.current_thread.text,
+                     "[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}"
+      )
+  
+      // and it's likely a freemail
+      and any($free_email_providers,
+              strings.icontains(body.current_thread.text, .)
+      )
+    )
+    // reply-to doesn't match sender
+    or (
+      length(headers.reply_to) > 0
+      and sender.email.email not in map(headers.reply_to, .email.email)
+    )
+    // there are no recipients
+    or length(recipients.to) == 0
+    // redirects to a phone number
+    or regex.icontains(body.current_thread.text,
+                       '(?:call|contact|text)[^\r\n]{0,50} at'
+    )
+    or regex.icontains(body.current_thread.text,
+                       '(?:private|personal) (?:e-?)?mail'
+    )
+    or strings.icontains(body.current_thread.text, ' kindly ')
+  )
+  
+  // not high trust sender domains
+  and not (
+    sender.email.domain.root_domain in $high_trust_sender_root_domains
+    and headers.auth_summary.dmarc.pass
+  )
+  // person provides piano lessons and offers to give a Roland baby-grand away
+  and not sender.email.domain.root_domain == 'ridleyacademy.com'
+tags:
+  - "Vertical: Education"
+attack_types:
+  - "BEC/Fraud"
+tactics_and_techniques:
+  - "Free email provider"
+detection_methods:
+  - "Content analysis"
+  - "Natural Language Understanding"
+  - "Sender analysis"
