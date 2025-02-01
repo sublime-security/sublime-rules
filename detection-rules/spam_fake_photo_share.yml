@@ -19,7 +19,8 @@ source: |
                           "*picture*",
                           "*photo*",
                           "*image*",
-                          "*sad news*"
+                          "*sad news*",
+                          "*new pics*"
         )
       )
       or (
@@ -32,7 +33,8 @@ source: |
                             "*picture*",
                             "*photo*",
                             "*image*",
-                            "*sad news*"
+                            "*sad news*",
+                            "*new pics*"
           )
         )
         or (
@@ -41,7 +43,8 @@ source: |
                             "*picture*",
                             "*photo*",
                             "*image*",
-                            "*sad news*"
+                            "*sad news*",
+                            "*new pics*"
           )
           and not strings.icontains(body.plain.raw, "[cid:image")
         )
@@ -51,14 +54,32 @@ source: |
                             "*picture*",
                             "*photo*",
                             "*image*",
-                            "*sad news*"
+                            "*sad news*",
+                            "*new pics*"
           )
         )
       )
       or (
         body.plain.raw is not null
         and body.html.display_text is null
-        and length(body.current_thread.text) == 0
+        and (
+          length(body.current_thread.text) == 0
+          or (
+            length(body.current_thread.text) < 500
+            // fake forward indicator in the plain text body
+            and (
+              regex.contains(body.plain.raw,
+                             'On (Sunday|Monday|Tuesday|Wednesday|Thursday|Friday|Saturday).{0,50} wrote'
+              )
+              or strings.icontains(body.plain.raw, 'Original Message')
+            )
+            and not regex.contains(body.current_thread.text,
+                                   'On (Sunday|Monday|Tuesday|Wednesday|Thursday|Friday|Saturday).{0,50} wrote'
+            )
+            and not strings.icontains(body.current_thread.text, 'Original Message')
+            and not any(headers.hops, any(.fields, .name == "Resent-From"))
+          )
+        )
         and strings.ilike(body.plain.raw,
                           "*picture*",
                           "*photo*",
