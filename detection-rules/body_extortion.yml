@@ -7,36 +7,49 @@ type: "rule"
 severity: "low"
 source: |
   type.inbound
+  and length(filter(body.links, .display_text is not null)) < 10
   and (
     (
       any(ml.nlu_classifier(strings.replace_confusables(body.current_thread.text)).intents,
           .name == "extortion" and .confidence == "high"
       )
-      and any(ml.nlu_classifier(strings.replace_confusables(body.current_thread.text)).entities,
+      and any(ml.nlu_classifier(strings.replace_confusables(body.current_thread.text
+                                )
+              ).entities,
               .name == "financial"
       )
     )
     // manual indicators failsafe
     or 3 of (
       // malware terms
-      regex.icontains(strings.replace_confusables(body.current_thread.text), "((spy|mal)ware|trojan|remote control)"),
+      regex.icontains(strings.replace_confusables(body.current_thread.text),
+                      "((spy|mal)ware|trojan|remote control)"
+      ),
       // actions recorded
       regex.icontains(strings.replace_confusables(body.current_thread.text),
                       "porn|adult (web)?site|webcam|masturbating|jerking off|pleasuring yourself|getting off"
       ),
-      regex.icontains(strings.replace_confusables(body.current_thread.text), "pervert|perversion|masturbat"),
+      regex.icontains(strings.replace_confusables(body.current_thread.text),
+                      "pervert|perversion|masturbat"
+      ),
       // a timeframe to pay
-      regex.icontains(strings.replace_confusables(body.current_thread.text), '\d\d hours', '(?:one|two|three|\d) days?'),
+      regex.icontains(strings.replace_confusables(body.current_thread.text),
+                      '\d\d (?:hours|uur)',
+                      '(?:one|two|three|\d) days?'
+      ),
       // a promise from the actor
       regex.icontains(strings.replace_confusables(body.current_thread.text),
-                        'permanently delete|(remove|destroy) (?:\w+\s*){0,4} (?:data|evidence|videos?)'
+                      'permanently delete|(remove|destroy) (?:\w+\s*){0,4} (?:data|evidence|videos?)'
       ),
       // a threat from the actor
       regex.icontains(strings.replace_confusables(body.current_thread.text),
-                        'sen[dt]\s*(?:\w+\s*){0,2}\s*to\s*(?:\w+\s*){0,3}\s*your contacts'),
+                      'sen[dt]\s*(?:\w+\s*){0,2}\s*to\s*(?:\w+\s*){0,3}\s*your contacts'
+      ),
       // bitcoin language (excluding newsletters)
       (
-        regex.icontains(strings.replace_confusables(body.current_thread.text), 'bitcoin|\bbtc\b|blockchain')
+        regex.icontains(strings.replace_confusables(body.current_thread.text),
+                        'bitcoin|\bbtc\b|blockchain'
+        )
         // negate cryptocurrency newsletters
         and not (
           any(body.links,
@@ -54,16 +67,17 @@ source: |
           )
         )
       ),
-      // bitcoin wallet address + threat
       (
-        strings.icontains(strings.replace_confusables(body.current_thread.text),
-                          "contact the police"
+        regex.icontains(strings.replace_confusables(body.current_thread.text),
+                        '(?:contact the police|(?:bitcoin|\bbtc\b).{0,20}wallet)'
         )
         and regex.icontains(strings.replace_confusables(body.current_thread.text),
-                            '(\b[13][a-km-zA-HJ-NP-Z0-9]{24,33}\b)|\bX[1-9A-HJ-NP-Za-km-z]{33}\b|\b(0x[a-fA-F0-9]{40})\b|\b[LM3][a-km-zA-HJ-NP-Z1-9]{26,33}\b|\b[48][0-9AB][1-9A-HJ-NP-Za-km-z]{93}\b'
+                            '(\b[13][a-km-zA-HJ-NP-Z0-9]{24,34}\b)|\bX[1-9A-HJ-NP-Za-km-z]{33}\b|\b(0x[a-fA-F0-9]{40})\b|\b[LM3][a-km-zA-HJ-NP-Z1-9]{26,33}\b|\b[48][0-9AB][1-9A-HJ-NP-Za-km-z]{93}\b'
         )
       ),
-      regex.icontains(strings.replace_confusables(body.current_thread.text), 'bc1q.{0,50}\b')
+      regex.icontains(strings.replace_confusables(body.current_thread.text),
+                      'bc1q.{0,50}\b'
+      )
     )
   )
   and (
@@ -81,7 +95,7 @@ source: |
       or not headers.auth_summary.spf.pass
     )
   )
-
+  
   // negate benign newsletters that mention cyber extortion
   and not (
     any(body.links,
@@ -92,6 +106,7 @@ source: |
     )
   )
   and length(body.current_thread.text) < 6000
+
 
 attack_types:
   - "Extortion"
