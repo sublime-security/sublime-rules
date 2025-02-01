@@ -1,0 +1,30 @@
+name: "Display url mismatch leading to suspicious TLD"
+description: "This rule detects messages that do not original from a suspicious TLD, but contain a link mismatch where the destination url is a suspicious tld. "
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and 0 < length(body.links) < 30
+  and not any([subject.subject, sender.display_name],
+            regex.icontains(., '(а|е|и|о|у)')
+    )
+  and sender.email.domain.tld not in $suspicious_tlds
+  and any(body.links,
+          not strings.contains(.display_url.url, "@")
+          and .display_url.domain.tld not in $suspicious_tlds
+          and .mismatched
+          and .href_url.domain.tld in $suspicious_tlds
+          and not .href_url.domain.root_domain == "avanan.click"
+          and not .href_url.domain.root_domain == "emailprotection.link"
+          and not .display_url.url =~ "chownow.com"
+  )
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Evasion"
+detection_methods:
+  - "Content analysis"
+  - "URL analysis"
+id: "07b13707-92c5-599a-b6da-1cb2d26dab14"
+testing_pr: 2002
+testing_sha: 2ad55fb5552e9b2f3ffee51cbff5ce1ac10522a4
