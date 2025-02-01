@@ -1,0 +1,43 @@
+name: "Link: Referer Anonymization Service From Untrusted Sender"
+description: "Detects messages containing links that utilize the a referer anonymization service href.li redirection service. The rule examines senders who are either not in a trusted domain list or have failed DMARC authentication despite being from a trusted domain."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and any(body.links,
+          // href.li
+          (
+            .href_url.domain.root_domain == "href.li"
+            and .href_url.query_params is not null
+          )
+          // deref-mail 
+          or (
+            strings.istarts_with(.href_url.path, '/mail/client/')
+            and strings.icontains(.href_url.query_params, 'redirectUrl=')
+            // this seems to be a common behavior for gmx.de users
+            and not sender.email.domain.domain == "gmx.de"
+            and not (
+              sender.email.domain.domain == "mail.com"
+              and any(headers.domains, .root_domain == "mail.com")
+            )
+          )
+          
+  )
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and not headers.auth_summary.dmarc.pass
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Open redirect"
+  - "Evasion"
+detection_methods:
+  - "Header analysis"
+  - "URL analysis"
+  - "Sender analysis"
+id: "9fab2e1e-96d2-504f-b3dd-8af12f0e553d"
