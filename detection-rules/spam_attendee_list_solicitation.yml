@@ -17,8 +17,8 @@ source: |
               and not (
                 regex.icount(., 'email(?:[[:punct:]]*s)?(?:\s\w*){0,9}list') == 1
                 and regex.icontains(.,
-                                    '(?:unsub|remove|safe|delete)[[:punct:]]*s?(?:\s\w*){0,9}(mailing|email).{0,9}list(?:\b|[^ei])',
-                                    'email list(?:\b|[^ei])[[:punct:]]*s?(\s\w*){0,5}(?:unsub|remove|safe|delete)'
+                                    '(?:unsub|remove|safe|delete|leave|update|part of|be added)[[:punct:]]*s?(?:\s\w*){0,9}(mailing|email)(?:\s\w*){0,9}list(?:\b|[^ei])',
+                                    'email list(?:\b|[^ei])[[:punct:]]*s?(\s\w*){0,5}(?:unsub|remove|safe|delete|leave|up to date|part of|be added)'
                 )
               )
             )
@@ -28,10 +28,10 @@ source: |
         )
       )
       and regex.icontains(body.current_thread.text,
-                          "(?:interested|accessing|purchas|obtain|acuir|sample)"
+                          "(?:interest(s|ed)|accessing|purchas|obtain|acuir|sample)"
       )
       and not regex.icontains(body.current_thread.text,
-                              "(?:debit card|transaction.{0,20}processed)"
+                              "(?:debit card|transaction.{0,20}processed|receipt)"
       )
     )
     // if there are indicators of a previous thread, also inspect the previous thread
@@ -44,7 +44,11 @@ source: |
         ),
         regex.icontains(body.current_thread.text, 'follow(?:ing)? up'),
         regex.icontains(body.current_thread.text, '(?:contact|attendee)s? list'),
+        regex.icontains(body.current_thread.text, '(any|get an) update.{0,50}\?'),
         strings.icontains(body.current_thread.text, 'heard back'),
+        strings.icontains(body.current_thread.text, 'recently sent'),
+        strings.icontains(body.current_thread.text, 'still interested'),
+        regex.icontains(body.current_thread.text, '(swift|quick|short) response'),
       )
       and any([body.html.display_text, body.plain.raw],
               (
@@ -85,6 +89,12 @@ source: |
       )
     )
   )
+  // negate Zendesk support tickets
+  and not any(body.links,
+            .href_url.domain.root_domain in ('zendesk.com')
+            and .display_text == 'Zendesk'
+  )
+
   and not profile.by_sender().solicited
   and not profile.by_sender().any_false_positives
 tags:
