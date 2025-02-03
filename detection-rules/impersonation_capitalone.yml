@@ -72,13 +72,15 @@ source: |
         // change notificaiton preferences to only security alerts
         and (
           strings.icount(body.current_thread.text, "security alert") > strings.icount(body.current_thread.text,
-                                                                                    "sign in to your account and select Security Alerts."
+                                                                                      "sign in to your account and select Security Alerts."
           )
         )
       )
       or strings.icontains(body.current_thread.text, "account remains secure")
       or strings.icontains(body.current_thread.text, "please verify your account")
-      or strings.icontains(body.current_thread.text, "suspicious activity detected")
+      or strings.icontains(body.current_thread.text,
+                           "suspicious activity detected"
+      )
       or strings.icontains(body.current_thread.text, "temporarily locked out")
       or regex.icontains(body.current_thread.text,
                          '(?:invalid|unrecognized|unauthorized|fail(?:ed|ure)?|suspicious|unusual|attempt(?:ed)?\b|tried to)\s*(?:\w+\s+){0,3}\s*(?:log(?:.?in)?|sign(?:.?in)?|account|access|activity)',
@@ -90,7 +92,9 @@ source: |
       strings.icontains(body.current_thread.text, "been suspend")
       or strings.icontains(body.current_thread.text, "will be restored")
       or strings.icontains(body.current_thread.text, "security reasons")
-      or strings.icontains(body.current_thread.text, "temporarily restricted access")
+      or strings.icontains(body.current_thread.text,
+                           "temporarily restricted access"
+      )
       or regex.icontains(body.current_thread.text,
                          'acc(?:ou)?n?t\s*(?:\w+\s+){0,3}\s*(?:authenticat(?:e|ion)|activity|\bho[li]d\b|terminat|[il1]{2}m[il1]t(?:s|ed|ation)|b?locked|de-?activat|suspen(?:ed|sion)|restrict(?:ed|ion)?|expir(?:ed?|ing)|v[il]o[li]at|verif(?:y|ication))',
                          '(?:authenticat(?:e|ion)|activity|\bho[li]d\b|terminat|[il1]{2}m[il1]t(?:s|ed|ation)|b?locked|de-?activat|suspen(?:ed|sion)|restrict(?:ed|ion)?|expir(?:ed?|ing)|v[il]o[li]at|verif(?:y|ication))\s*(?:\w+\s+){0,3}\s*acc(?:ou)?n?t\b'
@@ -124,8 +128,8 @@ source: |
       strings.icontains(body.current_thread.text, "about your account")
       or strings.icontains(body.current_thread.text, "action required")
       or regex.icontains(body.current_thread.text,
-                         '(update|\bedit\b|modify|revise|verif(?:y|ication)|discrepanc(?:y|ies)|mismatch(?:es)?|inconsistenc(?:y|ies)?|difference(?:s)?|anomal(?:y|ies)?|irregularit(?:y|ies)?)\s*(?:\w+\s+){0,4}\s*(?:account|detail|record|data|info(?:rmation)?)',
-                         '(?:account|detail|record|data|info(?:rmation)?)\s*(?:\w+\s+){0,4}\s*(update|\bedit\b|modify|revise|verif(?:y|ication)|discrepanc(?:y|ies)|mismatch(?:es)?|inconsistenc(?:y|ies)?|difference(?:s)?|anomal(?:y|ies)?|irregularit(?:y|ies)?)'
+                         '(update|\bedit\b|modify|revise|verif(?:y|ication)|discrepanc(?:y|ies)|mismatch(?:es)?|inconsistenc(?:y|ies)?|difference(?:s)?|anomal(?:y|ies)?|irregularit(?:y|ies)?)\s*(?:\w+\s+){0,4}\s*(?:account|ownership|detail|record|data|info(?:rmation)?)',
+                         '(?:account|ownership|detail|record|data|info(?:rmation)?)\s*(?:\w+\s+){0,4}\s*(update|\bedit\b|modify|revise|verif(?:y|ication)|discrepanc(?:y|ies)|mismatch(?:es)?|inconsistenc(?:y|ies)?|difference(?:s)?|anomal(?:y|ies)?|irregularit(?:y|ies)?)'
       )
     )
     // // other calls to action that are unexpected
@@ -146,8 +150,13 @@ source: |
                 or regex.icontains(.display_text,
                                    'restore\s*(?:\w+\s*){0,3}\s*(?:account|access)'
                 )
+                or regex.icontains(.display_text,
+                                   'review\s*(?:\w+\s*){0,3}\s*(?:payment)'
+                )
               )
-              and not regex.icontains(.display_text, 'confirm\s*(?:\w+\s*){0,3}\s*this message')
+              and not regex.icontains(.display_text,
+                                      'confirm\s*(?:\w+\s*){0,3}\s*this message'
+              )
               and .href_url.domain.root_domain != "capitalone.com"
       )
     )
@@ -168,13 +177,15 @@ source: |
     and not 'fail' in~ distinct(map(headers.hops, .authentication_results.dkim))
   )
   and not any(beta.ml_topic(body.html.display_text).topics,
-          // lots of newsletters talk about capital one 
-          (.name == "Newsletters and Digests" and .confidence == "high")
-          // lots of recruiting mention oppurtunties at capital one, often including the logo
-          or (
-            .name == "Professional and Career Development"
-            and .confidence == "high"
-          )
+              // lots of newsletters talk about capital one 
+              (
+                .name == "Newsletters and Digests" and .confidence == "high"
+              )
+              // lots of recruiting mention oppurtunties at capital one, often including the logo
+              or (
+                .name == "Professional and Career Development"
+                and .confidence == "high"
+              )
   )
   // negating legit replies/forwards
   // https://github.com/sublime-security/sublime-rules/blob/main/insights/authentication/org_inbound_auth_pass.yml
@@ -183,7 +194,9 @@ source: |
       strings.istarts_with(subject.subject, "RE:")
       or strings.istarts_with(subject.subject, "FW:")
       or strings.istarts_with(subject.subject, "FWD:")
-      or regex.imatch(subject.subject, '(\[[^\]]+\]\s?){0,3}(re|fwd?|automat.*)\s?:.*')
+      or regex.imatch(subject.subject,
+                      '(\[[^\]]+\]\s?){0,3}(re|fwd?|automat.*)\s?:.*'
+      )
       or strings.istarts_with(subject.subject, "Réponse automatique")
     )
     and (
