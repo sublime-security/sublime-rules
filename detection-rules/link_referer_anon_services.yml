@@ -2,7 +2,7 @@ name: "Link: Referer Anonymization Service From Untrusted Sender"
 description: "Detects messages containing links that utilize the a referer anonymization service href.li redirection service. The rule examines senders who are either not in a trusted domain list or have failed DMARC authentication despite being from a trusted domain."
 type: "rule"
 severity: "medium"
-source: "type.inbound\nand any(body.links,\n        // href.li\n        (\n          .href_url.domain.root_domain == \"href.li\"\n          and .href_url.query_params is not null\n        )\n        // deref-mail \n        or (\n          strings.istarts_with(.href_url.path, '/mail/client/')\n          and strings.icontains(.href_url.query_params, 'redirectUrl=')\n          // this seems to be a common behavior for gmx.de users\n          and not sender.email.domain.domain == \"gmx.de\"\n\n        )\n)\n// negate highly trusted sender domains unless they fail DMARC authentication\nand (\n  (\n    sender.email.domain.root_domain in $high_trust_sender_root_domains\n    and not headers.auth_summary.dmarc.pass\n  )\n  or sender.email.domain.root_domain not in $high_trust_sender_root_domains\n)\n"
+source: "type.inbound\nand any(body.links,\n        // href.li\n        (\n          .href_url.domain.root_domain == \"href.li\"\n          and .href_url.query_params is not null\n        )\n        // deref-mail \n        or (\n          strings.istarts_with(.href_url.path, '/mail/client/')\n          and strings.icontains(.href_url.query_params, 'redirectUrl=')\n          // this seems to be a common behavior for gmx users\n          and not sender.email.domain.domain in (\"gmx.de\", \"gmx.net\")\n          and not (\n            sender.email.domain.domain == \"mail.com\"\n            and any(headers.domains, .root_domain == \"mail.com\")\n          )\n        )\n)\n// apply sender profile elements specific to the sender_email\nand (\n  profile.by_sender_email().prevalence == \"new\"\n  \n  // if they aren't new, there are some condition that still result in a match\n  or (\n    // and have been flagged previous\n    profile.by_sender_email().any_messages_malicious_or_spam\n    // without any false positives\n    and profile.by_sender_email().any_false_positives == false\n  )\n)\n\n// negate highly trusted sender domains unless they fail DMARC authentication\nand (\n  (\n    sender.email.domain.root_domain in $high_trust_sender_root_domains\n    and not headers.auth_summary.dmarc.pass\n  )\n  or sender.email.domain.root_domain not in $high_trust_sender_root_domains\n)\n"
 attack_types:
   - "Credential Phishing"
 tactics_and_techniques:
@@ -14,4 +14,4 @@ detection_methods:
   - "Sender analysis"
 id: "9fab2e1e-96d2-504f-b3dd-8af12f0e553d"
 testing_pr: 2338
-testing_sha: d357227b25d7b2f6487a51298c8b7fbbf83695bd
+testing_sha: 9c89e56d4f43d4c38ca37550b58e7ecf132efa60
