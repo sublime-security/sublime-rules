@@ -1,0 +1,36 @@
+name: "Open Redirect: vconfex.com"
+description: |
+  Message contains use of the vconfex.com redirect. This has been exploited in the wild.
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and any(body.links,
+          .href_url.domain.root_domain == "vconfex.com"
+          and strings.istarts_with(.href_url.path, '/etl.php')
+          and strings.icontains(.href_url.query_params, 'url=')
+          and not strings.icontains(.href_url.query_params,
+                                    'url=(?:https?(?:%3a|:))?(?:%2f|\/){2}[^&]*vconfex\.com(?:\&|\/|$)'
+          )
+  )
+  and not sender.email.domain.root_domain == "vconfex.com"
+
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and not headers.auth_summary.dmarc.pass
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+attack_types:
+  - "Credential Phishing"
+  - "Malware/Ransomware"
+tactics_and_techniques:
+  - "Open redirect"
+detection_methods:
+  - "Sender analysis"
+  - "URL analysis"
+id: "877de339-387a-5d7c-94ca-9094c484fe7b"
+testing_pr: 2371
+testing_sha: 70129223374ea9b715af2d59efb9a5999a6fef13
