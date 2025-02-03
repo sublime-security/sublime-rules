@@ -1,0 +1,27 @@
+name: "Unicode QR Code"
+description: "Identifies messages leveraging Unicode block characters (between U+2580 - U+259F) arranged on consecutive lines to create QR codes. The rule inspects both the overall quantity and specific formatting of these characters, while considering the sender's historical behavior and reputation."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  // count of the lines ending with and then followed by a unicode block
+  and regex.count(body.current_thread.text,
+                  '[\x{2580}-\x{259F}][^\S\r\n]*[\r\n][^\S\r\n]*[\x{2580}-\x{259F}]'
+  ) > 10
+  // the total number of unicode blocks
+  and regex.count(body.current_thread.text, '[\x{2580}-\x{259F}]') > 150
+  and (
+    profile.by_sender_email().prevalence != "common"
+    or (
+      profile.by_sender_email().any_messages_malicious_or_spam
+      and not profile.by_sender_email().any_false_positives
+    )
+  )
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Evasion"
+detection_methods:
+  - "Content analysis"
+  - "Sender analysis"
+  - "QR code analysis"
