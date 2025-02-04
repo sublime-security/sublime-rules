@@ -9,13 +9,12 @@ source: |
   and length(recipients.bcc) == 0
   // abuse involves a popular service
   and sender.email.domain.root_domain in $majestic_million
-
+  
   // message is not from a free mail provider, we have only observed sevice providers abused
   and sender.email.domain.root_domain not in $free_email_providers
   and sender.email.domain.domain not in $free_email_providers
-  
   and not any(recipients.to, .email.email =~ sender.email.email)
-
+  
   // uses Sender Rewrite Scheme indicating the message traversed a distribtion list or other automatic relay
   and strings.icontains(headers.return_path.local_part, "+SRS=")
   
@@ -32,7 +31,11 @@ source: |
               and .email.domain.domain not in $recipient_domains
               and .email.domain.root_domain not in $recipient_domains
             )
-            or .email.domain.root_domain in ("onmicrosoft.com")
+            or (
+              .email.domain.root_domain in ("onmicrosoft.com")
+              // negate onmicrosoft domains within org_domains
+              and not .email.domain.domain in $org_domains
+            )
           )
   )
   // if there are reply-to addresses, ensure they are also not assoicated with the org
