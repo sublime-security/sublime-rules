@@ -5,20 +5,19 @@ type: "rule"
 severity: "medium"
 source: |
   type.inbound
-  // there are less than 10 unique links for convertcart within the body.links
-  and length(distinct(filter(body.links, .href_url.domain.root_domain == "convertcart.com"), .href_url.url)) < 10
-  
   and any(body.links,
-      .href_url.domain.root_domain == "convertcart.com"
-      and strings.iends_with(.href_url.path, '/click')
-      and strings.icontains(.href_url.query_params, 'url=')
-      and not strings.icontains(.href_url.query_params,
-                                'url=(?:https?(?:%3a|:))?(?:%2f|\/){2}[^&]*convertcart\.com(?:\&|\/|$)'
-      )
+          .href_url.domain.root_domain == "convertcart.com"
+          and strings.iends_with(.href_url.path, '/click')
+          and strings.icontains(.href_url.query_params, 'url=')
+          and not regex.icontains(.href_url.query_params,
+                                    'url=(?:https?(?:%3a|:))?(?:%2f|\/){2}[^&]*convertcart\.com(?:\&|\/|$|%2f)'
+          )
+          and not strings.icontains(.href_url.query_params,
+                                    sender.email.domain.root_domain
+          )
   )
   // remove uses that originate from convertcart.com
   and not any(headers.domains, .root_domain == "convertcart.com")
-
   // negate highly trusted sender domains unless they fail DMARC authentication
   and (
     (
