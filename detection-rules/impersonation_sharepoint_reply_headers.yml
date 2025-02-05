@@ -9,32 +9,38 @@ source: |
   and strings.ends_with(headers.in_reply_to, '@odspnotify>')
   and ( // but lacks other reply elements
     not (
-      (
-        strings.istarts_with(subject.subject, "RE:")
-        or strings.istarts_with(subject.subject, "RES:")
-        or strings.istarts_with(subject.subject, "R:")
-        or strings.istarts_with(subject.subject, "ODG:")
-        or strings.istarts_with(subject.subject,
-                                "答复:"
-        ) // response
-        or strings.istarts_with(subject.subject,
-                                "回复:"
-        ) // reply
-        or strings.istarts_with(subject.subject, "AW:")
-        or strings.istarts_with(subject.subject, "TR:")
-        or strings.istarts_with(subject.subject, "FWD:")
-        or strings.istarts_with(subject.subject, "Resposta automática:")
-        or strings.istarts_with(subject.subject, "Automatische Antwort:")
-        or strings.istarts_with(subject.subject, "Autosvar:")
-        or regex.icontains(subject.subject,
-                           '^(?:(?:\[[^\]]+\]\s?|EXT(?:ERNAL)?\s?){0,3}|[[:punct:]]{0,3}\w+[[:punct:]]{0,3}\s)(?:r[ev]|fwd?|tr|aw|automat(ic|ed) reply)\s?:'
-        )
+      strings.istarts_with(subject.subject, "RE:")
+      or strings.istarts_with(subject.subject, "RES:")
+      or strings.istarts_with(subject.subject, "R:")
+      or strings.istarts_with(subject.subject, "ODG:")
+      or strings.istarts_with(subject.subject,
+                              "答复:"
+      ) // response
+      or strings.istarts_with(subject.subject,
+                              "回复:"
+      ) // reply
+      or strings.istarts_with(subject.subject, "AW:")
+      or strings.istarts_with(subject.subject, "TR:")
+      or strings.istarts_with(subject.subject, "FWD:")
+      or strings.istarts_with(subject.subject, "Resposta automática:")
+      or strings.istarts_with(subject.subject, "Automatische Antwort:")
+      or strings.istarts_with(subject.subject, "Autosvar:")
+      or regex.icontains(subject.subject,
+                         '^(?:(?:\[[^\]]+\]\s?|EXT(?:ERNAL)?\s?){0,3}|[[:punct:]]{0,3}\w+[[:punct:]]{0,3}\s)(?:r[ev]|fwd?|tr|aw|automat(ic|ed) reply)\s?:'
       )
     )
     // the sender is the recipient 
     // or the recipients are hidden
     or (
-      sender.email.email in map(recipients.to, .email.email)
+      (
+        sender.email.email in map(recipients.to, .email.email)
+        and sum([
+                  length(recipients.bcc),
+                  length(recipients.to),
+                  length(recipients.cc)
+                ]
+        ) == 1
+      )
       or length(recipients.to) == 0
       or all(recipients.to, .email.email is null or .email.email == "")
     )
@@ -54,7 +60,6 @@ source: |
                                   '(?:from|to|sent|date|cc|subject|wrote):.*shared with you',
                                   '(?:from|to|sent|date|cc|subject|wrote):.*shared the folder .* with you',
                                   '(?:from|to|sent|date|cc|subject|wrote):.*invited you to view a file',
-  
               )
   )
   
