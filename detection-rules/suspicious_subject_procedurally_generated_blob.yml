@@ -1,0 +1,25 @@
+name: "Suspicious subject with long procedurally generated text blob"
+description: "This rule identifies subjects containing long strings of nonsensical or procedurally generated characters, which are often used in phishing or spam campaigns for campaign tracking and identification, as well as to bypass detection filters."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  // "#" symbol, and then letters, numbers or more symbols (-#)
+  and regex.imatch(subject.subject, ".*#[a-z0-9-#]+$")
+  // not JUST numbers
+  and not regex.imatch(subject.subject, ".*#[0-9-]+$")
+  // and not obviously benign
+  and not regex.icontains(subject.subject, "order (confirmation|number)|inv")  
+  // standard negations
+  and not profile.by_sender_email().any_false_positives
+  and not profile.by_sender_email().solicited
+tags:
+ - "Attack surface reduction"
+attack_types:
+  - "Credential Phishing"
+  - "Spam"
+tactics_and_techniques:
+  - "Evasion"
+detection_methods:
+  - "Content analysis"
+  - "Sender analysis"
