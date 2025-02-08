@@ -3,6 +3,8 @@ description: "Detects messages with unusually long local address parts (before t
 type: "rule"
 severity: "low"
 source: |
+  // max length of the local_part for exchange is 315
+  // https://learn.microsoft.com/en-us/exchange/mail-flow/mail-routing/recipient-resolution?view=exchserver-2019&viewFallbackFrom=exchonline-ww
   100 < length(sender.email.local_part)
   // not org_domains
   and not (
@@ -12,11 +14,17 @@ source: |
 
   // negate highly trusted sender domains unless they fail DMARC authentication
   and not (
-      sender.email.domain.root_domain in $high_trust_sender_root_domains
-      and headers.auth_summary.dmarc.pass
+    sender.email.domain.root_domain in $high_trust_sender_root_domains
+    and headers.auth_summary.dmarc.pass
   )
   // no previous false positives on this specific sender
   and not profile.by_sender_email().any_false_positives
+
+  // a common observed benign case of this due to Internet Mail Connector Encapsulated Address (IMCEA)
+  and not (
+    strings.istarts_with(sender.email.local_part, 'imcea')
+    and all(attachments, .content_type == "text/calendar")
+  )
 tags:
   - "Attack surface reduction"
 attack_types:
@@ -29,4 +37,4 @@ detection_methods:
   - "Sender analysis"
 id: "91a9cd45-41a9-51b9-9207-ded98d398d70"
 testing_pr: 2375
-testing_sha: c6a1435f028804b6589fb1c55456ab313e4efa20
+testing_sha: 901569b3e111790b25fa10efe59cc570cc0a4307
