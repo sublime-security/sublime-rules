@@ -9,7 +9,18 @@ source: |
   // not JUST numbers
   and not regex.imatch(subject.subject, ".*#[0-9-]+$")
   // to be safe, negate common benign keywords
-  and not regex.icontains(subject.subject, "order (confirmation|number)|inv")  
+  and not regex.icontains(subject.subject, "order (confirmation|number)|inv")
+  
+  // and 1 other suspicious element
+  and 1 of (
+    any(recipients.to, strings.icontains(sender.display_name, .email.domain.sld)),
+    (
+      regex.imatch(sender.display_name, ".*#[a-z0-9-#]+$")
+      and not regex.imatch(subject.subject, ".*#[0-9-]+$")
+      and not regex.icontains(subject.subject, "order (confirmation|number)|inv")
+    )
+  )
+  
   // standard negations
   and not profile.by_sender_email().any_false_positives
   and not profile.by_sender_email().solicited
