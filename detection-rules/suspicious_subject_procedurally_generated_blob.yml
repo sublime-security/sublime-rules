@@ -2,7 +2,28 @@ name: "Suspicious subject with long procedurally generated text blob"
 description: "This rule identifies subjects containing long strings of nonsensical or procedurally generated characters, which are often used in phishing or spam campaigns for campaign tracking and identification, as well as to bypass detection filters."
 type: "rule"
 severity: "medium"
-source: "type.inbound\n// \"#\" symbol, and then letters, numbers or more symbols (-#)\nand regex.imatch(subject.subject, \".*#[a-z0-9-#]+$\")\n// not JUST numbers\nand not regex.imatch(subject.subject, \".*#[0-9-]+$\")\n// and not obviously benign\nand not regex.icontains(subject.subject, \"order (confirmation|number)|inv\")  \n// standard negations\nand not profile.by_sender_email().any_false_positives\nand not profile.by_sender_email().solicited\n"
+source: |
+  type.inbound
+  // "#" symbol, and then letters, numbers or more symbols (-#)
+  and regex.imatch(subject.subject, ".*#[a-z0-9-#]+$")
+  // not JUST numbers
+  and not regex.imatch(subject.subject, ".*#[0-9-]+$")
+  // to be safe, negate common benign keywords
+  and not regex.icontains(subject.subject, "order (confirmation|number)|inv")
+
+  // and 1 other suspicious element
+  and 1 of (
+    any(recipients.to, strings.icontains(sender.display_name, .email.domain.sld)),
+    (
+      regex.imatch(sender.display_name, ".*#[a-z0-9-#]+$")
+      and not regex.imatch(subject.subject, ".*#[0-9-]+$")
+      and not regex.icontains(subject.subject, "order (confirmation|number)|inv")
+    )
+  )
+
+  // standard negations
+  and not profile.by_sender_email().any_false_positives
+  and not profile.by_sender_email().solicited
 tags:
   - "Attack surface reduction"
 attack_types:
@@ -15,4 +36,4 @@ detection_methods:
   - "Sender analysis"
 id: "e819593d-b60d-5b57-8bf5-837be4111c3f"
 testing_pr: 2394
-testing_sha: f5b79d6924b16c3aeb1d1df96a60b49f5ceb573c
+testing_sha: c473e7a8939a9c6752af1c88bc0f64743a7e706b
