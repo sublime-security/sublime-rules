@@ -24,6 +24,21 @@ source: |
             and not any($org_domains,
                         strings.icontains(..href_url.query_params, .)
             )
+            // remove any links that are to common "signature" sites
+            // this does open up some FNs due to abuse of redirects of these sites
+            // if FNs are obsevered, we should tighten the logic of these to account
+            // for the redirect behavior
+            and not any(['facebook.com', 'x.com', 'twitter.com', 'instagram.com'],
+                        strings.icontains(..href_url.query_params, .)
+            )
+  
+            // remove links which contain the sender domain if the sender doesn't have any malicious messages
+            and not (
+              strings.icontains(.href_url.query_params,
+                                sender.email.domain.root_domain
+              )
+              and profile.by_sender_domain().any_messages_malicious_or_spam == false
+            )
           )
   )
   // apply sender profile elements specific to the sender_email
