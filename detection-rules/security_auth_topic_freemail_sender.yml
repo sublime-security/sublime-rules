@@ -1,0 +1,17 @@
+name: "Security and Authentication From Unsolicited Free Email Sender"
+description: "This rule matches on Security and Authentication topics from unsolicited free email senders."
+type: "rule"
+severity: "high"
+source: "type.inbound\n// if the sender is an unsolicited free email provider, without previously classified FPs in this environment\nand (sender.email.domain.root_domain in $free_email_providers)\nand not profile.by_sender().solicited\nand not profile.by_sender().any_false_positives\n// if the current thread & subject is security and authentication\nand any(beta.ml_topic(coalesce(body.current_thread.text, \" \")).topics,\n    .name == \"Security and Authentication\"\n    and .confidence == \"high\"\n)\n// if the current thread is a malicious NLU\nand any(ml.nlu_classifier(body.current_thread.text).intents,\n        .name in (\"bec\", \"callback_scam\", \"cred_theft\", \"advance_fee\", \"steal_pii\") and .confidence != \"low\"\n)\n// negate if sending to common support or help \nand not all(recipients.to, regex.imatch(.email.local_part, \"care|support|help|reply|contact|info|service|enquiry|complaint|admin|payment|notification|customerservice|hello|hallo|hola\"))\n"
+tags:
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Topic analysis"
+  - "Sender analysis"
+id: "e2b9c989-eab7-588a-8df1-ee2fe0ab2dbe"
+testing_pr: 2360
+testing_sha: b4919b3e6bf37cbb28cb1802918558e2a84e1019
