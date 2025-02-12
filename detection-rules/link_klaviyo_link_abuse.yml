@@ -1,0 +1,50 @@
+name: "Link: Klaviyo Link Abuse"
+description: "Detects inbound messages containing exactly one Klaviyo tracking link (klclick domains) but lacking authentic Klaviyo email headers and sender patterns"
+type: "rule"
+severity: "low"
+source: |
+  type.inbound
+  and any(body.links,
+          .href_url.domain.root_domain in (
+            "klclick.com",
+            "klclick1.com",
+            "klclick2.com",
+            "klclick3.com",
+            "klclick4.com",
+            "klclick5.com",
+            "klclick6.com",
+            "klclick7.com",
+          )
+  )
+  // there is one unique Klaviyo Link in the message
+  and length(distinct(filter(body.links,
+                             .href_url.domain.root_domain in (
+                               "klclick.com",
+                               "klclick1.com",
+                               "klclick2.com",
+                               "klclick3.com",
+                               "klclick4.com",
+                               "klclick5.com",
+                               "klclick6.com",
+                               "klclick7.com",
+                             )
+                      ),
+                      .href_url.url
+             )
+  ) == 1
+  and not any(headers.domains, .root_domain == "klaviyomail.com")
+  and not any(headers.hops, any(.fields, .name == "X-Kmail-Account"))
+  and profile.by_sender_email().prevalence != "common"
+attack_types:
+  - "BEC/Fraud"
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Evasion"
+detection_methods:
+  - "Content analysis"
+  - "Header analysis"
+  - "Sender analysis"
+  - "URL analysis"
+id: "f3d46cfc-0ac3-5c09-ba89-3aafe150ad12"
+testing_pr: 2404
+testing_sha: 6866e55724f405a9c562e36b8c549bce6d3f8fb2
