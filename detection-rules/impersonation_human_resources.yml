@@ -8,7 +8,6 @@ source: |
   and regex.icontains(sender.display_name,
                       '(\bh\W?r\W?\b|human\s?resources|hr depart(ment)?|employee relations)'
   )
-  
   and not (
     strings.icontains(sender.display_name, sender.email.domain.domain)
     and sender.email.domain.tld == "hr"
@@ -45,7 +44,6 @@ source: |
     )
     or any(headers.references, strings.iends_with(., "ccsend.com"))
   )
-  
   and (
     (0 < length(body.links) < 10 or length(attachments) > 0)
     // mass-mailer infra abuse results in an inflated link count due to mailer templates that include links for unsubbing, changing preferences, etc.
@@ -62,11 +60,26 @@ source: |
     )
   )
   // Request and Urgency
-  and any(ml.nlu_classifier(body.current_thread.text).entities,
-          .name == "request"
-  )
-  and any(ml.nlu_classifier(body.current_thread.text).entities,
-          .name in ("urgency", "financial")
+  and (
+    (
+      (length(body.current_thread.text) > 400)
+      and any(ml.nlu_classifier(body.current_thread.text).entities,
+              .name == "request"
+      )
+      and any(ml.nlu_classifier(body.current_thread.text).entities,
+              .name in ("urgency", "financial")
+      )
+    )
+    or (
+      length(body.current_thread.text) < 400
+      and any(attachments,
+              (.file_type in $file_types_images or .file_type == "pdf")
+              and any(file.explode(.),
+                      .scan.qr.type == "url"
+                      and .scan.qr.url.domain.root_domain not in $org_domains
+              )
+      )
+    )
   )
   // additional suspicious indicator
   and (
@@ -85,6 +98,14 @@ source: |
                          and regex.match(.display_text, '[A-Z ]+')
                   ),
     ) < 3
+    or any(attachments,
+           (.file_type in $file_types_images or .file_type == "pdf")
+           and any(file.explode(.),
+                   any(ml.nlu_classifier(.scan.ocr.raw).intents,
+                       .name == "cred_theft"
+                   )
+           )
+    )
   )
   and (
     profile.by_sender().prevalence in ("new", "outlier")
