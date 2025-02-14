@@ -11,25 +11,20 @@ source: |
     sender.email.domain.root_domain in $org_domains
     and headers.auth_summary.dmarc.pass
   )
-  
   // negate highly trusted sender domains unless they fail DMARC authentication
   and not (
     sender.email.domain.root_domain in $high_trust_sender_root_domains
     and headers.auth_summary.dmarc.pass
   )
-  // no previous false positives on this specific sender
-  and not profile.by_sender_email().any_false_positives
   // remove common senders, unless marked malicious
   and not (
     profile.by_sender_email().prevalence == "common"
     and profile.by_sender_email().any_messages_malicious_or_spam == false
   )
-  
-  // a common observed benign case of this due to Internet Mail Connector Encapsulated Address (IMCEA)
-  and not (
-    strings.istarts_with(sender.email.local_part, 'imcea')
-    and all(attachments, .content_type == "text/calendar")
-  )
+  // a common observed benign cases of this due to Internet Mail Connector Encapsulated Address (IMCEA)
+  and not strings.istarts_with(sender.email.local_part, 'imcea')
+  // no previous false positives on this specific sender
+  and not profile.by_sender_email().any_false_positives
 tags:
  - "Attack surface reduction"
 attack_types:
