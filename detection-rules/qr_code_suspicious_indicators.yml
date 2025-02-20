@@ -19,6 +19,7 @@ source: |
           and any(file.explode(.),
                   .scan.qr.type is not null
                   and regex.contains(.scan.qr.data, '\.')
+                  and not (strings.icontains(.scan.qr.data, ',') and .scan.qr.type == 'undefined')
                   // not a json string
                   and not (
                       strings.starts_with(.scan.qr.data, '{')
@@ -40,11 +41,28 @@ source: |
                   // exclude images from WhatsApp (mobile)
                   and not regex.match(.file_name, 'WhatsApp Image \d\d\d\d-\d\d-\d\d at.*.jpe?g')
                   and not (
-                    .scan.exiftool.image_height > 3000
-                    or .scan.exiftool.image_width > 3000
+                    (
+                      .scan.exiftool.image_height > 3000
+                      and .scan.exiftool.image_height is not null
+                    )
+                    or (
+                      .scan.exiftool.image_width > 3000
+                      and .scan.exiftool.image_width is not null
+                    )
                   )
                   // exclude contact cards
                   and not strings.istarts_with(.scan.qr.data, "BEGIN:VCARD")
+  
+                  // negate QR codes to legit Servicio de Administración Tributaria (SAT) Gov links
+                  and not (
+                      .scan.qr.url.domain.root_domain is not null 
+                      and .scan.qr.url.domain.root_domain in ('sat.gob.mx')
+                  )
+                  and not (
+                    .scan.qr.data is not null 
+                    and strings.icontains(.scan.qr.data, 'sat.gob.mx')
+                  )
+                  
           )
       )
       or (
@@ -180,6 +198,7 @@ source: |
                         "on google docs with you",
                         "online doc",
                         "password.*compromised",
+                        "payment advice",
                         "periodic maintenance",
                         "potential(ly)? unauthorized",
                         "refund not approved",
@@ -224,6 +243,7 @@ source: |
         )
         or any($suspicious_subjects, strings.icontains(subject.subject, .))
         or regex.icontains(sender.display_name,
+                           "Accounts.?Payable",
                            "Admin",
                            "Administrator",
                            "Alert",
@@ -340,7 +360,7 @@ source: |
     )
     or profile.by_sender().any_messages_malicious_or_spam
   )
-
+  
   and not profile.by_sender().any_false_positives
   
   // negate highly trusted sender domains unless they fail DMARC authentication
@@ -351,7 +371,6 @@ source: |
     )
     or sender.email.domain.root_domain not in $high_trust_sender_root_domains
   )
-
 attack_types:
   - "Credential Phishing"
 tactics_and_techniques:

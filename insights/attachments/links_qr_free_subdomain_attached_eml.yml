@@ -1,0 +1,20 @@
+name: "QR Code Link to Free Subdomain in Attached EML"
+type: "query"
+source: |
+  map(attachments,
+      map(filter(file.parse_eml(.).attachments,
+                 .file_type in $file_types_images
+                 or .file_extension in $file_extensions_macros
+                 or .file_type == "pdf"
+          ),
+          map(filter(file.explode(.),
+                     .scan.qr.type == "url"
+                     and .scan.qr.url.domain.root_domain in $free_subdomain_hosts
+                     and .scan.qr.url.domain.subdomain is not null
+                     and .scan.qr.url.domain.subdomain != "www"
+              ),
+              .scan.qr.url.url
+          )
+      )
+  )
+severity: "high"

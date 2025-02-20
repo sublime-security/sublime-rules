@@ -9,7 +9,10 @@ source: |
     3 of (
       strings.icontains(body.current_thread.text, "Number of Images:"),
       strings.icontains(body.current_thread.text, "Attachment File Type:"),
+      strings.icontains(body.current_thread.text, "Device Model:"),
       strings.icontains(body.current_thread.text, "Device Name:"),
+      strings.icontains(body.current_thread.text, "Resolution:"),
+      strings.icontains(body.current_thread.text, "File Format:"),
       strings.icontains(body.current_thread.text, "Device Location:")
     )
     or (
@@ -30,7 +33,8 @@ source: |
                                  "Attachment File Type:"
                ),
                strings.icontains(body.current_thread.text, "Device Name:"),
-               strings.icontains(body.current_thread.text, "Device Location:")
+               strings.icontains(body.current_thread.text, "Device Location:"),
+               strings.icontains(body.current_thread.text, "Device Model:")
              )
       )
     )
@@ -38,23 +42,35 @@ source: |
   and length(filter(attachments, .file_type == "pdf")) == 1
   and any(attachments,
           .file_type == "pdf"
-          and any(file.explode(.),
-                  (
-                    strings.ilike(.scan.ocr.raw,
-                                  "*scan date*",
-                                  "*was sent from*",
-                                  "*of pages*",
-                                  "*verif*document*",
-                                  "*scanned file*"
-                    )
-                    or any(ml.nlu_classifier(.scan.ocr.raw).intents,
-                           .name == "cred_theft"
-                    )
-                    or any(ml.logo_detect(..).brands,
-                           .name in ("DocuSign", "Microsoft")
-                    )
+          and (
+            any(file.explode(.),
+                (
+                  strings.ilike(.scan.ocr.raw,
+                                "*scan date*",
+                                "*was sent from*",
+                                "*of pages*",
+                                "*verif*document*",
+                                "*scanned file*"
                   )
-                  and length(.scan.url.urls) == 1
+                  or any(ml.nlu_classifier(.scan.ocr.raw).intents,
+                         .name == "cred_theft"
+                  )
+                  or any(ml.logo_detect(..).brands,
+                         .name in ("DocuSign", "Microsoft")
+                  )
+                )
+                and length(.scan.url.urls) == 1
+            )
+            // encrypted pdf
+            or any(file.explode(.),
+                   any(.scan.exiftool.fields, .key == "Encryption")
+                   or (
+                     .scan.entropy.entropy > 7
+                     and any(.scan.strings.strings,
+                             strings.icontains(., "/Encrypt")
+                     )
+                   )
+            )
           )
   )
   and sender.email.domain.domain not in~ $org_domains

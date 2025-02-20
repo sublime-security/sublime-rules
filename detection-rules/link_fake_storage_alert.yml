@@ -59,11 +59,12 @@ source: |
     or strings.icontains(subject.subject, "exceeded")
     or strings.icontains(subject.subject, "out of")
     or strings.icontains(subject.subject, "icloud")
-    or strings.icontains(subject.subject, "limit")
+    or regex.icontains(subject.subject, '\blimit(?:ed|\b)')
     or strings.icontains(subject.subject, "all storage used")
     or strings.icontains(subject.subject, "compliance")
     or strings.icontains(subject.subject, "max storage")
     or strings.icontains(subject.subject, "storage space")
+    or strings.icontains(subject.subject, "be deleted")
   )
   // netgate links to loopnet.com - a popular commerical property listing service
   and not (
@@ -104,7 +105,15 @@ source: |
     )
     or sender.email.email != "noreply@icloud.com.cn"
   )
-  
+
+  // negate bouncebacks and undeliverables
+  and not any(attachments,
+              .content_type in (
+                "message/global-delivery-status",
+                "message/delivery-status"
+              )
+  )
+
   // negate highly trusted sender domains unless they fail DMARC authentication
   and (
     (

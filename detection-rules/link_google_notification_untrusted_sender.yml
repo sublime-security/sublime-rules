@@ -9,16 +9,19 @@ source: |
   // ignore messages from google[.]com unlesss they fail DMARC authentication
   and (
     (
-      sender.email.domain.root_domain in ("google.com", "youtube.com")
+      sender.email.domain.root_domain in ("google.com", "youtube.com", "nest.com")
       and not headers.auth_summary.dmarc.pass
     )
-    or sender.email.domain.root_domain not in ("google.com", "youtube.com")
+    or sender.email.domain.root_domain not in ("google.com", "youtube.com", "nest.com")
   )
   and any(body.links,
           .href_url.domain.domain == "notifications.google.com"
           and strings.starts_with(.href_url.path, "/g/p/")
   )
-  and any($suspicious_subjects, strings.icontains(subject.subject, .))
+  and (
+    any($suspicious_subjects, strings.icontains(subject.subject, .))
+    or strings.ilike(subject.subject, '*verification*')
+  )
   and (
     (
       profile.by_sender().prevalence in ("new", "outlier")

@@ -1,0 +1,62 @@
+name: "Service Abuse: DocuSign Share From an Unsolicited Reply-To Address"
+description: "DocuSign shares which contain a reply-to address or domain that has not been previously observed by the recipient organization."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  
+  // message is from docusign actual
+  and sender.email.domain.root_domain == 'docusign.net'
+  and not any(headers.reply_to, .email.domain.domain == 'docusign.com')
+  and (headers.auth_summary.spf.pass or headers.auth_summary.dmarc.pass)
+  
+  
+  // not a completed DocuSign
+  // reminders are sent automatically and can be just as malicious as the initial
+  // users often decline malicious ones
+  and not strings.istarts_with(subject.subject, "Completed: ")
+  and not strings.istarts_with(subject.subject, "Here is your signed document: ")
+  and not strings.istarts_with(subject.subject, "Voided: ")
+  
+  and length(headers.reply_to) > 0 
+  // reply-to email address has never been sent an email by the org
+  and not (
+    any(headers.reply_to, .email.email in $recipient_emails)
+    // if the reply-to email address is NOT in free_email_providers, check the domain in recipient_domains
+    or any(filter(headers.reply_to,
+                  // filter the list to only emails that are not in free_email_providers
+                  (
+                    .email.domain.domain not in $free_email_providers
+                    or .email.domain.root_domain not in $free_email_providers
+                  )
+           ),
+           .email.domain.domain in $recipient_domains
+    )
+  )
+  // reply-to address has never sent an email to the org
+  and not (
+    any(headers.reply_to, .email.email in $sender_emails)
+    // if the reply-to address is NOT in free_email_providers, check the domain in sender_domains
+    or any(filter(headers.reply_to,
+                  // filter the list to only emails that are not in free_email_providers
+                  (
+                    .email.domain.domain not in $free_email_providers
+                    or .email.domain.root_domain not in $free_email_providers
+                  )
+           ),
+           .email.domain.domain in $sender_domains
+    )
+  )
+tags:
+ - "Attack surface reduction"
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Evasion"
+  - "Free file host"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Header analysis"
+  - "Sender analysis"
+id: "2f12d616-f47a-5259-8946-ac2e01940f6f"

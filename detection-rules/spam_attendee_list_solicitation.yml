@@ -7,26 +7,99 @@ source: |
   and length(body.current_thread.text) < 2000
   and length(body.links) < 5
   and (
-    regex.icontains(body.current_thread.text,
-                    "(Attendee|Member|Participant|User|Visitor|Registrant|Buyer|Email)(s)?.{0,20}(list|database)"
+    (
+      (
+        any([subject.subject, body.current_thread.text],
+            (
+              regex.icontains(.,
+                              '(?:Attendee|Buyer|Contact|Decision Maker|Email|Member|Participant|Professional|Registrant|User|Visitor)(?:[[:punct:]]*s)?(?:\s\w*){0,9}(?:list(?:\b|[^ei])|database)'
+              )
+              and not (
+                regex.icount(., '(email|contact)(?:[[:punct:]]*s)?(?:\s\w*){0,9}list') == 1
+                and regex.icontains(.,
+                                    '(?:unsub|remove|safe|delete|leave|update|part of|be added)[[:punct:]]*s?(?:\s\w*){0,9}(mailing|email|my)(?:\s\w*){0,9}list(?:\b|[^ei])',
+                                    'email list(?:\b|[^ei])[[:punct:]]*s?(\s\w*){0,5}(?:unsub|remove|safe|delete|leave|up to date|part of|be added)'
+                )
+              )
+            )
+            or regex.icontains(.,
+                               '\b(?:list|database)(?:[[:punct:]]*s)?\b(\s\w*){0,9}(?:Attendee|Buyer|Contact|Decision Maker|Email|Member|Participant|Professional|Registrant|User|Visitor)s?'
+            )
+        )
+      )
+      and regex.icontains(body.current_thread.text,
+                          "(?:interest(s|ed)|accessing|purchas|obtain|acuir|sample)"
+      )
+      and not regex.icontains(body.current_thread.text,
+                              "(?:debit card|transaction.{0,20}processed|receipt)"
+      )
     )
-    or regex.icontains(body.current_thread.text,
-                    "(list|database).{0,20}(Attendee|Member|Participant|User|Visitor|Registrant|Buyer|Email)(s)?"
-    )
-    or regex.icontains(body.current_thread.text,
-                       '((demand|lead\b|marketing).{0,20}(manager|head|lead|supervisor|executive))'
+    // if there are indicators of a previous thread, also inspect the previous thread
+    or (
+      // contains references to the previous thread
+      2 of (
+        regex.icontains(body.current_thread.text, '(?:get|got|had) a chance'),
+        regex.icontains(body.current_thread.text, '(take|move)(\Wthis)?\Wforward'),
+        regex.icontains(body.current_thread.text, '(review|drop me a line about) (my|this)'),
+        regex.icontains(body.current_thread.text,
+                        '(?:below|previous(ly)?|last|prior) (message|email|sent)'
+        ),
+        regex.icontains(body.current_thread.text, 'follow(?:ing)?(-| )up'),
+        regex.icontains(body.current_thread.text, '(?:contact|attendee)s? list'),
+        regex.icontains(body.current_thread.text, '(any|get an) update.{0,50}\?'),
+        regex.icontains(body.current_thread.text, '(heard?|circling) back'),
+        strings.icontains(body.current_thread.text, 'recently sent'),
+        strings.icontains(body.current_thread.text, 'still interested'),
+        regex.icontains(body.current_thread.text, '(swift|quick|short) response'),
+      )
+      and any([body.html.display_text, body.plain.raw],
+              (
+                3 of (
+                  strings.icontains(., "from:"),
+                  strings.icontains(., "to:"),
+                  strings.icontains(., "sent:"),
+                  strings.icontains(., "date:"),
+                  strings.icontains(., "cc:"),
+                  strings.icontains(., "subject:")
+                )
+                or strings.icontains(.,
+                                     strings.concat(sender.display_name,
+                                                    " <",
+                                                    sender.email.email,
+                                                    "> wrote:"
+                                     )
+                )
+              )
+              // match _after_ the previous thread indciators
+              and (
+                regex.icontains(.,
+                                '(?:from|to|sent|date|cc|subject|wrote):.*(?:Attendee|Buyer|Contact|Decision Maker|Email|Member|Participant|Professional|Registrant|User|Visitor)(?:[[:punct:]]*s)?(?:\s\w*){0,9}(?:list(?:\b|[^ei])|database)'
+                )
+                or regex.icontains(.,
+                                   '(?:from|to|sent|date|cc|subject|wrote):.*(?:list(?:\b|[^ei])|database)(?:[[:punct:]]*s)?(\s\w*){0,9}(?:Attendee|Buyer|Contact|Decision Maker|Email|Member|Participant|Professional|Registrant|User|Visitor)s?'
+                )
+                or (
+                  2 of (
+                    strings.icontains(., "provide counts"),
+                    regex.icontains(., "(?:verified|fresh) data"),
+                    strings.icontains(., "precise targeting"),
+                    strings.icontains(., "deliverability"),
+                    regex.icontains(., "target (verticals|regions)")
+                  )
+                  and regex.icontains(., '(?:list(?:\b|[^ei])|database)')
+                )
+              )
+      )
     )
   )
-  and regex.icontains(body.current_thread.text,
-                      "(interested|accessing|purchas|obtain|acuir|sample)"
-  )
-  and not regex.icontains(body.current_thread.text,
-                    "(debit card|transaction.{0,20}processed)"
+  // negate Zendesk support tickets
+  and not any(body.links,
+            .href_url.domain.root_domain in ('zendesk.com')
+            and .display_text == 'Zendesk'
   )
   
   and not profile.by_sender().solicited
   and not profile.by_sender().any_false_positives
-
 tags:
   - "Attack surface reduction"
 attack_types:

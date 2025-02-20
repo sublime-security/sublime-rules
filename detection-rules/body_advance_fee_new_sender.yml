@@ -24,7 +24,7 @@ source: |
     or sender.email.domain.tld in $suspicious_tlds
   )
   and (
-    any(ml.nlu_classifier(body.current_thread.text).tags,
+    any(ml.nlu_classifier(body.current_thread.text).intents,
         .name == "advance_fee" and .confidence in ("medium", "high")
     )
     or (
@@ -33,16 +33,27 @@ source: |
                           '(donation|inheritence|\$\d,\d{3}\,\d{3}|lottery)'
       )
       and (
-        not (
+        (
           (
-            strings.istarts_with(subject.subject, "RE:")
-            // out of office auto-reply
-            or strings.istarts_with(subject.subject, "Automatic reply:")
-          )
-          and (
             length(headers.references) > 0
-            or any(headers.hops,
-                   any(.fields, strings.ilike(.name, "In-Reply-To"))
+            or not any(headers.hops,
+                       any(.fields, strings.ilike(.name, "In-Reply-To"))
+            )
+          )
+          and not (
+            (
+              strings.istarts_with(subject.subject, "RE:")
+              // out of office auto-reply
+              or strings.istarts_with(subject.subject, "Automatic reply:")
+              or strings.istarts_with(subject.subject, "R:")
+              or strings.istarts_with(subject.subject, "ODG:")
+              or strings.istarts_with(subject.subject, "答复:")
+              or strings.istarts_with(subject.subject, "AW:")
+              or strings.istarts_with(subject.subject, "TR:")
+              or strings.istarts_with(subject.subject, "FWD:")
+              or regex.icontains(subject.subject,
+                                 '^(\[[^\]]+\]\s?){0,3}(re|fwd?)\s?:'
+              )
             )
           )
         )
