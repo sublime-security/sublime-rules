@@ -18,18 +18,19 @@ source: |
                   // recipient email address is present in the URL, a common tactic used in credential phishing attacks and the url is not in $org_domains
                   and (
                     any(recipients.to,
-                        strings.icontains(..scan.qr.data, .email.email)
-                        and .email.domain.valid
+                        .email.domain.valid
+                        and (
+                          strings.icontains(..scan.qr.data, .email.email)
+                          or (
+                          // recipient email found in qr data base64 encoded
+                            any(beta.scan_base64(..scan.qr.data),
+                                strings.icontains(., ..email.email)
+                            )
+                          )
+                        )
                     )
-                    // recipient email is found base64 encoded
-                    or any(recipients.to,
-                           .email.domain.valid
-                           and any(beta.scan_base64(..scan.qr.data),
-                                   strings.icontains(., ..email.email)
-                           )
-                    )
+                    and .scan.qr.url.domain.root_domain not in $org_domains
                   )
-                  and .scan.qr.url.domain.root_domain not in $org_domains
           )
   )
   
