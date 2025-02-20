@@ -1,0 +1,24 @@
+name: "Link: QR Code with suspicious language (untrusted sender)"
+description: |
+  This rule analyzes image attachments for QR Codes that contain URLs including the recipient's email address. It ensures that the URLs do not link to any organizational domains.
+  Additionally, it examines the email body using Natural Language Processing to detect credential phishing language.In cases of null bodies,
+  the rule is conditioned to check the image for any suspicious terms.
+type: "rule"
+severity: "medium"
+source: "type.inbound\n\n// check image attachments for QR code, will want to add message.screenshot functionality here when it's ready\n// and length(attachments) < 10\nand any(attachments,\n        (.file_type in $file_types_images or .file_type == \"pdf\")\n        and any(file.explode(.),\n                .scan.qr.type == \"url\"\n\n                // recipient email address is present in the URL, a common tactic used in credential phishing attacks and the url is not in $org_domains\n                and (\n                  any(recipients.to,\n                      strings.icontains(..scan.qr.data, .email.email)\n                      and .email.domain.valid\n                  )\n                  // recipient email is found base64 encoded\n                  or any(recipients.to,\n                         .email.domain.valid\n                         and any(beta.scan_base64(..scan.qr.data),\n                                 strings.icontains(., ..email.email)\n                         )\n                  )\n                )\n                and .scan.qr.url.domain.root_domain not in $org_domains\n        )\n)\n\n// NLU has identified cred_theft language with high confidence\nand (\n  any(ml.nlu_classifier(body.current_thread.text).intents,\n      .name == \"cred_theft\" and .confidence == \"high\"\n  )\n  or \n  // the attachment contains suspicious strings\n  (\n    any(attachments,\n        (.file_type in $file_types_images or .file_type == \"pdf\")\n        and any(file.explode(.),\n                any(.scan.strings.strings,\n                    regex.icontains(.,\n                                    '(\\b2fa\\b|\\bQ.?R\\.?\\s?\\b|MFA|Muti[ -]?Factor Auth(entication)?)'\n                    )\n                )\n        )\n    )\n  )\n)\nand (\n  profile.by_sender().prevalence in (\"new\", \"outlier\")\n  or (\n    profile.by_sender().any_messages_malicious_or_spam\n    and not profile.by_sender().any_false_positives\n  )\n)\n\n// negate highly trusted sender domains unless they fail DMARC authentication\nand (\n  (\n    sender.email.domain.root_domain in $high_trust_sender_root_domains\n    and not headers.auth_summary.dmarc.pass\n  )\n  or sender.email.domain.root_domain not in $high_trust_sender_root_domains\n)\n"
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "QR code"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Computer Vision"
+  - "Natural Language Understanding"
+  - "QR code analysis"
+  - "Sender analysis"
+  - "URL analysis"
+id: "25a84d1c-9578-53e3-98a7-ca9b43abb28b"
+testing_pr: 2415
+testing_sha: 6219c005e91c2b8c321e8bca9630509581bc7195
