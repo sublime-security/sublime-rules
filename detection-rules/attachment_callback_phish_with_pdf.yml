@@ -27,76 +27,67 @@ source: |
             .file_extension == "pdf"
             and (
               // get the length of the attached pdf
-              any(file.explode(.),
-                  .depth == 0 and .scan.exiftool.page_count < 3
-              )
+              any(file.explode(.), .depth == 0 and .scan.exiftool.page_count < 3)
               // check that any _single_ result in the file.explode matches these conditions
               and any(file.explode(.),
-                  length(.scan.ocr.raw) > 60
-                  // 4 of the following strings are found        
-                  and (
-                    4 of (
-                      strings.icontains(.scan.ocr.raw, "purchase"),
-                      strings.icontains(.scan.ocr.raw, "payment"),
-                      strings.icontains(.scan.ocr.raw, "transaction"),
-                      strings.icontains(.scan.ocr.raw, "subscription"),
-                      strings.icontains(.scan.ocr.raw, "antivirus"),
-                      strings.icontains(.scan.ocr.raw, "order"),
-                      strings.icontains(.scan.ocr.raw, "support"),
-                      strings.icontains(.scan.ocr.raw, "help line"),
-                      strings.icontains(.scan.ocr.raw, "receipt"),
-                      strings.icontains(.scan.ocr.raw, "invoice"),
-                      strings.icontains(.scan.ocr.raw, "call"),
-                      strings.icontains(.scan.ocr.raw, "helpdesk"),
-                      strings.icontains(.scan.ocr.raw, "cancel"),
-                      strings.icontains(.scan.ocr.raw, "renew"),
-                      strings.icontains(.scan.ocr.raw, "refund"),
-                      strings.icontains(.scan.ocr.raw, "amount"),
-                      strings.icontains(.scan.ocr.raw, "crypto"),
-                      strings.icontains(.scan.ocr.raw, "wallet address"),
-                      regex.icontains(.scan.ocr.raw, '\$\d{3}\.\d{2}\b'),
-                      regex.icontains(.scan.ocr.raw,
-                                      '(\+\d|1.(\()?\d{3}(\))?\D\d{3}\D\d{4})'
-                      ),
-                      regex.icontains(.scan.ocr.raw,
-                                      '\+?(\d{1,2})?\s?\(?\d{3}\)?[\s\.\-⋅]{0,5}\d{3}[\s\.\-⋅]{0,5}\d{4}'
+                      length(.scan.ocr.raw) > 60
+                      // 4 of the following strings are found        
+                      and (
+                        4 of (
+                          strings.icontains(.scan.ocr.raw, "purchase"),
+                          strings.icontains(.scan.ocr.raw, "payment"),
+                          strings.icontains(.scan.ocr.raw, "transaction"),
+                          strings.icontains(.scan.ocr.raw, "subscription"),
+                          strings.icontains(.scan.ocr.raw, "antivirus"),
+                          strings.icontains(.scan.ocr.raw, "order"),
+                          strings.icontains(.scan.ocr.raw, "support"),
+                          strings.icontains(.scan.ocr.raw, "help line"),
+                          strings.icontains(.scan.ocr.raw, "receipt"),
+                          strings.icontains(.scan.ocr.raw, "invoice"),
+                          strings.icontains(.scan.ocr.raw, "call"),
+                          strings.icontains(.scan.ocr.raw, "helpdesk"),
+                          strings.icontains(.scan.ocr.raw, "cancel"),
+                          strings.icontains(.scan.ocr.raw, "renew"),
+                          strings.icontains(.scan.ocr.raw, "refund"),
+                          strings.icontains(.scan.ocr.raw, "amount"),
+                          strings.icontains(.scan.ocr.raw, "charged"),
+                          strings.icontains(.scan.ocr.raw, "crypto"),
+                          strings.icontains(.scan.ocr.raw, "wallet address"),
+                          regex.icontains(.scan.ocr.raw, '\$\d{3}\.\d{2}\b'),
+                          regex.icontains(.scan.ocr.raw,
+                                          '(\+\d|1.(\()?\d{3}(\))?\D\d{3}\D\d{4})'
+                          ),
+                          regex.icontains(.scan.ocr.raw,
+                                          '\+?(\d{1,2})?\s?\(?\d{3}\)?[\s\.\-⋅]{0,5}\d{3}[\s\.\-⋅]{0,5}\d{4}'
+                          )
+                        )
                       )
-                    )
-                  )
-  
-                  // 1 of the following strings is found, representing common Callback brands          
-                  and 1 of (
-                    strings.icontains(.scan.ocr.raw, "geek squad"),
-                    strings.icontains(.scan.ocr.raw, "lifelock"),
-                    strings.icontains(.scan.ocr.raw, "best buy"),
-                    strings.icontains(.scan.ocr.raw, "mcafee"),
-                    regex.icontains(.scan.ocr.raw, "ma?c.?fee"),
-                    strings.icontains(.scan.ocr.raw, "norton"),
-                    strings.icontains(.scan.ocr.raw, "ebay"),
-                    strings.icontains(.scan.ocr.raw, "paypal"),
-                    strings.icontains(.scan.ocr.raw, "starz"),
-                    // suspicious attachment name from the attachment object not file.explode() output
-                    (
-                      regex.icontains(..file_name, 'INV(OICE)?(?:_|\s)?\d+(.pdf)$')
-                    )
-                  )
-                  // Negate bank statements
-                  and not (
-                    2 of (
-                      strings.icontains(.scan.ocr.raw, "opening balance"),
-                      strings.icontains(.scan.ocr.raw, "closing balance"),
-                      strings.icontains(.scan.ocr.raw, "direct debit"),
-                      strings.icontains(.scan.ocr.raw, "interest"),
-                      strings.icontains(.scan.ocr.raw, "account balance"),
-                    )
-                  )
+                      and (
+                        // this section is synced with attachment_callback_phish_with_img.yml
+                        regex.icontains(.scan.ocr.raw,
+                                        '(p.{0,3}a.{0,3}y.{0,3}p.{0,3}a.{0,3}l|ma?c.?fee|n[o0]rt[o0]n|geek.{0,5}squad|ebay|symantec|best buy|lifel[o0]c|secure anywhere|starz)'
+                        )
+                        // suspicious attachment name from the attachment object not file.explode() output
+                        or regex.icontains(..file_name,
+                                           'INV(OICE)?(?:_|\s)?\d+(.pdf)$'
+                        )
+                      )
+                      // Negate bank statements
+                      and not (
+                        2 of (
+                          strings.icontains(.scan.ocr.raw, "opening balance"),
+                          strings.icontains(.scan.ocr.raw, "closing balance"),
+                          strings.icontains(.scan.ocr.raw, "direct debit"),
+                          strings.icontains(.scan.ocr.raw, "interest"),
+                          strings.icontains(.scan.ocr.raw, "account balance"),
+                        )
+                      )
               )
-            
-            or any(ml.logo_detect(.).brands,
-                   .name in ("PayPal", "Norton", "GeekSquad", "Ebay")
+              or any(ml.logo_detect(.).brands,
+                     .name in ("PayPal", "Norton", "GeekSquad", "Ebay")
+              )
             )
           )
-  )
   )
   and (
     (
@@ -124,7 +115,6 @@ source: |
     )
     or (length(headers.references) == 0 or length(body.current_thread.text) < 10)
   )
-
 attack_types:
   - "Callback Phishing"
 tactics_and_techniques:
