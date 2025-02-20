@@ -51,41 +51,44 @@ source: |
                   // recipient email address is present in the URL, a common tactic used in credential phishing attacks 
                   and any(recipients.to,
                           (
-                            strings.icontains(..scan.qr.data, .email.email)
-                            and (
-                              .email.domain.valid
-                              or strings.icontains(.display_name, "undisclosed")
+                            (
+                              strings.icontains(..scan.qr.data, .email.email)
+                              or any(beta.scan_base64(..scan.qr.data),
+                                     strings.icontains(., ..email.email)
+                              )
                             )
                           )
-  
-                          // the recipients sld is in the senders display name
-                          or any(recipients.to,
-                                 strings.icontains(sender.display_name,
-                                                   .email.domain.sld
-                                 )
-                          )
-  
-                          // the recipient local is in the body  
-                          or any(recipients.to,
-                                 strings.icontains(body.current_thread.text,
-                                                   .email.local_part
-                                 )
-                          )
-  
-                          // or the body is null 
-                          or body.current_thread.text is null
-                          or body.current_thread.text == ""
-  
-                          // or the subject contains authentication/urgency verbiage
-                          or regex.contains(subject.subject,
-                                            "(Authenticat(e|or|ion)|2fa|Multi.Factor|(qr|bar).code|action.require|alert|Att(n|ention):)"
-                          )
-  
-                          // high confidence cred theft in body
-                          or any(ml.nlu_classifier(body.current_thread.text).intents,
-                                 .name == "cred_theft" and .confidence in ("high")
+                          and (
+                            .email.domain.valid
+                            or strings.icontains(.display_name, "undisclosed")
                           )
                   )
+              )
+  
+              // the recipients sld is in the senders display name
+              or any(recipients.to,
+                     strings.icontains(sender.display_name, .email.domain.sld)
+              )
+  
+              // the recipient local is in the body  
+              or any(recipients.to,
+                     strings.icontains(body.current_thread.text,
+                                       .email.local_part
+                     )
+              )
+  
+              // or the body is null 
+              or body.current_thread.text is null
+              or body.current_thread.text == ""
+  
+              // or the subject contains authentication/urgency verbiage
+              or regex.contains(subject.subject,
+                                "(Authenticat(e|or|ion)|2fa|Multi.Factor|(qr|bar).code|action.require|alert|Att(n|ention):)"
+              )
+  
+              // high confidence cred theft in body
+              or any(ml.nlu_classifier(body.current_thread.text).intents,
+                     .name == "cred_theft" and .confidence in ("high")
               )
             )
           )
