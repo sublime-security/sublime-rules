@@ -1,0 +1,49 @@
+name: "Impersonation: Fake Gmail Attachment"
+description: "Message detects fake Gmail attachments by inspecting the body of a message for elements found within Gmail's user interface for attachment. In expected use, these elements only appears within the gmail WebUI and not within the body of message. The presence of this within message indicates a fake attachment."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and any([body.html.display_text, body.current_thread.text, body.plain.raw],
+          (
+            strings.icontains(., 'Scanned by Gmail')
+            or (
+              0 < regex.icount(., '\.pdf|\.(doc|xls|ppt)x?') < 3
+              and any(body.links,
+                      regex.icontains(.display_text, 'downl(oa|ao)d all')
+              )
+              and length(body.links) < 4
+            )
+          )
+          and regex.icontains(.,
+                              '[KMG]b\b'
+          ) // file size
+  )
+
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and not headers.auth_summary.dmarc.pass
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+  // if the sender has been marked as malicious, but has FPs, don't alert
+  and (
+    (
+      profile.by_sender().any_messages_malicious_or_spam
+      and not profile.by_sender().any_false_positives
+    )
+    or not profile.by_sender().any_messages_malicious_or_spam
+  )
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+detection_methods:
+  - "Content analysis"
+  - "File analysis"
+  - "Sender analysis"
+id: "0f5a4e14-3a9a-5354-a5d7-faa1268dd4d4"
+testing_pr: 2422
+testing_sha: 7e0f40e0727e51e98d724dfce7dfc48f23a78455
