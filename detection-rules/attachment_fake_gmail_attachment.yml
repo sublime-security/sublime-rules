@@ -5,8 +5,19 @@ severity: "high"
 source: |
   type.inbound
   and any([body.html.display_text, body.current_thread.text, body.plain.raw],
-          strings.icontains(., 'Scanned by Gmail')
-          and regex.icontains(., '[KM]b\b')
+          (
+            strings.icontains(., 'Scanned by Gmail')
+            or (
+              0 < regex.icount(., '\.pdf|\.(doc|xls|ppt)x?') < 3
+              and any(body.links,
+                      regex.icontains(.display_text, 'downl(oa|ao)d all')
+              )
+              and length(body.links) < 4
+            )
+          )
+          and regex.icontains(.,
+                              '[KMG]b\b'
+          ) // file size
   )
   
   // negate highly trusted sender domains unless they fail DMARC authentication
