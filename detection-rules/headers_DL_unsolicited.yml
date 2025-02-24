@@ -16,8 +16,35 @@ source: |
   and not any(recipients.to, .email.email =~ sender.email.email)
   
   // uses Sender Rewrite Scheme indicating the message traversed a distribtion list or other automatic relay
-  and strings.icontains(headers.return_path.local_part, "+SRS=")
-  
+  and (
+    strings.icontains(headers.return_path.local_part, "+SRS=")
+    // when the receipient is a group controlled by the final recipient
+    // the return_path header can be overwritten
+    // check the SPF designator for evidence of SRS 
+    or strings.icontains(headers.auth_summary.spf.details.designator, "+SRS=")
+    or any(headers.hops,
+           strings.icontains(.authentication_results.spf_details.designator,
+                             '+SRS='
+           )
+    )
+    // use the SPF recevied "mailbox" to find suspicious forwarding paths
+    or length(distinct(filter(map(filter(headers.hops,
+                                         .received.mailbox.raw is not null
+                                  ),
+                                  .received.mailbox.raw
+                              ),
+                              not strings.icontains(., mailbox.email.email)
+                              and not strings.iends_with(.,
+                                                         strings.concat(mailbox.email.domain.root_domain,
+                                                                        '>'
+                                                         )
+                              )
+                       ),
+                       // distict the
+                       .
+              )
+    ) > 1
+  )
   // the sender and recipient is not in $org_domains
   and sender.email.domain.domain not in $org_domains
   // the recipient has never sent an email to the org
