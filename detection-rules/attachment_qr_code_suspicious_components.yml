@@ -5,11 +5,15 @@ type: "rule"
 severity: "medium"
 source: |
   type.inbound
-  and 1 <= length(attachments) < 3
+  and 1 <= length(attachments) < 20
   
   // Inspects image attachments for QR codes
   and any(attachments,
-          (.file_type in $file_types_images or .file_type == "pdf")
+          (
+            .file_type in $file_types_images
+            or .file_type == "pdf"
+            or .file_extension in $file_extensions_macros
+          )
           and (
             any(file.explode(.),
                 .scan.qr.type == "url"
@@ -62,18 +66,29 @@ source: |
                     )
   
                     // exclude google maps
-                    and not strings.starts_with(.scan.qr.url.url, 'https://goo.gl/maps')
-                    and not strings.starts_with(.scan.qr.url.url, 'https://maps.app.goo.gl')
+                    and not strings.starts_with(.scan.qr.url.url,
+                                                'https://goo.gl/maps'
+                    )
+                    and not strings.starts_with(.scan.qr.url.url,
+                                                'https://maps.app.goo.gl'
+                    )
                   )
   
                   // the QR code url is a bing open redirect
-                  or .scan.qr.url.domain.root_domain == 'bing.com' and .scan.qr.url.path =~ '/ck/a'
+                  or (
+                    .scan.qr.url.domain.root_domain == 'bing.com'
+                    and .scan.qr.url.path =~ '/ck/a'
+                  )
+                  // QR code contains non ascii chars
+                  or regex.contains(.scan.qr.url.url, '[^\x00-\x7F]')
                   or (
   
                     // usap-dc open redirect
                     .scan.qr.url.domain.root_domain == "usap-dc.org"
                     and .scan.qr.url.path =~ "/tracker"
-                    and strings.starts_with(.scan.qr.url.query_params, "type=dataset&url=http")
+                    and strings.starts_with(.scan.qr.url.query_params,
+                                            "type=dataset&url=http"
+                    )
                   )
                 )
             )
@@ -89,7 +104,7 @@ source: |
       and not profile.by_sender().any_false_positives
     )
   )
-
+  
   // negate highly trusted sender domains unless they fail DMARC authentication
   and (
     (
