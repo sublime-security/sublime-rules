@@ -8,6 +8,17 @@ severity: "low"
 source: |
   type.inbound
   and length(filter(body.links, .display_text is not null)) < 10
+  and not (
+    ml.nlu_classifier(body.current_thread.text).language == "english"
+    and any(beta.ml_topic(body.html.display_text).topics,
+            .name in (
+              "News and Current Events",
+              "Newsletters and Digests",
+              "Advertising and Promotions"
+            )
+            and .confidence == "high"
+    )
+  )
   and (
     (
       any(ml.nlu_classifier(strings.replace_confusables(body.current_thread.text)).intents,
