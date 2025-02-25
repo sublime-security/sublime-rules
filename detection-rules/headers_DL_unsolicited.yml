@@ -28,21 +28,34 @@ source: |
            )
     )
     // use the SPF recevied "mailbox" to find suspicious forwarding paths
-    or length(distinct(filter(map(filter(headers.hops,
-                                         .received.mailbox.raw is not null
-                                  ),
-                                  .received.mailbox.raw
-                              ),
-                              not strings.icontains(., mailbox.email.email)
-                              and not strings.iends_with(.,
-                                                         strings.concat(mailbox.email.domain.root_domain,
-                                                                        '>'
-                                                         )
-                              )
-                       ),
-                       // distict the
-                       .
-              )
+    or length(
+        // distinct will be used to create a unique list of .received.mailbox.raw
+        distinct(
+            // map is used to extract just the .received.mailbox.raw from each header.hops
+            map(
+                // filter used to only find header.hops where the .received.mailbox.raw object is not null
+                filter(headers.hops,
+                  // 
+                  .received.mailbox.raw is not null
+                  // the .received.mailbox.raw within the headers should not be the mailbox the message
+                  // landed in
+                  and not strings.icontains(.received.mailbox.raw, mailbox.email.email)
+                  // it should not be within the org_domains
+                  and not any($org_domains,
+                    strings.iends_with(
+                      ..received.mailbox.raw,
+                      strings.concat(. , '>'))
+                  )
+                  // the mailbox root_domain should not be in the received.mailbox.raw
+                  and not strings.iends_with(
+                    .received.mailbox.raw,
+                    strings.concat(mailbox.email.domain.root_domain, '>')
+                  )
+              ),
+              .received.mailbox.raw
+            ),
+          .
+        )
     ) >= 1
   )
   // the sender and recipient is not in $org_domains
