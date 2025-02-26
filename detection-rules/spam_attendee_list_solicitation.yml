@@ -15,15 +15,15 @@ source: |
                               '(?:Attendee|Buyer|Contact|Decision Maker|Email|Member|Participant|Professional|Registrant|User|Visitor)(?:[[:punct:]]*s)?(?:\s\w*){0,9}(?:list(?:\b|[^ei])|database)'
               )
               and not (
-                regex.icount(., 'email(?:[[:punct:]]*s)?(?:\s\w*){0,9}list') == 1
+                regex.icount(., '(email|contact)(?:[[:punct:]]*s)?(?:\s\w*){0,9}list') == 1
                 and regex.icontains(.,
-                                    '(?:unsub|remove|safe|delete|leave|update|part of|be added)[[:punct:]]*s?(?:\s\w*){0,9}(mailing|email)(?:\s\w*){0,9}list(?:\b|[^ei])',
+                                    '(?:unsub|remove|safe|delete|leave|update|part of|be added|safe)[[:punct:]]*s?(?:\s\w*){0,9}(mailing|email|my|sender)(?:\s\w*){0,9}list(?:\b|[^ei])',
                                     'email list(?:\b|[^ei])[[:punct:]]*s?(\s\w*){0,5}(?:unsub|remove|safe|delete|leave|up to date|part of|be added)'
                 )
               )
             )
             or regex.icontains(.,
-                               '(?:list|database)(?:[[:punct:]]*s)?(\s\w*){0,9}(?:Attendee|Buyer|Contact|Decision Maker|Email|Member|Participant|Professional|Registrant|User|Visitor)s?'
+                               '\b(?:list|database)(?:[[:punct:]]*s)?\b(\s\w*){0,9}(?:Attendee|Buyer|Contact|Decision Maker|Email|Member|Participant|Professional|Registrant|User|Visitor)s?'
             )
         )
       )
@@ -39,15 +39,21 @@ source: |
       // contains references to the previous thread
       2 of (
         regex.icontains(body.current_thread.text, '(?:get|got|had) a chance'),
+        regex.icontains(body.current_thread.text, '(take|move)(\Wthis)?\Wforward'),
+        regex.icontains(body.current_thread.text, '(review|drop me a line about) (my|this|it)'),
         regex.icontains(body.current_thread.text,
-                        '(?:below|previous|last|prior) email'
+                        '(?:below|previous(ly)?|last|prior) (message|email|sent)'
         ),
-        regex.icontains(body.current_thread.text, 'follow(?:ing)? up'),
+        regex.icontains(body.current_thread.text,
+                        '(sent).{0,50}(e?mail|message) (?:below|previous(ly)?|last|prior)'
+        ),
+        regex.icontains(body.current_thread.text, 'follow(?:ing)?(-| )up'),
         regex.icontains(body.current_thread.text, '(?:contact|attendee)s? list'),
         regex.icontains(body.current_thread.text, '(any|get an) update.{0,50}\?'),
-        strings.icontains(body.current_thread.text, 'heard back'),
+        regex.icontains(body.current_thread.text, '(heard?|circling) back'),
         strings.icontains(body.current_thread.text, 'recently sent'),
         strings.icontains(body.current_thread.text, 'still interested'),
+        regex.icontains(body.current_thread.text, 'did you (get|receive) (it|my (message|e?mail))'),
         regex.icontains(body.current_thread.text, '(swift|quick|short) response'),
       )
       and any([body.html.display_text, body.plain.raw],
@@ -71,17 +77,18 @@ source: |
               // match _after_ the previous thread indciators
               and (
                 regex.icontains(.,
-                                '(?:from|to|sent|date|cc|subject|wrote):.*(?:Attendee|Buyer|Contact|Decision Maker|Email|Member|Participant|Professional|Registrant|User|Visitor)(?:[[:punct:]]*s)?(?:\s\w*){0,9}(?:list(?:\b|[^ei])|database)'
+                                '(?:from|to|sent|date|cc|subject|wrote):(.|\W)*(?:Attendee|Buyer|Contact|Decision Maker|Email|Member|Participant|Professional|Registrant|User|Visitor|Mailing)(?:[[:punct:]]*s)?(?:\s\w*){0,9}(?:list(?:\b|[^ei])|database)'
                 )
                 or regex.icontains(.,
-                                   '(?:from|to|sent|date|cc|subject|wrote):.*(?:list(?:\b|[^ei])|database)(?:[[:punct:]]*s)?(\s\w*){0,9}(?:Attendee|Buyer|Contact|Decision Maker|Email|Member|Participant|Professional|Registrant|User|Visitor)s?'
+                                   '(?:from|to|sent|date|cc|subject|wrote):(.|\W)*(?:list(?:\b|[^ei])|database)(?:[[:punct:]]*s)?(\s\w*){0,9}(?:Attendee|Buyer|Contact|Decision Maker|Email|Member|Participant|Professional|Registrant|User|Visitor|Mailing)s?'
                 )
                 or (
                   2 of (
                     strings.icontains(., "provide counts"),
                     regex.icontains(., "(?:verified|fresh) data"),
                     strings.icontains(., "precise targeting"),
-                    strings.icontains(., "deliverability")
+                    strings.icontains(., "deliverability"),
+                    regex.icontains(., "target (verticals|regions|criteria)")
                   )
                   and regex.icontains(., '(?:list(?:\b|[^ei])|database)')
                 )
@@ -94,7 +101,7 @@ source: |
             .href_url.domain.root_domain in ('zendesk.com')
             and .display_text == 'Zendesk'
   )
-
+  
   and not profile.by_sender().solicited
   and not profile.by_sender().any_false_positives
 tags:
