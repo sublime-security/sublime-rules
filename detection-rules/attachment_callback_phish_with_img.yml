@@ -31,43 +31,69 @@ source: |
   and any(attachments,
           // exclude images taken with mobile cameras and screenshots from android
           .file_type in $file_types_images
-          and any(file.explode(.),
-                  not any(.scan.exiftool.fields,
-                          .key == "Model"
-                          or (
-                            .key == "Software"
-                            and strings.starts_with(.value, "Android")
-                          )
-                  )
-                  // exclude images taken with mobile cameras and screenshots from Apple
-                  and not any(.scan.exiftool.fields,
-                              .key == "DeviceManufacturer"
-                              and .value == "Apple Computer Inc."
-                  )
-                  and not any(.scan.exiftool.fields,
-                              .key == "UserComment" and .value == "Screenshot"
-                  )
-                  and 4 of (
-                    strings.icontains(.scan.ocr.raw, "purchase"),
-                    strings.icontains(.scan.ocr.raw, "subscription"),
-                    strings.icontains(.scan.ocr.raw, "antivirus"),
-                    strings.icontains(.scan.ocr.raw, "order"),
-                    strings.icontains(.scan.ocr.raw, "support"),
-                    strings.icontains(.scan.ocr.raw, "receipt"),
-                    strings.icontains(.scan.ocr.raw, "amount"),
-                    strings.icontains(.scan.ocr.raw, "charged"),
-                    strings.icontains(.scan.ocr.raw, "invoice"),
-                    strings.icontains(.scan.ocr.raw, "call"),
-                    strings.icontains(.scan.ocr.raw, "cancel"),
-                    strings.icontains(.scan.ocr.raw, "renew"),
-                    strings.icontains(.scan.ocr.raw, "refund"),
-                    strings.icontains(.scan.ocr.raw, "+1")
-                  )
-          )
-          and any(file.explode(.),
+          and (
+            any(file.explode(.),
+                not any(.scan.exiftool.fields,
+                        .key == "Model"
+                        or (
+                          .key == "Software"
+                          and strings.starts_with(.value, "Android")
+                        )
+                )
+                // exclude images taken with mobile cameras and screenshots from Apple
+                and not any(.scan.exiftool.fields,
+                            .key == "DeviceManufacturer"
+                            and .value == "Apple Computer Inc."
+                )
+                and not any(.scan.exiftool.fields,
+                            .key == "UserComment" and .value == "Screenshot"
+                )
+                // 4 of the following strings are found        
+                and 4 of (
+                  // this section is synced with attachment_callback_phish_with_pdf.yml and body_callback_phishing_no_attachment.yml
+                  strings.icontains(.scan.ocr.raw, "purchase"),
+                  strings.icontains(.scan.ocr.raw, "payment"),
+                  strings.icontains(.scan.ocr.raw, "transaction"),
+                  strings.icontains(.scan.ocr.raw, "subscription"),
+                  strings.icontains(.scan.ocr.raw, "antivirus"),
+                  strings.icontains(.scan.ocr.raw, "order"),
+                  strings.icontains(.scan.ocr.raw, "support"),
+                  strings.icontains(.scan.ocr.raw, "help line"),
+                  strings.icontains(.scan.ocr.raw, "receipt"),
+                  strings.icontains(.scan.ocr.raw, "invoice"),
+                  strings.icontains(.scan.ocr.raw, "call"),
+                  strings.icontains(.scan.ocr.raw, "helpdesk"),
+                  strings.icontains(.scan.ocr.raw, "cancel"),
+                  strings.icontains(.scan.ocr.raw, "renew"),
+                  strings.icontains(.scan.ocr.raw, "refund"),
+                  regex.icontains(.scan.ocr.raw, "(?:reach|contact) us at"),
+                  strings.icontains(.scan.ocr.raw, "+1"),
+                  strings.icontains(.scan.ocr.raw, "amount"),
+                  strings.icontains(.scan.ocr.raw, "charged"),
+                  strings.icontains(.scan.ocr.raw, "crypto"),
+                  strings.icontains(.scan.ocr.raw, "wallet address"),
+                  regex.icontains(.scan.ocr.raw, '\$\d{3}\.\d{2}\b'),
                   regex.icontains(.scan.ocr.raw,
-                                  'p.{0,3}a.{0,3}y.{0,3}p.{0,3}a.{0,3}l|mcafee|n[o0]rt[o0]n|geek.{0,5}squad|ebay|symantec|best buy|lifel[o0]c|secure anywhere'
-                  )
+                                  '\+?([ilo0-9]{1}.)?\(?[ilo0-9]{3}?\)?.[ilo0-9]{3}.?[ilo0-9]{4}',
+                                  '\+?([ilo0-9]{1,2})?\s?\(?\d{3}\)?[\s\.\-⋅]{0,5}[ilo0-9]{3}[\s\.\-⋅]{0,5}[ilo0-9]{4}'
+                  ),
+                )
+                // this section is synced with attachment_callback_phish_with_pdf.yml and body_callback_phishing_no_attachment.yml
+                and regex.icontains(.scan.ocr.raw,
+                                    '(p.{0,3}a.{0,3}y.{0,3}p.{0,3}a.{0,3}l|ma?c.?fee|n[o0]rt[o0]n|geek.{0,5}squad|ebay|symantec|best buy|lifel[o0]c|secure anywhere|starz|utilities premium|pc security|at&t)'
+                )
+            )
+            // this section is synced with attachment_callback_phish_with_pdf.yml and body_callback_phishing_no_attachment.yml
+            or any(ml.logo_detect(.).brands,
+                   .name in (
+                     "PayPal",
+                     "Norton",
+                     "GeekSquad",
+                     "Ebay",
+                     "McAfee",
+                     "AT&T"
+                   )
+            )
           )
   )
 attack_types:

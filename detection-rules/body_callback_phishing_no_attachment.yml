@@ -26,22 +26,10 @@ source: |
     )
   )
   and (
-    strings.ilike(body.current_thread.text,
-                  "*mcfee*",
-                  "*mcafee*",
-                  "*norton*",
-                  "*geek*squad*",
-                  "*paypal*",
-                  "*ebay*",
-                  "*symantec*",
-                  "*best buy*",
-                  "*lifelock*",
-                  "*utilities premium*",
-                  "*pc security*",
-                  "*at&t*"
-                  
+    // this section is synced with attachment_callback_phish_with_pdf.yml and attachment_callback_phish_with_img.yml
+    regex.icontains(body.current_thread.text,
+                    '(p.{0,3}a.{0,3}y.{0,3}p.{0,3}a.{0,3}l|ma?c.?fee|n[o0]rt[o0]n|geek.{0,5}squad|ebay|symantec|best buy|lifel[o0]c|secure anywhere|starz|utilities premium|pc security|at&t)'
     )
-    or regex.icontains(body.current_thread.text, "pay.{0,10}pal")
     or any(ml.logo_detect(beta.message_screenshot()).brands,
            .name in ("PayPal", "Norton", "GeekSquad", "Ebay", "McAfee", "AT&T")
     )
@@ -49,63 +37,78 @@ source: |
   and length(body.current_thread.text) < 1750
   and (
     (
+      // this seciton is synced with attachment_callback_phish_with_img.yml and attachment_callback_phish_with_pdf.yml
+      // however, the 3 of logic and requiring a phone number is specific to this rule in order to reduce FPs
+      // caused by messages which mention cancelling or otherwise managing a subscription
+      // it is also synced and below for message_screenshot OCR output
       3 of (
-        strings.ilike(body.current_thread.text, '*purchase*'),
-        strings.ilike(body.current_thread.text, '*payment*'),
-        strings.ilike(body.current_thread.text, '*transaction*'),
-        strings.ilike(body.current_thread.text, '*subscription*'),
-        strings.ilike(body.current_thread.text, '*antivirus*'),
-        strings.ilike(body.current_thread.text, '*order*'),
-        strings.ilike(body.current_thread.text, '*support*'),
-        strings.ilike(body.current_thread.text, '*help line*'),
-        strings.ilike(body.current_thread.text, '*receipt*'),
-        strings.ilike(body.current_thread.text, '*invoice*'),
-        strings.ilike(body.current_thread.text, '*call*'),
-        strings.ilike(body.current_thread.text, '*cancel*'),
-        strings.ilike(body.current_thread.text, '*renew*'),
-        strings.ilike(body.current_thread.text, '*refund*'),
-        strings.ilike(body.current_thread.text, "*contact us at*"),
-        strings.ilike(body.current_thread.text, "*+1*")
+        strings.icontains(body.current_thread.text, 'purchase'),
+        strings.icontains(body.current_thread.text, 'payment'),
+        strings.icontains(body.current_thread.text, 'transaction'),
+        strings.icontains(body.current_thread.text, 'subscription'),
+        strings.icontains(body.current_thread.text, 'antivirus'),
+        strings.icontains(body.current_thread.text, 'order'),
+        strings.icontains(body.current_thread.text, 'support'),
+        strings.icontains(body.current_thread.text, 'help line'),
+        strings.icontains(body.current_thread.text, 'receipt'),
+        strings.icontains(body.current_thread.text, 'invoice'),
+        strings.icontains(body.current_thread.text, 'call'),
+        strings.icontains(body.current_thread.text, 'cancel'),
+        strings.icontains(body.current_thread.text, 'renew'),
+        strings.icontains(body.current_thread.text, 'refund'),
+        regex.icontains(body.current_thread.text, "(?:reach|contact) us at"),
+        strings.icontains(body.current_thread.text, "+1"),
+        strings.icontains(body.current_thread.text, "amount"),
+        strings.icontains(body.current_thread.text, "charged"),
+        strings.icontains(body.current_thread.text, "crypto"),
+        strings.icontains(body.current_thread.text, "wallet address"),
+        regex.icontains(body.current_thread.text, '\$\d{3}\.\d{2}\b'),
       )
       // phone number regex
-      and (
-        regex.icontains(body.current_thread.text,
-                        '\+?(\d{1}.)?\(?\d{3}?\)?.\d{3}.?\d{4}'
-        )
-        or regex.icontains(body.current_thread.text,
-                           '\+?(\d{1,2})?\s?\(?\d{3}\)?[\s\.\-⋅]{0,5}\d{3}[\s\.\-⋅]{0,5}\d{4}'
-        )
+      and regex.icontains(body.current_thread.text,
+                          '\+?([ilo0-9]{1}.)?\(?[ilo0-9]{3}?\)?.[ilo0-9]{3}.?[ilo0-9]{4}',
+                          '\+?([ilo0-9]{1,2})?\s?\(?\d{3}\)?[\s\.\-⋅]{0,5}[ilo0-9]{3}[\s\.\-⋅]{0,5}[ilo0-9]{4}'
       )
     )
     or (
       any(file.explode(beta.message_screenshot()),
+          // this seciton is synced with attachment_callback_phish_with_img.yml and attachment_callback_phish_with_pdf.yml
+          // and above for current_thread.text
           3 of (
-            strings.ilike(.scan.ocr.raw, '*purchase*'),
-            strings.ilike(.scan.ocr.raw, '*payment*'),
-            strings.ilike(.scan.ocr.raw, '*transaction*'),
-            strings.ilike(.scan.ocr.raw, '*subscription*'),
-            strings.ilike(.scan.ocr.raw, '*antivirus*'),
-            strings.ilike(.scan.ocr.raw, '*order*'),
-            strings.ilike(.scan.ocr.raw, '*support*'),
-            strings.ilike(.scan.ocr.raw, '*help line*'),
-            strings.ilike(.scan.ocr.raw, '*receipt*'),
-            strings.ilike(.scan.ocr.raw, '*invoice*'),
-            strings.ilike(.scan.ocr.raw, '*call*'),
-            strings.ilike(.scan.ocr.raw, '*cancel*'),
-            strings.ilike(.scan.ocr.raw, '*renew*'),
-            strings.ilike(.scan.ocr.raw, '*refund*'),
-            strings.ilike(.scan.ocr.raw, '*contact us at*'),
-            strings.ilike(.scan.ocr.raw, '*+1*')
+            strings.icontains(.scan.ocr.raw, 'purchase'),
+            strings.icontains(.scan.ocr.raw, 'payment'),
+            strings.icontains(.scan.ocr.raw, 'transaction'),
+            strings.icontains(.scan.ocr.raw, 'subscription'),
+            strings.icontains(.scan.ocr.raw, 'antivirus'),
+            strings.icontains(.scan.ocr.raw, 'order'),
+            strings.icontains(.scan.ocr.raw, 'support'),
+            strings.icontains(.scan.ocr.raw, 'help line'),
+            strings.icontains(.scan.ocr.raw, 'receipt'),
+            strings.icontains(.scan.ocr.raw, 'invoice'),
+            strings.icontains(.scan.ocr.raw, 'call'),
+            strings.icontains(.scan.ocr.raw, 'helpdesk'),
+            strings.icontains(.scan.ocr.raw, 'cancel'),
+            strings.icontains(.scan.ocr.raw, 'renew'),
+            strings.icontains(.scan.ocr.raw, 'refund'),
+            regex.icontains(.scan.ocr.raw, "(?:reach|contact) us at"),
+            strings.icontains(.scan.ocr.raw, '+1'),
+            strings.icontains(.scan.ocr.raw, 'amount'),
+            strings.icontains(.scan.ocr.raw, 'charged'),
+            strings.icontains(.scan.ocr.raw, 'crypto'),
+            strings.icontains(.scan.ocr.raw, 'wallet address'),
+            regex.icontains(.scan.ocr.raw, '\$\d{3}\.\d{2}\b'),
           )
           // phone number regex
-          and (
-            regex.icontains(.scan.ocr.raw,
-                            '\+?(\d{1}.)?\(?\d{3}?\)?.\d{3}.?\d{4}'
-            )
-            or regex.icontains(.scan.ocr.raw,
-                               '\+?(\d{1,2})?\s?\(?\d{3}\)?[\s\.\-⋅]{0,5}\d{3}[\s\.\-⋅]{0,5}\d{4}'
-            )
+          and regex.icontains(.scan.ocr.raw,
+                              '\+?([ilo0-9]{1}.)?\(?[ilo0-9]{3}?\)?.[ilo0-9]{3}.?[ilo0-9]{4}',
+                              '\+?([ilo0-9]{1,2})?\s?\(?\d{3}\)?[\s\.\-⋅]{0,5}[ilo0-9]{3}[\s\.\-⋅]{0,5}[ilo0-9]{4}'
           )
+  
+          // negate messages with previous threads.  While callback phishing with thread hijacking or with current_thread 
+          // padded with whitespace and previous threads in the message has been observed, the intetion of using OCR is for image embedded callbacks
+          and not regex.icount(.scan.ocr.raw, '(?:from|to|sent|date|cc|subject):') > 3
+          // this notation of previous threads often only occurs once
+          and not regex.icontains(.scan.ocr.raw, 'wrote:[\r\n]')
       )
     )
   )
@@ -118,7 +121,6 @@ source: |
     or sender.email.domain.root_domain not in $high_trust_sender_root_domains
   )
   and not strings.ends_with(headers.message_id, "@shopify.com>")
-
 attack_types:
   - "Callback Phishing"
 tactics_and_techniques:
