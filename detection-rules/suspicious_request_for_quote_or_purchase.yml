@@ -6,7 +6,7 @@ type: "rule"
 severity: "medium"
 source: |
   type.inbound
-  and 1 of (
+  and (
     (
       (
         length(recipients.to) == 0
@@ -18,17 +18,21 @@ source: |
         )
       )
       and length(recipients.cc) == 0
-    ),
+    )
+    or
     (
       sender.email.domain.root_domain in $free_email_providers
       and any(headers.reply_to, .email.email != sender.email.email)
       and any(headers.reply_to, .email.email not in $recipient_emails)
-    ),
+    )
+    or
     (
       length(headers.reply_to) > 0
       and all(headers.reply_to,
               .email.domain.root_domain != sender.email.domain.root_domain
               and not .email.domain.root_domain in $org_domains
+              // wetransfer includes user specific reply-to's & link display text which triggers NLU logic further within the rule
+              and not sender.email.domain.root_domain == "wetransfer.com"
       )
     )
   )
@@ -132,7 +136,6 @@ source: |
   )
   and not profile.by_sender().solicited
   and not profile.by_sender().any_false_positives
-
 attack_types:
   - "BEC/Fraud"
 tactics_and_techniques:
