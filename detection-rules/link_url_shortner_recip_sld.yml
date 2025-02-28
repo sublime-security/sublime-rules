@@ -1,0 +1,38 @@
+name: "Link: URL Shortener Containting Recipient SLD with Authentication Topics"
+description: "Identifies messages where recipient domain names appear in either subject or sender display name, while containing a shortened URL that includes the recipient's domain in the path. The message content discusses security and authentication topics, and includes a limited number of links."
+type: "rule"
+severity: "low"
+source: |
+  type.inbound
+  // any of the recipients SLD is in the subject or display name
+  and any([recipients.bcc, recipients.cc, recipients.to],
+          any(.,
+              strings.icontains(subject.subject, .email.domain.sld)
+              or strings.icontains(sender.display_name, .email.domain.sld)
+          )
+  )
+  // the topic is Security and Auth
+  and any(beta.ml_topic(body.html.display_text).topics,
+          .name == "Security and Authentication" and .confidence == "high"
+  )
+  // there are few links
+  and length(body.links) <= 10
+  // one of them is with url_shortners
+  and any(body.links,
+          .href_url.domain.root_domain in $url_shorteners
+          // the url exists as a plain url
+          and .display_url.url == .href_url.url
+          // and contains a recipient SLD
+          and any([recipients.bcc, recipients.cc, recipients.to],
+                  any(., strings.icontains(...href_url.path, .email.domain.sld))
+          )
+  )
+attack_types:
+  - "BEC/Fraud"
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Social engineering"
+  - "Impersonation: Brand"
+detection_methods:
+  - "Content analysis"
+  - "Natural Language Understanding"
