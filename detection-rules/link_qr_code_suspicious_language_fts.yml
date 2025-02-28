@@ -1,4 +1,4 @@
-name: "Link: QR Code with suspicious language (untrusted sender) "
+name: "Link: QR Code with suspicious language (untrusted sender)"
 description: |
   This rule analyzes image attachments for QR Codes that contain URLs including the recipient's email address. It ensures that the URLs do not link to any organizational domains.
   Additionally, it examines the email body using Natural Language Processing to detect credential phishing language.In cases of null bodies,
@@ -16,10 +16,21 @@ source: |
                   .scan.qr.type == "url"
   
                   // recipient email address is present in the URL, a common tactic used in credential phishing attacks and the url is not in $org_domains
-                  and any(recipients.to,
-                          strings.icontains(..scan.qr.data, .email.email) and .email.domain.valid
+                  and (
+                    any(recipients.to,
+                        .email.domain.valid
+                        and (
+                          strings.icontains(..scan.qr.data, .email.email)
+                          or (
+                          // recipient email found in qr data base64 encoded
+                            any(beta.scan_base64(..scan.qr.data),
+                                strings.icontains(., ..email.email)
+                            )
+                          )
+                        )
+                    )
+                    and .scan.qr.url.domain.root_domain not in $org_domains
                   )
-                  and .scan.qr.url.domain.root_domain not in $org_domains
           )
   )
   
@@ -43,7 +54,6 @@ source: |
       )
     )
   )
-  
   and (
     profile.by_sender().prevalence in ("new", "outlier")
     or (
@@ -51,7 +61,7 @@ source: |
       and not profile.by_sender().any_false_positives
     )
   )
-
+  
   // negate highly trusted sender domains unless they fail DMARC authentication
   and (
     (
