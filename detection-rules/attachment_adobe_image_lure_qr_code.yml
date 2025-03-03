@@ -51,11 +51,16 @@ source: |
                   // recipient email address is present in the URL, a common tactic used in credential phishing attacks 
                   and any(recipients.to,
                           (
-                            strings.icontains(..scan.qr.data, .email.email)
-                            and (
+                            (
                               .email.domain.valid
-                              or strings.icontains(.display_name, "undisclosed")
+                              and (
+                                strings.icontains(..scan.qr.data, .email.email)
+                                or any(beta.scan_base64(..scan.qr.data),
+                                       strings.icontains(., ..email.email)
+                                )
+                              )
                             )
+                            or strings.icontains(.display_name, "undisclosed")
                           )
   
                           // the recipients sld is in the senders display name
@@ -136,7 +141,6 @@ source: |
       and not profile.by_sender().any_false_positives
     )
   )
-  
 attack_types:
   - "Credential Phishing"
 tactics_and_techniques:
