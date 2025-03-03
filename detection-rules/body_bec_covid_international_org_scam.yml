@@ -1,6 +1,6 @@
-name: "COVID-19 themed fraud with sender and reply-to mismatch or compensation award"
+name: "COVID-19 themed fraud with sender and reply-to mismatch"
 description: |
-  Detects potential COVID-19 themed BEC/Fraud scams by analyzing text within the email body for mentions of COVID-19 assistance, compensation, or awards from mismatched senders and other suspicious language.
+  Detects potential COVID-19 themed BEC/Fraud scams by analyzing text within the email body for mentions of COVID-19 assistance from mismatched senders and other suspicious language.
 type: "rule"
 severity: "medium"
 source: |
@@ -17,8 +17,7 @@ source: |
   
   // use of honorific
   and regex.icontains(body.current_thread.text,
-                      '(?:Mr|Mrs|Ms|Miss|Dr|Prof|Sir|Lady|Rev)\.?[ \t]+',
-                      'Dear Sir'
+                      '(?:Mr|Mrs|Ms|Miss|Dr|Prof|Sir|Lady|Rev)\.?[ \t]+'
   )
   
   // mention of covid or an international organization
@@ -31,34 +30,16 @@ source: |
                       'interpol',
                       'treasury',
                       '\bFEMA\b',
-                      '\bIMF\b'
   )
   
   // and mention of covid in subject or body
-  and (
-    regex.icontains(subject.subject, 'covid(.{0,5}19)?\b')
-    or regex.icontains(body.current_thread.text, 'covid(.{0,5}19)?\b')
-  )
+  and regex.icontains(body.current_thread.text, 'covid(.0,5}19)?\b')
   
-  // Check for compensation or award related language
-  and (
-    2 of (
-      any(ml.nlu_classifier(body.current_thread.text).entities, .name == "urgency"),
-      any(ml.nlu_classifier(body.current_thread.text).entities, .name == "request"),
-      any(ml.nlu_classifier(body.current_thread.text).entities, .name == "financial")
-    )
-    or regex.icontains(subject.subject, 
-                      'compensation.{0,20}(award|fund)',
-                      'covid.{0,20}(compensation|award)',
-                      'selected.{0,30}(compensation|award)',
-                      'claim your award',
-                      'reference no')
-    or regex.icontains(body.current_thread.text, 
-                      'compensation.{0,20}(award|fund)',
-                      'covid.{0,20}(compensation|award)',
-                      'selected.{0,30}(compensation|award)',
-                      'claim your award',
-                      'reference no')
+  // urgent financial requests
+  and 2 of (
+    any(ml.nlu_classifier(body.current_thread.text).entities, .name == "urgency"),
+    any(ml.nlu_classifier(body.current_thread.text).entities, .name == "request"),
+    any(ml.nlu_classifier(body.current_thread.text).entities, .name == "financial")
   )
   
    // negate highly trusted sender domains unless they fail DMARC authentication
