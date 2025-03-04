@@ -19,19 +19,29 @@ source: |
                     )
              )
   ) > 0
-  and any(ml.nlu_classifier(body.current_thread.text).intents,
-          .name == "cred_theft" and .confidence == "high"
+  and (
+    any(ml.nlu_classifier(body.current_thread.text).intents,
+        .name == "cred_theft" and .confidence == "high"
+    )
+    // subject match when cred_theft doesn't match
+    // high confidence observed subject intros in the format of "Urgent Thing: ..."
+    or regex.icontains(subject.subject,
+                       '^(?:(?:Final|Last)?\s*Warning|(?:Final|Last|Legal|Critical|Content Violation)?\s*(?:Alert|Noti(?:ce|fication))|Appeal Required|Time.Sensitive|Critical.Alert|Important|Copyright Issue)\s*:\s*'
+    )
   )
   and 1 of (
     ( // sender domain matches no body domains
       length(body.links) > 0
       and all(body.links,
-              .href_url.domain.root_domain != sender.email.domain.root_domain
-              and .href_url.domain.root_domain not in (
-                "salesforce.com",
-                "force.com",
-                "site.com"
+              (
+                .href_url.domain.root_domain != sender.email.domain.root_domain
+                and .href_url.domain.root_domain not in (
+                  "salesforce.com",
+                  "force.com",
+                  "site.com"
+                )
               )
+              or .href_url.domain.root_domain is null
       )
     ),
     regex.icontains(subject.subject,
@@ -66,12 +76,15 @@ source: |
                     "activity.*acc(oun)?t",
                     "almost.full",
                     "app[li]e.[il]d",
+                    "appeal required",
                     "authenticate.*account",
                     "been.*suspend",
                     "clos.*of.*account.*processed",
                     "confirm.your.account",
+                    "copyright (?:restriction|infringment)",
                     "courier.*able",
                     "crediential.*notif",
+                    "Critical Alert",
                     "deactivation.*in.*progress",
                     "delivery.*attempt.*failed",
                     "document.received",
@@ -85,6 +98,7 @@ source: |
                     "e.?ma[il1]{2}.*suspend",
                     "email.update",
                     "faxed you",
+                    "final notice",
                     "fraud(ulent)?.*charge",
                     "from.helpdesk",
                     "fu[il1]{2}.*ma[il1]+[ -]?box",
@@ -95,6 +109,7 @@ source: |
                     "heipdesk",
                     "i[il]iega[il]",
                     "ii[il]ega[il]",
+                    "immediate action",
                     "incoming e?mail",
                     "incoming.*fax",
                     "lock.*security",
@@ -122,6 +137,7 @@ source: |
                     "periodic maintenance",
                     "potential(ly)? unauthorized",
                     "refund not approved",
+                    "restrictions applied",
                     "report",
                     "revised.*policy",
                     "scam",
@@ -137,10 +153,12 @@ source: |
                     "temporar(il)?y deactivate",
                     "temporar[il1]{2}y disab[li]ed",
                     "temporarily.*lock",
+                    "time.sensitive",
                     "un-?usua[li].activity",
                     "unable.*deliver",
                     "unauthorized.*activit",
                     "unauthorized.device",
+                    "unauthorized.use",
                     "undelivered message",
                     "unread.*doc",
                     "unusual.activity",
