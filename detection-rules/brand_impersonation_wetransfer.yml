@@ -1,0 +1,95 @@
+name: "Brand Impersonation: WeTransfer"
+description: "Detects messages claiming to be from WeTransfer that contain suspicious indicators, including misspelled domains, non-standard TLDs, suspicious file reference numbers, and French language variations. Excludes legitimate WeTransfer traffic with valid DMARC authentication."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and (
+    // Check for WeTransfer impersonation with suspicious indicators
+    (
+      // Display name is WeTransfer but sender domain is suspicious
+      (
+        (
+          strings.ilike(sender.display_name, '*wetransfer*')
+          or strings.ilike(sender.display_name, '*we transfer*')
+          or strings.ilike(sender.display_name, '*WE TRANSFER*')
+          or strings.ilevenshtein(sender.display_name, "wetransfer") <= 1
+        )
+        and (
+          // Check for misspelled wetransfer domains in sender email
+          regex.icontains(sender.email.email, 'nore?pl[a@]y@wetransfer')
+
+          // Check for non-legitimate TLDs (.fr or others)
+          or regex.icontains(sender.email.domain.domain,
+                             'wetransfer\\.[a-z]{2,4}$'
+          )
+        )
+      )
+
+      // Or suspicious subject patterns
+      or strings.ilike(subject.subject, '*wetransfer*', '*we transfer*')
+      or regex.icontains(subject.subject,
+                         '(?:Documents?|Files?|Recieved) (?:Received|Sent|via) WeTransfer'
+      )
+
+      // Check for file reference numbers which are common in phishing
+      or regex.icontains(subject.subject,
+                         'WeTransfer \[(?:File No\.|)\s*:\s*[0-9-]+\s*\]'
+      )
+
+      // French language patterns
+      or regex.icontains(subject.subject,
+                         'vous a envoy[ée] .{1,30} par WeTransfer'
+      )
+      or strings.ilike(subject.subject, "*TÉLÉCHARGEZ VOTRE FICHIER*")
+      or regex.icontains(body.current_thread.text, 'transfert expirera')
+      or regex.icontains(body.current_thread.text,
+                         "fichiers n'aient pas encore été téléchargés"
+      )
+    )
+  )
+  and not (
+    // From legitimate wetransfer.com domain with passing DMARC
+    (
+      sender.email.domain.root_domain == "wetransfer.com"
+      and headers.auth_summary.dmarc.pass
+    )
+
+    // From legitimate we.tl domain (their URL shortener) with passing DMARC
+    or (
+      sender.email.domain.root_domain == "we.tl"
+      and headers.auth_summary.dmarc.pass
+    )
+  )
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and not headers.auth_summary.dmarc.pass
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+  and (
+    not profile.by_sender().solicited
+    or (
+      profile.by_sender().any_messages_malicious_or_spam
+      and not profile.by_sender().any_false_positives
+    )
+  )
+  and not profile.by_sender().any_false_positives
+attack_types:
+  - "BEC/Fraud"
+  - "Callback Phishing"
+  - "Credential Phishing"
+  - "Extortion"
+  - "Malware/Ransomware"
+  - "Spam"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+detection_methods:
+  - "Content analysis"
+  - "Header analysis"
+  - "Sender analysis"
+id: "e37885ad-1099-58f9-a428-0910c666d119"
+testing_pr: 2459
+testing_sha: d41bd87ad05a60ed54a348b310720281fb0fb68c
