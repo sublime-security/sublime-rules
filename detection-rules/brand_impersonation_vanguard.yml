@@ -20,6 +20,30 @@ source: |
       )
     )
   )
+  and (
+    any(beta.ml_topic(body.current_thread.text).topics,
+        .name in (
+          "Security and Authentication",
+          "Secure Message",
+          "Reminders and Notifications"
+        )
+        and .confidence in ("medium", "high")
+    )
+    or any(beta.ml_topic(beta.ocr(beta.message_screenshot()).text).topics,
+           .name in (
+             "Security and Authentication",
+             "Secure Message",
+             "Reminders and Notifications"
+           )
+           and .confidence in ("medium", "high")
+    )
+    or any(ml.nlu_classifier(body.current_thread.text).intents,
+           .name == "cred_theft" and .confidence == "high"
+    )
+    or any(ml.nlu_classifier(beta.ocr(beta.message_screenshot()).text).intents,
+           .name == "cred_theft" and .confidence == "high"
+    )
+  )
   
   // and the sender is not in org_domains or from Vanguard domains and passes auth
   and not (
@@ -33,7 +57,11 @@ source: |
         "vanguard.co.uk",
         "vanguard.com.au",
         "vanguard.com.hk",
-        "vanguardretirement-mail.com"
+        "vanguardretirement-mail.com",
+        "e-vanguard.com",
+        "feedback-vanguard.com",
+        "m-vanguard.com",
+        "investordelivery.com"
       )
       and headers.auth_summary.dmarc.pass
     )
@@ -58,6 +86,7 @@ attack_types:
 tactics_and_techniques:
   - "Impersonation: Brand"
 detection_methods:
+  - "Natural Language Understanding"
   - "Header analysis"
   - "Sender analysis"
 id: "3bd048fe-5b3e-5050-b0d6-669653e14d9a"
