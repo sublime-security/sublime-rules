@@ -4,61 +4,49 @@ type: "rule"
 severity: "high"
 source: |
   type.inbound
-  and (
-    // Check for WeTransfer impersonation with suspicious indicators
+  and 2 of (
     (
-      // Display name is WeTransfer but sender domain is suspicious
-      (
-        (
-          strings.ilike(sender.display_name, '*wetransfer*')
-          or strings.ilike(sender.display_name, '*we transfer*')
-          or strings.ilike(sender.display_name, '*WE TRANSFER*')
-          or strings.ilevenshtein(sender.display_name, "wetransfer") <= 1
-        )
-        and (
-          // Check for misspelled wetransfer domains in sender email
-          regex.icontains(sender.email.email, 'nore?pl[a@]y@wetransfer')
+      strings.ilike(sender.display_name, '*wetransfer*')
+      or strings.ilike(sender.display_name, '*we transfer*')
+      or strings.ilevenshtein(sender.display_name, "wetransfer") <= 1
+    ),
   
-          // Check for non-legitimate TLDs (.fr or others)
-          or regex.icontains(sender.email.domain.domain,
-                             'wetransfer\\.[a-z]{2,4}$'
-          )
-        )
-      )
+    // Check for misspelled wetransfer domains in sender email
+    regex.icontains(sender.email.email, 'nore?pl[a@]y@wetransfer'),
   
-      // Or suspicious subject patterns
-      or regex.icontains(subject.subject,
-                         '(?:Documents?|Files?|Recieved) (?:Received|Sent|via) WeTransfer'
-      )
+    // Check for non-legitimate TLDs (.fr or others)
+    regex.icontains(sender.email.domain.root_domain, 'wetransfer\\.[a-z]{2,4}$'),
   
-      // Check for file reference numbers which are common in phishing
-      or regex.icontains(subject.subject,
-                         'WeTransfer \[(?:File No\.|)\s*:\s*[0-9-]+\s*\]'
-      )
+    // Suspicious subject patterns
+    regex.icontains(subject.subject,
+                    '(?:Documents?|Files?) (?:Received|Sent) (?:via)? WeTransfer'
+    ),
   
-      // French language patterns
-      or regex.icontains(subject.subject,
-                         'vous a envoy[ée] .{1,30} par WeTransfer'
-      )
-      or strings.ilike(subject.subject, "*TÉLÉCHARGEZ VOTRE FICHIER*")
-      or regex.icontains(body.current_thread.text, 'transfert expirera')
-      or regex.icontains(body.current_thread.text,
-                         "fichiers n'aient pas encore été téléchargés"
-      )
+    // Check for file reference numbers which are common in phishing
+    regex.icontains(subject.subject,
+                    'WeTransfer \[(?:File No\.|)\s*:\s*[0-9-]+\s*\]'
+    ),
+  
+    // French language patterns
+    regex.icontains(subject.subject, 'vous a envoy[ée] .{1,30} par WeTransfer'),
+    regex.icontains(subject.subject, "T[ÉE]L[ÉE]CHARGEZ VOTRE FICHIER"),
+    regex.icontains(body.current_thread.text, 'transfert expirera'),
+    regex.icontains(body.current_thread.text,
+                    "fichiers n'aient pas encore été téléchargés"
+    ),
+    any(body.links,
+        strings.ilike(.display_text, '*wetransfer*')
+        and .href_url.domain.root_domain not in~ ('wetransfer.com', 'we.tl')
+    ),
+    any(body.links,
+        .href_url.domain.root_domain in $free_file_hosts
+        or network.whois(.href_url.domain).days_old < 30
+        or .href_url.domain.tld in $suspicious_tlds
     )
   )
   and not (
-    // From legitimate wetransfer.com domain with passing DMARC
-    (
-      sender.email.domain.root_domain == "wetransfer.com"
-      and headers.auth_summary.dmarc.pass
-    )
-  
-    // From legitimate we.tl domain (their URL shortener) with passing DMARC
-    or (
-      sender.email.domain.root_domain == "we.tl"
-      and headers.auth_summary.dmarc.pass
-    )
+    sender.email.domain.root_domain in ("wetransfer.com", "we.tl")
+    and headers.auth_summary.dmarc.pass
   )
   // negate highly trusted sender domains unless they fail DMARC authentication
   and (
