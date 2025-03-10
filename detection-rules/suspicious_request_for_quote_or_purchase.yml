@@ -37,60 +37,52 @@ source: |
     )
   )
   and (
-    2 of (
-      (
-        regex.icontains(body.current_thread.text,
-                        '(discuss.{0,15}purchas(e|ing))'
+    // Group the language patterns that specifically indicate RFQ/RFP
+    (
+      1 of (
+        // RFQ/RFP specific language patterns
+        regex.icontains(body.current_thread.text, '(discuss.{0,15}purchas(e|ing))'),
+        regex.icontains(body.current_thread.text, '(sign(ed?)|view).{0,10}(purchase order)|Request for a Quot(e|ation)'),
+        regex.icontains(body.current_thread.text, '(please|kindly).{0,30}quot(e|ation)'),
+        regex.icontains(subject.subject, '(request for (purchase|quot(e|ation))|\bRFQ\b|\bRFP\b|bid invit(e|ation))'),
+        any(attachments, regex.icontains(.file_name, "(purchase.?order|Quot(e|ation))")),
+        any(ml.nlu_classifier(body.current_thread.text).tags, .name == "purchase_order" and .confidence == "high")
+      )
+      // Required: at least one RFQ/RFP language pattern
+      
+      // Optional: at least one additional indicator (can be another language pattern or a non-language indicator)
+      and (
+        2 of (
+          // RFQ/RFP language patterns (same as above)
+          regex.icontains(body.current_thread.text, '(discuss.{0,15}purchas(e|ing))'),
+          regex.icontains(body.current_thread.text, '(sign(ed?)|view).{0,10}(purchase order)|Request for a Quot(e|ation)'),
+          regex.icontains(body.current_thread.text, '(please|kindly).{0,30}quot(e|ation)'),
+          regex.icontains(subject.subject, '(request for (purchase|quot(e|ation))|\bRFQ\b|\bRFP\b|bid invit(e|ation))'),
+          any(attachments, regex.icontains(.file_name, "(purchase.?order|Quot(e|ation))")),
+          any(ml.nlu_classifier(body.current_thread.text).tags, .name == "purchase_order" and .confidence == "high"),
+          
+          // Non-language indicators
+          (
+            any(ml.nlu_classifier(body.current_thread.text).entities, .name == "request")
+            and any(ml.nlu_classifier(body.current_thread.text).entities, .name == "urgency")
+          ),
+          (
+            0 < length(filter(body.links,
+                              (
+                                .href_url.domain.domain in $free_subdomain_hosts
+                                or .href_url.domain.domain in $free_file_hosts
+                                or network.whois(.href_url.domain).days_old < 30
+                              )
+                              and (
+                                regex.match(.display_text, '[A-Z ]+')
+                                or any(ml.nlu_classifier(.display_text).entities,
+                                       .name in ("request", "urgency")
+                                )
+                              )
+                       )
+            ) < 3
+          )
         )
-      ),
-      (
-        regex.icontains(body.current_thread.text,
-                        '(sign(ed?)|view).{0,10}(purchase order)|Request for a Quot(e|ation)'
-        )
-      ),
-      (
-        regex.icontains(body.current_thread.text,
-                        '(please|kindly).{0,30}quot(e|ation)'
-        )
-      ),
-      (
-        regex.icontains(subject.subject,
-                        '(request for (purchase|quot(e|ation))|\bRFQ\b|\bRFP\b|bid invit(e|ation))'
-        )
-      ),
-      (
-        any(attachments,
-            regex.icontains(.file_name, "(purchase.?order|Quot(e|ation))")
-        )
-      ),
-      (
-        any(ml.nlu_classifier(body.current_thread.text).entities,
-            .name == "request"
-        )
-        and any(ml.nlu_classifier(body.current_thread.text).entities,
-                .name == "urgency"
-        )
-      ),
-      (
-        any(ml.nlu_classifier(body.current_thread.text).tags,
-            .name == "purchase_order" and .confidence == "high"
-        )
-      ),
-      (
-        0 < length(filter(body.links,
-                          (
-                            .href_url.domain.domain in $free_subdomain_hosts
-                            or .href_url.domain.domain in $free_file_hosts
-                            or network.whois(.href_url.domain).days_old < 30
-                          )
-                          and (
-                            regex.match(.display_text, '[A-Z ]+')
-                            or any(ml.nlu_classifier(.display_text).entities,
-                                   .name in ("request", "urgency")
-                            )
-                          )
-                   )
-        ) < 3
       )
     )
     or (
