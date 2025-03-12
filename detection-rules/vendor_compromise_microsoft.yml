@@ -1,0 +1,62 @@
+name: "Vendor Compromise: Microsoft Impersonation From Common Sender"
+description: "Message contains suspicious links and Microsoft impersonation from a sender common to your environment. Indicative of vendor compromise."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and length(body.links) < 10
+  and length(filter(body.links,
+                    .href_url.domain.domain in $free_file_hosts
+                    and (
+                      any(ml.nlu_classifier(.display_text).intents,
+                          .name == "cred_theft"
+                      )
+                      or any(ml.nlu_classifier(.display_text).entities,
+                             .name == "request"
+                      )
+                      or regex.icontains(.display_text,
+                                         "View (Document|file|share)"
+                      )
+                    )
+             )
+  ) == 1
+  and 1 of (
+    any(ml.nlu_classifier(body.html.display_text).entities,
+        .text in~ ("Sharepoint", "Microsoft")
+    ),
+    any(ml.logo_detect(beta.message_screenshot()).brands,
+        strings.istarts_with(.name, "Microsoft")
+    )
+  )
+  and not (
+    strings.starts_with(headers.message_id, '<Share-')
+    and strings.ends_with(headers.message_id, '@odspnotify>')
+  )
+  and (
+    profile.by_sender_email().prevalence in ("uncommon", "common")
+    or profile.by_sender_email().solicited
+  )
+  // and the sender is not from high trust sender root domains
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and not headers.auth_summary.dmarc.pass
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Free file host"
+  - "Impersonation: Brand"
+  - "Social engineering"
+detection_methods:
+  - "Header analysis"
+  - "Content analysis"
+  - "Natural Language Understanding"
+  - "URL analysis"
+  - "Computer Vision"
+  - "Sender analysis"
+id: "fb62d206-1674-565d-b579-9c57ea9f7c7e"
+testing_pr: 2472
+testing_sha: 794a119854bf25b390f70fc240ce4b975851c12c
