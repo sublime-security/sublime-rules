@@ -15,7 +15,9 @@ source: |
                               '(?:Attendee|Buyer|Contact|Decision Maker|Email|Member|Participant|Professional|Registrant|User|Visitor|Store|Grocer)(?:[[:punct:]]*s)?(?:\s\w*){0,9}(?:list(?:\b|[^ei])|database)'
               )
               and not (
-                regex.icount(., '(email|contact)(?:[[:punct:]]*s)?(?:\s\w*){0,9}list') == 1
+                regex.icount(.,
+                            '(email|contact)(?:[[:punct:]]*s)?(?:\s\w*){0,9}list'
+                ) == 1
                 and regex.icontains(.,
                                     '(?:unsub|remove|safe|delete|leave|update|part of|be added|safe)[[:punct:]]*s?(?:\s\w*){0,9}(mailing|email|my|sender)(?:\s\w*){0,9}list(?:\b|[^ei])',
                                     'email list(?:\b|[^ei])[[:punct:]]*s?(\s\w*){0,5}(?:unsub|remove|safe|delete|leave|up to date|part of|be added)'
@@ -23,7 +25,7 @@ source: |
               )
             )
             or regex.icontains(.,
-                               '\b(?:list|database)(?:[[:punct:]]*s)?\b(\s\w*){0,9}(?:Attendee|Buyer|Contact|Decision Maker|Email|Member|Participant|Professional|Registrant|User|Visitor|Store|Grocer)s?'
+                              '\b(?:list|database)(?:[[:punct:]]*s)?\b(\s\w*){0,9}(?:Attendee|Buyer|Contact|Decision Maker|Email|Member|Participant|Professional|Registrant|User|Visitor|Store|Grocer)s?'
             )
         )
       )
@@ -40,9 +42,11 @@ source: |
       2 of (
         regex.icontains(body.current_thread.text, '(?:get|got|had) a chance'),
         regex.icontains(body.current_thread.text, '(take|move)(\Wthis)?\Wforward'),
-        regex.icontains(body.current_thread.text, '(review|drop me a line about) (my|this|it)'),
         regex.icontains(body.current_thread.text,
-                        '(?:below|previous(ly)?|last|prior) (message|email|sent)'
+                        '(review|drop me a line about) (my|this|it)'
+        ),
+        regex.icontains(body.current_thread.text,
+                        '(?:below|previous(ly)?|last|prior|earlier) (message|email|sent)'
         ),
         regex.icontains(body.current_thread.text,
                         '(sent).{0,50}(e?mail|message) (?:below|previous(ly)?|last|prior)'
@@ -55,6 +59,7 @@ source: |
         strings.icontains(body.current_thread.text, 'still interested'),
         regex.icontains(body.current_thread.text, 'did you (get|receive) (it|my (message|e?mail))'),
         regex.icontains(body.current_thread.text, '(swift|quick|short) response'),
+        regex.icontains(body.current_thread.text, 'kindly.{0,30}.interested'),
       )
       and any([body.html.display_text, body.plain.raw],
               (
@@ -64,14 +69,15 @@ source: |
                   strings.icontains(., "sent:"),
                   strings.icontains(., "date:"),
                   strings.icontains(., "cc:"),
-                  strings.icontains(., "subject:")
+                  strings.icontains(., "subject:"),
+                  strings.icontains(., "--Original Message--")
                 )
                 or strings.icontains(.,
-                                     strings.concat(sender.display_name,
+                                    strings.concat(sender.display_name,
                                                     " <",
                                                     sender.email.email,
                                                     "> wrote:"
-                                     )
+                                    )
                 )
               )
               // match _after_ the previous thread indciators
@@ -80,7 +86,8 @@ source: |
                                 '(?:from|to|sent|date|cc|subject|wrote):(.|\W)*(?:Attendee|Buyer|Contact|Decision Maker|Email|Member|Participant|Professional|Registrant|User|Visitor|Mailing)(?:[[:punct:]]*s)?(?:\s\w*){0,9}(?:list(?:\b|[^ei])|database)'
                 )
                 or regex.icontains(.,
-                                   '(?:from|to|sent|date|cc|subject|wrote):(.|\W)*(?:list(?:\b|[^ei])|database)(?:[[:punct:]]*s)?(\s\w*){0,9}(?:Attendee|Buyer|Contact|Decision Maker|Email|Member|Participant|Professional|Registrant|User|Visitor|Mailing)s?'
+                                '(?:from|to|sent|date|cc|subject|wrote):(.|\W)*(?:list(?:\b|[^ei])|database)(?:[[:punct:]]*s)?(\s\w*){0,9}(?:Attendee|Buyer|Contact|Decision Maker|Email|Member|Participant|Professional|Registrant|User|Visitor|Mailing)s?'
+
                 )
                 or (
                   2 of (
@@ -98,10 +105,9 @@ source: |
   )
   // negate Zendesk support tickets
   and not any(body.links,
-            .href_url.domain.root_domain in ('zendesk.com')
-            and .display_text == 'Zendesk'
+              .href_url.domain.root_domain in ('zendesk.com')
+              and .display_text == 'Zendesk'
   )
-  
   and not profile.by_sender().solicited
   and not profile.by_sender().any_false_positives
 tags:
