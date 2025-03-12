@@ -7,7 +7,7 @@ references:
   - "https://delivr.to/payloads?id=3dce858d-7be3-412e-85d9-84f3b9845275"
   - "https://delivr.to/payloads?id=a0a38332-21b6-4394-b901-3697008e3440"
 type: "rule"
-severity: "medium"
+severity: "high"
 source: |
   type.inbound
   and any(attachments,
@@ -15,13 +15,28 @@ source: |
             .file_extension =~ "svg"
             or .file_extension in $file_extensions_common_archives
           )
-          and strings.ilike(file.parse_text(.).text,
-                            "*onload*",
-                            "*window.location.href*",
-                            "*onerror*",
-                            "*CDATA*",
-                            "*<script>*",
-                            "*</script>*"
+          and (
+            strings.ilike(file.parse_text(.).text,
+                          "*onload*",
+                          "*window.location.href*",
+                          "*onerror*",
+                          "*CDATA*",
+                          "*<script>*",
+                          "*</script>*"
+            )
+            or regex.icontains(file.parse_text(.).text,
+                               '<iframe[^\>]+src\s*=\s*\"data:[^\;]+;base64,'
+            )
+            or any(beta.scan_base64(file.parse_text(.).text),
+                   strings.ilike(.,
+                                 "*onload*",
+                                 "*window.location.href*",
+                                 "*onerror*",
+                                 "*CDATA*",
+                                 "*<script>*",
+                                 "*</script>*"
+                   )
+            )
           )
   )
   and (

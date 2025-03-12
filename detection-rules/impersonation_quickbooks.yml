@@ -25,6 +25,7 @@ source: |
       and regex.icontains(body.current_thread.text, '©\s*(?:\d+)\s*Intuit')
     )
     or strings.icontains(body.current_thread.text, 'Powered by QuickBooks')
+    or strings.icontains(body.current_thread.text, 'QuickBooks and Intuit are trademarks of Intuit Inc.')
   )
   and sender.email.domain.root_domain not in~ (
     'intuit.com',
@@ -53,13 +54,55 @@ source: |
                     'quickbooksonline.com'
                   )
                   or (
-                    .href_url.domain.domain == sender.email.domain.domain
+                    .href_url.domain.root_domain == sender.email.domain.root_domain
                     and (.href_url.path is null or .href_url.path == "/")
+                  )
+                  // handle links to the root website when the sender uses a freemail address to send invoices
+                  or (
+                    .href_url.domain.sld == sender.email.local_part
+                    and (.href_url.path is null or .href_url.path == "/")
+                    and sender.email.domain.root_domain in $free_email_providers
                   )
            )
     ) != length(body.links)
     // or no valid links
     or length(filter(body.links, .href_url.domain.domain is not null)) == 0
+  )
+  // the call to action link does not lead to inuit
+  and not (
+    // filter down to observed call to action display text
+    any(filter(body.links,
+               .display_text in~ (
+                 "view and pay",
+                 "review and pay",
+                 "view details"
+               )
+        ),
+        // benign/legit href_url details for those links
+        (
+          // sendgrid rewritten links
+          .href_url.domain.domain == "links.notification.intuit.com"
+          // CTA link
+          or (
+            .href_url.domain.domain == "connect.intuit.com"
+            and strings.icontains(.href_url.query_params,
+                                  'cta=viewinvoicenow'
+            )
+          )
+          // Mimecast links 
+          or (
+            .href_url.domain.root_domain == "mimecastprotect.com"
+            and (
+              strings.icontains(.href_url.query_params,
+                                'domain=links.notification.intuit.com'
+              )
+              or strings.icontains(.href_url.query_params,
+                                   'domain=connect.intuit.com'
+              )
+            )
+          )
+        )
+    )
   )
   // negate common sender of quickbooks reseller
   and not strings.icontains(body.current_thread.text, 'Purchasing Reviews, Inc')

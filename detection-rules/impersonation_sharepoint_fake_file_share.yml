@@ -17,8 +17,13 @@ source: |
                           "*invited you to access a file*",
                           "*received a document*",
                           "*shared a document*",
+                          "*shared a new document*",
                           "*shared this document*"
             )
+        )
+        or any(beta.ml_topic(body.current_thread.text).topics,
+               .name == "File Sharing and Cloud Services"
+               and .confidence == "high"
         )
         or any(file.explode(beta.message_screenshot()),
                strings.ilike(.scan.ocr.raw,
@@ -27,7 +32,12 @@ source: |
                              "*invited you to access a file*",
                              "*received a document*",
                              "*shared a document*",
+                             "*shared a new document*",
                              "*shared this document*"
+               )
+               or any(beta.ml_topic(.scan.ocr.raw).topics,
+                      .name == "File Sharing and Cloud Services"
+                      and .confidence == "high"
                )
         )
       )
@@ -36,7 +46,8 @@ source: |
                       "*shared*",
                       "*updated*",
                       "*sign*",
-                      "*review*"
+                      "*review*",
+                      "*scanned*"
         )
         or strings.ilike(subject.subject,
                          "*Excel*",
@@ -51,7 +62,6 @@ source: |
         or any(ml.nlu_classifier(body.current_thread.text).entities,
                .name == "org" and strings.icontains(subject.subject, .text)
         )
-       
       )
     )
     or any([
@@ -249,6 +259,11 @@ source: |
                 "microsoft.com",
                 "sharepoint.com"
               )
+  )
+  // if there is a Sharepoint link, ensure the link doesn't match any org SLDs
+  and not any(body.links,
+              .href_url.domain.root_domain == "sharepoint.com"
+              and any($org_slds, . == ..href_url.domain.subdomain)
   )
   and sender.email.domain.root_domain not in $org_domains
   and sender.email.domain.root_domain not in (

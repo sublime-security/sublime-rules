@@ -20,71 +20,80 @@ source: |
   and (
     strings.ilike(body.html.display_text, "*seller note*")
     or strings.ilike(body.html.display_text, "*Note from *")
+    or strings.ilike(body.html.display_text, "*Address Updated:*")
+    // payment notificiations that are sent to a recipient which is not the mailbox id
+    // attempts to include ones amplified via a DL
+    or (
+      strings.ilike(body.html.display_text, "*You Sent *")
+      and all(recipients.to,
+              .email.domain.domain not in $org_domains
+              and .email.email != mailbox.email.email
+      )
+    )
     // phone number in subject
     // the subject contains the seller's "name", attacks have been seen with the entire callback text in the seller's name
-    or     (
+    or (
+      regex.icontains(strings.replace_confusables(subject.subject),
+                      '.*\+?([ilo0-9]{1}.)?\(?[ilo0-9]{3}?\)?.[ilo0-9]{3}.?[ilo0-9]{4}.*'
+      )
+      or regex.icontains(strings.replace_confusables(subject.subject),
+                         '.*\+[ilo0-9]{1,3}[ilo0-9]{10}.*'
+      )
+      or // +12028001238
+   regex.icontains(strings.replace_confusables(subject.subject),
+                   '.*[ilo0-9]{3}\.[ilo0-9]{3}\.[ilo0-9]{4}.*'
+      )
+      or // 202-800-1238
+   regex.icontains(strings.replace_confusables(subject.subject),
+                   '.*[ilo0-9]{3}-[ilo0-9]{3}-[ilo0-9]{4}.*'
+      )
+      or // (202) 800-1238
+   regex.icontains(strings.replace_confusables(subject.subject),
+                   '.*\([ilo0-9]{3}\)\s[ilo0-9]{3}-[ilo0-9]{4}.*'
+      )
+      or // (202)-800-1238
+   regex.icontains(strings.replace_confusables(subject.subject),
+                   '.*\([ilo0-9]{3}\)-[ilo0-9]{3}-[ilo0-9]{4}.*'
+      )
+      or ( // 8123456789
         regex.icontains(strings.replace_confusables(subject.subject),
-                        '.*\+?([lo0-9]{1}.)?\(?[lo0-9]{3}?\)?.[lo0-9]{3}.?[lo0-9]{4}.*'
+                        '.*8[ilo0-9]{9}.*'
         )
-        or regex.icontains(strings.replace_confusables(subject.subject),
-                           '.*\+[lo0-9]{1,3}[lo0-9]{10}.*'
-        )
-        or // +12028001238
-   regex.icontains(strings.replace_confusables(subject.subject),
-                   '.*[lo0-9]{3}\.[lo0-9]{3}\.[lo0-9]{4}.*'
-        )
-        or // 202-800-1238
-   regex.icontains(strings.replace_confusables(subject.subject),
-                   '.*[lo0-9]{3}-[lo0-9]{3}-[lo0-9]{4}.*'
-        )
-        or // (202) 800-1238
-   regex.icontains(strings.replace_confusables(subject.subject),
-                   '.*\([lo0-9]{3}\)\s[lo0-9]{3}-[lo0-9]{4}.*'
-        )
-        or // (202)-800-1238
-   regex.icontains(strings.replace_confusables(subject.subject),
-                   '.*\([lo0-9]{3}\)-[lo0-9]{3}-[lo0-9]{4}.*'
-        )
-        or ( // 8123456789
-          regex.icontains(strings.replace_confusables(subject.subject),
-                          '.*8[lo0-9]{9}.*'
-          )
-          and regex.icontains(strings.replace_confusables(subject.subject
-                              ),
-                              '\+[1l]'
-          )
+        and regex.icontains(strings.replace_confusables(subject.subject),
+                            '\+[1l]'
         )
       )
+    )
   )
   and (
     (
       // icontains a phone number
       (
         regex.icontains(strings.replace_confusables(body.current_thread.text),
-                        '.*\+?([lo0-9]{1}.)?\(?[lo0-9]{3}?\)?.[lo0-9]{3}.?[lo0-9]{4}.*\n'
+                        '.*\+?([ilo0-9]{1}.)?\(?[ilo0-9]{3}?\)?.[ilo0-9]{3}.?[ilo0-9]{4}.*\n'
         )
         or regex.icontains(strings.replace_confusables(body.current_thread.text),
-                           '.*\+[lo0-9]{1,3}[lo0-9]{10}.*\n'
+                           '.*\+[ilo0-9]{1,3}[ilo0-9]{10}.*\n'
         )
         or // +12028001238
    regex.icontains(strings.replace_confusables(body.current_thread.text),
-                   '.*[lo0-9]{3}\.[lo0-9]{3}\.[lo0-9]{4}.*\n'
+                   '.*[ilo0-9]{3}\.[ilo0-9]{3}\.[ilo0-9]{4}.*\n'
         )
         or // 202-800-1238
    regex.icontains(strings.replace_confusables(body.current_thread.text),
-                   '.*[lo0-9]{3}-[lo0-9]{3}-[lo0-9]{4}.*\n'
+                   '.*[ilo0-9]{3}-[ilo0-9]{3}-[ilo0-9]{4}.*\n'
         )
         or // (202) 800-1238
    regex.icontains(strings.replace_confusables(body.current_thread.text),
-                   '.*\([lo0-9]{3}\)\s[lo0-9]{3}-[lo0-9]{4}.*\n'
+                   '.*\([ilo0-9]{3}\)\s[ilo0-9]{3}-[ilo0-9]{4}.*\n'
         )
         or // (202)-800-1238
    regex.icontains(strings.replace_confusables(body.current_thread.text),
-                   '.*\([lo0-9]{3}\)-[lo0-9]{3}-[lo0-9]{4}.*\n'
+                   '.*\([ilo0-9]{3}\)-[ilo0-9]{3}-[ilo0-9]{4}.*\n'
         )
         or ( // 8123456789
           regex.icontains(strings.replace_confusables(body.current_thread.text),
-                          '.*8[lo0-9]{9}.*\n'
+                          '.*8[ilo0-9]{9}.*\n'
           )
           and regex.icontains(strings.replace_confusables(body.current_thread.text
                               ),
@@ -125,6 +134,18 @@ source: |
             strings.ilike(body.html.inner_text, '*refund*'),
             strings.ilike(body.html.inner_text, '*+1*'),
             regex.icontains(body.html.inner_text, 'help.{0,3}desk'),
+            strings.ilike(body.html.inner_text, '* your funds*'),
+            strings.ilike(body.html.inner_text, '* your checking*'),
+            strings.ilike(body.html.inner_text, '* your saving*'),
+            strings.ilike(body.html.inner_text, '*transfer*'),
+            strings.ilike(body.html.inner_text, '*secure your account*'),
+            strings.ilike(body.html.inner_text, '*recover your*'),
+            strings.ilike(body.html.inner_text, '*unusual activity*'),
+            strings.ilike(body.html.inner_text, '*suspicious transaction*'),
+            strings.ilike(body.html.inner_text, '*transaction history*'),
+            strings.ilike(body.html.inner_text, '*please ignore this*'),
+            strings.ilike(body.html.inner_text, '*report activity*'),
+  
           )
         )
         or regex.icontains(body.current_thread.text,
