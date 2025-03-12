@@ -1,10 +1,8 @@
-name: "Callback Phishing solicitation in message body"
+name: "Callback Phishing via Adobe Sign comment"
 description: |
-  A fraudulent invoice/receipt found in the body of the message.
-  Callback Phishing is an attempt by an attacker to solicit the victim (recipient) to call a phone number. 
-  The resulting interaction could lead to a multitude of attacks ranging from Financial theft, Remote Access Trojan (RAT) Installation or Ransomware Deployment.
+  This rule inspects messages originating from legitimate Adobe Sign infrastructure, with content matching Callback Phishing criteria, in the body, requiring at least one brand name, as well as 3 matching Callback Phishing terms and a phone number. 
 type: "rule"
-severity: "medium"
+severity: "high"
 source: |
   type.inbound
   and length(attachments) == 0
@@ -15,19 +13,13 @@ source: |
       and not profile.by_sender().any_false_positives
     )
   )
-  and (
-    sender.email.domain.root_domain in $free_email_providers
-    or sender.email.domain.tld in $suspicious_tlds
-    or network.whois(sender.email.domain).found == false
-    or headers.mailer in~ ("Microsoft CDO for Windows 2000")
-    or (
-      length(recipients.to) == 1
-      and all(recipients.to, .email.domain.domain not in $org_domains)
-    )
-  )
+    // Legitimate Docusign sending infratructure
+    and sender.email.domain.root_domain == 'adobesign.com'
+    and (headers.auth_summary.spf.pass or headers.auth_summary.dmarc.pass)
+  
   and (
     // this section is synced with attachment_callback_phish_with_pdf.yml and attachment_callback_phish_with_img.yml
-    regex.icontains(body.current_thread.text,
+    regex.icontains(strings.replace_confusables(body.current_thread.text),
                     '(p.{0,3}a.{0,3}y.{0,3}p.{0,3}a.{0,3}l|ma?c.?fee|n[o0]rt[o0]n|geek.{0,5}squad|ebay|symantec|best buy|lifel[o0]c|secure anywhere|starz|utilities premium|pc security|at&t)'
     )
     or any(ml.logo_detect(beta.message_screenshot()).brands,
@@ -112,23 +104,17 @@ source: |
       )
     )
   )
-  // not high trust sender domains
-  and (
-    (
-      sender.email.domain.root_domain in $high_trust_sender_root_domains
-      and not headers.auth_summary.dmarc.pass
-    )
-    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
-  )
-  and not strings.ends_with(headers.message_id, "@shopify.com>")
 attack_types:
   - "Callback Phishing"
 tactics_and_techniques:
-  - "Free email provider"
+  - "Evasion"
   - "Impersonation: Brand"
   - "Out of band pivot"
   - "Social engineering"
 detection_methods:
-  - "File analysis"
+  - "Content analysis"
+  - "Computer Vision"
+  - "Header analysis"
   - "Sender analysis"
-id: "10a3a446-c70f-5843-a4e4-4d815d33fcb1"
+  - "URL analysis"
+id: "7eb4516d-f358-5c22-b527-34db0a532df9"

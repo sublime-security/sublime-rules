@@ -1,6 +1,6 @@
-name: "Brand impersonation: Meta/Facebook"
+name: "Brand Impersonation: Meta and Subsidiaries"
 description: |
-  Impersonation of Meta or Meta's subsidiary Facebook.
+  Impersonation of Meta or Meta's subsidiaries Facebook and Instagram.
 references:
   - "https://www.techrepublic.com/article/google-and-amazon-most-impersonated-brands-in-phishing-attacks/"
 type: "rule"
@@ -16,7 +16,12 @@ source: |
                     '*facebook business*',
                     '*meta support*',
                     '*meta for business*',
-                    '*meta policy*'
+                    '*meta policy*',
+                    'Instagram Not*',
+                    'Instagram Policies*',
+                    'Instagram Report*',
+                    'Instagram Helpdesk*',
+                    'Instagram Support*'
       )
       or strings.ilevenshtein(sender.display_name, 'facebook ads') <= 2
       or strings.ilevenshtein(sender.display_name, 'facebook business') <= 2
@@ -39,7 +44,8 @@ source: |
           regex.icontains(sender.display_name,
                           '\bfacebook\b',
                           '\bmeta\b',
-                          '\bmeta.*support\b'
+                          '\bmeta.*support\b',
+                          '\binstagram\b'
           )
           // negate metageek.com
           and not (
@@ -51,7 +57,7 @@ source: |
       )
       and (
         any(ml.logo_detect(beta.message_screenshot()).brands,
-            .name in ("Facebook", "Meta")
+            .name in ("Facebook", "Meta", "Instagram")
         )
         or any(ml.nlu_classifier(body.current_thread.text).intents,
                .name in ("cred_theft", "callback_scam", "steal_pii")
@@ -63,7 +69,7 @@ source: |
     or (
       sender.email.domain.root_domain == "salesforce.com"
       and any(ml.logo_detect(beta.message_screenshot()).brands,
-              .name in ("Facebook", "Meta")
+              .name in ("Facebook", "Meta", "Instagram")
       )
       and any(ml.nlu_classifier(body.current_thread.text).intents,
               .name in ("cred_theft", "callback_scam", "steal_pii")
@@ -74,7 +80,7 @@ source: |
     // or the body contains a facebook/meta footer with the address citing "community support" 
     (
       regex.icontains(body.current_thread.text,
-                      "Meta Platforms, Inc., Attention: Community Support, 1 (Facebook|Meta) Way, Menlo Park, CA 94025"
+                      'Attention: Community Support, 1 (Facebook|Meta)?\s*Way, Menlo Park, CA 94025'
       )
       // and it contains a link to spawn a chat with facebook - this is not the way support operates
       and (
@@ -88,6 +94,19 @@ source: |
               and .confidence in ("high")
           )
         )
+        or any(recipients.to,
+               any(body.links,
+                   strings.icontains(.href_url.url, ..email.email)
+                   or any(beta.scan_base64(.href_url.url, ignore_padding=true),
+                          strings.icontains(., ...email.email)
+                   )
+                   or any(beta.scan_base64(.href_url.fragment,
+                                           ignore_padding=true
+                          ),
+                          strings.icontains(., ...email.email)
+                   )
+               )
+        )
       )
     )
   )
@@ -98,7 +117,8 @@ source: |
     'facebookenterprise.com',
     'meta.com',
     'metamail.com',
-    'medallia.com'
+    'instagram.com',
+    'medallia.com',
   )
   // negate metaenterprise links
   and not any(headers.reply_to, .email.email == "noreply@facebookmail.com")
@@ -112,7 +132,7 @@ source: |
       and not profile.by_sender().any_false_positives
     )
     // if saleforce is being abused, sender profiles aren't very useful
-    or sender.email.email in ("noreply@salesforce.com", "support@salesforce.com")
+    or sender.email.email in ("noreply@salesforce.com", "support@salesforce.com", "no-reply@salesforce.com")
     // sent via Google group
     or any(headers.hops, any(.fields, .name == "X-Google-Group-Id"))
   )
@@ -129,7 +149,6 @@ source: |
     or sender.email.domain.root_domain == "salesforce.com"
   )
   and not profile.by_sender().any_false_positives
-
 attack_types:
   - "Credential Phishing"
 tactics_and_techniques:
