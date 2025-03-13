@@ -6,8 +6,11 @@ source: |
   (
     type.inbound
     or (
-      strings.icontains(headers.return_path.local_part, "+caf_=") // Gmail autoforward
+      strings.icontains(headers.return_path.local_part,
+                        "+caf_="
+      ) // Gmail autoforward
       and headers.return_path.domain.root_domain in $org_domains // from an internal domain
+      and not sender.email.domain.root_domain in $org_domains
     )
   )
   and any(filter(body.links, .href_url.domain.domain == "forms.office.com"),
@@ -96,7 +99,7 @@ source: |
                                   '\n\n'
                 ) > 20
                 or strings.icount(ml.link_analysis(., mode="aggressive").final_dom.raw,
-                                  '<span>'
+                                  '<span><span>'
                 ) > 20
               )
             )
@@ -104,12 +107,16 @@ source: |
             and 
             // there is one or two links to another page
             0 < length(filter(ml.link_analysis(.).final_dom.links,
-                              .display_text is null
-                              or (
-                                .display_text !~ "Privacy and cookies"
-                                and .display_text !~ "terms of use"
-                                and .display_text !~ "report abuse"
-                                and .href_url.domain.root_domain != 'microsoft.com'
+                              not (
+                                (
+                                  (
+                                    .display_text =~ "Privacy and cookies"
+                                    or .display_text =~ "terms of use"
+                                    or .display_text =~ "report abuse"
+                                  )
+                                  and .href_url.domain.root_domain =~ 'microsoft.com'
+                                )
+                                or .href_url.domain.root_domain =~ sender.email.domain.root_domain
                               )
                        )
             ) <= 2
