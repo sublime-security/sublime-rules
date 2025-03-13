@@ -5,7 +5,37 @@ type: "rule"
 severity: "medium"
 source: |
   type.inbound
-  and 1 <= length(attachments) < 20
+  and (
+    1 <= length(attachments) < 3
+    or (
+      // if there are more than three attachments
+      3 <= length(attachments) < 20
+      // there are only pngs and pdf/docx
+      and length(distinct(map(attachments, .file_extension))) == 2
+      and all(distinct(map(attachments, .file_extension)),
+              . in ('png', 'pdf', 'docx')
+      )
+      and (
+        // multiple attachments mention common brands or other common common filenames
+        (
+          length(filter(attachments,
+                        strings.icontains(.file_name, 'adobe')
+                        or strings.icontains(.file_name, 'office')
+                        or strings.icontains(.file_name, 'appstore')
+                        or strings.icontains(.file_name, 'google')
+                        or strings.icontains(.file_name, 'padlock')
+                        or regex.icontains(.file_name, '\bdoc\b')
+                 )
+          ) > 3
+        )
+        or any(filter(attachments, .file_extension in ('pdf', 'docx')),
+               any(recipients.to,
+                   strings.icontains(..file_name, .email.domain.sld)
+               )
+        )
+      )
+    )
+  )
   
   // Inspects image attachments for QR codes
   and any(attachments,
