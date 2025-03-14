@@ -1,0 +1,100 @@
+name: "Credential Phishing: Fake Security Login Alert (Generic)"
+description: "Detects phishing attempts that claim suspicious login activity or unusual sign-in attempts regardless of brand"
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  
+  // Subject contains security alert language
+  and regex.icontains(subject.subject,
+                     "unusual login|unusual sign|login attempt|sign.?in attempt|suspicious sign|unusual activity|security alert")
+  
+  // Body contains security alert language
+  and regex.icontains(body.current_thread.text,
+                     "detect.*login|unusual.*login|suspicious.*login|login attempt|unusual sign|IP Address|Location|don't recognize|security|verify.*account|suspicious activity")
+  
+  // Link with suspicious display text
+  and any(body.links,
+         regex.icontains(.display_text, 
+                        "sign in|log in|login|verify|continue|account|confirm")
+  )
+  
+  // Link domains don't match sender
+  and any(body.links,
+         .href_url.domain.root_domain != sender.email.domain.root_domain
+         and .href_url.domain.root_domain not in $org_domains
+  )
+  
+  // Check for NLU credential theft intent
+  and any(ml.nlu_classifier(body.current_thread.text).intents,
+          .name == "cred_theft" and .confidence in ("medium", "high")
+  )
+  
+  // Explicit negations for known legitimate security alert senders
+  and not (
+    regex.icontains(sender.email.domain.domain, 
+                   "lastpass.com|teachable.com|accountprotection.microsoft.com|notificationservices.org")
+    and headers.auth_summary.spf.pass
+  )
+  
+  // Sender profile checks
+  and (
+    (
+      profile.by_sender().prevalence in ("new", "outlier")
+      and not profile.by_sender().solicited
+    )
+    or (
+      profile.by_sender().any_messages_malicious_or_spam
+      and not profile.by_sender().any_false_positives
+    )
+  )
+  
+  // Stricter negation for high trust domains - must pass both SPF and DMARC
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and (
+        not headers.auth_summary.dmarc.pass
+        or not headers.auth_summary.spf.pass
+      )
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+  
+  // Stronger senders of concern - limit to these patterns for common phishing sources
+  and (
+    regex.icontains(sender.display_name, 
+                   "Amazon|Microsoft|Meta|Facebook|Twitter|X|Chase|Wells Fargo|Bank|Metamask|Coinbase|AWS|Adobe|Navan|MEXC|Google")
+    or regex.icontains(sender.email.local_part, 
+                      "support|security|no[-_]?reply|secure|alert|service|admin|help|info|account")
+    or (
+      regex.icontains(sender.email.domain.domain, 
+                      "service|security|support|alert|secure|admin|google|microsoft|amazon")
+      and not regex.icontains(sender.email.domain.domain, "notificationservice")
+    )
+  )
+  
+  // Make sure the link URL pattern is suspicious (not just matching domain mismatch)
+  and any(body.links,
+         (
+           regex.icontains(.href_url.url, 
+                          "login|auth|sign|verify|account|secure|confirm|token|session|password")
+           or .href_url.domain.root_domain in $url_shorteners
+         )
+         or regex.icontains(.display_text, "log into my account")
+  )
+  
+  // Negate replies
+  and (
+    length(headers.references) == 0
+    or not any(headers.hops, any(.fields, strings.ilike(.name, "In-Reply-To")))
+  )
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Natural Language Understanding"
+  - "Sender analysis"
+  - "URL analysis"
