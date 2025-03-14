@@ -8,8 +8,24 @@ type: "rule"
 severity: "medium"
 source: |
   type.inbound
-  and any(body.links, .href_url.domain.domain == 't.info.samsungusa.com' and .href_url.path =~ '/r/')
-  and sender.email.domain.root_domain != 'samsungusa.com'
+  and any(body.links,
+          (
+            .href_url.domain.domain == 't.info.samsungusa.com'
+            and .href_url.path =~ '/r/'
+          )
+          or (
+            .href_url.domain.root_domain == "samsung.com"
+            and strings.iends_with(.href_url.domain.subdomain, '.email')
+            and strings.icontains(.href_url.path, '/r/')
+            and strings.icontains(.href_url.query_params, 'id=')
+            and strings.icontains(.href_url.query_params, 'p1=')
+            // with redirects to google/doubleclick
+            and regex.icontains(.href_url.query_params,
+                                'p1=[^\&]*(?:google\.|doubleclick\.net)'
+            )
+          )
+  )
+  and sender.email.domain.root_domain not in ('samsungusa.com', 'samsung.com')
 tags:
   - "Attack surface reduction"
 attack_types:
