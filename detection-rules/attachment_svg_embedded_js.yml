@@ -15,13 +15,28 @@ source: |
             .file_extension =~ "svg"
             or .file_extension in $file_extensions_common_archives
           )
-          and strings.ilike(file.parse_text(.).text,
-                            "*onload*",
-                            "*window.location.href*",
-                            "*onerror*",
-                            "*CDATA*",
-                            "*<script>*",
-                            "*</script>*"
+          and (
+            strings.ilike(file.parse_text(.).text,
+                          "*onload*",
+                          "*window.location.href*",
+                          "*onerror*",
+                          "*CDATA*",
+                          "*<script>*",
+                          "*</script>*"
+            )
+            or regex.icontains(file.parse_text(.).text,
+                               '<iframe[^\>]+src\s*=\s*\"data:[^\;]+;base64,'
+            )
+            or any(beta.scan_base64(file.parse_text(.).text),
+                   strings.ilike(.,
+                                 "*onload*",
+                                 "*window.location.href*",
+                                 "*onerror*",
+                                 "*CDATA*",
+                                 "*<script>*",
+                                 "*</script>*"
+                   )
+            )
           )
   )
   and (
