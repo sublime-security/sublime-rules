@@ -1,5 +1,5 @@
 name: "Link: Multistage Landing - Microsoft Forms Abuse"
-description: "The detection rule matches on message groups which make use of Microsoft Forms as a landing page. The landing page contains links which are newly registered, use free file or subdomain hosts, url shortners or when visited are phishing pages, lead to a captcha or rediret to a top website."
+description: "The detection rule matches on message groups which make use of Microsoft Forms as a landing page. The landing page contains links which are newly registered, use free file or subdomain hosts, URL shorteners or when visited are phishing pages, lead to a captcha or redirect to a top website."
 type: "rule"
 severity: "high"
 source: |
@@ -89,18 +89,25 @@ source: |
                 or strings.icount(ml.link_analysis(., mode="aggressive").final_dom.raw,
                                   '\n\n'
                 ) > 20
+                or strings.icount(ml.link_analysis(., mode="aggressive").final_dom.raw,
+                                  '<span><span>'
+                ) > 20
               )
             )
             // AND 
             and 
             // there is one or two links to another page
             0 < length(filter(ml.link_analysis(.).final_dom.links,
-                              .display_text is null
-                              or (
-                                .display_text !~ "Privacy and cookies"
-                                and .display_text !~ "terms of use"
-                                and .display_text !~ "report abuse"
-                                and .href_url.domain.root_domain != 'microsoft.com'
+                              not (
+                                (
+                                  (
+                                    .display_text =~ "Privacy and cookies"
+                                    or .display_text =~ "terms of use"
+                                    or .display_text =~ "report abuse"
+                                  )
+                                  and .href_url.domain.root_domain =~ 'microsoft.com'
+                                )
+                                or .href_url.domain.root_domain =~ sender.email.domain.root_domain
                               )
                        )
             ) <= 2
