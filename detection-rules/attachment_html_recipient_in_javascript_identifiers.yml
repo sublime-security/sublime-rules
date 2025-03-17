@@ -25,15 +25,29 @@ source: |
           )
           // Recipients address found in javascript
           and any(file.explode(.),
-                  any(recipients.to,
-                      any(..scan.javascript.strings, strings.icontains(., ..email.email)) and (.email.domain.valid or strings.icontains(.display_name, "undisclosed"))
+                  (
+                    any(recipients.to,
+                        (
+                          any(..scan.javascript.strings,
+                              strings.icontains(., ..email.email)
+                          )
+                          or any(..scan.strings.strings,
+                                 strings.icontains(., ..email.email)
+                          )
+                        )
+                        and (
+                          .email.domain.valid
+                          or strings.icontains(.display_name, "undisclosed")
+                        )
+                    )
                   )
-  
-                  // Negating Cisco Secure Email Encryption
-                  and not any(.scan.javascript.strings,
-                              strings.contains(., "Cisco Registered Envelope Service")
-                              and not strings.contains(., "https://res.cisco.com:443")
-                  )
+          )
+          // Negating Cisco Secure Email Encryption
+          and not any(file.explode(.),
+                      any(.scan.javascript.strings,
+                          strings.contains(., "Cisco Registered Envelope Service")
+                          or strings.contains(., "https://res.cisco.com:443")
+                      )
           )
   )
 

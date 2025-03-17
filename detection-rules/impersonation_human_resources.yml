@@ -109,12 +109,12 @@ source: |
   )
   // topic negation
   and not any(beta.ml_topic(body.current_thread.text).topics,
-            .name in (
-              "Newsletters and Digests",
-              "Advertising and Promotions",
-              "Educational and Research",
-            )
-            and .confidence == "high"
+              .name in (
+                "Newsletters and Digests",
+                "Advertising and Promotions",
+                "Educational and Research",
+              )
+              and .confidence == "high"
   )
   and (
     profile.by_sender().prevalence in ("new", "outlier")
@@ -122,16 +122,27 @@ source: |
       profile.by_sender().any_messages_malicious_or_spam
       and not profile.by_sender().any_false_positives
     )
+    or sender.email.email in (
+      "adobesign@adobesign.com",
+      "noreply@salesforce.com",
+      "support@salesforce.com",
+      "no-reply@salesforce.com"
+    ) // abused services
   )
   // negate highly trusted sender domains unless they fail DMARC authentication
   and (
     (
       sender.email.domain.root_domain in $high_trust_sender_root_domains
-      and not headers.auth_summary.dmarc.pass
+      and (
+        not headers.auth_summary.dmarc.pass
+        or (
+          headers.auth_summary.dmarc.pass is null
+          and not headers.auth_summary.spf.pass
+        )
+      )
     )
     or sender.email.domain.root_domain not in $high_trust_sender_root_domains
   )
-
 
 attack_types:
   - "BEC/Fraud"
