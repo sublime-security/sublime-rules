@@ -1,0 +1,61 @@
+name: "Brand Impersonation: Gmail"
+description: "Detects incoming messages from senders using Gmail-like display names or masquerading as Gmail support teams while discussing security and authentication topics. The rule analyzes message content and screenshots for credential harvesting signals, excluding legitimate organizational domains and authenticated high-trust senders."
+type: "rule"
+severity: ""
+source: |
+  type.inbound
+  and (
+    // display name contains gmail
+    (
+      strings.ilike(strings.replace_confusables(sender.display_name), '*gmail*')
+      and sender.display_name != sender.email.email
+    )
+    // levenshtein distance similar to gmail
+    or strings.ilevenshtein(strings.replace_confusables(sender.display_name),
+                            'gmail'
+    ) <= 1
+    or regex.icontains(body.current_thread.text,
+                       "gmail (support|technical|help) (team)"
+    )
+  )
+  and (
+    any(beta.ml_topic(body.current_thread.text).topics,
+        .name in ("Security and Authentication")
+        and .confidence in ("medium", "high")
+    )
+    or any(beta.ml_topic(beta.ocr(beta.message_screenshot()).text).topics,
+           .name in ("Security and Authentication")
+           and .confidence in ("medium", "high")
+    )
+    or any(ml.nlu_classifier(body.current_thread.text).intents,
+           .name == "cred_theft" and .confidence == "high"
+    )
+    or any(ml.nlu_classifier(beta.ocr(beta.message_screenshot()).text).intents,
+           .name == "cred_theft" and .confidence == "high"
+    )
+  )
+  
+  // and the sender is not in org_domains
+  and not sender.email.domain.root_domain in $org_domains
+  
+  // and the sender is not from high trust sender root domains
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and not headers.auth_summary.dmarc.pass
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+  and not profile.by_sender().solicited
+
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Social engineering"
+  - "Free email provider"
+  - "Impersonation: Brand"
+detection_methods:
+  - "Content analysis"
+  - "Natural Language Understanding"
+  - "Optical Character Recognition"
+  - "Sender analysis"
