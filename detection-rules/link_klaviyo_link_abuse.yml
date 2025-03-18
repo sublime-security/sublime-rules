@@ -5,37 +5,44 @@ severity: "low"
 source: |
   type.inbound
   and any(body.links,
-          .href_url.domain.root_domain in (
-            "klclick.com",
-            "klclick1.com",
-            "klclick2.com",
-            "klclick3.com",
-            "klclick4.com",
-            "klclick5.com",
-            "klclick6.com",
-            "klclick7.com",
+          any([
+                "klclick.com",
+                "klclick1.com",
+                "klclick2.com",
+                "klclick3.com",
+                "klclick4.com",
+                "klclick5.com",
+                "klclick6.com",
+                "klclick7.com"
+              ],
+              strings.icontains(..href_url.domain.root_domain, .)
+              or strings.icontains(..href_url.query_params, .)
           )
   )
   // there is one unique Klaviyo Link in the message
   and length(distinct(filter(body.links,
-                             .href_url.domain.root_domain in (
-                               "klclick.com",
-                               "klclick1.com",
-                               "klclick2.com",
-                               "klclick3.com",
-                               "klclick4.com",
-                               "klclick5.com",
-                               "klclick6.com",
-                               "klclick7.com",
+                             any([
+                                   "klclick.com",
+                                   "klclick1.com",
+                                   "klclick2.com",
+                                   "klclick3.com",
+                                   "klclick4.com",
+                                   "klclick5.com",
+                                   "klclick6.com",
+                                   "klclick7.com"
+                                 ],
+                                 strings.icontains(..href_url.domain.root_domain,
+                                                   .
+                                 )
+                                 or strings.icontains(..href_url.query_params, .)
                              )
                       ),
                       .href_url.url
              )
-  ) == 1
+  ) <= 1
   and not any(headers.domains, .root_domain == "klaviyomail.com")
   and not any(headers.hops, any(.fields, .name == "X-Kmail-Account"))
   and profile.by_sender_email().prevalence != "common"
-
 attack_types:
   - "BEC/Fraud"
   - "Credential Phishing"
