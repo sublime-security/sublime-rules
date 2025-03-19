@@ -5,11 +5,45 @@ type: "rule"
 severity: "medium"
 source: |
   type.inbound
-  and 1 <= length(attachments) < 3
+  and (
+    1 <= length(attachments) < 3
+    or (
+      // if there are more than three attachments
+      3 <= length(attachments) < 20
+      // there are only pngs and pdf/docx
+      and length(distinct(map(attachments, .file_extension))) == 2
+      and all(distinct(map(attachments, .file_extension)),
+              . in ('png', 'pdf', 'docx')
+      )
+      and (
+        // multiple attachments mention common brands or other common common filenames
+        (
+          length(filter(attachments,
+                        strings.icontains(.file_name, 'adobe')
+                        or strings.icontains(.file_name, 'office')
+                        or strings.icontains(.file_name, 'appstore')
+                        or strings.icontains(.file_name, 'google')
+                        or strings.icontains(.file_name, 'padlock')
+                        or regex.icontains(.file_name, '\bdoc\b')
+                 )
+          ) > 3
+        )
+        or any(filter(attachments, .file_extension in ('pdf', 'docx')),
+               any(recipients.to,
+                   strings.icontains(..file_name, .email.domain.sld)
+               )
+        )
+      )
+    )
+  )
   
   // Inspects image attachments for QR codes
   and any(attachments,
-          (.file_type in $file_types_images or .file_type == "pdf")
+          (
+            .file_type in $file_types_images
+            or .file_type == "pdf"
+            or .file_extension in $file_extensions_macros
+          )
           and (
             any(file.explode(.),
                 .scan.qr.type == "url"
@@ -62,18 +96,44 @@ source: |
                     )
   
                     // exclude google maps
-                    and not strings.starts_with(.scan.qr.url.url, 'https://goo.gl/maps')
-                    and not strings.starts_with(.scan.qr.url.url, 'https://maps.app.goo.gl')
+                    and not strings.starts_with(.scan.qr.url.url,
+                                                'https://goo.gl/maps'
+                    )
+                    and not strings.starts_with(.scan.qr.url.url,
+                                                'https://maps.app.goo.gl'
+                    )
                   )
   
                   // the QR code url is a bing open redirect
-                  or .scan.qr.url.domain.root_domain == 'bing.com' and .scan.qr.url.path =~ '/ck/a'
+                  or (
+                    .scan.qr.url.domain.root_domain == 'bing.com'
+                    and .scan.qr.url.path =~ '/ck/a'
+                  )
+                  // QR code contains non ascii chars
+                  or regex.contains(.scan.qr.url.url, '[^\x00-\x7F]')
                   or (
   
                     // usap-dc open redirect
                     .scan.qr.url.domain.root_domain == "usap-dc.org"
                     and .scan.qr.url.path =~ "/tracker"
-                    and strings.starts_with(.scan.qr.url.query_params, "type=dataset&url=http")
+                    and strings.starts_with(.scan.qr.url.query_params,
+                                            "type=dataset&url=http"
+                    )
+                    or (
+                      any(recipients.to,
+                          strings.icontains(..scan.qr.url.url, .email.email)
+                          or any(beta.scan_base64(..scan.qr.url.url,
+                                                  ignore_padding=true
+                                 ),
+                                 strings.icontains(., ..email.email)
+                          )
+                          or any(beta.scan_base64(..scan.qr.url.fragment,
+                                                  ignore_padding=true
+                                 ),
+                                 strings.icontains(., ..email.email)
+                          )
+                      )
+                    )
                   )
                 )
             )
@@ -89,7 +149,7 @@ source: |
       and not profile.by_sender().any_false_positives
     )
   )
-
+  
   // negate highly trusted sender domains unless they fail DMARC authentication
   and (
     (
