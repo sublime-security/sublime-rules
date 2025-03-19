@@ -1,0 +1,20 @@
+name: "Attachment: HTML With Suspicious Comments"
+description: "Detects HTML files under 100KB that contain duplicate or padding text in the form of literary quotes or common sayings within HTML comments."
+type: "rule"
+severity: "high"
+source: "type.inbound\nand any(attachments,\n        (\n          (\n            .file_type == \"html\"\n            or .file_extension in (\"html\", \"xhtml\", \"mhtml\")\n            or .content_type == \"text/html\"\n          )\n          and .size < 100000\n        )\n        and (\n          (\n            // targeting comments that pad the file with quotes from literature\n            // examples: \"// Echoes of the past linger in silence.\", \"// The wind whispered secrets unknown.\", \"// Shadows tell stories in the dark.\"\n\n            // count all HTML code comments that match our pattern\n            length(regex.extract(file.parse_text(.).text, '// [A-Z][ a-z ]+\\.')) / \n            // divide by the count of all UNIQUE HTML code comments that match our pattern\n            length(distinct(regex.extract(file.parse_text(.).text,\n                                          '// [A-Z][ a-z ]+\\.'\n                            ),\n                            .full_match\n                   )\n            ) \n            // at least 50% of the comments are duplicates\n            >= 2\n          )\n          or (\n            // targeting comments that pad the file with sayings\n            // examples: \"<!-- <span> No gain without pain. </span> -->\", \"<!-- <p> Beauty is only skin deep. </p> -->\", \"<!-- <span> Actions speak louder than words. </span> -->\"\n            length(regex.extract(file.parse_text(.).text,\n                                 '<!-- <[a-z]+> [A-Z][ a-z ]+\\. </[a-z]+> -->'\n                   )\n            ) > 2\n          )\n        )\n)\n"
+tags:
+  - "Attack surface reduction"
+attack_types:
+  - "Credential Phishing"
+  - "Malware/Ransomware"
+tactics_and_techniques:
+  - "HTML smuggling"
+  - "Evasion"
+detection_methods:
+  - "File analysis"
+  - "HTML analysis"
+  - "Content analysis"
+id: "93061d17-730a-5b33-955d-8f8f6cc5cca9"
+testing_pr: 2520
+testing_sha: 8765df87c0009104e82264a7886e9f5b55a1ff4a
