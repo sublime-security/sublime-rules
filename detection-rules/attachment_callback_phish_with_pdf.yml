@@ -19,14 +19,22 @@ source: |
   and length(attachments) == 1
   
   // sender is freemail
-  and sender.email.domain.root_domain in $free_email_providers
-  
+  and (
+    sender.email.domain.root_domain in $free_email_providers
+    // the sender is a common service, which has likely been sent through a DL
+    or (
+      sender.email.domain.root_domain in $tranco_50k
+      and all(recipients.to, .email.domain.domain not in $org_domains)
+    )
+  )
   // the attachment is a pdf with less than 3 pages, and at least 60 ocr chars
   and any(attachments,
           (
             .file_extension == "pdf"
             // get the length of the attached pdf
-            and any(file.explode(.), .depth == 0 and .scan.exiftool.page_count < 3)
+            and any(file.explode(.),
+                    .depth == 0 and .scan.exiftool.page_count < 3
+            )
             // check that any _single_ result in the file.explode matches these conditions
             // a second file.explode is required because the OCR is generated at a different depth within 
             // the file.explode results
