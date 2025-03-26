@@ -1,0 +1,45 @@
+name: "Callback Phishing: Healthcare Appointment Confirmation"
+description: "Detects messages from free email providers discussing healthcare appointments and containing phone numbers to reschedule or cancel, without any prior benign communication history."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+
+  // from a free email provider (not a legitimate healthcare domain)
+  and sender.email.domain.root_domain in $free_email_providers
+
+  // healthcare topic
+  and any(beta.ml_topic(body.current_thread.text).topics,
+          .name == "Health and Wellness"
+  )
+
+  // contains healthcare appointment-related keywords
+  and 2 of (
+    strings.icontains(body.current_thread.text, "appointment"),
+    strings.icontains(body.current_thread.text, "meeting"),
+    strings.icontains(body.current_thread.text, "hospital"),
+    strings.icontains(body.current_thread.text, "clinic"),
+    strings.icontains(body.current_thread.text, "your health agent")
+  )
+
+  // contains a phone number pattern
+  and regex.contains(body.current_thread.text,
+                     '\+?([ilo0-9]{1}.)?\(?[ilo0-9]{3}?\)?.[ilo0-9]{3}.?[ilo0-9]{4}',
+                     '\+?([ilo0-9]{1,2})?\s?\(?\d{3}\)?[\s\.\-⋅]{0,5}[ilo0-9]{3}[\s\.\-⋅]{0,5}[ilo0-9]{4}'
+  )
+
+  // no benign history with this sender
+  and not profile.by_sender().any_messages_benign
+attack_types:
+  - "Callback Phishing"
+tactics_and_techniques:
+  - "Free email provider"
+  - "Impersonation: Brand"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Sender analysis"
+  - "Natural Language Understanding"
+id: "5337d737-36be-5ba6-b7a4-bc27e1b7c94f"
+testing_pr: 2533
+testing_sha: 8af152432ce763c02637dba51f8c9912ee5566ce
