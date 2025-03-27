@@ -1,19 +1,21 @@
-name: "Open Redirect: retailrocket.net"
+name: "Open Redirect: adnxs.com"
 description: |
-  Message contains use of the retailrocket.net open redirect. This has been exploited in the wild.
+  Message contains use of the adnxs.com redirect with getuid parameter. This has been exploited in phishing campaigns to redirect users to malicious sites.
 type: "rule"
 severity: "medium"
 source: |
   type.inbound
-  and length(filter(body.links, .href_url.domain.root_domain == "retailrocket.net")) < 10
   and any(body.links,
-          .href_url.domain.domain == "clickproxy.retailrocket.net"
-          and strings.icontains(.href_url.query_params, 'url=')
+          .href_url.domain.domain == "ib.adnxs.com"
+          and strings.icontains(.href_url.path, '/getuid')
+          // Make sure the redirect is not going back to adnxs.com
           and not regex.icontains(.href_url.query_params,
-                                  'url=(?:https?(?:%3a|:))?(?:%2f|\/){2}[^&]*retailrocket\.net(?:\&|\/|$)'
+                                  '(?:https?(?:%3a|:))?(?:%2f|\/){2}[^&]*adnxs\.com(?:\&|\/|$|%2f)'
           )
   )
-  and not sender.email.domain.root_domain == "retailrocket.net"
+  and not sender.email.domain.root_domain == "adnxs.com"
+  and not sender.email.domain.root_domain == "appnexus.com"
+  
   // negate highly trusted sender domains unless they fail DMARC authentication
   and (
     (
@@ -30,4 +32,4 @@ tactics_and_techniques:
 detection_methods:
   - "Sender analysis"
   - "URL analysis"
-id: "0e00e7cb-6761-5cc2-befb-76c5725630c1"
+id: "7fc92916-6c7a-53dd-9487-22b11ee062b3"
