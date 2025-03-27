@@ -1,0 +1,19 @@
+name: "Compensation Review With QR Code in Attached EML"
+description: "Detects inbound messages containing compensation-related terms (salary, bonus, merit, etc.) combined with review/change language that include EML attachments containing QR codes or barcodes in scanned documents."
+type: "rule"
+severity: "high"
+source: "type.inbound\n\n// Subjects include review/updates to salary\n// \nand (\n  // the subject contains pay related items\n  (\n    strings.icontains(subject.subject, 'salary')\n    or strings.icontains(subject.subject, 'compensation')\n    or regex.icontains(subject.subject, 'comp\\b')\n    or regex.icontains(subject.subject, '\\bpay(?:roll|\\b)')\n    or strings.icontains(subject.subject, 'bonus')\n    or strings.icontains(subject.subject, 'incentive')\n    or strings.icontains(subject.subject, 'merit')\n  )\n  and (\n    strings.icontains(subject.subject, 'review')\n    or strings.icontains(subject.subject, 'evaluation')\n    or regex.icontains(subject.subject, 'eval\\b')\n    or strings.icontains(subject.subject, 'assessment')\n    or strings.icontains(subject.subject, 'appraisal')\n    or strings.icontains(subject.subject, 'feedback')\n    or strings.icontains(subject.subject, 'performance')\n    or strings.icontains(subject.subject, 'adjustment')\n    or strings.icontains(subject.subject, 'increase')\n    or strings.icontains(subject.subject, 'raise')\n    or strings.icontains(subject.subject, 'change')\n    or strings.icontains(subject.subject, 'modification')\n    or strings.icontains(subject.subject, 'revision')\n    or strings.icontains(subject.subject, 'amendment')\n    or strings.icontains(subject.subject, 'distribution')\n\n  )\n)\nand any(filter(attachments, .content_type == \"message/rfc822\"),\n        any(file.parse_eml(.).attachments,\n            any(file.explode(.),\n                (\n                  regex.icontains(.scan.ocr.raw, 'scan|camera')\n                  and regex.icontains(.scan.ocr.raw, '\\bQR\\b|Q\\.R\\.|barcode')\n                )\n                or .scan.qr.type == \"url\" and .scan.qr.url.domain.valid\n            )\n        )\n)\n"
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "QR code"
+  - "Social engineering"
+detection_methods:
+  - "Computer Vision"
+  - "Content analysis"
+  - "Optical Character Recognition"
+  - "QR code analysis"
+id: "0e89830c-2ac0-51d3-118f-da514cc3b26e"
+og_id: "98a2f03c-4bec-556d-af84-709d41819877"
+testing_pr: 2534
+testing_sha: fab4cf53b91d940b02165720a90b3c597d517228
