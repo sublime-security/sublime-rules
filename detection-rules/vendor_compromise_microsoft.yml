@@ -21,17 +21,44 @@ source: |
              )
   ) == 1
   and 1 of (
-    any(ml.nlu_classifier(body.html.display_text).entities,
+    any(ml.nlu_classifier(body.current_thread.text).entities,
         .text in~ ("Sharepoint", "Microsoft")
     ),
     any(ml.logo_detect(beta.message_screenshot()).brands,
         strings.istarts_with(.name, "Microsoft")
+    ),
+    any(attachments,
+        .file_type in $file_types_images
+        and any(file.explode(.),
+                any(ml.nlu_classifier(.scan.ocr.raw).entities,
+                    .text in~ ("Sharepoint", "Microsoft")
+                )
+        )
     )
   )
-  and not (
-    strings.starts_with(headers.message_id, '<Share-')
-    and strings.ends_with(headers.message_id, '@odspnotify>')
+  
+  // bounce-back negations
+  and not strings.like(sender.email.local_part,
+                       "*postmaster*",
+                       "*mailer-daemon*",
+                       "*administrator*"
   )
+  and not any(attachments,
+              .content_type in (
+                "message/rfc822",
+                "message/delivery-status",
+                "text/calendar"
+              )
+  )
+  
+  // negate Sharepoint shares
+  and not strings.ends_with(headers.message_id, '@odspnotify>')
+  
+  // negate Sharepoint shares from non-MS domains (personal Onedrive share from a Gmail adddress, for example)
+  and not (
+    length(body.links) > 0 and all(body.links, .href_url.domain.tld == "ms")
+  )
+  
   and (
     profile.by_sender_email().prevalence in ("uncommon", "common")
     or profile.by_sender_email().solicited
