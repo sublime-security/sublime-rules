@@ -5,8 +5,22 @@ severity: "medium"
 source: |
   type.inbound
   and sender.email.domain.domain not in $org_domains
-  and regex.icontains(sender.display_name,
-                      '(\bh\W?r\W?\b|human\s?resources|hr depart(ment)?|employee relations)'
+  and (
+    regex.icontains(sender.display_name,
+                    '(\bh\W?r\W?\b|human\s?resources|hr depart(ment)?|employee relations)'
+    )
+    or (
+      length(filter(ml.nlu_classifier(body.current_thread.text).entities,
+                    .name == "sender"
+             )
+      ) == 1
+      and any(ml.nlu_classifier(body.current_thread.text).entities,
+              .name == "sender"
+              and regex.icontains(.text,
+                                  '(\bh\W?r\W?\b|human\s?resources|hr depart(ment)?|employee relations)'
+              )
+      )
+    )
   )
   and not (
     strings.icontains(sender.display_name, sender.email.domain.domain)
@@ -117,7 +131,7 @@ source: |
               and .confidence == "high"
   )
   and (
-    profile.by_sender().prevalence in ("new", "outlier")
+    profile.by_sender_email().prevalence in ("new", "outlier")
     or (
       profile.by_sender().any_messages_malicious_or_spam
       and not profile.by_sender().any_false_positives
