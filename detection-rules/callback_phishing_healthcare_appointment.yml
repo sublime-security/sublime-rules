@@ -5,6 +5,9 @@ severity: "medium"
 source: |
   type.inbound
   
+  and length(body.current_thread.text) < 5000
+  and length(recipients.to) == 1
+  
   // from a free email provider (not a legitimate healthcare domain)
   and sender.email.domain.root_domain in $free_email_providers
   
@@ -14,7 +17,7 @@ source: |
   )
   
   // contains healthcare appointment-related keywords
-  and 2 of (
+  and 3 of (
     strings.icontains(body.current_thread.text, "appointment"),
     strings.icontains(body.current_thread.text, "meeting"),
     strings.icontains(body.current_thread.text, "hospital"),
@@ -26,6 +29,20 @@ source: |
   and regex.contains(body.current_thread.text,
                      '\+?([ilo0-9]{1}.)?\(?[ilo0-9]{3}?\)?.[ilo0-9]{3}.?[ilo0-9]{4}',
                      '\+?([ilo0-9]{1,2})?\s?\(?\d{3}\)?[\s\.\-⋅]{0,5}[ilo0-9]{3}[\s\.\-⋅]{0,5}[ilo0-9]{4}'
+  )
+  
+  // bounce-back negations
+  and not strings.like(sender.email.local_part,
+                       "*postmaster*",
+                       "*mailer-daemon*",
+                       "*administrator*"
+  )
+  and not any(attachments,
+              .content_type in (
+                "message/rfc822",
+                "message/delivery-status",
+                "text/calendar"
+              )
   )
   
   // no benign history with this sender
