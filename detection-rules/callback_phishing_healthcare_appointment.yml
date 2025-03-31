@@ -52,7 +52,16 @@ source: |
     // NLU detected intents for stealing PII
     any(ml.nlu_classifier(body.current_thread.text).intents,
         .name == "steal_pii" and .confidence in ("medium", "high")
-    )
+    ),
+    // Specific campaign indictors we've seen
+    regex.icontains(subject.subject,
+                    'your (upcoming|scheduled|healthcare|your) (doctor-s|check-up|visit|medical|booking) (visit|appointment|is)( is)? (confirmed|coming up|scheduled soon|tomorrow)',
+                    'doctor-s',
+                    '(details|invoice) for your upcoming visit',
+                    'health check'
+    ),
+    strings.icontains(body.current_thread.text, 'your health agent'),
+    strings.icontains(body.current_thread.text, mailbox.last_name)
   )
   and regex.contains(body.current_thread.text,
                      '\+?([ilo0-9]{1}.)?\(?[ilo0-9]{3}?\)?.[ilo0-9]{3}.?[ilo0-9]{4}',
@@ -62,6 +71,9 @@ source: |
   and any(ml.nlu_classifier(body.current_thread.text).entities,
           .name in ("urgency", "request")
   )
+  
+  // negate replies
+  and (length(headers.references) == 0 or headers.in_reply_to is null)
   
   // bounce-back negations
   and not strings.like(sender.email.local_part,
