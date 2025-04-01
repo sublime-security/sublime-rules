@@ -1,0 +1,76 @@
+name: "Brand Impersonation: TikTok"
+description: "Detects messages impersonating TikTok through similar display names or logo detection, combined with security-themed content and authentication failures. Excludes legitimate TikTok communications and trusted senders."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and (
+    // display name contains tiktok
+    (
+      strings.ilike(strings.replace_confusables(sender.display_name), '*tiktok*')
+      // levenshtein distance similar to tiktok
+      or strings.ilevenshtein(strings.replace_confusables(sender.display_name),
+                              'tiktok'
+      ) <= 1
+      or any(ml.logo_detect(beta.message_screenshot()).brands,
+             .name == "TikTok" and .confidence == "high"
+      )
+    )
+  )
+  and (
+    any(beta.ml_topic(body.current_thread.text).topics,
+        .name in (
+          "Security and Authentication",
+          "Secure Message",
+          "Reminders and Notifications"
+        )
+        and .confidence in ("medium", "high")
+    )
+    or any(beta.ml_topic(beta.ocr(beta.message_screenshot()).text).topics,
+           .name in (
+             "Security and Authentication",
+             "Secure Message",
+             "Reminders and Notifications"
+           )
+           and .confidence in ("medium", "high")
+           and beta.ocr(beta.message_screenshot()).text != ""
+    )
+    or any(ml.nlu_classifier(body.current_thread.text).intents,
+           .name == "cred_theft" and .confidence == "high"
+    )
+    or any(ml.nlu_classifier(beta.ocr(beta.message_screenshot()).text).intents,
+           .name == "cred_theft" and .confidence == "high"
+    )
+  )
+  
+  // and the sender is not in org_domains or from tiktok domains and passes auth
+  and not (
+    sender.email.domain.root_domain in $org_domains
+    or (
+      sender.email.domain.root_domain in ("tiktok.com", "tiktokglobalshop.com", "bytedance.com")
+      and headers.auth_summary.dmarc.pass
+    )
+  )
+  // and the sender is not from high trust sender root domains
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and not headers.auth_summary.dmarc.pass
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+  and not profile.by_sender().solicited
+
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Social engineering"
+detection_methods:
+  - "Computer Vision"
+  - "Content analysis"
+  - "Header analysis"
+  - "Natural Language Understanding"
+  - "Optical Character Recognition"
+  - "Sender analysis"
+id: "aaacc8b7-fbbd-596d-9268-d90b92bdfcd7"
