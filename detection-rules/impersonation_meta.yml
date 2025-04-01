@@ -95,15 +95,20 @@ source: |
           )
         )
         or any(recipients.to,
-               .email.domain.valid 
+               .email.domain.valid
                and any(body.links,
-                   strings.icontains(.href_url.url, ..email.email)
-                   or any(beta.scan_base64(.href_url.url, format="url", ignore_padding=true),
-                          strings.icontains(., ...email.email)
-                   )
-                   or any(beta.scan_base64(.href_url.fragment, ignore_padding=true),
-                          strings.icontains(., ...email.email)
-                   )
+                       strings.icontains(.href_url.url, ..email.email)
+                       or any(beta.scan_base64(.href_url.url,
+                                               format="url",
+                                               ignore_padding=true
+                              ),
+                              strings.icontains(., ...email.email)
+                       )
+                       or any(beta.scan_base64(.href_url.fragment,
+                                               ignore_padding=true
+                              ),
+                              strings.icontains(., ...email.email)
+                       )
                )
         )
       )
@@ -127,11 +132,20 @@ source: |
       and not profile.by_sender().solicited
     )
     or (
+      sender.email.domain.domain in $replyto_service_domains
+      and length(headers.reply_to) > 0
+      and beta.profile.by_reply_to().prevalence != "common"
+    )
+    or (
       profile.by_sender().any_messages_malicious_or_spam
-      and not profile.by_sender().any_false_positives
+      and not profile.by_sender().any_messages_benign
     )
     // if saleforce is being abused, sender profiles aren't very useful
-    or sender.email.email in ("noreply@salesforce.com", "support@salesforce.com", "no-reply@salesforce.com")
+    or sender.email.email in (
+      "noreply@salesforce.com",
+      "support@salesforce.com",
+      "no-reply@salesforce.com"
+    )
     // sent via Google group
     or any(headers.hops, any(.fields, .name == "X-Google-Group-Id"))
   )
@@ -147,7 +161,7 @@ source: |
     // salesforce has been abused for meta phishing campaigns repeatedly 
     or sender.email.domain.root_domain == "salesforce.com"
   )
-  and not profile.by_sender().any_false_positives
+  and not profile.by_sender().any_messages_benign
 attack_types:
   - "Credential Phishing"
 tactics_and_techniques:
