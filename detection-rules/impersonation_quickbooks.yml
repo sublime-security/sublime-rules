@@ -17,15 +17,33 @@ source: |
         .name == "Quickbooks" and .confidence in ("medium", "high")
     )
     // contains the address and copyright 
-    or 
-    (
+    or (
       strings.icontains(body.current_thread.text,
                         '2800 E. Commerce Center Place, Tucson, AZ 85706'
       )
       and regex.icontains(body.current_thread.text, '©\s*(?:\d+)\s*Intuit')
     )
     or strings.icontains(body.current_thread.text, 'Powered by QuickBooks')
-    or strings.icontains(body.current_thread.text, 'QuickBooks and Intuit are trademarks of Intuit Inc.')
+    or strings.icontains(body.current_thread.text,
+                         'QuickBooks and Intuit are trademarks of Intuit Inc.'
+    )
+    // phone number and update language
+    or (
+      regex.icontains(body.current_thread.text,
+                      '\b\+?(\d{1}.)?\(?\d{3}?\)?.~?.?\d{3}.?~?.\d{4}\b'
+      )
+      and any(beta.ml_topic(body.current_thread.text).topics,
+              .name == "Software and App Updates"
+      )
+
+      // we need to re-check for QB indicators, otherwise we can have "*invoice*"
+      // and this block, which is much more than just QB impersonation
+      and (
+        strings.ilike(sender.display_name, '*quickbooks*')
+        or strings.ilevenshtein(sender.display_name, 'quickbooks') <= 1
+        or strings.ilike(sender.email.domain.domain, '*quickbooks*')
+      )
+    )
   )
   and sender.email.domain.root_domain not in~ (
     'intuit.com',
@@ -85,9 +103,7 @@ source: |
           // CTA link
           or (
             .href_url.domain.domain == "connect.intuit.com"
-            and strings.icontains(.href_url.query_params,
-                                  'cta=viewinvoicenow'
-            )
+            and strings.icontains(.href_url.query_params, 'cta=viewinvoicenow')
           )
           // Mimecast links 
           or (
