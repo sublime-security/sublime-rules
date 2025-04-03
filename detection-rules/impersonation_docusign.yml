@@ -34,13 +34,19 @@ source: |
         )
         or regex.icontains(body.current_thread.text, '\bdocu.?sign\b')
       )
-      and any(body.links, .display_text in~ ("Review Document", "View Document", "View Completed Document"))
+      and any(body.links,
+              .display_text in~ (
+                "Review Document",
+                "View Document",
+                "View Completed Document",
+                "Review and Sign"
+              )
+      )
       // negate replies/forwards which involve a legit docusign message-id format
       and not any(headers.references,
                   strings.iends_with(., '@docusign.net')
                   and regex.imatch(., '[0-9a-f]{32}@docusign.net')
       )
-  
     )
     or (
       (
@@ -49,36 +55,60 @@ source: |
         or regex.icontains(body.html.raw,
                            '<span[^>]*style="[^"]*">Docu.?Sign<\/span>'
         )
-        or regex.icontains(body.html.raw,
-                           '<h1[^\>]*>\s*Docu.?Sign'
-        )
+        or regex.icontains(body.html.raw, '<h1[^\>]*>\s*Docu.?Sign')
         or regex.icontains(body.html.raw,
                            '<span[^>]*style="[^"]*">(Docu|D(?:ocu?)?)<\/span><span[^>]*style="[^"]*">(Sign|S(?:ign?)?)<\/span>'
         )
         or regex.icontains(body.html.raw, '<strong>Docu.?Sign</strong>')
         or regex.icontains(body.html.raw, '<div class="logo">DocuSign</div>')
         or regex.icontains(body.html.raw,
-                           'D&#917540;&#917540;o&#917540;&#917540;c︀uS&#917540;&#917540;i︀gn'
+                           // Basic variations with HTML encoding
+                           '(?:D|&#68;|&#x44;)(?:&#?[0-9a-fA-F]{2,6};|\s|o|о|&#1086;|&#x43e;)(?:&#?[0-9a-fA-F]{2,6};|\s|c|с|&#1089;|&#x441;)u(?:&#?[0-9a-fA-F]{2,6};|\s)?S(?:&#?[0-9a-fA-F]{2,6};|\s|i|і|&#1110;|&#x456;)(?:&#?[0-9a-fA-F]{2,6};|\s|g|ɡ|&#609;|&#x261;)(?:n|&#110;|&#x6e;)',
+                           // Common homograph patterns
+                           '(?:[DⅮᎠᗞᗡ𝐃𝐷𝑫𝒟𝓓𝔇𝔻𝕯𝖣])(?:[oοоօ0Ооʘ◯])(?:[cсçҫ¢ϲС])u(?:[sѕЅ5$])(?:[iіІ1l!|])(?:[gǵġģ9ɡ])(?:[nոռℼη𝐧𝑛𝒏𝓃𝓷𝔫𝕟𝖓])',
+  
+                           // Variant with invisible characters and combining marks
+                           '[DᎠᗞⅅ]\s*[oо0]\s*[cс]\s*u\s*[sЅ]\s*[iіl]\s*[gǵɡ]\s*[nոռ]',
+  
+                           // Look for HTML entities for each letter in sequence
+                           '(?:D|&#68;|&#x44;)(?:o|о|&#111;|&#x6f;|&#1086;|&#x43e;|&#959;|&#x3bf;)(?:c|с|&#99;|&#x63;|&#1089;|&#x441;|&#1010;|&#231;|&#x67;|&#265;|&#x109;)(?:u|&#117;|&#x75;|&#1091;|&#x443;|&#965;|&#x3c5;)(?:s|&#115;|&#x73;|&#1109;|&#x455;)(?:i|і|&#105;|&#x69;|&#1110;|&#x456;|&#305;|&#x131;)(?:g|&#103;|&#x67;|&#609;|&#x261;|&#287;|&#x11f;)(?:n|&#110;|&#x6e;|&#1085;|&#x43d;|&#951;|&#x3b7;)',
+                           // Handle repeated HTML entities and variation selectors (using Unicode class)                           
+                           'D(?:&#[0-9]{1,7};)*\p{Mn}*o(?:&#[0-9]{1,7};)*\p{Mn}*c(?:&#[0-9]{1,7};)*\p{Mn}*u(?:&#[0-9]{1,7};)*\p{Mn}*[Ss](?:&#[0-9]{1,7};)*\p{Mn}*i(?:&#[0-9]{1,7};)*\p{Mn}*g(?:&#[0-9]{1,7};)*\p{Mn}*n',
         )
       )
       and (
-        regex.icontains(body.html.raw, 'background:\s*rgb\(30,\s*76,\s*161\)')
-        or regex.icontains(body.html.raw,
-                           'background-color:\s*rgb\(30,\s*76,\s*161\)'
+        regex.icontains(body.html.raw,
+                        'b(?:ackground(?:-color)?|g?color):\s*rgb\(30,\s*76,\s*161\)'
         )
         or regex.icontains(body.html.raw,
-                           'background-color:\s*rgb\(61,\s*170,\s*73\)'
+                           'b(?:ackground(?:-color)?|g?color):\s*rgb\(30,\s*76,\s*161\)'
         )
         or regex.icontains(body.html.raw,
-                           '<(?:div|td|table)[^>]*B(?:ACKGROUND-|g)COLOR(?::|=)\s*\"?#1e4ca1[^>]*>',
+                           'b(?:ackground(?:-color)?|g?color):\s*rgb\(61,\s*170,\s*73\)'
         )
-        or regex.icontains(body.html.raw, 'B(?:ACKGROUND-|g)COLOR(?::|=)\s*\"?#214e9f')
-        or regex.icontains(body.html.raw, 'B(?:ACKGROUND-|g)COLOR(?::|=)\s*\"?#3260a7')
-        or regex.icontains(body.html.raw, 'B(?:ACKGROUND-|g)COLOR(?::|=)\s*\"?#0056b3')
-        or regex.icontains(body.html.raw, 'B(?:ACKGROUND-|g)COLOR(?::|=)\s*\"?#1e4ca1')
-        or regex.icontains(body.html.raw, 'B(?:ACKGROUND-|g)COLOR(?::|=)\s*\"?#214395')
         or regex.icontains(body.html.raw,
-                           '<table[^>]*style="[^"]*B(?:ACKGROUND-|g)COLOR(?::|=)\s*\"?#1E4CA1[^"]*"[^>]*>(.*?)<\/table>'
+                           '<(?:div|td|table)[^>]*b(?:ackground(?:-color)?|g?color)(?::|=)\s*\"?#1e4ca1[^>]*>',
+        )
+        or regex.icontains(body.html.raw,
+                           'b(?:ackground(?:-color)?|g?color)(?::|=)\s*\"?#214e9f'
+        )
+        or regex.icontains(body.html.raw,
+                           'b(?:ackground(?:-color)?|g?color)(?::|=)\s*\"?#3260a7'
+        )
+        or regex.icontains(body.html.raw,
+                           'b(?:ackground(?:-color)?|g?color)(?::|=)\s*\"?#0056b3'
+        )
+        or regex.icontains(body.html.raw,
+                           'b(?:ackground(?:-color)?|g?color)(?::|=)\s*\"?#1e4ca1'
+        )
+        or regex.icontains(body.html.raw,
+                           'b(?:ackground(?:-color)?|g?color)(?::|=)\s*\"?#214395'
+        )
+        or regex.icontains(body.html.raw,
+                           'b(?:ackground(?:-color)?|g?color)(?::|=)\s*\"?#325bb8'
+        )
+        or regex.icontains(body.html.raw,
+                           '<table[^>]*style="[^"]*b(?:ackground(?:-color)?|g?color)(?::|=)\s*\"?#1E4CA1[^"]*"[^>]*>(.*?)<\/table>'
         )
         or regex.icontains(body.html.raw, '<title>Document.{0,50}</title>')
         or any(body.links, regex.icontains(.display_text, 'view.{0,3}doc'))
@@ -96,6 +126,7 @@ source: |
         // such as U+034f(look carefully): "Revi͏ew Now"
         (
           strings.ilevenshtein(.display_text, "Review Now") <= 3
+          or strings.ilevenshtein(.display_text, "Review and Sign") <= 3
           or (
             strings.icontains(.display_text, "Review")
             and not strings.icontains(.display_text, "Review Us")
