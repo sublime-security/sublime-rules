@@ -15,6 +15,7 @@ source: |
                   "eFax",
                   "Restore",
                   "OPEN",
+                  "0PEN",
                   "Secure",
                   "Messaging",
                   "Reset",
@@ -50,6 +51,17 @@ source: |
           strings.icontains(ml.link_analysis(., mode="aggressive").final_dom.raw,
                             'This form was blocked due to privacy or safety concerns.'
           )
+          // this error has been shown before with the text "Phishing form from content scan. Inner Message: This form has been flagged for potential phishing."
+          or any(ml.link_analysis(., mode="aggressive").additional_responses,
+                 strings.icontains(.json["error"]["message"], "phishing")
+          )
+          // or MS thinks there are phishing keywords
+          or any(ml.link_analysis(., mode="aggressive").additional_responses,
+                 any(.json["form"]["questions"], .["subtitleHasPhishingKeywords"] == true)
+                 or any(.json["form"]["questions"], .["titleHasPhishingKeywords"] == true)
+                 or any(.json["form"]["descriptiveQuestions"], .["titleHasPhishingKeywords"] == true)
+                 or any(.json["form"]["descriptiveQuestions"], .["titleHasPhishingKeywords"] == true)
+          )
           // this logic checks for three abnormal cases
           // 1) no questions
           // 2) questions, but no inputs
@@ -58,27 +70,17 @@ source: |
           // // there is one or two links that isn't "standard" on the form
           or (
             (
-              // 1) doesn't contain any descriptive questions or questions
-              strings.icontains(ml.link_analysis(., mode="aggressive").final_dom.raw,
-                                // closes the question-list div
-                                '<div id="question-list"></div>'
+              // 1) doesn't contain any sections or questions
+              any(ml.link_analysis(., mode="aggressive").additional_responses,
+                  length(.json["form"]["descriptiveQuestions"]) == 0
+                  and length(.json["form"]["questions"]) == 0
               )
               or 
-              // 2) Contains questions, but no inputs
-              (
-                // has a question
-                strings.icontains(ml.link_analysis(., mode="aggressive").final_dom.raw,
-                                  // starts a new div
-                                  'id="question-list"><div>'
-                )
-                // no inputs
-                and not strings.icontains(ml.link_analysis(., mode="aggressive").final_dom.raw,
-                                          '<input '
-                )
-                // no required fields
-                and not strings.icontains(ml.link_analysis(., mode="aggressive").final_dom.raw,
-                                          '<span>Required</span>'
-                )
+              // 2) Contains a form section header, but no actual inputs
+              // possible question types are .Choice, .TextField, .Rating, .DateTime, .Ranking, .MatrixChoiceGroup, .MatrixChoice, and .NPS
+              any(ml.link_analysis(., mode="aggressive").additional_responses,
+                  length(.json["form"]["descriptiveQuestions"]) > 0
+                  and length(.json["form"]["questions"]) == 0
               )
               or 
               // 3) a bunch of new lines (used to push down the submit button of the form)
@@ -92,6 +94,17 @@ source: |
                 or strings.icount(ml.link_analysis(., mode="aggressive").final_dom.raw,
                                   '<span><span>'
                 ) > 20
+                or any(ml.link_analysis(., mode="aggressive").additional_responses,
+                       any(.json["form"]["questions"],
+                           strings.icount(.["formsProRTQuestionTitle"],
+                                          '<br><br>'
+                           ) > 20
+                           or strings.icount(.["formsProRTQuestionTitle"], '\n\n') > 20
+                           or strings.icount(.["formsProRTQuestionTitle"],
+                                             '<span><span>'
+                           ) > 20
+                       )
+                )
               )
             )
             // AND 
@@ -111,8 +124,13 @@ source: |
                               )
                        )
             ) <= 2
-            and not strings.contains(ml.link_analysis(., mode="aggressive").final_dom.raw,
-                                     'role="progressbar" aria-label="Page 1 of '
+            and (
+              not strings.contains(ml.link_analysis(., mode="aggressive").final_dom.raw,
+                                   'role="progressbar" aria-label="Page 1 of '
+              )
+              or any(ml.link_analysis(., mode="aggressive").additional_responses,
+                     .json["form"]["progressBarEnabled"] == false
+              )
             )
           )
   )
