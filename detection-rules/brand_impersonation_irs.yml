@@ -1,0 +1,65 @@
+name: "Brand Impersonation: Internal Revenue Service"
+description: "Detects messages from senders posing as the Internal Revenue Service by checking display name similarity and content indicators from body text and screenshots. Excludes legitimate IRS domains and authenticated senders."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and (
+    // display name contains IRS
+    (
+      strings.ilike(strings.replace_confusables(sender.display_name),
+                    '*internal revenue service*'
+      )
+    )
+    // levenshtein distance similar to IRS
+    or strings.ilevenshtein(strings.replace_confusables(sender.display_name),
+                            'internal revenue service'
+    ) <= 1
+  )
+  and (
+    any(beta.ml_topic(body.current_thread.text).topics,
+        .name in ("Security and Authentication", "Financial Communications")
+        and .confidence in ("high")
+    )
+    or any(beta.ml_topic(beta.ocr(beta.message_screenshot()).text).topics,
+           .name in ("Security and Authentication", "Financial Communications")
+           and .confidence in ("high")
+    )
+    or any(ml.nlu_classifier(body.current_thread.text).intents,
+           .name == "cred_theft" and .confidence == "high"
+    )
+    or any(ml.nlu_classifier(beta.ocr(beta.message_screenshot()).text).intents,
+           .name == "cred_theft" and .confidence == "high"
+    )
+  )
+  
+  // and the sender is not in org_domains or from IRS domains and passes auth
+  and not (
+    sender.email.domain.root_domain in $org_domains
+    or (
+      sender.email.domain.root_domain in ("irs.gov", "govdelivery.com")
+      and headers.auth_summary.dmarc.pass
+    )
+  )
+  // and the sender is not from high trust sender root domains
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and not headers.auth_summary.dmarc.pass
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+  and not profile.by_sender().solicited
+
+attack_types:
+  - "BEC/Fraud"
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Natural Language Understanding"
+  - "Optical Character Recognition"
+  - "Sender analysis"
+id: "3c63f8e9-4bce-5ce3-b17d-1ae361b5782d"
