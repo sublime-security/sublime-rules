@@ -10,37 +10,12 @@ source: |
   )
   and not any(headers.reply_to, .email.domain.domain in $org_domains)
   
-  // the message needs to have a reply-to address
-  and length(headers.reply_to) > 0
+  // reply-to address has never sent an email to the org
+  and beta.profile.by_reply_to().prevalence == "new"
   
   // reply-to email address has never been sent an email by the org
-  and not (
-    any(headers.reply_to, .email.email in $recipient_emails)
-    // if the reply-to email address is NOT in free_email_providers, check the domain in recipient_domains
-    or any(filter(headers.reply_to,
-                  // filter the list to only emails that are not in free_email_providers
-                  (
-                    .email.domain.domain not in $free_email_providers
-                    or .email.domain.root_domain not in $free_email_providers
-                  )
-           ),
-           .email.domain.domain in $recipient_domains
-    )
-  )
-  // reply-to address has never sent an email to the org
-  and not (
-    any(headers.reply_to, .email.email in $sender_emails)
-    // if the reply-to address is NOT in free_email_providers, check the domain in sender_domains
-    or any(filter(headers.reply_to,
-                  // filter the list to only emails that are not in free_email_providers
-                  (
-                    .email.domain.domain not in $free_email_providers
-                    or .email.domain.root_domain not in $free_email_providers
-                  )
-           ),
-           .email.domain.domain in $sender_domains
-    )
-  )
+  and not beta.profile.by_reply_to().solicited
+
 tags:
  - "Attack surface reduction"
 attack_types:
