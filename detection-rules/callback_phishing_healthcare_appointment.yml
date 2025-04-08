@@ -8,7 +8,6 @@ source: |
   and length(recipients.to) == 1
   and length(recipients.cc) == 0
   and length(recipients.bcc) == 0
-  and length(attachments) == 0
   
   // from a free email provider (not a legitimate healthcare domain)
   and sender.email.domain.root_domain in $free_email_providers
@@ -24,57 +23,78 @@ source: |
   )
   
   // Contains specific appointment elements
-  and 4 of (
-    // Contains date and time
-    regex.contains(body.current_thread.text,
-                   '\d{1,2}[/:].\d{1,2}|\d{1,2}:\d{2}|\d{1,2} ?(?:am|pm)|\d{1,2}[/-]\d{1,2}[/-]\d{2,4}'
-    ),
-    // Contains typical appointment info
-    regex.icontains(body.current_thread.text,
-                    'insurance|photo id|identification|arrive .{1,20} minutes early|bring|prescription|health'
-    ),
-    // Contains medical terms
-    regex.icontains(body.current_thread.text,
-                    'medical|clinic|hospital|doctor|physician|specialist|medicine|exam|specialty|healthcare|patient'
-    ),
-    // Contains suspicious terms
-    regex.icontains(body.current_thread.text,
-                    'estimated fee|payment|invoice|bill|charge|cost|amount due'
-    ),
-    // Contains poor grammar indicators
-    regex.icontains(body.current_thread.text,
-                    'need update|you change or|need bring|things to bring|things to remembered|please confirmed|provide update'
-    ),
-    // Generic or suspicious wording
-    regex.icontains(body.current_thread.text,
-                    'health provider|sensitive patient information|medical practitioner'
-    ),
-    // NLU detected intents for stealing PII
-    any(ml.nlu_classifier(body.current_thread.text).intents,
-        .name == "steal_pii" and .confidence in ("medium", "high")
-    ),
-    // Specific campaign indictors we've seen
-    regex.icontains(subject.subject,
-                    'your (upcoming|scheduled|healthcare|your) (doctor-s|check-up|visit|medical|booking) (visit|appointment|is)( is)? (confirmed|coming up|scheduled soon|tomorrow)',
-                    'doctor-s',
-                    '(details|invoice) for your upcoming visit',
-                    'health check'
-    ),
-    strings.icontains(body.current_thread.text, 'your health agent'),
-    any(filter(ml.nlu_classifier(body.current_thread.text).entities,
-               .name == "recipient"
+  and (
+    (
+      length(attachments) == 0
+      and 4 of (
+        // Contains date and time
+        regex.contains(body.current_thread.text,
+                       '\d{1,2}[/:].\d{1,2}|\d{1,2}:\d{2}|\d{1,2} ?(?:am|pm)|\d{1,2}[/-]\d{1,2}[/-]\d{2,4}'
         ),
-        strings.icontains(.name, mailbox.last_name)
-        and strings.icontains(.name, mailbox.first_name)
+        // Contains typical appointment info
+        regex.icontains(body.current_thread.text,
+                        'insurance|photo id|identification|arrive .{1,20} minutes early|bring|prescription|health'
+        ),
+        // Contains medical terms
+        regex.icontains(body.current_thread.text,
+                        'medical|clinic|hospital|doctor|physician|specialist|medicine|exam|specialty|healthcare|patient'
+        ),
+        // Contains suspicious terms
+        regex.icontains(body.current_thread.text,
+                        'estimated fee|payment|invoice|bill|charge|cost|amount due'
+        ),
+        // Contains poor grammar indicators
+        regex.icontains(body.current_thread.text,
+                        'need update|you change or|need bring|things to bring|things to remembered|please confirmed|provide update'
+        ),
+        // Generic or suspicious wording
+        regex.icontains(body.current_thread.text,
+                        'health provider|sensitive patient information|medical practitioner'
+        ),
+        // NLU detected intents for stealing PII
+        any(ml.nlu_classifier(body.current_thread.text).intents,
+            .name == "steal_pii" and .confidence in ("medium", "high")
+        ),
+        // Specific campaign indictors we've seen
+        regex.icontains(subject.subject,
+                        'your (upcoming|scheduled|healthcare|your) (doctor-s|check-up|visit|medical|booking) (visit|appointment|is)( is)? (confirmed|coming up|scheduled soon|tomorrow)',
+                        'doctor-s',
+                        '(details|invoice) for your upcoming visit',
+                        'health check'
+        ),
+        regex.icontains(body.current_thread.text, 'your (health agent|care team)'),
+        any(filter(ml.nlu_classifier(body.current_thread.text).entities,
+                   .name == "recipient"
+            ),
+            strings.icontains(.name, mailbox.last_name)
+            and strings.icontains(.name, mailbox.first_name)
+        )
+      )
+      and regex.contains(body.current_thread.text,
+                         '\+?([ilo0-9]{1}.)?\(?[ilo0-9]{3}?\)?.[ilo0-9]{3}.?[ilo0-9]{4}',
+                         '\+?([ilo0-9]{1,2})?\s?\(?\d{3}\)?[\s\.\-⋅]{0,5}[ilo0-9]{3}[\s\.\-⋅]{0,5}[ilo0-9]{4}'
+      )
+      // Check for urgency or request entities via NLU
+      and any(ml.nlu_classifier(body.current_thread.text).entities,
+              .name in ("urgency", "request")
+      )
     )
-  )
-  and regex.contains(body.current_thread.text,
-                     '\+?([ilo0-9]{1}.)?\(?[ilo0-9]{3}?\)?.[ilo0-9]{3}.?[ilo0-9]{4}',
-                     '\+?([ilo0-9]{1,2})?\s?\(?\d{3}\)?[\s\.\-⋅]{0,5}[ilo0-9]{3}[\s\.\-⋅]{0,5}[ilo0-9]{4}'
-  )
-  // Check for urgency or request entities via NLU
-  and any(ml.nlu_classifier(body.current_thread.text).entities,
-          .name in ("urgency", "request")
+    or (
+      length(attachments) == 1
+      and (
+        any(attachments,
+            any(file.explode(.),
+                any(beta.ml_topic(.scan.ocr.raw).topics,
+                    .name == "Health and Wellness"
+                )
+                and regex.contains(.scan.ocr.raw,
+                                   '\+?([ilo0-9]{1}.)?\(?[ilo0-9]{3}?\)?.[ilo0-9]{3}.?[ilo0-9]{4}',
+                                   '\+?([ilo0-9]{1,2})?\s?\(?\d{3}\)?[\s\.\-⋅]{0,5}[ilo0-9]{3}[\s\.\-⋅]{0,5}[ilo0-9]{4}'
+                )
+            )
+        )
+      )
+    )
   )
   
   // negate replies
