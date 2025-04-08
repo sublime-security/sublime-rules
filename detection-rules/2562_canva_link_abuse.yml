@@ -1,0 +1,48 @@
+name: "Canva Link Abuse"
+description: "Detects when a sender outside of Canva shares a single Canva link, where the sender has low historical sending volume."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and any(body.links,
+          strings.icontains(.href_url.domain.root_domain, 'canva.com')
+          or strings.icontains(.href_url.query_params, 'canva.com')
+  )
+
+  // there is one unique Canva link in the message
+  and length(distinct(filter(body.links,
+                             strings.icontains(.href_url.domain.root_domain,
+                                               'canva.com'
+                             )
+                             or strings.icontains(.href_url.query_params,
+                                                  'canva.com'
+                             )
+                      ),
+                      .href_url.url
+             )
+  ) <= 1
+
+  and not (
+    sender.email.domain.root_domain == "canva.com"
+    and headers.auth_summary.dmarc.pass
+  )
+  and profile.by_sender_email().prevalence != "common"
+tags:
+  - "Attack surface reduction"
+attack_types:
+  - "BEC/Fraud"
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Free file host"
+  - "Impersonation: Brand"
+  - "Social engineering"
+  - "Evasion"
+detection_methods:
+  - "Content analysis"
+  - "Header analysis"
+  - "Sender analysis"
+  - "URL analysis"
+id: "583a75a3-dc2e-51c5-0b25-e674391d527e"
+og_id: "f871f6c5-c8dc-5c69-a283-ad2bee53262c"
+testing_pr: 2562
+testing_sha: 8349d9086ca43ca6d608bb9d1c8fe76d482d0c8f
