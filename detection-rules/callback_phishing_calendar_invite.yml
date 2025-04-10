@@ -1,0 +1,42 @@
+name: "Callback Phishing via Calendar Invite"
+description: "Detects calendar invites containing callback phishing language in the DESCRIPTION of the invite."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and length(attachments) > 0
+  and all(attachments, .content_type in ("text/calendar", "application/ics"))
+  and any(attachments,
+          // extract the calendar invite description and use NLU against it
+          any(regex.extract(file.parse_text(.).text,
+                            'DESCRIPTION:((?:(?:\r?\n[ \t][^\r\n]*)|[^\r\n])*?)(?:\r?\n[A-Z-][A-Z0-9-]*[;:])'
+              ),
+              any(.groups,
+                  any(ml.nlu_classifier(.).intents, .name == "callback_scam")
+              )
+          )
+  )
+  and (
+    not profile.by_sender().solicited
+    and not profile.by_sender().any_messages_benign
+  )
+  
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and not headers.auth_summary.dmarc.pass
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+
+attack_types:
+  - "Callback Phishing"
+tactics_and_techniques:
+  - "Social engineering"
+  - "Evasion"
+detection_methods:
+  - "File analysis"
+  - "Header analysis"
+  - "Natural Language Understanding"
+  - "Sender analysis"
