@@ -66,35 +66,62 @@ source: |
       // attachment logic
       or (
         // the body.current_thread.text length is very short (probably just a warning banner)
-        // we've already matched on the "fax" in the subject or sender, so this _might_ be ok
+        // and the attacment isn't used in the body of the message
+        // https://platform.sublime.security/messages/95f01a3c68655e685d90b62b8636d2f53bb4148c49a52391b59a083637afd0f2
         length(body.current_thread.text) < 300
         // and there are attachments
-        and length(attachments) > 0
+        and 0 < length(attachments) < 5
         // the attachments shouldn't be images which are used in the body of the html
-        and not all(attachments,
-                    any(regex.extract(.content_id, '^\<(.*)\>$'),
-                        any(.groups,
-                            strings.icontains(body.html.raw,
-                                              strings.concat('src="cid:', ., '"')
-                            )
-                        )
+        and any(attachments,
+                strings.icontains(.file_name, 'fax')
+                or (
+
+                  // or they are used in the body and OCR on them contains fax wording
+                  // https://platform.sublime.security/messages/07bdeda6a045ade4a1669b263d3f506ea4c40a8559148f2ffff600d6140bac90
+
+                  // the image is used in the HTML body
+                  .file_type in $file_types_images
+                  and any(regex.extract(.content_id, '^\<(.*)\>$'),
+                          any(.groups,
+                              strings.icontains(body.html.raw,
+                                                strings.concat('src="cid:',
+                                                               .,
+                                                               '"'
+                                                )
+                              )
+                          )
+                  )
+                  and (
+                    // and that image contains fax wording
+                    strings.icontains(beta.ocr(.).text, "New Fax Received")
+                    or strings.icontains(beta.ocr(.).text, "New Fax Document")
+                    or regex.icontains(beta.ocr(.).text,
+                                       "(?:received|have) a (?:new )?fax"
                     )
+                    or regex.icontains(beta.ocr(.).text,
+                                       "to view (th(?:e|is) )?(?:fax|message)"
+                    )
+                    or regex.icontains(beta.ocr(.).text,
+                                       'transmit(?:ted|ting)?(?:\s+\w+){0,2}\s+(?:fax|facsimile)',
+                                       '(?:fax|facsimile)\s+(?:\s+\w+){0,2}transmit(?:ted|ting)?',
+                    )
+                  )
+                )
         )
       )
     )
-
-    // negate known fax mailers
-    and not (
-      sender.email.domain.root_domain in (
-        "faxage.com",
-        'fax2mail.com',
-        'ringcentral.com',
-        'avaya.com',
-        'egoldfax.com',
-        'efax.com'
-      )
-      and headers.auth_summary.dmarc.pass
+  )
+  // negate known fax mailers
+  and not (
+    sender.email.domain.root_domain in (
+      "faxage.com",
+      'fax2mail.com',
+      'ringcentral.com',
+      'avaya.com',
+      'egoldfax.com',
+      'efax.com'
     )
+    and headers.auth_summary.dmarc.pass
   )
 attack_types:
   - "Credential Phishing"
@@ -113,4 +140,4 @@ detection_methods:
 id: "384d475c-601d-5031-4c9f-b292c8a17d52"
 og_id: "2a96b90a-64bf-52ad-b4e4-6f1e8c1dcba6"
 testing_pr: 2581
-testing_sha: cae34b68f2dd0555ae45e3c3290ac2999ea60fac
+testing_sha: 08a9369ca134563e507a61e516181a31b33a8552
