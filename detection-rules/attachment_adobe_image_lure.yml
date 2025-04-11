@@ -67,8 +67,12 @@ source: |
     or length(headers.references) == 0
   )
   
-  // not a newsletter
+  // not a newsletter or advertisement
   and not any(headers.hops, any(.fields, .name == "List-Unsubscribe-Post"))
+  and not any(beta.ml_topic(body.current_thread.text).topics,
+              .name in ("Advertising and Promotions", "Newsletters and Digests")
+              and .confidence == "high"
+  )
   
   // negate highly trusted sender domains unless they fail DMARC authentication
   and (
@@ -79,13 +83,15 @@ source: |
     or sender.email.domain.root_domain not in $high_trust_sender_root_domains
   )
   and (
-    not profile.by_sender().solicited
+    not profile.by_sender_email().solicited
+    or profile.by_sender_email().prevalence == "new"
     or (
-      profile.by_sender().any_messages_malicious_or_spam
-      and not profile.by_sender().any_false_positives
+      profile.by_sender_email().any_messages_malicious_or_spam
+      and not profile.by_sender_email().any_false_positives
     )
   )
-  and not profile.by_sender().any_false_positives
+  and not profile.by_sender_email().any_false_positives
+
 
 attack_types:
   - "Credential Phishing"
