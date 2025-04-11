@@ -15,36 +15,20 @@ source: |
               or .email.domain.root_domain in $high_trust_sender_root_domains
               or .email.domain.root_domain in ("docusign.net", "docusign.com")
   )
+  // 
+  // This rule makes use of a beta feature and is subject to change without notice
+  // using the beta feature in custom rules is not suggested until it has been formally released
+  // 
   
-    and length(headers.reply_to) > 0 
-    // reply-to email address has never been sent an email by the org
-    and not (
-      any(headers.reply_to, .email.email in $recipient_emails)
-      // if the reply-to email address is NOT in free_email_providers, check the domain in recipient_domains
-      or any(filter(headers.reply_to,
-                    // filter the list to only emails that are not in free_email_providers
-                    (
-                      .email.domain.domain not in $free_email_providers
-                      or .email.domain.root_domain not in $free_email_providers
-                    )
-             ),
-             .email.domain.domain in $recipient_domains
-      )
-    )
-    // reply-to address has never sent an email to the org
-    and not (
-      any(headers.reply_to, .email.email in $sender_emails)
-      // if the reply-to address is NOT in free_email_providers, check the domain in sender_domains
-      or any(filter(headers.reply_to,
-                    // filter the list to only emails that are not in free_email_providers
-                    (
-                      .email.domain.domain not in $free_email_providers
-                      or .email.domain.domain not in $free_email_providers
-                    )
-             ),
-             .email.domain.domain in $sender_domains
-      )
-    )
+  // reply-to address has never sent an email to the org
+  and beta.profile.by_reply_to().prevalence == "new"
+  
+  // reply-to email address has never been sent an email by the org
+  and not beta.profile.by_reply_to().solicited
+  
+  // do not match if the reply_to address has been observed as a reply_to address
+  // of a message that has been classified as benign
+  and not beta.profile.by_reply_to().any_messages_benign
   
   // not a completed DocuSign
   // reminders are sent automatically and can be just as malicious as the initial
@@ -146,6 +130,7 @@ source: |
       or regex.icontains(subject.subject, '\bMFA\b')
     )
   )
+
 attack_types:
   - "Callback Phishing"
   - "BEC/Fraud"
