@@ -15,11 +15,11 @@ source: |
         and (
           any(ml.logo_detect(.).brands, strings.starts_with(.name, "Microsoft"))
           or any(file.explode(.),
-                  // for Office documents
+                 // for Office documents
                  .flavors.mime == "text/xml"
                  and any(.scan.strings.strings,
                          regex.icontains(.,
-                                         'Microsoft (Authenticat(e|or|ion)|2fa|Multi.Factor|(qr|bar).code|action.require|alert|Att(n|ention):)'
+                                         'Microsoft\s*(?:\w+(?:\s*\w+)?|[[:punct:]]+|\s+){0,3}\s*(?:Authenticat(?:e|or|ion)|2fa|Multi.Factor|(?:qr|bar).code|action.require|alert|Att(?:n|ention))'
                          )
                  )
           )
@@ -27,6 +27,27 @@ source: |
     )
     or any(ml.logo_detect(beta.message_screenshot()).brands,
            strings.starts_with(.name, "Microsoft")
+    )
+    or (
+      // limited body length 
+      length(body.current_thread.text) < 300
+      and any(filter(attachments,
+                     .file_type in $file_types_images
+                     // image attachments that are displayed in the body
+                     // when the content-id is corrected, this will be much more siple
+                     and any(regex.extract(.content_id, '^<(?P<cid>[^\>]+)\>$'),
+                             strings.icontains(body.html.raw,
+                                               .named_groups["cid"]
+                             )
+                     )
+              ),
+              // those imagines contain the wording
+              any(file.explode(.),
+                  regex.icontains(.scan.ocr.raw,
+                                  'Microsoft\s*(?:\w+(?:\s*\w+)?|[[:punct:]]+|\s+){0,3}\s*(?:Authenticat(?:e|or|ion)|2fa|Multi.Factor|(?:qr|bar).code|action.require|alert|Att(?:n|ention))'
+                  )
+              )
+      )
     )
   )
   and any(attachments,
@@ -71,7 +92,10 @@ source: |
                                               "(Authenticat(e|or|ion)|2fa|Multi.Factor|(qr|bar).code|action.require|alert|Att(n|ention):)"
                             )
                           )
-                          and (.email.domain.valid or strings.icontains(.display_name, "undisclosed"))
+                          and (
+                            .email.domain.valid
+                            or strings.icontains(.display_name, "undisclosed")
+                          )
                   )
               )
             )
@@ -91,7 +115,6 @@ source: |
       and not profile.by_sender().any_false_positives
     )
   )
-
   and not profile.by_sender().any_false_positives
 
 attack_types:
