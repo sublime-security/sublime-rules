@@ -1,0 +1,131 @@
+name: "Suspicious Adobe Acrobat Link"
+description: "Detects malicious Adobe Acrobat links that contain suspicious elements such as newly registered domains, URL shorteners, or free file hosts. The rule examines document viewer behavior and validates link destinations through multiple security checks."
+type: "rule"
+severity: ""
+source: |
+  type.inbound
+  and any(body.links,
+          .href_url.domain.domain == "acrobat.adobe.com"
+          and strings.istarts_with(.href_url.path, '/id/urn:')
+  )
+  and length(distinct(filter(body.links,
+                             .href_url.domain.domain == "acrobat.adobe.com"
+                             and strings.istarts_with(.href_url.path, '/id/urn:')
+                      ),
+                      .href_url.url
+             )
+  ) == 1
+  and any(filter(body.links,
+                 .href_url.domain.domain == "acrobat.adobe.com"
+                 and strings.istarts_with(.href_url.path, '/id/urn:')
+          ),
+          any(ml.link_analysis(., mode="aggressive").additional_responses,
+              any(file.explode(.file),
+                  length(.scan.url.urls) == 1
+                  and any(.scan.url.urls,
+                          // any of those links domains are new
+                          network.whois(.domain).days_old < 30
+                          // go to free file hosts
+                          or .domain.root_domain in $free_file_hosts
+                          or .domain.domain in $free_file_hosts
+  
+                          // go to free subdomains hosts
+                          or (
+                            .domain.root_domain in $free_subdomain_hosts
+                            // where there is a subdomain
+                            and .domain.subdomain is not null
+                            and .domain.subdomain != "www"
+                          )
+                          // go to url shortners
+                          or .domain.root_domain in $url_shorteners
+                          or .domain.domain in $url_shorteners
+                  )
+              )
+              // if the PDF contains a CTA
+              // because the OCR output is at a different object than the URLs
+              // we have to loop twice
+              or 
+              (
+                any(file.explode(.file),
+                    (
+                      // find any links that mention common "action" words
+                      regex.icontains(.scan.ocr.raw,
+                                      '(?:view|click|show|access|download|continue|goto|Validate|Va[il]idar|login|verify|account)'
+                      )
+                    )
+                )
+                // and we detect a URL as phishing
+                and any(file.explode(.file),
+                        any(filter(.scan.url.urls, .domain.root_domain != "adobe.com"),
+  
+  
+                            // and when visiting those links, are phishing
+                            ml.link_analysis(., mode="aggressive").credphish.disposition == "phishing"
+  
+                            // hit a captcha page
+                            or ml.link_analysis(., mode="aggressive").credphish.contains_captcha
+  
+                            // or the page redirects to common website, observed when evasion happens
+                            or (
+                              length(ml.link_analysis(., mode="aggressive").redirect_history
+                              ) > 0
+                              and ml.link_analysis(., mode="aggressive").effective_url.domain.root_domain in $tranco_10k
+                            )
+                        )
+                )
+              )
+          )
+  )
+  
+  and length(headers.references) == 0
+  and headers.in_reply_to is null
+  and sender.email.domain.root_domain != "adobe.com"
+  
+  
+  --- Previous version with much lower benign matches --- need to scope logic based on observed TPs
+  type.inbound
+  and any(body.links,
+          .href_url.domain.domain == "acrobat.adobe.com"
+          and strings.istarts_with(.href_url.path, '/id/urn:')
+  )
+  and length(distinct(filter(body.links,
+                             .href_url.domain.domain == "acrobat.adobe.com"
+                             and strings.istarts_with(.href_url.path, '/id/urn:')
+                      ),
+                      .href_url.url
+             )
+  ) == 1
+  and any(filter(body.links,
+                 .href_url.domain.domain == "acrobat.adobe.com"
+                 and strings.istarts_with(.href_url.path, '/id/urn:')
+          ),
+          any(ml.link_analysis(., mode="aggressive").additional_responses,
+              any(file.explode(.file), length(.scan.url.urls) == 1)
+              and any(filter(file.explode(.file), .scan.ocr.raw is not null),
+                      strings.icontains(.scan.ocr.raw, 'view document')
+                      or strings.icontains(.scan.ocr.raw, 'please wait')
+                      or strings.icontains(.scan.ocr.raw, "display this type of document")
+                      or strings.icontains(.scan.ocr.raw, 'PDF viewer')
+  
+              )
+          )
+  )
+  and length(headers.references) == 0
+  and headers.in_reply_to is null
+  and sender.email.domain.root_domain != "adobe.com"
+
+attack_types:
+  - "Credential Phishing"
+  - "Malware/Ransomware"
+tactics_and_techniques:
+  - "Evasion"
+  - "Free file host"
+  - "Free subdomain host"
+  - "PDF"
+  - "Social engineering"
+detection_methods:
+  - "Header analysis"
+  - "URL analysis"
+  - "Content analysis"
+  - "Optical Character Recognition"
+  - "Whois"
