@@ -44,8 +44,7 @@ source: |
               // if the PDF contains a CTA
               // because the OCR output is at a different object than the URLs
               // we have to loop twice
-              or 
-              (
+              or (
                 any(file.explode(.file),
                     (
                       // find any links that mention common "action" words
@@ -56,8 +55,9 @@ source: |
                 )
                 // and we detect a URL as phishing
                 and any(file.explode(.file),
-                        any(filter(.scan.url.urls, .domain.root_domain != "adobe.com"),
-  
+                        any(filter(.scan.url.urls,
+                                   .domain.root_domain != "adobe.com"
+                            ),
   
                             // and when visiting those links, are phishing
                             ml.link_analysis(., mode="aggressive").credphish.disposition == "phishing"
@@ -71,15 +71,21 @@ source: |
                               ) > 0
                               and ml.link_analysis(., mode="aggressive").effective_url.domain.root_domain in $tranco_10k
                             )
+                            // Check for cloudflare suspected phishing page
+                            or strings.contains(ml.link_analysis(.,
+                                                                 mode="aggressive"
+                                                ).final_dom.raw,
+                                                '<title>Suspected phishing site | Cloudflare</title>'
+                            )
                         )
                 )
               )
           )
   )
-  
   and length(headers.references) == 0
   and headers.in_reply_to is null
   and sender.email.domain.root_domain != "adobe.com"
+
 
 attack_types:
   - "Credential Phishing"
