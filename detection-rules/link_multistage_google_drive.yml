@@ -5,8 +5,18 @@ severity: "high"
 source: |
   type.inbound
   
-  // reply-to email address as never been sent an email by the org
-  and not any(headers.reply_to, .email.email in $recipient_emails)
+  //
+  // This rule makes use of a beta feature and is subject to change without notice
+  // using the beta feature in custom rules is not suggested until it has been formally released
+  //
+  // the reply-to address is new or unsolicited
+  and ( 
+    // reply-to address has never sent an email to the org
+     beta.profile.by_reply_to().prevalence == "new"
+  
+    // reply-to email address has never been sent an email by the org
+    or not beta.profile.by_reply_to().solicited
+  )
   
   // message is from google actual
   and sender.email.domain.domain == 'google.com'
@@ -21,9 +31,10 @@ source: |
   and headers.auth_summary.dmarc.pass
   
   // not where the sender display name is within org_display_names
-  and not any($org_display_names,
-      strings.istarts_with(sender.display_name, strings.concat(., " (via Google "))
-      or strings.istarts_with(sender.display_name, strings.concat(., " (Google "))
+  and not any(regex.iextract(sender.display_name,
+                             '^(?P<sender_display_name>.*)\((?:via )?Google'
+              ),
+              .named_groups["sender_display_name"] in~ $org_display_names
   )
   
   // threat actors dont want others to edit the share
