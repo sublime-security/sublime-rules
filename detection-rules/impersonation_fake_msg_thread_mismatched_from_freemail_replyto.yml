@@ -17,12 +17,12 @@ source: |
       profile.by_sender().any_messages_malicious_or_spam
       and not profile.by_sender().any_false_positives
     )
-    
+  
     // 
     // This rule makes use of a beta feature and is subject to change without notice
     // using the beta feature in custom rules is not suggested until it has been formally released
     //
-    
+  
     // known (likely compromised) sender but with unknown reply-to
     or beta.profile.by_reply_to().prevalence in ("new", "outlier")
   )
@@ -32,14 +32,30 @@ source: |
           .email.domain.domain in $free_email_providers
           and not .email.domain.domain == sender.email.domain.domain
   )
-  
-  and not any(beta.ml_topic(body.current_thread.text).topics,
-              .name in (
-                "Customer Service and Support",
-                "Advertising and Promotions",
-                "Newsletters and Digests"
-              )
-              and .confidence in ("medium", "high")
+  and (
+    not any(beta.ml_topic(body.current_thread.text).topics,
+            .name in (
+              "Customer Service and Support",
+              "Advertising and Promotions",
+              "Newsletters and Digests"
+            )
+            and .confidence in ("medium", "high")
+    )
+    // do not let topic modelling negate the flag if NLU is highly confident of a malicious body
+    or (
+      any(beta.ml_topic(body.current_thread.text).topics,
+          .name in (
+            "Customer Service and Support",
+            "Advertising and Promotions",
+            "Newsletters and Digests"
+          )
+          and .confidence in ("medium", "high")
+      )
+      and any(ml.nlu_classifier(body.current_thread.text).intents,
+              .name in ("advance_fee", "bec", "cred_theft")
+              and .confidence == "high"
+      )
+    )
   )
   
   // negate known services where the reply-to is intentionally written
