@@ -4,18 +4,25 @@ type: "rule"
 severity: "medium"
 source: |
   type.inbound
+  // a single PDF attachment
+  and length(attachments) == 1
+  // the Topic analysis of the PDF is Voicemail
   and any(attachments,
-      .file_extension == "pdf"
-      and any(beta.ml_topic(beta.ocr(.).text).topics,
-              .confidence == "high"
-              and .name == "Voicemail Call and Missed Call Notifications"
-      )
-      and beta.ocr(.).text != ""
-      and beta.ocr(.).success
-      // contains a link or QR code
-      and any(file.explode(.), 0 < length(.scan.pdf.urls) <= 2 or .scan.qr.url.url is not null)
-      // there is only a single page
-      and any(file.explode(.), .depth == 0 and .scan.exiftool.page_count == 1 )
+          .file_extension == "pdf"
+          // the NLU detected language is english
+          and ml.nlu_classifier(beta.ocr(.).text).language == "english"
+          and any(beta.ml_topic(beta.ocr(.).text).topics,
+                  .confidence == "high"
+                  and .name == "Voicemail Call and Missed Call Notifications"
+          )
+          and beta.ocr(.).text != ""
+          and beta.ocr(.).success
+          // contains a link or QR code
+          and any(file.explode(.),
+                  0 < length(.scan.pdf.urls) <= 2 or .scan.qr.url.url is not null
+          )
+          // there is only a single page
+          and any(file.explode(.), .depth == 0 and .scan.exiftool.page_count == 1)
   )
 attack_types:
   - "Credential Phishing"
@@ -33,4 +40,4 @@ detection_methods:
 id: "f19246f0-4250-53e2-274c-fb754a86d432"
 og_id: "d3587209-a8e6-5209-8dfc-35646b6ccd23"
 testing_pr: 2551
-testing_sha: 25dd6606fa8b81c86302cf64a63e3488fd23af27
+testing_sha: 0ac35afa8f282febf46c12eba48f9bf0f270473a
