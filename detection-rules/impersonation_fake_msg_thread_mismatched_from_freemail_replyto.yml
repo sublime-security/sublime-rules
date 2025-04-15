@@ -17,6 +17,8 @@ source: |
       profile.by_sender().any_messages_malicious_or_spam
       and not profile.by_sender().any_false_positives
     )
+    // known (likely compromised) sender but with unknown reply-to
+    or beta.profile.by_reply_to().prevalence in ("new", "outlier")
   )
   
   // Reply-to is a freemail sender but From is not
@@ -25,22 +27,22 @@ source: |
           and not .email.domain.domain == sender.email.domain.domain
   )
   
-  // Exclude marketing emails
-  and not strings.ilike(sender.email.local_part,
-                        "support",
-                        "sales",
-                        "noreply",
-                        "marketing"
+  and not any(beta.ml_topic(body.current_thread.text).topics,
+              .name in (
+                "Customer Service and Support",
+                "Advertising and Promotions",
+                "Newsletters and Digests"
+              )
+              and .confidence in ("medium", "high")
   )
+  
+  // negate known services where the reply-to is intentionally written
+  and sender.email.domain.domain not in $replyto_service_domains
   
   // Exclude mailing lists
   and not any(headers.hops,
               any(.fields,
-                  .name in (
-                    "x-google-group-id",
-                    "list-post",
-                    "mailing-list"
-                  )
+                  .name in ("x-google-group-id", "list-post", "mailing-list")
               )
   )
   
