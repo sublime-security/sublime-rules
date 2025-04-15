@@ -3,7 +3,8 @@ description: "Detects messages from HelloSign in which the document originates f
 type: "rule"
 severity: "low"
 source: |
-  sender.email.domain.domain == "mail.hellosign.com"
+  type.inbound
+  and sender.email.domain.domain == "mail.hellosign.com"
   and headers.auth_summary.spf.pass
   and headers.auth_summary.dmarc.pass
   and (
@@ -15,11 +16,16 @@ source: |
       )
       // check that the sender email has not been observed previously
       and all(regex.iextract(body.html.raw,
-                             '<th class="action-item--action[^\>]+\>\s*[^\<]*\((?P<sender_email>[^\)]+)\).*?</th>'
+                             '<th class="action-item--action[^\>]+\>\s*[^\<]*\((?P<sender_email>[^\"]+@(?P<sender_domain>[^\"]+))\).*?</th>'
               ),
               .named_groups["sender_domain"] not in $org_domains
               and .named_groups["sender_email"] not in $recipient_emails
               and .named_groups["sender_email"] not in $sender_emails
+              and not (
+                .named_groups["sender_domain"] not in $free_email_providers
+                and .named_groups["sender_domain"] in $recipient_domains
+                and .named_groups["sender_domain"] in $sender_domains
+              )
       )
     )
   
@@ -34,6 +40,11 @@ source: |
                        .named_groups["sender_domain"] not in $org_domains
                        and .named_groups["sender_email"] not in $recipient_emails
                        and .named_groups["sender_email"] not in $sender_emails
+                       and not (
+                         .named_groups["sender_domain"] not in $free_email_providers
+                         and .named_groups["sender_domain"] in $recipient_domains
+                         and .named_groups["sender_domain"] in $sender_domains
+                       )
                )
            )
     )
@@ -49,6 +60,11 @@ source: |
               .named_groups["sender_domain"] not in $org_domains
               and .named_groups["sender_email"] not in $recipient_emails
               and .named_groups["sender_email"] not in $sender_emails
+              and not (
+                .named_groups["sender_domain"] not in $free_email_providers
+                and .named_groups["sender_domain"] in $recipient_domains
+                and .named_groups["sender_domain"] in $sender_domains
+              )
       )
     )
   )
