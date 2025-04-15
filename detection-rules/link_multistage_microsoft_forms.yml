@@ -7,39 +7,11 @@ source: |
   and any(filter(body.links, .href_url.domain.domain == "forms.office.com"),
           // avoid doing Link Analysis if the display-text has strong indications of phishing
           (
-            any([
-                  "REVIEW",
-                  "PROPOSAL",
-                  "DOCUMENT",
-                  "PASSWORD",
-                  "eFax",
-                  "Restore",
-                  "OPEN",
-                  "0PEN",
-                  "Secure",
-                  "Messaging",
-                  "Reset",
-                  "Account",
-                  "Verify",
-                  "Login",
-                  "Notification",
-                  "Alert",
-                  "Urgent",
-                  "Immediate",
-                  "Access",
-                  "Support",
-                  "Update",
-                  "Download",
-                  "Attachment",
-                  "Service",
-                  "Payment",
-                  "Remittance",
-                  "Invoice"
-                ],
-                // replace confusables - observed ITW
-                strings.icontains(strings.replace_confusables(..display_text), .)
-            // add confidence to these strings by using profile.by_sender()
+            // replace confusables - observed ITW
+            regex.icontains(strings.replace_confusables(.display_text),
+                            'review|proposal|document|efax|restore|[o0]pen|secure|messaging|reset|account|verify|login|notification|alert|urgent|immediate|access|support|\bupdate\b|download|attachment|service|payment|remittance|invoice'
             )
+            // add confidence to these strings by using profile.by_sender()
             and (
               not profile.by_sender().solicited
               and profile.by_sender().prevalence in ('new', 'outlier')
@@ -57,10 +29,18 @@ source: |
           )
           // or MS thinks there are phishing keywords
           or any(ml.link_analysis(., mode="aggressive").additional_responses,
-                 any(.json["form"]["questions"], .["subtitleHasPhishingKeywords"] == true)
-                 or any(.json["form"]["questions"], .["titleHasPhishingKeywords"] == true)
-                 or any(.json["form"]["descriptiveQuestions"], .["titleHasPhishingKeywords"] == true)
-                 or any(.json["form"]["descriptiveQuestions"], .["titleHasPhishingKeywords"] == true)
+                 any(.json["form"]["questions"],
+                     .["subtitleHasPhishingKeywords"] == true
+                 )
+                 or any(.json["form"]["questions"],
+                        .["titleHasPhishingKeywords"] == true
+                 )
+                 or any(.json["form"]["descriptiveQuestions"],
+                        .["titleHasPhishingKeywords"] == true
+                 )
+                 or any(.json["form"]["descriptiveQuestions"],
+                        .["titleHasPhishingKeywords"] == true
+                 )
           )
           // this logic checks for three abnormal cases
           // 1) no questions
@@ -121,6 +101,7 @@ source: |
                                   and .href_url.domain.root_domain =~ 'microsoft.com'
                                 )
                                 or .href_url.domain.root_domain =~ sender.email.domain.root_domain
+                                or .href_url.domain.tld == "ms"
                               )
                        )
             ) <= 2
