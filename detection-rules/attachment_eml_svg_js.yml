@@ -9,36 +9,51 @@ source: |
           and any(file.parse_eml(.).attachments,
                   .file_extension =~ "svg"
                   and (
-                    strings.ilike(file.parse_text(.).text,
+                    strings.ilike(file.parse_text(.,
+                                                  encodings=[
+                                                    "ascii",
+                                                    "utf8",
+                                                    "utf16-le"
+                                                  ]
+                                  ).text,
                                   "*onload*",
                                   "*window.location.href*",
                                   "*onerror*",
                                   "*CDATA*",
                                   "*<script>*",
-                                  "*</script>*"
+                                  "*</script>*",
+                                  '*location.assign*',
+                                  '*decodeURIComponent*'
                     )
-                    or regex.icontains(file.parse_text(.).text,
+                    or regex.icontains(file.parse_text(.,
+                                                       encodings=[
+                                                         "ascii",
+                                                         "utf8",
+                                                         "utf16-le"
+                                                       ]
+                                       ).text,
                                        '<iframe[^\>]+src\s*=\s*\"data:[^\;]+;base64,'
                     )
-                    or any(beta.scan_base64(file.parse_text(.).text),
+                    or any(beta.scan_base64(file.parse_text(.).text,
+                                            encodings=[
+                                              "ascii",
+                                              "utf8",
+                                              "utf16-le"
+                                            ]
+                           ),
                            strings.ilike(.,
                                          "*onload*",
                                          "*window.location.href*",
                                          "*onerror*",
                                          "*CDATA*",
                                          "*<script>*",
-                                         "*</script>*"
+                                         "*</script>*",
+                                         '*location.assign*',
+                                         '*decodeURIComponent*'
                            )
                     )
                   )
           )
-  )
-  and (
-    not profile.by_sender().solicited
-    or (
-      profile.by_sender().any_messages_malicious_or_spam
-      and not profile.by_sender().any_false_positives
-    )
   )
 attack_types:
   - "Credential Phishing"
