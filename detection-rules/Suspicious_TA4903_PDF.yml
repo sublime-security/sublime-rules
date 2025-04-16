@@ -1,0 +1,43 @@
+name: "Attachment: Suspicious PDF files"
+description: "This rule identifies messages that contain PDF attachments used by ta4903 for bid phishing
+type: "rule"
+severity: "medium"
+source: | https://www.proofpoint.com/uk/blog/threat-insight/ta4903-actor-spoofs-us-government-small-businesses-phishing-bec-bids
+type.inbound
+  and length(attachments) == 1
+  and all(attachments,
+          .file_extension in~ $file_extensions_macros or .file_type == "pdf"
+  )
+  and strings.icontains(body.current_thread.text, "bid")
+  and (
+    strings.icontains(subject.subject,
+                    'invitation to bid'
+    )
+    or any(attachments,
+           strings.icontains(.file_name,
+                           'usda'
+           )
+    )
+  )
+  and strings.icontains(sender.email.domain.domain, "usda")
+  and (
+    any(ml.nlu_classifier(body.current_thread.text).entities,
+        .text == "usda" 
+        and .name in ("sender", "org")
+    )
+    and any(attachments,
+            any(file.explode(.),
+                any(ml.nlu_classifier(.scan.ocr.raw).entities,
+                    strings.icontains(.text, "Agriculture")
+                )
+            )
+    )
+  )
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Evasion"
+  - "PDF"
+detection_methods:
+  - "File analysis"
+  - "Optical Character Recognition"
