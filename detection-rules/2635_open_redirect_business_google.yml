@@ -1,0 +1,17 @@
+name: "Open Redirect: business.google.com website_shared URL Param"
+description: "Detects messages containing an open redirect in business.google.com's \nwebsite_shared/launch_bw.html endpoint with the 'f' parameter. This has been \nexploited in phishing campaigns to redirect users to malicious sites.\n"
+type: "rule"
+severity: "medium"
+source: "type.inbound\nand any(body.links,\n        .href_url.domain.domain == \"business.google.com\" \n        and strings.icontains(.href_url.path, '/website_shared/launch_bw.html')\n        and strings.icontains(.href_url.query_params, 'f=')\n        // Make sure the redirect is not going back to google.com\n        and not regex.icontains(.href_url.query_params,\n                              '(?:https?(?:%3a|:))?(?:%2f|\\/){2}[^&]*google\\.com(?:\\&|\\/|$|%2f)')\n)\n// Exclude legitimate Google domains as senders\nand not regex.icontains(sender.email.domain.root_domain, '^google')\n\n// negate highly trusted sender domains unless they fail DMARC authentication\nand (\n  (\n    sender.email.domain.root_domain in $high_trust_sender_root_domains\n    and not headers.auth_summary.dmarc.pass\n  )\n  or sender.email.domain.root_domain not in $high_trust_sender_root_domains\n)\n"
+attack_types:
+  - "Credential Phishing"
+  - "Malware/Ransomware"
+tactics_and_techniques:
+  - "Open redirect"
+detection_methods:
+  - "Sender analysis"
+  - "URL analysis"
+id: "2a2247b2-1520-5d93-af75-9eb5e3770c6e"
+og_id: "f146be73-7200-570e-a033-a28814c5a098"
+testing_pr: 2635
+testing_sha: a9232e79eef0bcfe9301ba379cba4cba00f9bf70
