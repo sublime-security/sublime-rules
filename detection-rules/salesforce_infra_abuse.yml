@@ -28,6 +28,9 @@ source: |
     or regex.icontains(subject.subject,
                        '^(?:(?:Final|Last)?\s*Warning|(?:Final|Last|Legal|Critical|Content Violation)?\s*(?:Alert|Noti(?:ce|fication))|Appeal Required|Time.Sensitive|Critical.Alert|Important|Copyright Issue)\s*:\s*'
     )
+    or any(ml.logo_detect(beta.message_screenshot()).brands,
+           .name in ("Facebook", "Meta", "Instagram") and .confidence in ("medium", "high")
+    )
   )
   and 1 of (
     ( // sender domain matches no body domains
@@ -43,6 +46,25 @@ source: |
               )
               or .href_url.domain.root_domain is null
       )
+    ),
+    any(recipients.to,
+        .email.domain.valid
+        and any(body.links,
+                strings.icontains(.href_url.url, ..email.email)
+                or any(beta.scan_base64(.href_url.url,
+                                        format="url",
+                                        ignore_padding=true
+                       ),
+                       strings.icontains(., ...email.email)
+                )
+                or any(beta.scan_base64(.href_url.fragment, ignore_padding=true),
+                       strings.icontains(., ...email.email)
+                )
+                // cloudflare turnstile or phishing warning page
+                or strings.icontains(ml.link_analysis(., mode="aggressive").final_dom.display_text,
+                                "cloudflare"
+                )
+        )
     ),
     regex.icontains(subject.subject,
                     "termination.*notice",
