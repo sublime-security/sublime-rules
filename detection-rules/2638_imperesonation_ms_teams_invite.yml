@@ -1,0 +1,46 @@
+name: "Brand Impersonation: Microsoft Teams Invitation"
+description: "Detects messages impersonating a Microsoft Teams invites by matching known invite text patterns while containing join links that do not resolve to Microsoft domains. Additional verification includes checking for absent phone dial-in options and missing standard Teams help text or HTML meeting components."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and strings.icontains(body.current_thread.text, 'Microsoft Teams')
+  and strings.icontains(body.current_thread.text, 'join the meeting now')
+  and strings.contains(body.current_thread.text, 'Meeting ID:')
+  and strings.icontains(body.current_thread.text, 'Passcode:')
+  // and regex.contains(body.current_thread.text, 'Meeting ID:\s*\d{3}\s+\d{3}\s+\d{3}\s+\d{3}')
+  // and regex.icontains(body.current_thread.text, 'Passcode:\s*[A-Z0-9]{8}')
+
+  // if there are attachments, they shouldn't be calendar invites
+  and not any(attachments, .content_type =~ "text/calendar")
+  // not a reply
+  and length(headers.references) == 0
+  and headers.in_reply_to is null
+  and length(body.links) < 20
+  and any(body.links, .display_text =~ "join the meeting now")
+  and all(filter(body.links, .display_text =~ "join the meeting now"),
+          .href_url.domain.root_domain != "microsoft.com"
+  )
+  and not strings.icontains(body.current_thread.text, 'Dial in by phone')
+  and (
+    not strings.icontains(body.current_thread.text, 'Microsoft Teams Need help?')
+    or strings.icontains(body.html.raw, '<div class="meeting-title">')
+    or strings.icontains(body.html.raw, '<div class="meeting-time">')
+    or strings.icontains(body.html.raw, '<div class="meeting-location">')
+    or strings.icontains(body.html.raw, '<span class="conflict-badge">')
+    or strings.icontains(body.html.raw, 'class="join-button"')
+  )
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Header analysis"
+  - "HTML analysis"
+  - "URL analysis"
+id: "1fb77b10-0031-5bff-5ea9-ba1c2e85c649"
+og_id: "46410ad8-3465-505f-a78e-f77704910a91"
+testing_pr: 2638
+testing_sha: 33cbda8782b1ded29ca1ef92d9dad421c333dca8
