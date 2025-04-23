@@ -1,0 +1,64 @@
+name: "Brand Impersonation: Gemini Trust Company"
+description: "Detects messages impersonating Gemini Trust Company through analysis of footer content, social media links, and address verification, excluding legitimate communications from authenticated Gemini domains."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and (
+    // the address in the footer
+    regex.icontains(body.html.display_text,
+                    "600 Third Avenue.{1,2}2nd Floor.{1,2}New York, NY"
+    )
+    or strings.icontains(body.html.display_text,
+                    "Gemini Trust Company"
+    )
+    // logo detect combined with sender display name 
+    // need to be more specific here due to other uses of the word "Gemini"
+    // or (
+    //   sender.display_name  =~ "Gemini"
+    //   and any(ml.logo_detect(beta.message_screenshot()).brands, .name == "Gemini" and .confidence != "low")
+    // )
+    
+    // the social links in the footer
+    or (
+      length(filter(body.links,
+                    strings.icontains(.href_url.url,
+                                      'https://www.instagram.com/gemini/'
+                    )
+                    or strings.icontains(.href_url.url,
+                                         'https://www.linkedin.com/company/geminitrust/'
+                    )
+                    or strings.icontains(.href_url.url,
+                                         'https://facebook.com/GeminiTrust'
+                    )
+                    or strings.icontains(.href_url.url,
+                                         'https://twitter.com/Gemini'
+                    )
+                    or strings.icontains(.href_url.url,
+                                         'https://support.gemini.com/hc/en-us/requests/new'
+                    )
+                    or strings.icontains(.href_url.url,
+                                         'https://support.gemini.com/hc/en-us/requests/new'
+                    )
+             )
+      ) >= 4
+    )
+  )
+  
+  // not from Gemini actual
+  and not (
+    sender.email.domain.root_domain in ("gemini.com")
+    and headers.auth_summary.dmarc.pass
+  )
+  
+
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "URL analysis"
+  - "Sender analysis"
+  - "Header analysis"
