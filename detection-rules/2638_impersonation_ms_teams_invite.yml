@@ -7,23 +7,36 @@ source: |
   and strings.icontains(body.current_thread.text, 'Microsoft Teams')
   and strings.icontains(body.current_thread.text, 'join the meeting now')
   and strings.contains(body.current_thread.text, 'Meeting ID:')
-  and strings.icontains(body.current_thread.text, 'Passcode:')
-  // and regex.contains(body.current_thread.text, 'Meeting ID:\s*\d{3}\s+\d{3}\s+\d{3}\s+\d{3}')
-  // and regex.icontains(body.current_thread.text, 'Passcode:\s*[A-Z0-9]{8}')
+  and strings.contains(body.current_thread.text, 'Passcode:')
 
-  // if there are attachments, they shouldn't be calendar invites
-  and not any(attachments, .content_type =~ "text/calendar")
   // not a reply
   and length(headers.references) == 0
   and headers.in_reply_to is null
-  and length(body.links) < 20
+  // few links
+  and length(body.links) < 10
+
+  // no unsubscribe links
+  // common in newsletters which link to a webinar style event
+  and not any(body.links, strings.icontains(.display_text, "unsub"))
+
+  // one of the links contains "join the meeting now"
   and any(body.links, .display_text =~ "join the meeting now")
+
+  // the "join the meeting now" link does not go to microsoft
   and all(filter(body.links, .display_text =~ "join the meeting now"),
-          .href_url.domain.root_domain != "microsoft.com"
+          .href_url.domain.root_domain not in ("microsoft.com", "microsoft.us")
+          // rewriters often abstract the link
+          and .href_url.domain.root_domain not in $bulk_mailer_url_root_domains
   )
+
+  // missing the dial by phone element
   and not strings.icontains(body.current_thread.text, 'Dial in by phone')
+
+  // any of these suspicious elements from the body
   and (
+    // malicious samples leveraged recipient domain branding here
     not strings.icontains(body.current_thread.text, 'Microsoft Teams Need help?')
+    // malicious samples contained unique html elements not present in legit ones
     or strings.icontains(body.html.raw, '<div class="meeting-title">')
     or strings.icontains(body.html.raw, '<div class="meeting-time">')
     or strings.icontains(body.html.raw, '<div class="meeting-location">')
@@ -40,7 +53,7 @@ detection_methods:
   - "Header analysis"
   - "HTML analysis"
   - "URL analysis"
-id: "1fb77b10-0031-5bff-5ea9-ba1c2e85c649"
+id: "19ae345f-4a72-5786-9405-bc3bd96a921a"
 og_id: "46410ad8-3465-505f-a78e-f77704910a91"
 testing_pr: 2638
-testing_sha: 33cbda8782b1ded29ca1ef92d9dad421c333dca8
+testing_sha: 0043d666a6bb214e7321dea712d6ecf5c47f84f9
