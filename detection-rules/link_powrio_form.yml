@@ -22,16 +22,21 @@ source: |
                    )
                  )
           ),
+          // it's credphishing
+          ml.link_analysis(.).credphish.disposition == "phishing"
+          // these shouldn't show up here either
+          or ml.link_analysis(.).credphish.contains_login
+          or ml.link_analysis(.).credphish.contains_captcha
           // there is a redirect, and that redirect goes to a different domain than the sender root domain
-          any(regex.extract(ml.link_analysis(.).final_dom.raw,
-                            'window\.CONTENT=(?P<content>[^\n]+)\;\n'
-              ),
-              strings.parse_json(.named_groups["content"])["afterSubmission"] == "redirect"
-              and strings.parse_json(.named_groups["content"])["redirectLink"] != ""
-              and not strings.icontains(strings.parse_json(.named_groups["content"]
-                                        )["redirectLink"],
-                                        sender.email.domain.root_domain
-              )
+          or any(regex.extract(ml.link_analysis(.).final_dom.raw,
+                               'window\.CONTENT=(?P<content>[^\n]+)\;\n'
+                 ),
+                 strings.parse_json(.named_groups["content"])["afterSubmission"] == "redirect"
+                 and strings.parse_json(.named_groups["content"])["redirectLink"] != ""
+                 and not strings.icontains(strings.parse_json(.named_groups["content"]
+                                           )["redirectLink"],
+                                           sender.email.domain.root_domain
+                 )
           )
           // use the META data to inspect the "app_owner" data
           or any(regex.extract(ml.link_analysis(.).final_dom.raw,
@@ -81,16 +86,22 @@ source: |
                               )
                             )
                      ),
+                     // it's credphishing
+                     ml.link_analysis(.).credphish.disposition == "phishing"
+                     // these shouldn't show up here either
+                     or ml.link_analysis(.).credphish.contains_login
+                     or ml.link_analysis(.).credphish.contains_captcha
+  
                      // there is a redirect, and that redirect goes to a different domain than the sender root domain
-                     any(regex.extract(ml.link_analysis(.).final_dom.raw,
-                                       'window\.CONTENT=(?P<content>[^\n]+)\;\n'
-                         ),
-                         strings.parse_json(.named_groups["content"])["afterSubmission"] == "redirect"
-                         and strings.parse_json(.named_groups["content"])["redirectLink"] != ""
-                         and not strings.icontains(strings.parse_json(.named_groups["content"]
-                                                   )["redirectLink"],
-                                                   sender.email.domain.root_domain
-                         )
+                     or any(regex.extract(ml.link_analysis(.).final_dom.raw,
+                                          'window\.CONTENT=(?P<content>[^\n]+)\;\n'
+                            ),
+                            strings.parse_json(.named_groups["content"])["afterSubmission"] == "redirect"
+                            and strings.parse_json(.named_groups["content"])["redirectLink"] != ""
+                            and not strings.icontains(strings.parse_json(.named_groups["content"]
+                                                      )["redirectLink"],
+                                                      sender.email.domain.root_domain
+                            )
                      )
                      // the creator has been suspended
                      or any(regex.extract(ml.link_analysis(.).final_dom.raw,
