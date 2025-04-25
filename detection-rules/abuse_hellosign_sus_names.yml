@@ -35,7 +35,18 @@ source: |
   and (
     // contains the word dropbox
     // the subject is in the format of "<actor controlled title>(?: - Signature Requested by| is awaiting your signature) <actor controlled name>"
-    strings.icontains(subject.subject, 'dropbox')
+    (
+        strings.icontains(subject.subject, 'dropbox')
+        // negate where the sender is dropbox
+        and not any(headers.hops,
+              any(.fields,
+                  .name == "X-Mailgun-Variables"
+                  and regex.contains(.value,
+                                         '\"on_behalf_of_email": \"[^\"]+@dropbox.com\"'
+                          )
+                  )
+              )
+    )
     or strings.icontains(subject.subject, 'sharefile')
     or strings.icontains(subject.subject, 'helloshare')
   
