@@ -1,8 +1,45 @@
 name: "Brand Impersonation: Procore"
-description: "Detects messages containing Procore branding language that do not originate from legitimate Procore domains. This has been observed in phishing campaigns. "
+description: "Detects messages containing Procore branding language that do not originate from legitimate Procore domains. This has been observed in phishing campaigns."
 type: "rule"
 severity: "medium"
-source: "type.inbound\nand strings.ilike(body.current_thread.text, \"*powered by procore*\") \nand not sender.email.domain.root_domain == \"procore.com\"\n"
+source: |
+  type.inbound
+  and strings.ilike(body.current_thread.text, "*powered by procore*")
+  and not sender.email.domain.root_domain in ("procore.com", "procoretech.com")
+  and not any(body.links, .href_url.domain.domain == "storage.procore.com")
+
+  // negating legit replies/forwards
+  // https://github.com/sublime-security/sublime-rules/blob/main/insights/authentication/org_inbound_auth_pass.yml
+  and not (
+    (
+      strings.istarts_with(subject.subject, "RE:")
+      or strings.istarts_with(subject.subject, "FW:")
+      or strings.istarts_with(subject.subject, "FWD:")
+      or regex.imatch(subject.subject,
+                      '(\[[^\]]+\]\s?){0,3}(re|fwd?|automat.*)\s?:.*'
+      )
+      or strings.istarts_with(subject.subject, "Réponse automatique")
+    )
+    and (
+      length(headers.references) > 0
+      and any(headers.hops, any(.fields, strings.ilike(.name, "In-Reply-To")))
+    )
+  )
+  // negate bounce backs
+  and not (
+    strings.like(sender.email.local_part,
+                 "*postmaster*",
+                 "*mailer-daemon*",
+                 "*administrator*"
+    )
+    and any(attachments,
+            .content_type in (
+              "message/rfc822",
+              "message/delivery-status",
+              "text/calendar"
+            )
+    )
+  )
 attack_types:
   - "BEC/Fraud"
   - "Credential Phishing"
@@ -15,4 +52,4 @@ detection_methods:
 id: "bffb6dc3-00d8-5d04-421c-68ea84b5c425"
 og_id: "74baa1e5-f1cd-5d15-b2f2-e863baf4a20f"
 testing_pr: 2645
-testing_sha: 23f711c3392ae33cac1c35b4bce395e7a09fa095
+testing_sha: f7ce66a32766f8b5965f976bdd901f2352eb227f
