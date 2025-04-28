@@ -22,8 +22,46 @@ source: |
       strings.istarts_with(body.html.inner_text, "docusign")
       and not strings.istarts_with(body.current_thread.text, "docusign")
     )
+    // docusign is found in current thread AND contains docusign wording
     or (
-      (
+      regex.icontains(body.current_thread.text, '\bdocu.?sign\b')
+      and (
+        strings.icontains(body.current_thread.text,
+                          'You have received a document',
+        )
+        or strings.icontains(body.current_thread.text,
+                             'You have a document to review and sign',
+        )
+        or strings.icontains(body.current_thread.text,
+                             'A document is available for you',
+        )
+        or strings.icontains(body.current_thread.text,
+                             'This email contains a secure link to DocuSign'
+        )
+        or strings.icontains(body.current_thread.text,
+                             'All parties have completed with Docusign'
+        )
+        or strings.icontains(body.current_thread.text,
+                             'Please use the link above to Docusign'
+        )
+        or strings.icontains(body.current_thread.text, 'Review on Docusign')
+        or strings.icontains(body.current_thread.text, 'Completed with Docusign')
+        or strings.icontains(body.current_thread.text, 'Complete with Docusign')
+        or strings.icontains(body.current_thread.text,
+                             'please review and complete with DocuSign'
+        )
+        or strings.icontains(body.current_thread.text,
+                             'We appreciate you choosing DocuSign'
+        )
+      )
+    )
+    or (
+      // negate replies/forwards which involve a legit docusign message-id format
+      not any(headers.references,
+              strings.iends_with(., '@docusign.net')
+              and regex.imatch(., '[0-9a-f]{32}@docusign.net')
+      )
+      and (
         (
           regex.icontains(sender.display_name, '\bdocu\b')
           and strings.icontains(sender.display_name, 'sign')
@@ -32,16 +70,79 @@ source: |
           regex.icontains(subject.subject, '\bdocu\b')
           and strings.icontains(subject.subject, 'sign')
         )
-        or regex.icontains(body.current_thread.text, '\bdocu.?sign\b')
-        or regex.icontains(body.html.raw, 'Powered by.{0,4}</div>\s*</td>\s*<td>\s*<img[^\>]+(?:src="https://docucdn-a.akamaihd.net/[^\"]+email-logo.png"|alt="DocuSign")')
-      )
-      and any(body.links,
-              regex.icontains(.display_text, '(?:Re)?view.*Document', '(?:Re)?view.*Sign')
-      )
-      // negate replies/forwards which involve a legit docusign message-id format
-      and not any(headers.references,
-                  strings.iends_with(., '@docusign.net')
-                  and regex.imatch(., '[0-9a-f]{32}@docusign.net')
+        or (
+          (
+            regex.icontains(body.html.raw,
+                            'Powered by.{0,6}(?:\s*<\/?[^\>]+\>\s*)+<img[^\>]+(?:src="https:\/\/docucdn-a\.akamaihd\.net\/[^\"]+email-logo.png"|alt="DocuSign")'
+            )
+            or regex.icontains(body.current_thread.text, 'Powered by\s*DocuSign')
+          )
+          // limit it to where the powered by is within the current thread
+          and strings.icontains(body.current_thread.text, 'Powered by')
+        )
+        // footer disclaimers
+        or (
+          strings.icontains(body.current_thread.text,
+                            'This message was sent to you by'
+          )
+          and strings.icontains(body.current_thread.text,
+                                'who is using the Docusign Electronic Signature Service'
+          )
+        )
+        or strings.icontains(body.current_thread.text,
+                             'Thank you for choosing DocuSign'
+        )
+        or (
+          (
+            strings.icontains(body.current_thread.text,
+                              'Alternate Signing Method'
+            )
+            or strings.icontains(body.current_thread.text, 'Alternative Access')
+          )
+          and regex.icontains(body.current_thread.text,
+                              '(?:Click|Select) ''Access Documents'', and enter '
+          )
+        )
+        or strings.icontains(body.current_thread.text,
+                             'Please do not share this email, link, or access code with others'
+        )
+        or strings.icontains(body.current_thread.text,
+                             'using the Docusign Electronic Signature Service.'
+        )
+  
+        // footer links
+        or (
+          length(filter(body.links,
+                        (
+                          .href_url.domain.domain == "support.docusign.com"
+                          and strings.contains(.href_url.path, '/articles/')
+                        )
+                        or .href_url.domain.domain == "community.docusign.com"
+                        or .href_url.domain.domain == "protect.docusign.com"
+                        or .href_url.domain.domain == "app.esign.docusign.com"
+                 )
+          ) >= 2
+          // and the display_text for these links are within the current thread
+          and (
+            strings.icontains(body.current_thread.text, 'Declining to sign')
+            or strings.icontains(body.current_thread.text,
+                                 'Managing notifications'
+            )
+            or strings.icontains(body.current_thread.text,
+                                 'How to Sign a Document'
+            )
+            or strings.icontains(body.current_thread.text,
+                                 'Docusign Support Center'
+            )
+            or strings.icontains(body.current_thread.text, 'Report this email')
+            or strings.icontains(body.current_thread.text, 'Docusign Community')
+            or strings.icontains(body.current_thread.text,
+                                 'Connect with our support team'
+            )
+            or strings.icontains(body.current_thread.text, 'Unsubscribe')
+            or strings.icontains(body.current_thread.text, 'Manage Preferences')
+          )
+        )
       )
     )
     or (
@@ -56,6 +157,7 @@ source: |
                            '<span[^>]*style="[^"]*">(Docu|D(?:ocu?)?)<\/span><span[^>]*style="[^"]*">(Sign|S(?:ign?)?)<\/span>'
         )
         or regex.icontains(body.html.raw, '<strong>Docu.?Sign</strong>')
+        or regex.icontains(body.html.raw, ' <title>Docu.?sign</title>')
         or regex.icontains(body.html.raw, '<div class="logo">DocuSign</div>')
   
         // Basic variations with HTML encoding
@@ -120,9 +222,6 @@ source: |
         or regex.icontains(body.html.raw,
                            '<table[^>]*style="[^"]*b(?:ackground(?:-color)?|g?color)(?::|=)\s*\"?#1E4CA1[^"]*"[^>]*>(.*?)<\/table>'
         )
-        or regex.icontains(body.html.raw, '<title>Document.{0,50}</title>')
-        or any(body.links, regex.icontains(.display_text, 'view.{0,3}doc'))
-        or any(body.links, regex.contains(.display_text, '\bDOCUMENT'))
       )
     )
   )
@@ -141,9 +240,9 @@ source: |
             strings.icontains(.display_text, "Review")
             and not strings.icontains(.display_text, "Review Us")
           )
-          or strings.icontains(.display_text, "Now")
           or strings.icontains(.display_text, "document")
           or strings.icontains(.display_text, "docusign")
+          or strings.icontains(.display_text, "Review on Docusign")
         )
         and not .href_url.domain.root_domain in ("docusign.com", "docusign.net")
         and not (
