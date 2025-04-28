@@ -56,12 +56,27 @@ source: |
           )
         )
         and not any(file.explode(.),
-                    strings.ilike(.scan.ocr.raw, "*DocuSign Envelope*")
-                    or strings.ilike(.scan.ocr.raw, "*Certificate Of Completion*")
+                    strings.ilike(.scan.ocr.raw,
+                                  "*DocuSigned By*",
+                                  "*DocuSign Envelope ID*",
+                                  "*Certificate Of Completion*",
+                                  "*Adobe Sign*"
+                    )
                     or (
                       .depth == 0
-                      and .scan.exiftool.page_count > 10
-                      and length(.scan.strings.strings) > 8000
+                      and (
+                        (
+                          .scan.exiftool.page_count > 10
+                          and length(.scan.strings.strings) > 8000
+                        )
+                        or (
+                          .scan.exiftool.producer == "Acrobat Sign"
+                          and any(.scan.exiftool.fields,
+                                  .key == "SigningReason"
+                                  and .value == "Certified by Adobe Acrobat Sign"
+                          )
+                        )
+                      )
                     )
         )
     )
@@ -106,14 +121,11 @@ source: |
           )
         )
         and not any(file.explode(beta.message_screenshot()),
-                    (
-                      strings.ilike(.scan.ocr.raw, "*DocuSigned By*")
-                      and not strings.ilike(.scan.ocr.raw,
-                                            "*DocuSign Envelope ID*"
-                      )
-                      and not strings.ilike(.scan.ocr.raw,
-                                            "*Certificate Of Completion*"
-                      )
+                    strings.ilike(.scan.ocr.raw,
+                                  "*DocuSigned By*",
+                                  "*DocuSign Envelope ID*",
+                                  "*Certificate Of Completion*",
+                                  "*Adobe Sign*"
                     )
         )
       )
