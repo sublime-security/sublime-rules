@@ -1,0 +1,41 @@
+name: "Service Abuse: Adobe Sign Notification From an Unsolicited Reply-To Address"
+description: "Identifies messages appearing to come from Adobe Sign signature notifications that contain a reply-to address not previously seen in organizational communications. This tactic exploits trust in legitimate Adobe services while attempting to establish unauthorized communication channels."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  
+  // Legitimate Adobe Sign sending infratructure
+  and sender.email.email == "adobesign@adobesign.com"
+  and headers.auth_summary.spf.pass
+  and headers.auth_summary.dmarc.pass
+  and strings.icontains(subject.subject, 'signature requested')
+  
+  //
+  // This rule makes use of a beta feature and is subject to change without notice
+  // using the beta feature in custom rules is not suggested until it has been formally released
+  //
+  
+  // reply-to address has never sent an email to the org
+  and beta.profile.by_reply_to().prevalence == "new"
+  
+  // reply-to email address has never been sent an email by the org
+  and not beta.profile.by_reply_to().solicited
+  
+  // do not match if the reply_to address has been observed as a reply_to address
+  // of a message that has been classified as benign
+  and not beta.profile.by_reply_to().any_messages_benign
+
+tags:
+ - "Attack surface reduction"
+attack_types:
+  - "BEC/Fraud"
+  - "Callback Phishing"
+  - "Spam"
+tactics_and_techniques:
+  - "Social engineering"
+  - "Impersonation: Brand"
+detection_methods:
+  - "Header analysis"
+  - "Sender analysis"
+id: "d00893ba-a65a-5b04-88d1-f35512eae291"
