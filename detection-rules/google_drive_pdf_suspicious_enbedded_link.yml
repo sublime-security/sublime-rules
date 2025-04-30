@@ -1,0 +1,35 @@
+name: "PDF Hosted On Google Drive With Suspicious Embedded Link"
+description: "Detects when a Google Drive link contains embedded suspicious URLs within a PDF viewer, including those on suspicious TLDs, free subdomain hosts, or credential harvesting sites."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and any(body.links,
+          .href_url.domain.domain == "drive.google.com"
+          and strings.istarts_with(.href_url.path, "/file/d/")
+          and any(filter(ml.link_analysis(., mode="aggressive").additional_responses,
+                     .url.path == "/viewerng/presspage"
+              ),
+              any(.json,
+                  any(.,
+                      any(., // this gets us to the array that contains the links embedded in the PDF
+                          strings.parse_url(.).domain.tld in $suspicious_tlds
+                          or strings.parse_url(.).domain.domain in $free_subdomain_hosts
+                          or strings.parse_url(.).domain.root_domain in $free_subdomain_hosts
+                          or ml.link_analysis(strings.parse_url(.)).credphish.disposition == "phishing"
+                      )
+                  )
+              )
+          )
+  )
+  and not profile.by_sender_email().any_messages_benign
+
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Free file host"
+  - "Social engineering"
+  - "Evasion"
+detection_methods:
+  - "Sender analysis"
+  - "URL analysis"
