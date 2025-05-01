@@ -1,0 +1,41 @@
+name: "Service Abuse: Zoom Docs From an Unsolicited Sender Address"
+description: "Detects messages from Zoom Docs in which the document originates from a newly observed email address.  The email address is extracted from the body message."
+type: "rule"
+severity: "low"
+source: |
+  type.inbound
+  and sender.email.domain.root_domain == "zoom.us"
+  and sender.display_name == "Zoom Docs"
+  
+  // 
+  // This rule makes use of a beta feature and is subject to change without notice
+  // using the beta feature in custom rules is not suggested until it has been formally released
+  // 
+  
+  and any(beta.html_xpath(body.html, '//h2').nodes,
+          // extract the sender email out of the message body
+          any(regex.iextract(.display_text,
+                             '^(?P<sender_display_name>[^\(]+)\((?P<sender_email>[^\)]+@(?P<sender_domain>[^\)]+))\)'
+              ),
+              .named_groups["sender_domain"] not in $org_domains
+              and .named_groups["sender_email"] not in $recipient_emails
+              and .named_groups["sender_email"] not in $sender_emails
+              and not (
+                .named_groups["sender_domain"] not in $free_email_providers
+                and .named_groups["sender_domain"] in $recipient_domains
+                and .named_groups["sender_domain"] in $sender_domains
+              )
+          )
+  )
+tags:
+ - "Attack surface reduction"
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Social engineering"
+  - "Free file host"
+  - "Evasion"
+detection_methods:
+  - "HTML analysis"
+  - "Sender analysis"
+  - "Header analysis"
