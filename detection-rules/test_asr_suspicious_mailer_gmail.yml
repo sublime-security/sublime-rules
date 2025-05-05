@@ -1,0 +1,26 @@
+name: "Suspicious mailer received from Gmail servers"
+description: "Mailer is atypical of sends from Gmail infrastructure. Observed sending callback phishing and general spam."
+type: "rule"
+severity: "low"
+source: |
+  type.inbound
+  and (
+    strings.ilike(headers.mailer,
+                  "Microsoft CDO for Windows 2000",
+                  "PHPMailer*",
+                  "nodemailer*"
+    )
+    or any(headers.hops, any(.fields, .value == "Produced By Microsoft MimeOLE"))
+  )
+  and any(headers.hops, .index == 0 and .received.server.raw == "smtp.gmail.com")
+  and not profile.by_sender().any_false_positives
+tags:
+ - "Attack surface reduction"
+attack_types:
+  - "Callback Phishing"
+  - "Spam"
+tactics_and_techniques:
+  - "Free email provider"
+  - "Social engineering"
+detection_methods:
+  - "Header analysis"

@@ -1,0 +1,42 @@
+name: "Link to a Domain with Punycode Characters"
+description: |
+  The body contains a link to a domain with Punycode characters to hide the true URL destination, or contains non-printable ASCII content.
+references:
+  - "https://www.bleepingcomputer.com/news/security/hackers-abuse-lookalike-domains-and-favicons-for-credit-card-theft/"
+type: "rule"
+authors:
+  - twitter: "ajpc500"
+severity: "medium"
+source: |
+  type.inbound
+  and any(body.links, .href_url.domain.punycode is not null and .href_url.domain.valid == true)
+  and (
+    (
+      // include automated emails
+      sender.display_name == "WordPress"
+      or sender.email.local_part == "wordpress"
+    )
+
+    or (
+      (
+        profile.by_sender().prevalence in ("new", "outlier")
+        and not profile.by_sender().solicited
+      )
+      or (
+        profile.by_sender().any_messages_malicious_or_spam
+        and not profile.by_sender().any_false_positives
+      )
+    )
+  )
+  and not profile.by_sender().any_false_positives
+tags:
+  - "Attack surface reduction"
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Evasion"
+  - "Lookalike domain"
+  - "Punycode"
+detection_methods:
+  - "Sender analysis"
+  - "URL analysis"

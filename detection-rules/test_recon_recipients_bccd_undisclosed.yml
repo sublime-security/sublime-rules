@@ -1,0 +1,65 @@
+name: "Reconnaissance: All recipients cc/bcc'd or undisclosed"
+description: |
+  Recon messages, a form of deliverability testing, are used to validate whether a recipient address is valid or not, potentially preceding an attack.
+
+  All recipients are bcc'd or undisclosed, with no links or attachments, and a short body and subject from an unknown sender.
+type: "rule"
+severity: "low"
+source: |
+  type.inbound
+  and (
+    length(recipients.bcc) > 0
+    or length(recipients.cc) > 0
+    or any(recipients.to, strings.ilike(.display_name, "undisclosed?recipients"))
+  )
+  and (
+    length(subject.subject) <= 10
+    or (
+      strings.ilike(subject.subject, "*checking*", "*testing*")
+      and length(subject.subject) <= 25
+    )
+  )
+  and length(attachments) == 0
+  // and there are no links. Or all the links are to aka.ms or an extraction from a warning banner that match the senders domain
+  and (
+    length(body.links) == 0
+    or length(filter(body.links,
+                     (
+                       .display_text is null
+                       and .display_url.url == sender.email.domain.root_domain
+                     )
+                     or .href_url.domain.domain == "aka.ms"
+              )
+    ) == length(body.links)
+  )
+  and (
+    body.current_thread.text is null
+    or length(body.current_thread.text) < 50
+    or (
+      length(body.current_thread.text) < 900
+      // or body is most likely all warning banner ending with a generic greeting
+      and regex.imatch(body.current_thread.text, '.*(hi|hello)')
+    )
+  )
+  and profile.by_sender().prevalence != "common"
+  and not profile.by_sender().solicited
+  and not profile.by_sender().any_false_positives
+  
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and not headers.auth_summary.dmarc.pass
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+
+tags:
+  - "Attack surface reduction"
+  - "Deliverability testing"
+attack_types:
+  - "Reconnaissance"
+detection_methods:
+  - "Content analysis"
+  - "Header analysis"
+  - "Sender analysis"
