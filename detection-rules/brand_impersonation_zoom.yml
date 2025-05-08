@@ -1,0 +1,87 @@
+name: "Brand Impersonation: Zoom"
+description: "Detects messages impersonating Zoom through social footers, webinar links, and suspicious domain pattern matching. The rule looks for specific combinations of social media links, redirects, and content analysis to identify inauthentic Zoom-branded messages not originating from legitimate Zoom domains."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and (
+    // the social links in the footer
+    3 of (
+      any(body.links, strings.icontains(.href_url.url, "twitter.com/zoom")),
+      any(body.links,
+          strings.icontains(.href_url.url,
+                            "linkedin.com/company/zoom-video-communications"
+          )
+      ),
+      any(body.links, strings.icontains(.href_url.url, "blog.zoom.us")),
+      strings.ilike(body.html.raw,
+                    '*https://go.pardot.com/l/84442/*/*/84442/*/twitter.png*'
+      ),
+      strings.ilike(body.html.raw,
+                    '*https://go.pardot.com/l/84442/*/*/84442/*/linkedin.png*'
+      ),
+      strings.ilike(body.html.raw,
+                    '*https://go.pardot.com/l/84442/*/*/84442/*/zoomblog.png*'
+      )
+    )
+    or (
+      any(beta.ml_topic(body.current_thread.text).topics,
+          .name == "Events and Webinars" and .confidence != "low"
+      )
+      and any(ml.logo_detect(beta.message_screenshot()).brands,
+              .name == "Zoom" and .confidence == "high"
+      )
+      and any(body.links,
+              any(ml.nlu_classifier(.display_text).intents,
+                  .name == "cred_theft" and .confidence == "high"
+              )
+      )
+    )
+    or (
+      any(body.links,
+          // link claims to go to a Zoom domain, but does not
+          (
+            .display_url.domain.root_domain in ("zoom.us", "zoom.com")
+            or strings.icontains(.display_text, "zoom.us")
+            or strings.icontains(.display_text, "zoom.com")
+          )
+          and .href_url.domain.root_domain not in ("zoom.us", "zoom.com")
+          and (
+            .href_url.domain.tld in $suspicious_tlds
+            // country code second-level domain
+            or strings.istarts_with(.href_url.domain.tld, "com.")
+            // blocked by a Cloudflare CAPTCHA
+            or strings.icontains(ml.link_analysis(.).final_dom.raw,
+                                 'https://challenges.cloudflare.com/turnstile/',
+            )
+            or length(ml.link_analysis(.).files_downloaded) > 0
+            // Zoom logo on page
+            or ml.link_analysis(.).credphish.brand.name == "Zoom"
+          )
+      )
+    )
+  )
+  
+  // Not from a legitimate Zoom domain
+  and not (
+    sender.email.domain.root_domain in (
+      "zoom.us",
+      "zuora.com",
+      "zoomgov.com",
+      "zoom.com"
+    )
+    and headers.auth_summary.dmarc.pass
+  )
+
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Social engineering"
+  - "Evasion"
+detection_methods:
+  - "Computer Vision"
+  - "Content analysis"
+  - "HTML analysis"
+  - "Natural Language Understanding"
+  - "URL analysis"
