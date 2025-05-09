@@ -3,86 +3,7 @@ description: |
   Message (or attached message) contains an image impersonating an Outlook attachment button.
 type: "rule"
 severity: "medium"
-source: |
-  type.inbound
-  and length(attachments) < 8
-  and (
-    // fake file attachment preview in original email
-    any(attachments,
-        .file_type in $file_types_images
-        and (
-          any(ml.logo_detect(.).brands, .name == "FakeAttachment")
-          or (
-            .size < 30000
-            and any(file.explode(.),
-                    strings.icontains(.scan.ocr.raw, 'sent you')
-                    // the attached image includes a filesize string
-                    and regex.icontains(.scan.ocr.raw,
-                                        '\b\d+.\d{1,2}\s?(k|m)b(\s|$)'
-                    )
-            )
-          )
-        )
-    )
-    // message body/screenhot
-    or (
-      any(ml.logo_detect(beta.message_screenshot()).brands,
-          .name == "FakeAttachment"
-      )
-      or (
-        length(body.current_thread.text) < 2000
-        and strings.icontains(body.current_thread.text, 'sent you')
-        // the attached image includes a filesize string
-        and regex.icontains(body.current_thread.text,
-                            '\b\d+.\d{1,2}\s?(k|m)b(\s|$)'
-        )
-      )
-    )
-    // fake file attachment preview in attached EML
-    or any(attachments,
-           (.content_type == "message/rfc822" or .file_extension == "eml")
-           and any(file.parse_eml(.).attachments,
-                   .file_type in $file_types_images
-                   and (
-                     any(ml.logo_detect(.).brands, .name == "FakeAttachment")
-                     or (
-                       .size < 30000
-                       and any(file.explode(.),
-                               strings.icontains(.scan.ocr.raw, 'sent you')
-                               // the attached image includes a filesize string
-                               and regex.icontains(.scan.ocr.raw,
-                                                   '\b\d+.\d{1,2}\s?(k|m)b(\s|$)'
-                               )
-                       )
-                     )
-                   )
-           )
-    )
-  )
-  and not (
-    (
-      strings.istarts_with(subject.subject, "RE:")
-      or strings.istarts_with(subject.subject, "R:")
-      or strings.istarts_with(subject.subject, "ODG:")
-      or strings.istarts_with(subject.subject, "答复:")
-      or strings.istarts_with(subject.subject, "AW:")
-      or strings.istarts_with(subject.subject, "TR:")
-      or strings.istarts_with(subject.subject, "FWD:")
-      or regex.imatch(subject.subject, '(\[[^\]]+\]\s?){0,3}(re|fwd?)\s?:')
-    )
-    and (
-      length(headers.references) > 0
-      or any(headers.hops, any(.fields, strings.ilike(.name, "In-Reply-To")))
-    )
-  )
-  // negate highly trusted sender domains unless they fail DMARC authentication
-  and (
-    (
-      sender.email.domain.root_domain in $high_trust_sender_root_domains
-      and not headers.auth_summary.dmarc.pass
-    )
-    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
-  )
+source: "type.inbound\nand length(attachments) < 8\nand (\n  // fake file attachment preview in original email\n  any(attachments,\n      .file_type in $file_types_images\n      and (\n        any(ml.logo_detect(.).brands, .name == \"FakeAttachment\")\n        or (\n          .size < 30000\n          and any(file.explode(.),\n                  strings.icontains(.scan.ocr.raw, 'sent you')\n                  // the attached image includes a filesize string\n                  and regex.icontains(.scan.ocr.raw,\n                                      '\\b\\d+.\\d{1,2}\\s?(k|m)b(\\s|$)'\n                  )\n          )\n        )\n      )\n  )\n  // message body/screenhot\n  or (\n    any(ml.logo_detect(beta.message_screenshot()).brands,\n        .name == \"FakeAttachment\"\n    )\n    or (\n      length(body.current_thread.text) < 2000\n      and strings.icontains(body.current_thread.text, 'sent you')\n      // the attached image includes a filesize string\n      and regex.icontains(body.current_thread.text,\n                          '\\b\\d+.\\d{1,2}\\s?(k|m)b(\\s|$)'\n      )\n    )\n  )\n  // Suspicious table with file size indicators \n  or regex.contains(body.html.raw,\n                    \"<table[^>]*>.*?<img[^>]+src=[\\\"']cid:[^\\\"']+[\\\"'][^>]*>.*?\\\\.(pdf|doc(x)|xls(x)?).*?<font[^>]*>\\\\s*\\\\d{1,4}\\\\.\\\\d{1,2}\\\\s*k[bB]\"\n  )\n\n  // fake file attachment preview in attached EML\n  or any(attachments,\n         (.content_type == \"message/rfc822\" or .file_extension == \"eml\")\n         and any(file.parse_eml(.).attachments,\n                 .file_type in $file_types_images\n                 and (\n                   any(ml.logo_detect(.).brands, .name == \"FakeAttachment\")\n                   or (\n                     .size < 30000\n                     and any(file.explode(.),\n                             strings.icontains(.scan.ocr.raw, 'sent you')\n                             // the attached image includes a filesize string\n                             and regex.icontains(.scan.ocr.raw,\n                                                 '\\b\\d+.\\d{1,2}\\s?(k|m)b(\\s|$)'\n                             )\n                     )\n                   )\n                 )\n         )\n  )\n)\nand not (\n  (\n    strings.istarts_with(subject.subject, \"RE:\")\n    or strings.istarts_with(subject.subject, \"R:\")\n    or strings.istarts_with(subject.subject, \"ODG:\")\n    or strings.istarts_with(subject.subject, \"答复:\")\n    or strings.istarts_with(subject.subject, \"AW:\")\n    or strings.istarts_with(subject.subject, \"TR:\")\n    or strings.istarts_with(subject.subject, \"FWD:\")\n    or regex.imatch(subject.subject, '(\\[[^\\]]+\\]\\s?){0,3}(re|fwd?)\\s?:')\n    or regex.imatch(subject.subject,\n                    '^\\[?(EXT|EXTERNAL)\\]?[: ]\\s*(RE|FWD?|FW|AW|TR|ODG|答复):.*'\n    )\n  )\n  and (\n    length(headers.references) > 0\n    or any(headers.hops, any(.fields, strings.ilike(.name, \"In-Reply-To\")))\n  )\n)\n// negate highly trusted sender domains unless they fail DMARC authentication\nand (\n  (\n    sender.email.domain.root_domain in $high_trust_sender_root_domains\n    and not headers.auth_summary.dmarc.pass\n  )\n  or sender.email.domain.root_domain not in $high_trust_sender_root_domains\n)\n"
 tags:
   - "Suspicious attachment"
   - "Suspicious content"
@@ -100,4 +21,4 @@ detection_methods:
 id: "c6d34a72-ee3b-526f-f627-68257644772e"
 og_id: "96b8b285-2116-5e45-b0ca-57b81dc87b94"
 testing_pr: 2692
-testing_sha: b205f1727d4c38474e15522a789a3e593a8618e3
+testing_sha: e3df478e528581f17bf81f4e677d320a992c278d
