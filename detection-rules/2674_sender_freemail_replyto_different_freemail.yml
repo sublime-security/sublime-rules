@@ -3,12 +3,22 @@ description: "Detects when a sender using a free email provider includes a reply
 type: "rule"
 severity: "medium"
 source: |
-  sender.email.domain.root_domain in $free_email_providers
+  type.inbound
+  and sender.email.domain.root_domain in $free_email_providers
   and length(headers.reply_to) > 0
   and any(headers.reply_to,
           .email.domain.root_domain in $free_email_providers
           and .email.domain.root_domain != sender.email.domain.root_domain
           and .email.domain.root_domain not in ("googlegroups.com")
+  )
+  // secureserver.net seems to rewrite the sender local part to be the reply-to domain
+  // observed in many newsletter send via secureserver.net
+  and not (
+    sender.email.domain.domain == 'bounces.cloud.em.secureserver.net'
+    and all(headers.reply_to,
+            strings.istarts_with(sender.email.local_part, .email.local_part)
+            and strings.iends_with(sender.email.local_part, .email.domain.domain)
+    )
   )
 attack_types:
   - "BEC/Fraud"
@@ -22,4 +32,4 @@ detection_methods:
 id: "2ab504fe-fdcf-5492-be4d-39b8c0c546d4"
 og_id: "fcd831d0-9e03-5c9a-aa2f-af37d3a8c156"
 testing_pr: 2674
-testing_sha: 4ab0a21a0a599703caaf1f75ac73183a491fc3dd
+testing_sha: 182714ca3f7b8525b1857d5c69216e4220c37208
