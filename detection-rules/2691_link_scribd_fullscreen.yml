@@ -1,0 +1,37 @@
+name: "Link: Scribd Fullscreen Link From Suspicious Sender"
+description: "Detects messages containing Scribd links with the fullscreen parameter from senders with no prior benign communication or recent history."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and length(body.links) < 10
+  and any(body.links,
+          (
+            .href_url.domain.root_domain == "scribd.com"
+            or strings.icontains(.href_url.query_params, 'scribd.com')
+            or strings.icontains(.href_url.query_params, 'scribd%2ecom')
+            or strings.icontains(.href_url.query_params, 'scribd%252ecom')
+          )
+          and strings.icontains(.href_url.fragment, 'fullscreen')
+  )
+  and (
+    not profile.by_sender_email().solicited
+    or profile.by_sender_email().days_since.last_contact > 14
+    or profile.by_sender_email().any_messages_malicious_or_spam
+  )
+  and not profile.by_sender_email().any_messages_benign
+tags:
+  - "Attack surface reduction"
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Free file host"
+  - "Social engineering"
+  - "Evasion"
+detection_methods:
+  - "URL analysis"
+  - "Sender analysis"
+id: "dc8d1788-f3fc-5e3c-31df-eea4d4d4e1ab"
+og_id: "9e9bc972-d4e1-5bd0-96bc-b8b10e74b02a"
+testing_pr: 2691
+testing_sha: 6659fe30ed743badd4f5d7c05763809b573ecec6
