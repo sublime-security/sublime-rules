@@ -5,7 +5,7 @@ severity: "medium"
 source: |
   type.inbound
   // short body
-  and length(body.current_thread.text) < 600
+  and length(body.current_thread.text) < 1500
   // // legal with urgency
   and any(beta.ml_topic(body.html.display_text).topics,
           .name == "Legal and Compliance" and .confidence in ("medium", "high")
@@ -15,21 +15,37 @@ source: |
   and length(headers.references) == 0
   and headers.in_reply_to is null
   
-  // a single PDF attachment
-  and length(attachments) == 1
+  and (
+    // only one attachment
+    length(attachments) == 1
+    // or, any 2 attachments share the ~same file name
+    or any(attachments,
+           any(regex.extract(.file_name,
+                             // the regex extracts the file name, discarding the file extention and any numbers in parens
+                             // "test.txt" and "test (1).pdf" become "test"
+                             '(?P<file_name>.*?)(?:\s*\([^)]+\))*\.[^.]+$'
+               ),
+               length(filter(attachments,
+                             strings.istarts_with(.file_name,
+                                                  ..named_groups["file_name"]
+                             )
+                      )
+               ) > 1
+           )
+    )
+  )
   
   and any(attachments,
           .file_extension == "pdf"
           and any(file.explode(.),
                   0 < length(.scan.pdf.urls) < 5
-                  and 
-                  (
+                  and (
                     // exported from google docs
                     strings.icontains(.scan.exiftool.producer,
                                       "Google Docs Renderer"
                     )
                     or any(.scan.pdf.urls,
-                          // with links that are URL shortners
+                           // with links that are URL shortners
                            .domain.root_domain in $url_shorteners
                            or .domain.domain in $url_shorteners
                            // when visiting those links, the link it is sus
