@@ -1,0 +1,33 @@
+name: "Open Redirect: PIRL San Diego"
+description: |
+  Message contains use of the PIRL San Diego open redirect. This has been exploited in the wild.
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and any(body.links,
+          .href_url.domain.root_domain == "pirlsandiego.net"
+          and strings.icontains(.href_url.path, '/LinkClick.aspx')
+          and strings.icontains(.href_url.url, 'link=')
+  )
+
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and not headers.auth_summary.dmarc.pass
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+attack_types:
+  - "Credential Phishing"
+  - "Malware/Ransomware"
+tactics_and_techniques:
+  - "Open redirect"
+detection_methods:
+  - "Sender analysis"
+  - "URL analysis"
+id: "fa755d06-e33d-500b-1b68-efd02d702593"
+og_id: "a057d64c-71a1-554a-8ff1-7016d5cae8cf"
+testing_pr: 2699
+testing_sha: cbe0f095258fe3ce9d42be5ac9c91dfce9d2b631

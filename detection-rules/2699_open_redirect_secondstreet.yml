@@ -1,0 +1,36 @@
+name: "Open Redirect: secondstreetapp.com"
+description: |
+  Message contains use of the secondstreetapp.com redirect. This has been exploited in the wild.
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and any(body.links,
+      .href_url.domain.root_domain == "secondstreetapp.com"
+      and strings.icontains(.href_url.query_params, '&redirect=')
+      // not redirects to themselves
+      and not regex.icontains(.href_url.query_params, '&redirect=[^&]*secondstreetapp\.com')
+  )
+  // remove uses that originate from secondstreet
+  and not any(headers.domains, .root_domain == "secondstreetmail.com")
+
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and not headers.auth_summary.dmarc.pass
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+attack_types:
+  - "Credential Phishing"
+  - "Malware/Ransomware"
+tactics_and_techniques:
+  - "Open redirect"
+detection_methods:
+  - "Sender analysis"
+  - "URL analysis"
+id: "d3959155-166c-5d91-daa9-d209629dc7f5"
+og_id: "6767888d-c23f-5a7c-ad8f-a6959882d57f"
+testing_pr: 2699
+testing_sha: cbe0f095258fe3ce9d42be5ac9c91dfce9d2b631

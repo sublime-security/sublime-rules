@@ -1,0 +1,36 @@
+name: "Open redirect: Signature Travel Network"
+description: "Message contains use of the Signature Travel Network open redirect, but the sender is not Signature Travel Network. This has been exploited in the wild."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and any(body.links,
+          .href_url.domain.root_domain == 'sigtn.com'
+          and strings.iends_with(.href_url.path, "emt.cfm")
+          and strings.icontains(.href_url.query_params, "link=")
+  )
+  and sender.email.domain.root_domain not in (
+    'signaturetravelnetwork.com',
+    'sigtn.com'
+  )
+  and not any(headers.domains, .root_domain == "signaturetravelnetwork.com")
+
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and not headers.auth_summary.dmarc.pass
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Open redirect"
+detection_methods:
+  - "Sender analysis"
+  - "URL analysis"
+id: "2a4d653d-33f8-53f1-03ca-74bf9ee5d227"
+og_id: "c92e3202-4dae-52ce-b9bd-2d7722c8e72d"
+testing_pr: 2699
+testing_sha: cbe0f095258fe3ce9d42be5ac9c91dfce9d2b631

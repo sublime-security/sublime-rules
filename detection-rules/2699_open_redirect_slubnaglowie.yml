@@ -1,0 +1,38 @@
+name: "Open redirect: slubnaglowie.pl"
+description: "Message contains use of a slubnaglowie.pl redirect. This redirection has been abused by threat actors in the wild."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and any(body.links,
+          .href_url.domain.root_domain == "slubnaglowie.pl"
+          and .href_url.path == "/przejdz" // "to go" or "to move/proceed" in Polish
+          and strings.icontains(.href_url.query_params, 'url=')
+  )
+
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and (
+    (
+      (
+        sender.email.domain.root_domain in $high_trust_sender_root_domains
+        or sender.email.domain.root_domain == "slubnaglowie.pl"
+      )
+      and not headers.auth_summary.dmarc.pass
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Evasion"
+  - "Open redirect"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Header analysis"
+  - "Sender analysis"
+  - "URL analysis"
+id: "b05d2550-ac63-5536-b8a0-173e48b10608"
+og_id: "2ec356d0-d7d8-5997-acd4-3118accc6e02"
+testing_pr: 2699
+testing_sha: cbe0f095258fe3ce9d42be5ac9c91dfce9d2b631

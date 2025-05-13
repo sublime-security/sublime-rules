@@ -1,0 +1,18 @@
+name: "Open Redirect: ringaraja.net"
+description: |
+  Message contains use of the ringaraja.net open redirect. This has been exploited in the wild.
+type: "rule"
+severity: "medium"
+source: "type.inbound\nand any(body.links,\n        .href_url.domain.root_domain == \"ringaraja.net\"\n        and .href_url.path =~ \"/portleti/katalogponudnikov/result.asp\"\n        and strings.icontains(.href_url.query_params, 'url=')\n        // negate use of the redirect by ringaraja\n        and not regex.icontains(.href_url.query_params, 'url=[^&]*ringaraja\\.net')\n) \n\n// negate highly trusted sender domains unless they fail DMARC authentication\nand (\n  (\n    sender.email.domain.root_domain in $high_trust_sender_root_domains\n    and not headers.auth_summary.dmarc.pass\n  )\n  or sender.email.domain.root_domain not in $high_trust_sender_root_domains\n)\n"
+attack_types:
+  - "Credential Phishing"
+  - "Malware/Ransomware"
+tactics_and_techniques:
+  - "Open redirect"
+detection_methods:
+  - "Sender analysis"
+  - "URL analysis"
+id: "92df5845-f250-5b64-f631-e2372198e2f7"
+og_id: "4d9594f4-1e96-5afd-a575-8a16d2d79698"
+testing_pr: 2699
+testing_sha: cbe0f095258fe3ce9d42be5ac9c91dfce9d2b631

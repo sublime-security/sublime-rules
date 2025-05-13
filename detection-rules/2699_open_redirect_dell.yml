@@ -1,0 +1,35 @@
+name: "Open redirect: Dell"
+description: |
+  Message contains use of the Dell open redirect, but the sender is not Dell.
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and any(body.links,
+          .href_url.domain.domain == 't.em.home.dell.com'
+          and .href_url.path =~ '/r/'
+  )
+  and sender.email.domain.root_domain not in ('dell.com', 'dell.ca')
+
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and not headers.auth_summary.dmarc.pass
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+tags:
+  - "Attack surface reduction"
+attack_types:
+  - "Credential Phishing"
+  - "Malware/Ransomware"
+tactics_and_techniques:
+  - "Open redirect"
+detection_methods:
+  - "Sender analysis"
+  - "URL analysis"
+id: "f22e3c8b-1592-578d-4d09-734e536a7c93"
+og_id: "718c2b0f-7ac3-5473-bb7c-12900b3da54a"
+testing_pr: 2699
+testing_sha: cbe0f095258fe3ce9d42be5ac9c91dfce9d2b631

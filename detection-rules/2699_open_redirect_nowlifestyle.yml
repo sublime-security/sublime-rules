@@ -1,0 +1,38 @@
+name: "Open Redirect: nowlifestyle.com"
+description: |
+  Message contains use of the nowlifestyle.com open redirect. This has been exploited in the wild.
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and any(body.links,
+          .href_url.domain.root_domain == "nowlifestyle.com"
+          and strings.icontains(.href_url.path, "/redir.php")
+          and regex.icontains(.href_url.query_params,
+                              'url=(?:https?|(?:\/|%2f)(?:\/|%2f))'
+          )
+          and not regex.icontains(.href_url.query_params,
+                                  'url=[^\&]*nowlifestyle\.com'
+          )
+  )
+  and not sender.email.domain.root_domain == "nowlifestyle.com"
+
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and not headers.auth_summary.dmarc.pass
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Open redirect"
+detection_methods:
+  - "Sender analysis"
+  - "URL analysis"
+id: "68d3478e-dd4b-54b6-99c3-46f824673a92"
+og_id: "a2bea3a3-5673-5c56-9042-36bf67ece793"
+testing_pr: 2699
+testing_sha: cbe0f095258fe3ce9d42be5ac9c91dfce9d2b631

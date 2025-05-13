@@ -1,0 +1,18 @@
+name: "Open Redirect: Club-OS"
+description: |
+  Message contains use of the Club-OS open redirect. This has been exploited in the wild.
+type: "rule"
+severity: "medium"
+source: "type.inbound\nand any(body.links,\n    .href_url.domain.root_domain == \"club-os.com\"\n    and strings.icontains(.href_url.path, 'click')\n    and strings.icontains(.href_url.query_params, 'target=')\n    // negate hash lookup targets (not actor controlled)\n    and not (\n      regex.icontains(.href_url.query_params, 'target=[a-f0-9]{40}(?:$|&)')\n      and strings.icontains(.href_url.query_params, '&hashLookup=true')\n    )\n    // negate urls that go back to club-os\n    and not regex.icontains(.href_url.query_params, 'target=[^\\&]*club-os.com/')   \n)\n\n// negate highly trusted sender domains unless they fail DMARC authentication\nand (\n  (\n    sender.email.domain.root_domain in $high_trust_sender_root_domains\n    and not headers.auth_summary.dmarc.pass\n  )\n  or sender.email.domain.root_domain not in $high_trust_sender_root_domains\n)\n"
+attack_types:
+  - "Credential Phishing"
+  - "Malware/Ransomware"
+tactics_and_techniques:
+  - "Open redirect"
+detection_methods:
+  - "Sender analysis"
+  - "URL analysis"
+id: "eb54eadf-0497-5cf6-90f3-ebeb8de398ad"
+og_id: "c6286914-059d-5879-8f17-b923304cb628"
+testing_pr: 2699
+testing_sha: cbe0f095258fe3ce9d42be5ac9c91dfce9d2b631
