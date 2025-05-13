@@ -1,0 +1,78 @@
+name: "Link: Large Embedded Image Links to Suspicious URLs"
+description: "Detects messages containing embedded images over 5000 bytes and 300x300 pixels that link to potentially malicious destinations including free file hosts, newly registered domains, or suspicious authentication flows."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and 0 < length(attachments) < 10
+  and strings.contains(body.html.raw, 'cid:')
+  and any(
+          // get all the links which have an attached image as a decendant
+          beta.html_xpath(body.html,
+                          '//a[descendant::img[starts-with(@src,"cid:")]]'
+          ).nodes,
+  
+          // extract the content id of the attached image from the img src
+          any(regex.extract(.raw, 'src=\"cid:(?P<cid>.*)\"'),
+              // loop through the attachments finding the linked image
+              any(filter(attachments,
+                         strings.contains(.content_id, ..named_groups["cid"])
+                  ),
+                  // the linked imagine is "large"
+                  .size > 5000
+                  and beta.parse_exif(.).image_height > 300
+                  and beta.parse_exif(.).image_width > 300
+              )
+              // // and the link is sus
+              and any(beta.html_xpath(.., '@href').nodes,
+              // free file hosts
+                          strings.parse_url(.raw).domain.domain in $free_file_hosts
+                          or strings.parse_url(.raw).domain.root_domain in $free_file_hosts
+                          // free subdomain hosts
+                          or strings.parse_email(.raw).domain.domain in $free_subdomain_hosts
+                          or strings.parse_email(.raw).domain.root_domain in $free_subdomain_hosts
+                          // phishing
+                          or ml.link_analysis(strings.parse_url(.raw)).credphish.disposition == "phishing"
+                          // custom captcha thing
+                          or strings.istarts_with(ml.link_analysis(strings.parse_url(.raw
+                                                                   )
+                                                  ).final_dom.display_text,
+                                                  "I'm Human"
+                          )
+                          // newly registered domaina
+                          or network.whois(strings.parse_url(.raw).domain).days_old < 31
+                          // contains a the recipient email address
+                          or any(recipients.to,
+                                 .email.domain.valid
+                                 and (
+                                   // plain text
+                                   strings.icontains(..raw, .email.email)
+                                   // base64 encoded
+                                   or any(beta.scan_base64(strings.parse_url(..raw
+                                                           ).url,
+                                                           format="url",
+                                                           ignore_padding=true
+                                          ),
+                                          strings.icontains(., ..email.email)
+                                   )
+                                 )
+                          )
+              )
+          )
+  )
+
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Evasion"
+  - "Image as content"
+  - "Social engineering"
+  - "Free file host"
+  - "Free subdomain host"
+detection_methods:
+  - "Content analysis"
+  - "HTML analysis"
+  - "URL analysis"
+  - "File analysis"
+  - "Exif analysis"
+  - "Whois"
