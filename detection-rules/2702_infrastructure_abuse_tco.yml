@@ -1,0 +1,40 @@
+name: "Twitter infrastructure abuse via link shortener"
+description: "Email contains Twitter shortened link (t.co) but does not originate from a Twitter domain. This is a known malicious and spam tactic."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and length(body.links) < 10
+  and any(body.links, .href_url.domain.root_domain == "t.co")
+  and sender.email.domain.domain not in~ (
+    'twitter.com',
+    'x.com',
+    'twitter.discoursemail.com'
+  )
+
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and not headers.auth_summary.dmarc.pass
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+tags:
+  - "Attack surface reduction"
+attack_types:
+  - "Credential Phishing"
+  - "Malware/Ransomware"
+  - "Spam"
+tactics_and_techniques:
+  - "Evasion"
+  - "Impersonation: Brand"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Sender analysis"
+  - "URL analysis"
+id: "991f6e29-9a43-5ad0-4d5a-52ca0403145f"
+og_id: "99ca165e-086a-5dc0-aa75-82446f27955b"
+testing_pr: 2702
+testing_sha: de21b238dbd4ac6d3ff386875619cbbe5402d228
