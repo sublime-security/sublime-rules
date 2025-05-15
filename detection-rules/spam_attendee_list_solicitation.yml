@@ -6,6 +6,10 @@ source: |
   type.inbound
   and length(body.current_thread.text) < 2000
   and length(body.links) < 5
+  and any(beta.ml_topic(coalesce(body.html.display_text, body.plain.raw)).topics,
+          .name in ("Contact List Solicitation", "B2B Cold Outreach")
+          and .confidence in ("medium", "high")
+  )
   and (
     (
       (
@@ -46,10 +50,17 @@ source: |
                         '(review|drop me a line about) (my|this|it)'
         ),
         regex.icontains(body.current_thread.text,
+                        'missed it( the)? first time'
+        ),
+        regex.icontains(body.current_thread.text,
                         '(?:below|previous(ly)?|last|prior|earlier) (message|email|sent)'
         ),
         regex.icontains(body.current_thread.text,
-                        '(sent).{0,50}(e?mail|message) (?:below|previous(ly)?|last|prior)'
+                          // "the email I sent you earlier"
+                        '(e?mail|message).{0,20}(sent).{0,20}(?:below|previous(ly)?|last|prior|earlier)'
+        ),
+        regex.icontains(body.current_thread.text,
+                        '(sent).{0,50}(e?mail|message) (?:below|previous(ly)?|last|prior|earlier)'
         ),
         regex.icontains(body.current_thread.text, 'follow(?:ing)?(-| )up'),
         regex.icontains(body.current_thread.text, '(?:contact|attendee)s? list'),
@@ -87,7 +98,7 @@ source: |
                 )
                 or regex.icontains(.,
                                 '(?:from|to|sent|date|cc|subject|wrote):(.|\W)*(?:list(?:\b|[^ei])|database)(?:[[:punct:]]*s)?(\s\w*){0,9}(?:Attendee|Buyer|Contact|Decision Maker|Email|Member|Participant|Professional|Registrant|User|Visitor|Mailing)s?'
-
+  
                 )
                 or (
                   2 of (
