@@ -1,0 +1,19 @@
+name: "Suspicious invoice reference with missing or image-only attachments"
+description: "This rule flags emails that reference invoices or payments but have suspicious characteristics: attachments are either missing or only images. It also checks for misleading links disguised as attachments and the presence of invoice-related keywords. The rule looks for potential credential theft or unusual requests, making it a strong indicator of phishing attempts."
+type: "rule"
+severity: "high"
+source: "type.inbound\n\n// more than 0 but less than 20 links\nand 0 < length(body.links) < 20\n\n// all attachments are images or there are 0 attachments\nand (\n  length(attachments) > 0 and all(attachments, .file_type in $file_types_images)\n  or length(attachments) == 0\n)\n\n// subject contains payment/invoice language\nand (\n  any(ml.nlu_classifier(subject.subject).tags, .name in (\"payment\", \"invoice\"))\n  or regex.contains(subject.subject,\n                    '(?:\\binv(?:oice|o)\\b|in_v|in-voice|pay(?:ment|mnt)|pymt|\\brec(?:eipt|pt|iept)\\b|rcpt|confirm(?:ation)|cnfrm|cnf|po\\b|p\\.o\\.|purch(?:ase)?-?order|\\bord(?:er)?\\b|bill(?:ing)|billing-info|transact(?:ion)|txn|trx|\\bstmt\\b|\\bstmnt\\b|remit(?:tance)|rmt|remndr|remind|\\bdue(?:-date)\\b|ovrdue|overdue|agreement|\\bbal(?:ance)\\b|\\bpaid(?:-invoice)\\b)'\n  )\n)\n\n// link display text ends in a file extension or contain common payment terms\nand (\n  any(body.links,\n      regex.imatch(.display_text,\n                   '.*\\.(?:doc|docm|docx|dot|dotm|pdf|ppa|ppam|ppsm|ppt|pptm|pptx|wbk|xla|xlam|xlm|xls|xlsb|xlsm|xlsx|xlt|xltm)$'\n      )\n  )\n  or any(body.links,\n         regex.icontains(.display_text,\n                         '(?:\\binv(?:oice|o)\\b|in_v|in-voice|pay(?:ment|mnt)|pymt|\\brec(?:eipt|pt|iept)\\b|rcpt|req(?:uest)|rqst|\\brq\\b|\\bpo\\b|p\\.o\\.|purch(?:ase)?-?order|\\bord(?:er)?\\b|bill(?:ing)|billing-info|transact(?:ion)|txn|trx|\\bstmt\\b|\\bstmnt\\b|remit(?:tance)|rmt|remndr|remind|\\bdue(?:-date)\\b|ovrdue|overdue|\\bbal(?:ance)\\b|\\bpaid(?:-invoice)\\b)'\n         )\n         or (\n           regex.icontains(.display_text,\n                           '(view|click|download|goto)?(attachment|download|file|online|document)s?'\n           )\n           and any(ml.nlu_classifier(body.current_thread.text).entities,\n                   .name in (\"financial\") and .text =~ \"invoice\"\n           )\n         )\n  )\n)\n// the body references an attachment \nand (\n  strings.contains(body.current_thread.text, \"attach\")\n  // negate warning banners warning about the attachment(s)\n  and (\n    not (\n      (\n        regex.count(body.current_thread.text, \"attach\") == 1\n        and regex.icontains(body.current_thread.text,\n                            \"(caution|warning).{0,30}attach\"\n        )\n      )\n      or ( // WeTransfer expiry warning notification\n        sender.email.email == \"noreply@wetransfer.com\"\n        and any(body.links,\n                .display_text == \"Don't send me these expiry reminders anymore\"\n        )\n      )\n    )\n  )\n)\n\n// body text is determined to contain cred_theft language by nlu or contains a request with the word kindly\nand (\n  any(ml.nlu_classifier(body.current_thread.text).intents,\n      .name == \"cred_theft\"\n  )\n  or any(ml.nlu_classifier(body.current_thread.text).entities,\n         .name == \"request\" and strings.icontains(.text, \"kindly\")\n  )\n)\nand not profile.by_sender().solicited\n"
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Computer Vision"
+  - "File analysis"
+  - "Natural Language Understanding"
+  - "Sender analysis"
+id: "b090594f-55a1-5a0c-8dad-50c04ea29f89"
+og_id: "466c1680-b9ff-5bd0-baf8-e65cca99d18b"
+testing_pr: 2713
+testing_sha: 60ab4a7f99b797c1e21685c502c40cf0e12f195a
