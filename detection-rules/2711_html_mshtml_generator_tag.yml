@@ -1,0 +1,34 @@
+name: "Body HTML: MSHTML Generator Tag"
+description: "Detects messages containing an MSHTML generator meta tag from senders outside highly trusted domains or from trusted domains that fail DMARC authentication. This technique is often associated with malicious HTML content."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and any(distinct(html.xpath(body.html,
+                              "//meta[lower-case(@name)='generator']/@content").nodes, .raw
+          ),
+          strings.icontains(.raw, 'MSHTML')
+  )
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and not headers.auth_summary.dmarc.pass
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+attack_types:
+  - "Credential Phishing"
+  - "Spam"
+tactics_and_techniques:
+  - "Evasion"
+  - "HTML smuggling"
+  - "Scripting"
+detection_methods:
+  - "HTML analysis"
+  - "Header analysis"
+  - "Sender analysis"
+id: "ed4b5323-e785-5c9a-47a0-bb8042797412"
+og_id: "f7ced640-4853-5357-bb51-48410c8d8799"
+testing_pr: 2711
+testing_sha: 90e3692cfb0c9baeba67e2486e29822e4e4740a0
