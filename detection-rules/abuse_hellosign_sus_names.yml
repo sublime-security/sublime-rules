@@ -9,7 +9,6 @@ source: |
   and sender.email.email == "noreply@mail.hellosign.com"
   and headers.auth_summary.spf.pass
   and headers.auth_summary.dmarc.pass
-  
   and (
     strings.icontains(subject.subject, ' - Signature Requested')
     or (
@@ -48,24 +47,28 @@ source: |
     // contains the word dropbox
     // the subject is in the format of "<actor controlled title>(?: - Signature Requested by| is awaiting your signature) <actor controlled name>"
     (
-        strings.icontains(subject.subject, 'dropbox')
-        // negate where the sender is dropbox
-        and not any(headers.hops,
-              any(.fields,
-                  .name == "X-Mailgun-Variables"
-                  and regex.contains(.value,
+      strings.icontains(subject.subject, 'dropbox')
+      // negate where the sender is dropbox
+      and not any(headers.hops,
+                  any(.fields,
+                      .name == "X-Mailgun-Variables"
+                      and regex.contains(.value,
                                          '\"on_behalf_of_email": \"[^\"]+@dropbox.com\"'
-                          )
+                      )
                   )
-              )
+      )
     )
     or strings.icontains(subject.subject, 'sharefile')
     or strings.icontains(subject.subject, 'helloshare')
   
     // sender names part of the subject
     or (
+      // Signature Terms in the Sender Display Name
+      strings.icontains(sender.display_name, 'Signature Requ')
       // Billing Accounting
-      regex.icontains(sender.display_name, 'Accounts? (?:Payable|Receivable)', )
+      or regex.icontains(sender.display_name,
+                         'Accounts? (?:Payable|Receivable)',
+      )
       or strings.icontains(sender.display_name, 'Billing Support')
   
       // HR/Payroll/Legal/etc
@@ -100,15 +103,18 @@ source: |
                          '_IMG_.*(?: - Signature Requested by| is awaiting your signature)',
                          'IMG[_-](?:\d|\W)+.*(?: - Signature Requested by| is awaiting your signature)'
       )
-  
       // Invoice Themes
       or regex.icontains(subject.subject,
-                         '(Invoice|INV\b|Payment|\bACH\b|Wire Confirmation|P[O0]\W+?\d+\"|P[O0](?:\W+?|\d+)|Purchase Order|Billing|Past Due|Remit(?:tance)?|Settlement).*(?: - Signature Requested by| is awaiting your signature)'
+                         '(INV\b|\bACH\b|Wire Confirmation|P[O0]\W+?\d+\"|P[O0](?:\W+?|\d+)|Purchase Order|Past Due|Remit(?:tance)?).*(?: - Signature Requested by| is awaiting your signature)'
+      )
+      // Payment Themes
+      or regex.icontains(subject.subject,
+                         '(?:payment.*(?:complete|confirmation|approved|recent|processing)|(complete|confirmation|approved|recent|processing).*payment).*(?: - Signature Requested by| is awaiting your signature)'
       )
   
       // Payroll/HR
       or regex.icontains(subject.subject,
-                         '(?:Payroll|Employee Pay\b|Salary|Benefit Enrollment|Employee Handbook|Reimbursement Approved).*(?: - Signature Requested by| is awaiting your signature)'
+                         '(?:Payroll|Employee Pay\b|Salary|Benefit Enrollment|Payment.*Benefit|Benefit.*Update|Employee Handbook|Reimbursement Approved).*(?: - Signature Requested by| is awaiting your signature)'
       )
   
       // shared files/extenstion/urgency/CTA
@@ -122,6 +128,7 @@ source: |
       )
     )
   )
+
 attack_types:
   - "Callback Phishing"
   - "BEC/Fraud"
