@@ -1,0 +1,17 @@
+name: "Open Redirect: asemailmgmteu.com"
+description: "Message contains use of the asemailmgmteu.com open redirect. This has been exploited in the wild."
+type: "rule"
+severity: "medium"
+source: "type.inbound\nand any(body.links,\n        .href_url.domain.root_domain == \"asemailmgmteu.com\"\n        and strings.icontains(.href_url.query_params, 'redirect=')\n        // negate use of the redirect by \n        and not regex.icontains(.href_url.query_params,\n                                'redirect=[^&]*asemailmgmteu\\.com'\n        )\n)\nand (\n  not profile.by_sender().solicited\n  or (\n    profile.by_sender().any_messages_malicious_or_spam\n    and not profile.by_sender().any_false_positives\n  )\n)\n\n// negate highly trusted sender domains unless they fail DMARC authentication\nand (\n  (\n    sender.email.domain.root_domain in $high_trust_sender_root_domains\n    and not headers.auth_summary.dmarc.pass\n  )\n  or sender.email.domain.root_domain not in $high_trust_sender_root_domains\n)\n"
+attack_types:
+  - "Credential Phishing"
+  - "Malware/Ransomware"
+tactics_and_techniques:
+  - "Open redirect"
+detection_methods:
+  - "Sender analysis"
+  - "URL analysis"
+id: "3ac7a6f0-8ba5-5d3e-7936-d0ef5d2c89af"
+og_id: "368871ea-5b78-5507-a873-8a66aa346cce"
+testing_pr: 2712
+testing_sha: 1fd6a8f847020af479ab95372841699167c264ac
