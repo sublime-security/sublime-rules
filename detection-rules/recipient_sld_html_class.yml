@@ -1,0 +1,31 @@
+name: "Body HTML: Recipient SLD In HTML Class"
+description: "Detects when the recipient's domain name is concealed within HTML class attributes. The message comes from either an unauthenticated trusted sender or an untrusted source."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and any(recipients.to,
+          any(distinct(html.xpath(body.html, '//*[@class]/@class').nodes, .raw),
+              strings.icontains(.raw, ..email.domain.sld)
+          )
+          and .email.domain.root_domain not in $free_email_providers
+          and length(.email.domain.sld) > 4
+  )
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and not headers.auth_summary.dmarc.pass
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+  and not profile.by_sender().solicited
+
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Evasion"
+  - "Social engineering"
+detection_methods:
+  - "HTML analysis"
+  - "Header analysis"
+  - "Sender analysis"
