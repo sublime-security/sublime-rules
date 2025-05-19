@@ -1,0 +1,44 @@
+name: "Link: Direct Link to keap.app contact-us page"
+description: "Detects URLs linking to Keap App contact us, which has been used to host malicious content due to its trusted domain status and product capabilities"
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and length(body.links) < 10
+  and any(body.links,
+          (
+            .href_url.domain.root_domain == "keap.app"
+            and strings.istarts_with(.href_url.path, '/contact-us/')
+          )
+          // encoded within the query_params (common for open redirects)
+          or (
+            (
+              strings.icontains(.href_url.query_params, 'keap.app')
+              or strings.icontains(.href_url.query_params, 'keap%2eapp')
+              or strings.icontains(.href_url.query_params, 'keap%252eapp')
+            )
+            and strings.istarts_with(.href_url.query_params, '/contact-us/')
+          )
+  )
+  and length(filter(body.links,
+                    .href_url.domain.root_domain == "keap.app"
+                    // encoded within the query_params (common for open redirects)
+                    or strings.icontains(.href_url.query_params, 'keap.app')
+                    or strings.icontains(.href_url.query_params, 'keap%2eapp')
+                    or strings.icontains(.href_url.query_params, 'keap%252eapp')
+             )
+  ) == 1
+tags:
+  - "Attack surface reduction"
+attack_types:
+  - "Credential Phishing"
+  - "Malware/Ransomware"
+tactics_and_techniques:
+  - "Free file host"
+  - "Evasion"
+detection_methods:
+  - "URL analysis"
+id: "d6941bce-38e2-58f9-2ba2-f6a6e145cc7c"
+og_id: "a7a69267-5761-5f35-a8ff-6d19b7fd0d99"
+testing_pr: 2720
+testing_sha: 58a2caf79e85c63e842bf46faa805c0ed29a6210
