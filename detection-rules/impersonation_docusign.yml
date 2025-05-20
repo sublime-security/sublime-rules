@@ -302,26 +302,33 @@ source: |
   // this should always be a known docusign domain,
   // even with branded docusign subdomains
   and (
-    any(body.links,
-        // we've observed invisible characters in the display name
-        // such as U+034f(look carefully): "Revi͏ew Now"
-        (
-          strings.ilevenshtein(.display_text, "Review Now") <= 3
-          or strings.ilevenshtein(.display_text, "Review and Sign") <= 3
-          or (
-            strings.icontains(.display_text, "Review")
-            and not (
-              strings.icontains(.display_text, "Review Us")
-              or strings.icontains(.display_text, "leave us a review")
-              or regex.icontains(.display_text, '\bReviews\b')
-            )
-          )
-          or strings.icontains(.display_text, "document")
-          or strings.icontains(.display_text, "docusign")
-          or strings.icontains(.display_text, "Review on Docusign")
-          or (strings.icontains(.display_text, "Sign") and strings.icontains(.display_text, "Now"))
-        )
-        and not .href_url.domain.root_domain in (
+    any(
+        // filter links that match docusign wording
+        filter(body.links,
+               // we've observed invisible characters in the display name
+               // such as U+034f(look carefully): "Revi͏ew Now"
+               (
+                 strings.ilevenshtein(.display_text, "Review Now") <= 3
+                 or strings.ilevenshtein(.display_text, "Review and Sign") <= 3
+                 or (
+                   strings.icontains(.display_text, "Review")
+                   and not (
+                     strings.icontains(.display_text, "Review Us")
+                     or strings.icontains(.display_text, "leave us a review")
+                     or regex.icontains(.display_text, '\bReviews\b')
+                   )
+                 )
+                 or strings.icontains(.display_text, "document")
+                 or strings.icontains(.display_text, "docusign")
+                 or strings.icontains(.display_text, "Review on Docusign")
+                 or (
+                   strings.icontains(.display_text, "Sign")
+                   and strings.icontains(.display_text, "Now")
+                 )
+               )
+        ),
+        // ensure those links aren't legit
+        not .href_url.domain.root_domain in (
           "docusign.com",
           "docusign.net",
           'docusign.co.uk',
