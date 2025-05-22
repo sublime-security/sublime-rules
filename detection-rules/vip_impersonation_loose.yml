@@ -1,6 +1,6 @@
-name: "VIP / Executive impersonation (strict match, untrusted)"
+name: "VIP / Executive impersonation (near match, untrusted)"
 description: |
-  Sender display name matches the display name of a user in the $org_vips list, and the sender has never been seen before.
+  Sender display name is close to the display name of a user in the $org_vips list, and the sender has never been seen before.
 
   The $org_vips list must first be manually connected to a VIP group of your upstream provider (Google Workspace and Microsoft 365 only) in order for this rule to work.
   Once connected, the list will be automatically synced and kept up-to-date. For more information, see the $org_vips documentation: https://docs.sublimesecurity.com/docs/configure-org_vips-list
@@ -12,7 +12,9 @@ type: "rule"
 severity: "high"
 source: |
   type.inbound
-  and any($org_vips, .display_name =~ sender.display_name)
+  and any($org_vips,
+          0 <= strings.ilevenshtein(sender.display_name, .display_name) < 4
+  )
   and (
     // ignore personal <> work emails
     // where the sender and mailbox's display name are the same
@@ -57,4 +59,4 @@ tactics_and_techniques:
 detection_methods:
   - "Header analysis"
   - "Sender analysis"
-id: "e42c84b7-9d50-5870-9a5d-311670a14bc1"
+id: "487f93a7-3ca4-5ec2-bf15-6f6b1633bd36"
