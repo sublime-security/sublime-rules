@@ -14,11 +14,24 @@ source: |
   // secureserver.net seems to rewrite the sender local part to be the reply-to domain for bounces
   // observed in many newsletter sent via secureserver.net
   and not (
-    strings.istarts_with(sender.email.domain.domain,  'bounces.')
+    strings.istarts_with(sender.email.domain.domain, 'bounces.')
     and sender.email.domain.root_domain == 'secureserver.net'
     and all(headers.reply_to,
             strings.istarts_with(sender.email.local_part, .email.local_part)
             and strings.iends_with(sender.email.local_part, .email.domain.domain)
+    )
+  )
+  // lists.riseup.net send from the list address and use the reply-to of the sender
+  // the sender is within the X-Original-From header and contains the full "From" header
+  and not (
+    sender.email.domain.domain == "lists.riseup.net"
+    and any(headers.hops,
+            any(.fields,
+                .name =~ "X-Original-From"
+                and any(headers.reply_to,
+                        strings.icontains(..value, .email.email)
+                )
+            )
     )
   )
 tags:
