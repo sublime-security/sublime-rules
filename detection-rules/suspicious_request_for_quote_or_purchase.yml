@@ -19,14 +19,12 @@ source: |
       )
       and length(recipients.cc) == 0
     )
-    or
-    (
+    or (
       sender.email.domain.root_domain in $free_email_providers
       and any(headers.reply_to, .email.email != sender.email.email)
       and any(headers.reply_to, .email.email not in $recipient_emails)
     )
-    or
-    (
+    or (
       length(headers.reply_to) > 0
       and all(headers.reply_to,
               .email.domain.root_domain != sender.email.domain.root_domain
@@ -35,36 +33,73 @@ source: |
               and not sender.email.domain.root_domain == "wetransfer.com"
       )
     )
+    or (
+      length(recipients.to) == 1
+      and all(recipients.to, .email.email == sender.email.email)
+      and (length(recipients.cc) > 0 or length(recipients.bcc) > 0)
+    )
   )
   and (
-    // Group the language patterns that specifically indicate RFQ/RFP
+    // Group the keyword patterns that specifically indicate RFQ/RFP
     (
       1 of (
         // RFQ/RFP specific language patterns
-        regex.icontains(body.current_thread.text, '(discuss.{0,15}purchas(e|ing))'),
-        regex.icontains(body.current_thread.text, '(sign(ed?)|view).{0,10}(purchase order)|Request for (a Quot(e|ation)|Proposal)'),
-        regex.icontains(body.current_thread.text, '(please|kindly).{0,30}quot(e|ation)'),
-        regex.icontains(subject.subject, '(request for (purchase|quot(e|ation))|\bRFQ\b|\bRFP\b|bid invit(e|ation))'),
-        any(attachments, regex.icontains(.file_name, "(purchase.?order|Quot(e|ation))")),
-        any(ml.nlu_classifier(body.current_thread.text).tags, .name == "purchase_order" and .confidence == "high")
+        regex.icontains(body.current_thread.text,
+                        '(discuss.{0,15}purchas(e|ing))'
+        ),
+        regex.icontains(body.current_thread.text,
+                        '(sign(ed?)|view).{0,10}(purchase order)|Request for (a Quot(e|ation)|Proposal)'
+        ),
+        regex.icontains(body.current_thread.text,
+                        '(please|kindly).{0,30}quot(e|ation)'
+        ),
+        regex.icontains(subject.subject,
+                        '(request for (purchase|quot(e|ation))|\bRFQ\b|\bRFP\b|bid invit(e|ation))'
+        ),
+        any(attachments,
+            regex.icontains(.file_name, "(purchase.?order|Quot(e|ation))")
+        ),
+        any(ml.nlu_classifier(body.current_thread.text).tags,
+            .name == "purchase_order" and .confidence == "high"
+        )
       )
-      // Required: at least one RFQ/RFP language pattern
-      
-      // Optional: at least one additional indicator (can be another language pattern or a non-language indicator)
+      // Required: at least one RFQ/RFP keyword pattern
+  
+      // Optional: at least one additional indicator (can be another keyword pattern or a non-keyword indicator)
       and (
         2 of (
-          // RFQ/RFP language patterns (same as above)
-          regex.icontains(body.current_thread.text, '(discuss.{0,15}purchas(e|ing))'),
-          regex.icontains(body.current_thread.text, '(sign(ed?)|view).{0,10}(purchase order)|Request for a Quot(e|ation)'),
-          regex.icontains(body.current_thread.text, '(please|kindly).{0,30}quot(e|ation)'),
-          regex.icontains(subject.subject, '(request for (purchase|quot(e|ation))|\bRFQ\b|\bRFP\b|bid invit(e|ation))'),
-          any(attachments, regex.icontains(.file_name, "(purchase.?order|Quot(e|ation))")),
-          any(ml.nlu_classifier(body.current_thread.text).tags, .name == "purchase_order" and .confidence == "high"),
-          
-          // Non-language indicators
+          // RFQ/RFP keyword patterns (same as above)
+          regex.icontains(body.current_thread.text,
+                          '(discuss.{0,15}purchas(e|ing))'
+          ),
+          regex.icontains(body.current_thread.text,
+                          '(sign(ed?)|view).{0,10}(purchase order)|Request for a Quot(e|ation)'
+          ),
+          regex.icontains(body.current_thread.text,
+                          '(please|kindly).{0,30}quot(e|ation)'
+          ),
+          regex.icontains(subject.subject,
+                          '(request for (purchase|quot(e|ation))|\bRFQ\b|\bRFP\b|bid invit(e|ation))'
+          ),
+          any(attachments,
+              regex.icontains(.file_name, "(purchase.?order|Quot(e|ation))")
+          ),
+          any(ml.nlu_classifier(body.current_thread.text).tags,
+              .name == "purchase_order" and .confidence == "high"
+          ),
+  
+          // Non-keyword indicators
           (
-            any(ml.nlu_classifier(body.current_thread.text).entities, .name == "request")
-            and any(ml.nlu_classifier(body.current_thread.text).entities, .name == "urgency")
+            any(ml.nlu_classifier(body.current_thread.text).entities,
+                .name == "request"
+            )
+            and any(ml.nlu_classifier(body.current_thread.text).entities,
+                    .name == "urgency"
+            )
+            and not any(beta.ml_topic(body.current_thread.text).topics,
+                      .name == "Advertising and Promotions"
+                      and .confidence == "high"
+            )
           ),
           (
             0 < length(filter(body.links,
@@ -129,8 +164,11 @@ source: |
     )
     or sender.email.domain.root_domain not in $high_trust_sender_root_domains
   )
-  and not profile.by_sender().solicited
-  and not profile.by_sender().any_false_positives
+  and (
+    not profile.by_sender().solicited
+    or profile.by_sender().days_since.last_contact > 30
+  )
+  and not profile.by_sender().any_messages_benign
 attack_types:
   - "BEC/Fraud"
 tactics_and_techniques:
