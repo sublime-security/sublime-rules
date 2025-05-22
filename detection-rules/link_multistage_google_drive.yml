@@ -10,9 +10,9 @@ source: |
   // using the beta feature in custom rules is not suggested until it has been formally released
   //
   // the reply-to address is new or unsolicited
-  and ( 
+  and (
     // reply-to address has never sent an email to the org
-     beta.profile.by_reply_to().prevalence == "new"
+    beta.profile.by_reply_to().prevalence == "new"
   
     // reply-to email address has never been sent an email by the org
     or not beta.profile.by_reply_to().solicited
@@ -30,6 +30,9 @@ source: |
   )
   and headers.auth_summary.dmarc.pass
   
+  // not where the reply_to address is within org_domains
+  and not any(headers.reply_to, .email.domain.domain in $org_domains)
+  
   // not where the sender display name is within org_display_names
   and not any(regex.iextract(sender.display_name,
                              '^(?P<sender_display_name>.*)\((?:via )?Google'
@@ -39,7 +42,6 @@ source: |
   
   // threat actors dont want others to edit the share
   and not strings.icontains(body.current_thread.text, 'invited you to edit')
-  
   and (
     // check the shared filed name for suspicious indicators
     // alerting keywords
@@ -58,14 +60,14 @@ source: |
     or regex.icontains(strings.replace_confusables(subject.subject),
                        ': \".*(?:(?:Verify|Confirm|Update|Review|Complete)\b.*\b(Your (Identity|Account|Online[- ]?ID|Billing Information))|(?:(?:Action|Attention|Verification|Review)[[:punct:]\s](?:Needed|Required)))[^\"]*\"'
     )
-    
-    or
-    ( // filenames that in References/ID keywords
+    or ( // filenames that in References/ID keywords
       regex.icontains(strings.replace_confusables(subject.subject),
                       ': \".*[[:punct:]\s]+\w+[[:punct:]\s]*[a-zA-Z]*[0-9][a-zA-Z0-9]*\"$'
       )
       // the above regex is a bit "open", so close it by checking it with a more specific "ending" pattern.
-      and regex.icontains(strings.replace_confusables(subject.subject), '[[:punct:]]\s*[a-z0-9]{5,}\"$')
+      and regex.icontains(strings.replace_confusables(subject.subject),
+                          '[[:punct:]]\s*[a-z0-9]{5,}\"$'
+      )
     )
   
     // finally get ready to do link analysis
@@ -83,7 +85,29 @@ source: |
            strings.icontains(ml.link_analysis(., mode="aggressive").final_dom.display_text,
                              "You can't access this item because it is in violation of our Terms of Service"
            )
-  
+           // if not taken down
+           // inspect the links on the page
+           or any(filter(ml.link_analysis(., mode="aggressive").additional_responses,
+                         .url.path == "/viewerng/presspage"
+                  ),
+                  any(.json,
+                      any(.,
+                          any(., // this gets us to the array that contains the links embedded in the PDF
+                              network.whois(strings.parse_url(.).domain).days_old < 30
+                              or strings.parse_url(.).domain.tld in $suspicious_tlds
+                              or (
+                                strings.parse_url(.).domain.root_domain in $free_subdomain_hosts
+                                and strings.parse_url(.).domain.subdomain is not null
+                                and strings.parse_url(.).domain.subdomain != "www"
+                              )
+                              or strings.parse_url(.).domain.domain in $free_file_hosts
+                              or strings.parse_url(.).domain.root_domain in $free_file_hosts
+                              or strings.parse_url(.).domain.domain in $url_shorteners
+                              or strings.parse_url(.).domain.root_domain in $url_shorteners
+                          )
+                      )
+                  )
+           )
            // if not taken down
            // filter down the links on the google drive page to those that are external to google
            or any(filter(ml.link_analysis(., mode="aggressive").final_dom.links,
