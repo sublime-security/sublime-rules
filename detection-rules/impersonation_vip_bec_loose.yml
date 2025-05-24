@@ -1,25 +1,17 @@
-name: "VIP impersonation with urgent request (strict match, untrusted sender)"
+name: "VIP impersonation with BEC language (near match, untrusted sender)"
 description: |
   Sender is using a display name that matches the display name of someone in your $org_vips list.
 
   Detects potential Business Email Compromise (BEC) attacks by analyzing text within email body from untrusted senders.
 type: "rule"
-severity: "high"
+severity: "medium"
 source: |
   type.inbound
-  and any($org_vips, .display_name =~ sender.display_name)
-  and (
-    any(ml.nlu_classifier(body.current_thread.text).intents,
-        .name == "bec" and .confidence in ("medium", "high")
-    )
-    or (
-      any(ml.nlu_classifier(body.current_thread.text).entities,
-          .name == "urgency"
-      )
-      and any(ml.nlu_classifier(body.current_thread.text).entities,
-              .name == "request"
-      )
-    )
+  and any($org_vips,
+          0 <= strings.ilevenshtein(sender.display_name, .display_name) < 4
+  )
+  and any(ml.nlu_classifier(body.current_thread.text).intents,
+          .name == "bec" and .confidence in ("medium", "high")
   )
   and (
     (
@@ -47,7 +39,8 @@ source: |
   )
 
   and not profile.by_sender().any_false_positives
-
+tags:
+  - "Attack surface reduction"
 attack_types:
   - "BEC/Fraud"
 tactics_and_techniques:
@@ -55,7 +48,6 @@ tactics_and_techniques:
   - "Social engineering"
 detection_methods:
   - "Content analysis"
-  - "Content analysis"
   - "Natural Language Understanding"
   - "Sender analysis"
-id: "0dd1fa60-6e89-5f70-81a1-6b64eef0e428"
+id: "303081da-6850-5ba6-9589-c3dc7673320e"
