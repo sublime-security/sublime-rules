@@ -243,6 +243,15 @@ source: |
           )
       )
     )
+    or (
+      any(recipients.to,
+          strings.icontains(body.current_thread.text,
+                            strings.concat("This link will work for ",
+                                           .email.email
+                            )
+          )
+      )
+    )
     // contains HTML and wording from the sharepoint template
     or (
       (
@@ -250,13 +259,11 @@ source: |
         // This rule makes use of a beta feature and is subject to change without notice
         // using the beta feature in custom rules is not suggested until it has been formally released
         // 
-                    
+  
         // alt text for the global icon
-        length(beta.html_xpath(body.html, '//img[@alt="permission globe icon"]').nodes
-        ) > 0
+        length(html.xpath(body.html, '//img[@alt="permission globe icon"]').nodes) > 0
         // reference to the global icon id
-        or length(beta.html_xpath(body.html, '//img[@id="Picture_x0020_1"]').nodes
-        ) > 0
+        or length(html.xpath(body.html, '//img[@id="Picture_x0020_1"]').nodes) > 0
         // a comment reference the globe icon
         or strings.icontains(body.html.raw,
                              ' <!-- Permission globe icon placeholder -->'
@@ -267,12 +274,22 @@ source: |
                            'This invite will only work for you and people with existing access'
       )
     )
-    or 2 of 
-      (
-           strings.icontains(body.current_thread.text, 'Microsoft respects your privacy'),
-           strings.icontains(body.current_thread.text, 'please read our Privacy Statement'),
-           strings.icontains(body.current_thread.text, 'Microsoft Corporation, One Microsoft Way, Redmond, WA 98052'),
-      )
+    or any(html.xpath(body.html,
+                      "//*[contains(translate(@style, 'ABCDEF', 'abcdef'), 'color:#605e5c')]"
+           ).nodes,
+           .display_text =~ "Privacy Statement"
+    )
+    or 2 of (
+      strings.icontains(body.current_thread.text,
+                        'Microsoft respects your privacy'
+      ),
+      strings.icontains(body.current_thread.text,
+                        'please read our Privacy Statement'
+      ),
+      strings.icontains(body.current_thread.text,
+                        'Microsoft Corporation, One Microsoft Way, Redmond, WA 98052'
+      ),
+    )
   )
   
   // Negate messages when the message-id indciates the message is from MS actual. DKIM/SPF domains can be custom and therefore are unpredictable.
