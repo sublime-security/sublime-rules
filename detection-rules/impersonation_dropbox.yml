@@ -12,7 +12,13 @@ source: |
     or any(body.links,
            .display_url.domain.root_domain == "dropbox.com"
            and .mismatched
-           and not .href_url.domain.root_domain in ("mimecast.com", "mimecastprotect.com")
+           and not .href_url.domain.root_domain in (
+             "mimecast.com",
+             "mimecastprotect.com"
+           )
+    )
+    or regex.icontains(body.current_thread.text,
+                       'invited you to view the file ".*" on Dropbox'
     )
   )
   and sender.email.domain.root_domain not in~ ('dropbox.com', 'dropboxforum.com')
@@ -28,7 +34,8 @@ source: |
                          "*view*",
                          "*completed document*",
                          "*open agreement*",
-                         "*open document*"
+                         "*open document*",
+                         "*open file*"
            )
            and not strings.ilike(.display_text, "*view this email in*")
            and .href_url.domain.root_domain != "dropbox.com"
@@ -36,13 +43,18 @@ source: |
                    .name == "cred_theft" and .confidence in ("medium", "high")
            )
     )
+    or (
+      length(ml.logo_detect(beta.message_screenshot()).brands) != 0
+      and all(ml.logo_detect(beta.message_screenshot()).brands,
+              .name == "Dropbox"
+      )
+    )
   )
   and sender.email.email not in $recipient_emails
-
+  
   // negate dropbox fax (aka hellofax)
-
   and not sender.email.domain.root_domain == 'hellofax.com'
-
+  
   // negate highly trusted sender domains unless they fail DMARC authentication
   and (
     (
