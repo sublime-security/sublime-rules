@@ -78,11 +78,12 @@ source: |
         and any(attachments,
                 strings.icontains(.file_name, 'fax')
                 or (
-  
                   // or they are used in the body and OCR on them contains fax wording
                   // the image is used in the HTML body
                   .file_type in $file_types_images
-                  and any(regex.extract(.content_id, '^\<(.*)\>$'),
+                  and 
+                  (
+                    any(regex.extract(.content_id, '^\<(.*)\>$'),
                           any(.groups,
                               strings.icontains(body.html.raw,
                                                 strings.concat('src="cid:',
@@ -91,6 +92,21 @@ source: |
                                                 )
                               )
                           )
+                    )
+                    or
+                    // Engine doesn't support alternation, so handle stripped content ids separately
+                    (
+                      any(regex.extract(.content_id, '^(.*)$'),
+                            any(.groups,
+                                strings.icontains(body.html.raw,
+                                                  strings.concat('src="cid:',
+                                                                .,
+                                                                '"'
+                                                  )
+                                )
+                            )
+                        )
+                    )
                   )
                   and (
                     // and that image contains fax wording

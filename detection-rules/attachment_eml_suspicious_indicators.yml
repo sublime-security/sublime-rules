@@ -16,10 +16,20 @@ source: |
       ) == 1
       and length(filter(attachments,
                         .file_type in $file_types_images
-                        and any(regex.extract(.content_id, '^<(?P<cid>.*)\>$'),
-                                strings.icontains(body.html.raw,
-                                                  .named_groups["cid"]
-                                )
+                        and 
+                        (
+                          any(regex.extract(.content_id, '^<(?P<cid>.*)\>$'),
+                            strings.icontains(body.html.raw,
+                                              .named_groups["cid"]
+                            )
+                          )
+                          or
+                          // Engine doesn't support alternation, so handle stripped content ids separately
+                          any(regex.extract(.content_id, '^(?P<cid>.*)$'),
+                            strings.icontains(body.html.raw,
+                                              .named_groups["cid"]
+                            )
+                          )
                         )
                  )
       ) == length(attachments) - 1
