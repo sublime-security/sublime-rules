@@ -1,8 +1,8 @@
-rule encrypted_ms_office_aes {
+rule aes_encryption_keywords {
   meta:
-    description = "Detects Microsoft Office Documents with AES Encryption"
+    description = "Detects the use of AES Encryption keywords"
     author = "Sublime Security"
-    severity = "medium"
+    severity = "low"
     reference = "AES-256-CBC with HMAC-SHA-256 implementation in MS Office files"
   
   strings:
