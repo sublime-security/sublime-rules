@@ -1,0 +1,77 @@
+name: "Attachment: Callback Phishing solicitation via text-based file"
+description: "Callback Phishing via a text-based file attachment and a short body and subject from an unknown sender."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and length(subject.subject) <= 10
+  // there are no links, all the links are to aka.ms, or an extraction from a warning banner that match the senders domain
+  and (
+    length(body.links) == 0
+    or length(filter(body.links,
+                     (
+                       .display_text is null
+                       and .display_url.url == sender.email.domain.root_domain
+                     )
+                     or .href_url.domain.domain == "aka.ms"
+                     or network.whois(.display_url.domain).days_old < 30
+              )
+    ) == length(body.links)
+  )
+  and (body.current_thread.text is null or length(body.current_thread.text) < 50)
+  and 0 < length(attachments) < 4
+  and any(attachments,
+          (.content_type == "text/plain" or .file_type in ("doc", "docx"))
+          and any(file.explode(.),
+                  (.depth == 0 or .flavors.mime == "text/plain")
+                  and any(.scan.strings.strings,
+                          strings.ilike(.,
+                                        "*mcafee*",
+                                        "*norton*",
+                                        "*geek squad*",
+                                        "*paypal*",
+                                        "*ebay*",
+                                        "*symantec*",
+                                        "*best buy*",
+                                        "*lifelock*",
+                                        "*geek total*"
+                          )
+                          and any(..scan.strings.strings,
+                                  regex.icontains(.,
+                                                  '\b\+?(\d{1}.)?\(?\d{3}?\)?.~?.?\d{3}.?~?.\d{4}\b'
+                                  )
+                          )
+                  )
+          )
+  )
+  and profile.by_sender().prevalence != "common"
+  and not profile.by_sender().solicited
+  and not profile.by_sender().any_false_positives
+
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and (
+        any(distinct(headers.hops, .authentication_results.dmarc is not null),
+            strings.ilike(.authentication_results.dmarc, "*fail")
+        )
+      )
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+attack_types:
+  - "Callback Phishing"
+tactics_and_techniques:
+  - "Evasion"
+  - "Out of band pivot"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "File analysis"
+  - "Header analysis"
+  - "Sender analysis"
+id: "f64a3ffd-e4e3-5fcf-605b-6f1f7ad975e4"
+og_id: "ca39c83a-b308-532d-894b-528bdaef2748"
+testing_pr: 2787
+testing_sha: 8737280a39ab58490626893dfb7f3c431cf94e11
