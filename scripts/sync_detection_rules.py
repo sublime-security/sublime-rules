@@ -30,8 +30,6 @@ RULE_STATUS_PREFIX = os.getenv('RULE_STATUS_PREFIX', 'rule_status_')
 # flag to control if a reference is added which links to the PR in the repo
 ADD_PR_REFERENCE = os.getenv('ADD_PR_REFERENCE', 'true').lower() == 'true'
 
-# flag to modify the name of each rule to include the PR#
-INCLUDE_PR_IN_NAME = os.getenv('INCLUDE_PR_IN_NAME', 'true').lower() == 'true'
 # flag to enable creating a rule in the feed for net new rules
 INCLUDE_ADDED = os.getenv('INCLUDE_ADDED', 'true').lower() == 'true'
 # flag to enable creating a rule in the feed for updated (not net new) rules
@@ -562,6 +560,7 @@ def add_block(yaml_string, block_name, value):
 def handle_closed_prs():
     """
     Handle closed PRs by deleting rules from closed PRs after a delay period.
+    Uses comprehensive search by PR number pattern to catch all rules including orphaned ones.
 
     Returns:
         set: Set of rule IDs that were deleted
@@ -612,69 +611,60 @@ def handle_closed_prs():
                     f"\tDELAY NOT MET: Skipping PR #{closed_pr['number']}: {closed_pr['title']}\n\tRemaining Time = {remaining_days} days, {remaining_hours} hours, {remaining_minutes} minutes, {remaining_seconds} seconds")
                 continue
 
-        # if it's past the variable, then delete it
-        files = get_files_for_pull_request(pr_number)
+        # Search for all rules with this PR number pattern
+        # This catches all rules created from this PR, including orphaned ones
+        pr_search_pattern = f"PR# {pr_number} - "
+        print(f"\tSearching for all rules with pattern: '{pr_search_pattern}'")
 
-        for file in files:
-            print(f"\tStatus of {file['filename']}: {file['status']}")
-            # get all the rules from the close PR
-            if file['status'] in ['added', 'modified', 'changed'] and file['filename'].startswith(
-                    'detection-rules/') and file['filename'].endswith('.yml'):
-                # get their contents to extract the rule name for searching
-                content = get_file_contents(file['contents_url'])
-                # get the rule name
-                rule_name = extract_rule_name(content)
+        found_rules = search_sublime_rule_feed(pr_search_pattern)
+        if found_rules is None:
+            print(f"\tError searching for rules with pattern '{pr_search_pattern}' for PR#{pr_number}")
+            continue
 
-                # if we are including the PR in the rule name (this helps us make sure we're finding the right one)
-                # then we need to prepend it here, because it own't actually be in the name of the rule in the offiical feed
-                if INCLUDE_PR_IN_NAME and not rule_name.startswith(f"PR#{pr_number} - "):
-                    rule_name = prepend_pr_details(rule_name, closed_pr)
+        print(f"\tFound {found_rules['count']} rules matching PR pattern")
 
-                # Finally search for the rule name in the SUBLIME_API
-                found_rules = search_sublime_rule_feed(rule_name)
-                if found_rules is None:
-                    print(f"\tError Finding Rules in Platform for PR#{pr_number} - {rule_name}")
+        # Process all found rules
+        for found_rule in found_rules.get('rules', []):
+            rule_name = found_rule.get('name', '')
+            rule_id = found_rule.get('id', '')
+
+            # Verify this rule actually belongs to this PR (double-check the pattern match)
+            if not rule_name.startswith(pr_search_pattern):
+                print(f"\tSkipping rule '{rule_name}' - doesn't match expected pattern")
+                continue
+
+            print(f"\tEvaluating rule: {rule_name}")
+
+            # Verify this rule has the expected tags to confirm it was created by our script
+            rule_tags = found_rule.get('tags', [])
+
+            # Check for the open PR tag
+            if CREATE_OPEN_PR_TAG and OPEN_PR_TAG not in rule_tags:
+                print(f"\t\tSkipping rule - missing required tag '{OPEN_PR_TAG}'")
+                continue
+
+            # Check for the author tag if enabled
+            if ADD_AUTHOR_TAG:
+                expected_author_tag = f"{AUTHOR_TAG_PREFIX}{closed_pr['user']['login']}"
+                if expected_author_tag not in rule_tags:
+                    print(f"\t\tSkipping rule - missing expected author tag '{expected_author_tag}'")
+                    print(f"\t\tRule tags: {rule_tags}")
                     continue
-                print(f"\tFound {found_rules['count']} matching the rule name")
-                # it's possible we have more than one rule, if they match, delete them all
-                for found_rule in found_rules.get('rules', []):
-                    # make sure we're dealing with an exact match of the rule we expect
-                    # found_rule won't have quotes around it, because it's taken from the json of the rule
-                    if found_rule.get('name') == rule_name.strip('\'\"'):
-                        print("\tFound Rule Name Match")
-                        if CREATE_OPEN_PR_TAG and OPEN_PR_TAG in found_rule.get('tags'):
-                            print(f"\tFound {OPEN_PR_TAG} tag match")
 
-                            if ADD_AUTHOR_TAG and f"{AUTHOR_TAG_PREFIX}{closed_pr['user']['login']}" in found_rule.get(
-                                    'tags'):
-                                print("\tFound author tag match")
-                                print(f"\tFound Matching Rule to delete:  {found_rule['id']}")
-                                # go delete that rule
-                                deleted = sublime_delete_rule(found_rule['id'])
-                                if deleted:
-                                    print(f"\tDELETED Matching Rule:  {found_rule['id']}")
-                                    deleted_ids.add(found_rule['id'])
-                                else:
-                                    print(f"\tERROR DELETING Matching Rule:  {found_rule['id']}")
-                            else:
-                                print(f"{AUTHOR_TAG_PREFIX}{closed_pr['user']['login']} not found in: ")
-                                print(found_rule.get('tags'))
-
-                        else:
-                            print(f"\t{OPEN_PR_TAG} not found in: ")
-                            print(found_rule.get('tags'))
-                    else:
-                        print("\tRule not match not found: ")
-                        print(f"\tFound Rule:    {found_rule.get('name')}")
-                        print(f"\tEtracted Rule: {rule_name.strip('\'\"')}")
+            # All checks passed - delete this rule
+            print(f"\t\tRule matches all criteria - deleting rule ID: {rule_id}")
+            deleted = sublime_delete_rule(rule_id)
+            if deleted:
+                print(f"\t\tDELETED rule: {rule_id}")
+                deleted_ids.add(rule_id)
+            else:
+                print(f"\t\tERROR DELETING rule: {rule_id}")
 
     print(f"Deleted {len(deleted_ids)} Rules from Closed PRs:")
-
     for deleted_id in deleted_ids:
         print(f"\t{deleted_id}")
 
     return deleted_ids
-
 
 def handle_pr_rules(mode):
     """
@@ -824,7 +814,9 @@ def handle_pr_rules(mode):
                 if ADD_PR_REFERENCE:
                     modified_content = add_block(modified_content, 'references', pr['html_url'])
 
-                if INCLUDE_PR_IN_NAME:
+                # In standard mode, always include PR in name (required for handle_closed_prs)
+                # In test-rules mode, never include PR in name
+                if mode == 'standard':
                     modified_content = rename_rules(modified_content, pr)
 
                 # Save the file
