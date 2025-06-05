@@ -1,18 +1,26 @@
-name: "Suspicious message with unscannable Cloudflare link"
-description: "This rule detects messages with unscannable links to cloudflare infrastructure with suspicious indicators in the subject or display name from an unsolicited sender."
+name: "Suspicious attachment with unscannable Cloudflare link"
+description: "A PDF or Office document contains suspicious URLs that lead to Cloudflare-protected pages with turnstile CAPTCHA gates. The sender uses deceptive display names and subjects indicating urgency or authority."
 type: "rule"
 severity: "medium"
 source: |
   type.inbound
-  and ( 
-    // few links
-    0 < length(body.links) < 20
-    // fewer unique root domain links
-    and length(distinct(body.links, .href_url.domain.root_domain)) < 10
-    // sender domain matches no body domains
-    and all(body.links,
-            .href_url.domain.root_domain != sender.email.domain.root_domain
-    )
+  and any(attachments,
+          (
+            .file_extension in $file_extensions_macros
+            or .file_extension == "pdf"
+            or .file_type in ("pdf", "doc", "docx", "xls", "xlsx")
+            or .content_type in ("application/pdf")
+          )
+          and any(file.explode(.),
+                  // few links
+                  0 < length(.scan.url.urls) < 20
+                  // fewer unique root domain links
+                  and length(distinct(.scan.url.urls, .domain.root_domain)) < 10
+                  // sender domain matches no body domains
+                  and all(.scan.url.urls,
+                          .domain.root_domain != sender.email.domain.root_domain
+                  )
+          )
   )
   
   // negate bouncebacks and undeliverables
@@ -211,7 +219,7 @@ source: |
                        "Security",
                        "Service",
                        "Signature",
-                       "SSA",
+                       'SSA?\.gov',
                        "Storage",
                        "Support",
                        "Sweepstakes",
@@ -227,54 +235,75 @@ source: |
                        "Webmaster",
                        "Winner",
     )
-    or any(body.links, strings.ends_with(.href_url.url, ".exe"))
+    or any(attachments,
+           (
+             .file_extension in $file_extensions_macros
+             or .file_extension == "pdf"
+             or .file_type in ("pdf", "doc", "docx", "xls", "xlsx")
+             or .content_type in ("application/pdf")
+           )
+           and any(file.explode(.),
+                   any(.scan.url.urls, strings.ends_with(.url, ".exe"))
+                   or any(ml.nlu_classifier(.scan.ocr.raw).intents, .name == "cred_theft")
+           )
+    )
+  )
+  and any(attachments,
+          (
+            .file_extension in $file_extensions_macros
+            or .file_extension == "pdf"
+            or .file_type in ("pdf", "doc", "docx", "xls", "xlsx")
+            or .content_type in ("application/pdf")
+          )
+          and any(file.explode(.),
+                  any(.scan.url.urls,
+                      (
+                        strings.icontains(ml.link_analysis(., mode="aggressive").final_dom.display_text,
+                                          "cloudflare"
+                        )
+                        // includes the turnstile CAPTCHA
+                        or (
+                          strings.icontains(ml.link_analysis(., mode="aggressive").final_dom.raw,
+                                            'https://challenges.cloudflare.com/turnstile/'
+                          )
+                          // has a short body length indicating the page is gated behind the turnstile instead
+                          // of just including the turnstile
+                          and length((
+                                       ml.link_analysis(., mode="aggressive").final_dom.display_text
+                                     )
+                          ) < 200
+                        )
+                      )
+                      and not (
+                        ( // a Cloudflare error page
+                          strings.ilike(ml.link_analysis(., mode="aggressive").final_dom.display_text,
+                                        "*error code*"
+                          )
+                          and any(ml.link_analysis(., mode="aggressive").final_dom.links,
+                                  strings.icontains(.href_url.query_params,
+                                                    "utm_source=errorcode"
+                                  )
+                          )
+                        ) // a cookie warning mentioning Cloudflare
+                        or regex.icontains(ml.link_analysis(., mode="aggressive").final_dom.display_text,
+                                           "cookie.{0,50}Cloudflare"
+                        )
+                        or ml.link_analysis(., mode="aggressive").effective_url.domain.root_domain in (
+                          "marketbeat.com"
+                        )
+                      )
+                  )
+          )
   )
   
-  // link can't be scanned due to Cloudflare captcha
-  and any(body.links,
-          (
-            strings.icontains(ml.link_analysis(., mode="aggressive").final_dom.display_text,
-                              "cloudflare"
-            )
-            // includes the turnstile CAPTCHA
-            or (
-              strings.icontains(ml.link_analysis(., mode="aggressive").final_dom.raw,
-                                'https://challenges.cloudflare.com/turnstile/'
-              )
-              // has a short body length indicating the page is gated behind the turnstile instead
-              // of just including the turnstile
-              and length((
-                           ml.link_analysis(., mode="aggressive").final_dom.display_text
-                         )
-              ) < 200
-            )
-          )
-          and not (
-            ( // a Cloudflare error page
-              strings.ilike(ml.link_analysis(., mode="aggressive").final_dom.display_text,
-                            "*error code*"
-              )
-              and any(ml.link_analysis(., mode="aggressive").final_dom.links,
-                      strings.icontains(.href_url.query_params,
-                                        "utm_source=errorcode"
-                      )
-              )
-            ) // a cookie warning mentioning Cloudflare
-            or regex.icontains(ml.link_analysis(., mode="aggressive").final_dom.display_text,
-                               "cookie.{0,50}Cloudflare"
-            )
-            or ml.link_analysis(., mode="aggressive").effective_url.domain.root_domain in (
-              "marketbeat.com"
-            )
-          )
-  )
   and (
-    not profile.by_sender_email().solicited
+    not profile.by_sender().solicited
     or (
       profile.by_sender().any_messages_malicious_or_spam
       and not profile.by_sender().any_false_positives
     )
   )
+  
   // negate highly trusted sender domains unless they fail DMARC authentication
   and (
     (
@@ -283,15 +312,23 @@ source: |
     )
     or sender.email.domain.root_domain not in $high_trust_sender_root_domains
   )
-  and not profile.by_sender().any_false_positives
-
+  and not profile.by_sender().any_messages_benign
+  
 tags:
-  - "Attack surface reduction"
+ - "Attack surface reduction"
 attack_types:
   - "Credential Phishing"
+tactics_and_techniques:
+  - "Evasion"
+  - "PDF"
+  - "Social engineering"
+  - "Impersonation: Employee"
+  - "Impersonation: VIP"
 detection_methods:
-  - "Content analysis"
-  - "Header analysis"
+  - "File analysis"
   - "URL analysis"
   - "Sender analysis"
-id: "70ea21f9-2a88-5e33-81a2-4f3384080a04"
+  - "Content analysis"
+  - "Header analysis"
+  - "Natural Language Understanding"
+id: "00f92b6f-7449-5c93-ba29-b406c57bf121"

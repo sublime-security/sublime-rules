@@ -9,15 +9,23 @@ source: |
           .name in ("Travel and Transportation", "Customer Service and Support")
           and .confidence == "high"
   )
-  and any(ml.nlu_classifier(body.current_thread.text).entities,
-          .name == "org" and .text == "Booking.com"
+  and (
+    any(ml.nlu_classifier(body.current_thread.text).entities,
+        .name == "org" and .text == "Booking.com"
+        or strings.icontains(body.current_thread.text, ' booking.com ')
+    )
   )
   and (
     any(ml.nlu_classifier(body.current_thread.text).intents,
         .name == "cred_theft"
     )
     or any(body.links,
-           strings.ilike(.display_text, "*review*", "*complaint*", "*contact*")
+           strings.ilike(.display_text,
+                         "*review*",
+                         "*complaint*",
+                         "*contact*",
+                         "*accommodation*"
+           )
            or .display_url.domain.root_domain == "booking.com" and .mismatched
            or network.whois(.href_url.domain).days_old < 30
     )
@@ -29,15 +37,6 @@ source: |
       profile.by_sender().any_messages_malicious_or_spam
       and not profile.by_sender().any_false_positives
     )
-  )
-  
-  // negate highly trusted sender domains unless they fail DMARC authentication
-  and (
-    (
-      sender.email.domain.root_domain in $high_trust_sender_root_domains
-      and not headers.auth_summary.dmarc.pass
-    )
-    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
   )
 
 attack_types:
