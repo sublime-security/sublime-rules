@@ -13,8 +13,18 @@ source: |
     or length(attachments) == 0
   )
   and length(body.links) > 0
-  and any(ml.logo_detect(beta.message_screenshot()).brands,
-          .name == "Adobe" and .confidence in ("high")
+  and (
+    any(ml.logo_detect(beta.message_screenshot()).brands,
+        .name == "Adobe" and .confidence in ("high")
+    )
+    or (
+      strings.icontains(body.current_thread.text, "adobe")
+      and length(beta.ml_topic(body.current_thread.text).topics) == 1
+      and all(beta.ml_topic(body.current_thread.text).topics,
+              .name == "File Sharing and Cloud Services" and .confidence == "high"
+      )
+      and length(body.current_thread.text) < 2000
+    )
   )
   and (
     any(file.explode(beta.message_screenshot()),
@@ -65,7 +75,7 @@ source: |
           or strings.istarts_with(subject.subject, "TR:")
           or strings.istarts_with(subject.subject, "FWD:")
           or regex.imatch(subject.subject,
-                        '(\[[^\]]+\]\s?){0,3}(re|fwd?|automat.*)\s?:.*'
+                        '^\[?/{0,2}(EXT|EXTERNAL)\]?/{0,2}[: ]\s*(RE|FWD?|FW|AW|TR|ODG|答复):.*'
         )
         )
       )
@@ -73,11 +83,21 @@ source: |
     or length(headers.references) == 0
   )
   and (
-    not profile.by_sender().solicited
-    or (
-      profile.by_sender().any_messages_malicious_or_spam
-      and not profile.by_sender().any_false_positives
+    (
+      headers.auth_summary.spf.pass
+      and headers.auth_summary.dmarc.pass
+      and (
+        not profile.by_sender().solicited
+        or profile.by_sender().any_messages_malicious_or_spam
+        or profile.by_sender_email().days_since.last_contact > 14
+      )
+      and not profile.by_sender().any_messages_benign
+      and not sender.email.domain.root_domain in ("adobe-events.com", "frame.io")
     )
+    or not headers.auth_summary.spf.pass
+    or headers.auth_summary.spf.pass is null
+    or not headers.auth_summary.dmarc.pass
+    or headers.auth_summary.dmarc.pass is null
   )
   // negate highly trusted sender domains unless they fail DMARC authentication
   and (
