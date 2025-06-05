@@ -67,6 +67,9 @@ source: |
         )
         or strings.icontains(body.current_thread.text, 'Please Sign docusign')
         or strings.icontains(body.current_thread.text, 'This email was sent via DocuSign')
+        or strings.icontains(body.current_thread.text, 'This email was sent to you via DocuSign')
+        or strings.icontains(body.current_thread.text, 'This message was sent via DocuSign')
+        or strings.icontains(body.current_thread.text, 'This message was sent to you via DocuSign')
         or strings.icontains(body.current_thread.text, 'review via DocuSign Electronic Signature')
         or strings.icontains(body.current_thread.text, 'sent to you by DocuSign')
         or strings.icontains(body.current_thread.text, 'Processed by DocuSign')
@@ -167,7 +170,9 @@ source: |
             "clixsign.com",
             "esignlive.com",
             "clickcontracts.com",
-            "sadq.sa"
+            "sadq.sa",
+            "vasion.com",
+            "chubb.com", // insurance company
           )
         )
         or (
@@ -225,30 +230,26 @@ source: |
                            '<span[^>]*style="[^"]*">Docu.?Sign<\/span>'
         )
   
-        // 
-        // This rule makes use of a beta feature and is subject to change without notice
-        // using the beta feature in custom rules is not suggested until it has been formally released
-        // 
-        or any(beta.html_xpath(body.html, '//h1').nodes,
+        or any(html.xpath(body.html, '//h1').nodes,
                regex.icontains(.display_text, 'Docu.?Sign')
         )
         or regex.icontains(body.html.raw,
                            '<span[^>]*style="[^"]*">(Docu|D(?:ocu?)?)<\/span>(?:<[^\>]+\>){0,2}<span[^>]*style="[^"]*">(Sign|S(?:ign?)?)<\/span>'
         )
         // any bold text contains docusign
-        or any(beta.html_xpath(body.html, '//strong').nodes,
+        or any(html.xpath(body.html, '//strong').nodes,
                regex.imatch(.display_text, 'Docu.?Sign')
         )
         // title starts with Docusign
-        or any(beta.html_xpath(body.html, '//title').nodes,
+        or any(html.xpath(body.html, '//title').nodes,
                regex.icontains(.display_text, '^docu.?sign')
         )
         // a div with a class of logo contains the display text of docusign
-        or any(beta.html_xpath(body.html, '//div[@class="logo"]').nodes,
+        or any(html.xpath(body.html, '//div[@class="logo"]').nodes,
                strings.icontains(.display_text, 'Docusign')
         )
         // image contains an alt text of docusign
-        or any(beta.html_xpath(body.html, '//img/@alt').nodes, .raw =~ "docusign")
+        or any(html.xpath(body.html, '//img/@alt').nodes, .raw =~ "docusign")
   
         // Basic variations with HTML encoding
         // use of regex extract allows 
@@ -297,38 +298,64 @@ source: |
   // this should always be a known docusign domain,
   // even with branded docusign subdomains
   and (
-    any(body.links,
-        // we've observed invisible characters in the display name
-        // such as U+034f(look carefully): "Revi͏ew Now"
-        (
-          strings.ilevenshtein(.display_text, "Review Now") <= 3
-          or strings.ilevenshtein(.display_text, "Review and Sign") <= 3
-          or (
-            strings.icontains(.display_text, "Review")
-            and not (
-              strings.icontains(.display_text, "Review Us")
-              or strings.icontains(.display_text, "leave us a review")
-              or regex.icontains(.display_text, '\bReviews\b')
-            )
-          )
-          or strings.icontains(.display_text, "document")
-          or strings.icontains(.display_text, "docusign")
-          or strings.icontains(.display_text, "Review on Docusign")
-          or (strings.icontains(.display_text, "Sign") and strings.icontains(.display_text, "Now"))
-
+    any(
+        // filter links that match docusign wording
+        filter(body.links,
+               // we've observed invisible characters in the display name
+               // such as U+034f(look carefully): "Revi͏ew Now"
+               (
+                 strings.ilevenshtein(.display_text, "Review Now") <= 3
+                 or strings.ilevenshtein(.display_text, "Review and Sign") <= 3
+                 or (
+                   strings.icontains(.display_text, "Review")
+                   // negate benign uses of the "review" term
+                   and not (
+                     strings.icontains(.display_text, "Review Us")
+                     or strings.icontains(.display_text, "leave us a review")
+                     or regex.icontains(.display_text, '\bReviews\b')
+                     // don't match microsoft quarantine messages
+                     or (
+                       strings.icontains(.display_text, "Review Message")
+                       and (
+                         .href_url.domain.domain == "security.microsoft.com"
+                         and .href_url.path == "/quarantine"
+                       )
+                     )
+  
+                   )
+                 )
+                 or strings.icontains(.display_text, "document")
+                 or strings.icontains(.display_text, "docusign")
+                 or strings.icontains(.display_text, "Review on Docusign")
+                 or (
+                   strings.icontains(.display_text, "Sign")
+                   and strings.icontains(.display_text, "Now")
+                 )
+               )
+        ),
+        // ensure those links aren't legit
+        not .href_url.domain.root_domain in (
+          "docusign.com",
+          "docusign.net",
+          'docusign.co.uk',
+          'docusign.com.br',
+          'docusign.fr',
+          // other e-signature companies which use simliar wording
+          "insuresign.com",
+          "clixsign.com",
+          "esignlive.com",
+          "clickcontracts.com",
+          "adobesign.com",
+          "hellosign.com",
         )
-        and not .href_url.domain.root_domain in ("docusign.com", "docusign.net", 'docusign.co.uk')
         and not (
           .href_url.domain.root_domain == "mimecastprotect.com"
           and (
             .href_url.query_params is not null
-            and (
-              regex.icontains(.href_url.query_params,
-                              'domain=(?:\w+.)?docusign.net'
-              )
-              or regex.icontains(.href_url.query_params,
-                                 'domain=(?:\w+.)?docusign.com'
-              )
+            and regex.icontains(.href_url.query_params,
+                                'domain=(?:\w+\.)?docusign.(?:net|com|co\.uk|com\.br|fr)',
+                                // other e-signature companies
+                                'domain=(?:\w+\.)?(?:insuresign\.com|clixsign\.com|esignlive\.com|clickcontracts\.com|adobesign\.com|hellosign\.com)'
             )
           )
         )
@@ -382,13 +409,6 @@ source: |
         )
     )
     and strings.contains(sender.display_name, "via")
-  )
-  and (
-    not profile.by_sender().solicited
-    or (
-      profile.by_sender().any_messages_malicious_or_spam
-      and not profile.by_sender().any_false_positives
-    )
   )
 attack_types:
   - "Credential Phishing"
