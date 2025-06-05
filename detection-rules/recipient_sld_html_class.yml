@@ -9,7 +9,16 @@ source: |
               strings.icontains(.raw, ..email.domain.sld)
           )
           and .email.domain.root_domain not in $free_email_providers
+          and sender.email.domain.domain not in $org_domains
           and length(.email.domain.sld) > 4
+  )
+  // negate replies and messages where the recipient is CC'ed
+  and not (
+    (
+      length(headers.references) > 0
+      or any(headers.hops, any(.fields, strings.ilike(.name, "In-Reply-To")))
+    )
+      or any(recipients.cc, .email.domain.root_domain == sender.email.domain.root_domain)
   )
   // negate highly trusted sender domains unless they fail DMARC authentication
   and (
