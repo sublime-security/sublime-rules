@@ -1,0 +1,17 @@
+name: "Link: SharePoint Filename Matches Org Name"
+description: "Detects when a SharePoint or OneDrive shared file link contains suspicious filename patterns that match organizational naming patterns, indicating potential impersonation.  This has been observed in conjuction with native Microsoft Sharepoint share verification via email and One Time Password. "
+type: "rule"
+severity: "medium"
+source: "type.inbound\nand strings.ilike(subject.subject, \"*shared*\", \"*invit*\")\nand strings.ilike(body.current_thread.text,\n                  \"*shared a file with you*\",\n                  \"*shared with you*\",\n                  \"*invited you to access a file*\"\n)\nand not strings.ilike(body.current_thread.text, \"invited you to edit\")\nand (\n  // use the display text of the link to determine the name of the file\n  any(filter(body.links,\n             (\n               .href_url.domain.root_domain == \"sharepoint.com\"\n               or .href_url.domain.root_domain == \"1drv.ms\"\n               // handle urls with mimecast rewriting\n               or (\n                 .href_url.domain.root_domain == 'mimecastprotect.com'\n                 and strings.icontains(.href_url.query_params,\n                                       '.sharepoint.com'\n                 )\n               )\n             )\n             and .display_text != \"Open\"\n      ),\n\n\n      // the document name is the same as the org name\n      // as determined by the footer \n      (\n        strings.icontains(body.current_thread.text,\n                          strings.concat('This email is generated through ',\n                                         .display_text\n                          )\n        )\n        and strings.icontains(body.current_thread.text,\n                              strings.concat(\"\\'s use of Microsoft 365 and may contain content that is controlled by \",\n                                             .display_text\n                              )\n        )\n      )\n  )\n)\n"
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Impersonation: Employee"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "URL analysis"
+id: "bdfc7101-7d74-5b51-1952-11ddc3434917"
+og_id: "cb954726-12ac-5956-b4d1-55fcf3b4bd95"
+testing_pr: 2794
+testing_sha: 0f5712c4c2d5e0386e2c61464bbd8e9500611092
