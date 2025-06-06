@@ -1,0 +1,21 @@
+name: "Brand Impersonation: TikTok"
+description: "Detects messages impersonating TikTok through similar display names or logo detection, combined with security-themed content and authentication failures. Excludes legitimate TikTok communications and trusted senders."
+type: "rule"
+severity: "medium"
+source: "type.inbound\nand (\n  // TikTok Brand Detection \n  (\n    // display name contains tiktok\n    strings.ilike(strings.replace_confusables(sender.display_name), '*tiktok*')\n    // levenshtein distance similar to tiktok\n    or strings.ilevenshtein(strings.replace_confusables(sender.display_name),\n                            'tiktok'\n    ) <= 1\n    or any(ml.logo_detect(beta.message_screenshot()).brands,\n           .name == \"TikTok\" and .confidence == \"high\"\n    )\n  )\n  // OR TikTok verification language\n  or (\n    strings.icontains(body.current_thread.text, \"tiktok\")\n    and (\n      strings.icontains(body.current_thread.text, \"verified badge\")\n      or strings.icontains(body.current_thread.text, \"verification criteria\")\n      or strings.icontains(body.current_thread.text, \"activate badge\")\n      or strings.icontains(body.current_thread.text, \"verification complete\")\n      or strings.icontains(body.current_thread.text, \"almost verified\")\n      or strings.icontains(body.current_thread.text, \"review complete\")\n    )\n  )\n)\nand (\n  // ML Topic Analysis and Credential Theft Detection\n  any(beta.ml_topic(body.current_thread.text).topics,\n      .name in (\n        \"Security and Authentication\",\n        \"Secure Message\",\n        \"Reminders and Notifications\"\n      )\n      and .confidence in (\"medium\", \"high\")\n  )\n  or any(beta.ml_topic(beta.ocr(beta.message_screenshot()).text).topics,\n         .name in (\n           \"Security and Authentication\",\n           \"Secure Message\",\n           \"Reminders and Notifications\"\n         )\n         and .confidence in (\"medium\", \"high\")\n         and beta.ocr(beta.message_screenshot()).text != \"\"\n  )\n  or any(ml.nlu_classifier(body.current_thread.text).intents,\n         .name == \"cred_theft\" and .confidence == \"high\"\n  )\n  or any(ml.nlu_classifier(beta.ocr(beta.message_screenshot()).text).intents,\n         .name == \"cred_theft\" and .confidence == \"high\"\n  )\n)\n// Not from legitimate TikTok or Google domains with DMARC pass\nand not (\n  sender.email.domain.root_domain in $org_domains\n  or (\n    sender.email.domain.root_domain in (\n      \"tiktok.com\",\n      \"tiktokglobalshop.com\",\n      \"bytedance.com\"\n    )\n    and headers.auth_summary.dmarc.pass\n  )\n  or (\n    sender.email.domain.root_domain in (\"google.com\", \"gmail.com\")\n    and headers.auth_summary.dmarc.pass\n  )\n)\n// negate highly trusted sender domains unless they fail DMARC authentication\nand (\n  (\n    sender.email.domain.root_domain in $high_trust_sender_root_domains\n    and not headers.auth_summary.dmarc.pass\n  )\n  or sender.email.domain.root_domain not in $high_trust_sender_root_domains\n)\nand not profile.by_sender().solicited\n"
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Social engineering"
+detection_methods:
+  - "Computer Vision"
+  - "Content analysis"
+  - "Header analysis"
+  - "Natural Language Understanding"
+  - "Optical Character Recognition"
+  - "Sender analysis"
+id: "08e458ba-94f4-55ab-f378-9b522a74269a"
+og_id: "aaacc8b7-fbbd-596d-9268-d90b92bdfcd7"
+testing_pr: 2774
+testing_sha: e4222bc25af6d65a1981484187aa4397363da885
