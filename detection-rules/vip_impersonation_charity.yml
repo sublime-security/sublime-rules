@@ -21,6 +21,9 @@ source: |
         strings.istarts_with(subject.subject, "RE:")
         or strings.istarts_with(subject.subject, "FW:")
         or strings.istarts_with(subject.subject, "FWD:")
+        or regex.imatch(subject.subject,
+                        '(\[[^\]]+\]\s?){0,3}(re|fwd?|automat.*)\s?:.*'
+        )
       )
       and (
         (length(headers.references) == 0 and headers.in_reply_to is null)
@@ -35,14 +38,26 @@ source: |
       not (
         (
           strings.istarts_with(subject.subject, "RE:")
+          or strings.istarts_with(subject.subject, "R:")
+          or strings.istarts_with(subject.subject, "ODG:")
+          or strings.istarts_with(subject.subject, "答复:")
+          or strings.istarts_with(subject.subject, "AW:")
+          or strings.istarts_with(subject.subject, "TR:")
           or strings.istarts_with(subject.subject, "FWD:")
+          or regex.imatch(subject.subject,
+                          '(\[[^\]]+\]\s?){0,3}(re?|ODG|答复|AW|TR|fwd?|automat.*)\s?:.*'
+          )
         )
       )
-      and 3 of (
-        strings.icontains(body.html.display_text, "from:"),
-        strings.icontains(body.html.display_text, "to:"),
-        strings.icontains(body.html.display_text, "sent:"),
-        strings.icontains(body.html.display_text, "subject:")
+      and any([body.current_thread.text, body.html.display_text, body.plain.raw],
+              3 of (
+                strings.icontains(., "from:"),
+                strings.icontains(., "to:"),
+                strings.icontains(., "sent:"),
+                strings.icontains(., "date:"),
+                strings.icontains(., "cc:"),
+                strings.icontains(., "subject:")
+              )
       )
       and (
         length(body.current_thread.text) + 100 < length(body.html.display_text)
