@@ -35,6 +35,25 @@ source: |
             and any(file.explode(.),
                     .depth == 0 and .scan.exiftool.page_count < 3
             )
+            // negate ML matches to "Professional and Career Development" - tuning resume FPs
+            and not (
+              any(beta.ml_topic(coalesce(body.html.display_text, body.plain.raw)).topics,
+                .name == "Professional and Career Development" and .confidence == "high"
+                )
+                or (
+                    (
+                    any(attachments,
+                        .file_type == 'pdf'
+                        and any(file.explode(.),
+                                any(beta.ml_topic(.scan.ocr.raw).topics,
+                                    .name == "Professional and Career Development"
+                                    and .confidence == "high"
+                                )
+                        )
+                    )
+                    )
+                )
+            )
             // check that any _single_ result in the file.explode matches these conditions
             // a second file.explode is required because the OCR is generated at a different depth within 
             // the file.explode results
