@@ -1,0 +1,59 @@
+name: "Deceptive Dropbox Mention"
+description: "Detects when an actor mentions Dropbox but includes links to non-Dropbox domains, displays email address discrepancies, and exhibits suspicious language patterns according to machine learning analysis"
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and strings.icontains(body.current_thread.text, 'dropbox')
+  
+  // Email address discrepancy detection - body contains email different from sender
+  and (
+    regex.icontains(body.current_thread.text,
+                    '[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}'
+    )
+    and not strings.icontains(body.current_thread.text, sender.email.email)
+    and not regex.icontains(body.current_thread.text,
+                            'recipient:\s*[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}'
+    )
+  )
+  
+  // Not from legitimate Dropbox infrastructure
+  and sender.email.domain.root_domain not in~ (
+    'dropbox.com',
+    'docsend.com',
+    // tuning: exlude hellosign emails that are covered in another rule
+    'hellosign.com'
+    'box.com'
+  )
+  
+  // Contains suspicious links to non-Dropbox/file-sharing domains
+  and any(body.links,
+          (.href_url.domain.root_domain in~ $free_subdomain_hosts
+          or .href_url.domain.root_domain in~ $free_file_hosts)
+          and .href_url.domain.valid
+  )
+  
+  // ML indicates potential credential theft
+  and any(ml.nlu_classifier(body.current_thread.text).intents,
+          .name == "cred_theft" and .confidence in~ ("medium", "high")
+  )
+  
+  // Exclude legitimate file sharing services already covered by other rules
+  and sender.email.domain.root_domain not in~ (
+    'docsend.com',
+    'box.com',
+    'wetransfer.com'
+  )
+
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Free file host"
+  - "Free subdomain host"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Header analysis"
+  - "Natural Language Understanding"
+  - "Sender analysis"
+  - "URL analysis"
