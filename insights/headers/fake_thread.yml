@@ -2,9 +2,18 @@ name: "Fake message thread"
 type: "query"
 source: | 
   type.inbound
-  and regex.icontains(subject.subject, '\b(?:RE|FWD?)\s*:')
   and (
-    length(headers.references) == 0
-    or headers.in_reply_to is null
+    regex.icontains(subject.subject, '\b(?:RE|FWD?)\s*:')
+    or any([body.current_thread.text, body.html.display_text, body.plain.raw],
+           3 of (
+             strings.icontains(., "from:"),
+             strings.icontains(., "to:"),
+             strings.icontains(., "sent:"),
+             strings.icontains(., "date:"),
+             strings.icontains(., "cc:"),
+             strings.icontains(., "subject:")
+           )
+    )
   )
+  and (length(headers.references) == 0 or headers.in_reply_to is null)
 severity: "medium"

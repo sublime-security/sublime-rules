@@ -9,35 +9,38 @@ source: |
     or length(filter(attachments, .file_type != "pdf")) == 0
   )
   and (
-    any(ml.logo_detect(beta.message_screenshot()).brands, .name == "Adobe")
-    and 0 < length(body.links) < 10
-    and any(body.links, .display_text is null)
-    and (
-      length(filter(body.links,
-                    (
-                      .display_text is null
-                      and .display_url.url == sender.email.domain.root_domain
-                    )
-                    or .href_url.domain.root_domain in (
-                      "aka.ms",
-                      "mimecast.com",
-                      "mimecastprotect.com",
-                      "cisco.com"
-                    )
-             )
-      ) != length(body.links)
+    (
+      any(ml.logo_detect(beta.message_screenshot()).brands, .name == "Adobe")
+      and 0 < length(body.links) < 10
+      and any(body.links, .display_text is null)
+      and (
+        length(filter(body.links,
+                      (
+                        .display_text is null
+                        and .display_url.url == sender.email.domain.root_domain
+                      )
+                      or .href_url.domain.root_domain in (
+                        "aka.ms",
+                        "mimecast.com",
+                        "mimecastprotect.com",
+                        "cisco.com"
+                      )
+               )
+        ) != length(body.links)
+      )
     )
-    // )
-    or any(attachments,
-           any(ml.logo_detect(.).brands,
-               .name == "Adobe"
-               and .confidence in ("medium", "high")
-               and any(file.explode(..),
-                       (
-                         length(.scan.url.urls) > 0
-                         or length(.scan.pdf.urls) > 0
-                         or length(body.links) > 0
-                       )
+    or any(filter(attachments,
+                  // filter down to attachments with adobe logo
+                  any(ml.logo_detect(.).brands,
+                      .name == "Adobe" and .confidence in ("medium", "high")
+                  )
+           ),
+           // the attachment (or message body) contain links
+           any(file.explode(.),
+               (
+                 length(.scan.url.urls) > 0
+                 or length(.scan.pdf.urls) > 0
+                 or length(body.links) > 0
                )
            )
     )
@@ -67,8 +70,12 @@ source: |
     or length(headers.references) == 0
   )
   
-  // not a newsletter
+  // not a newsletter or advertisement
   and not any(headers.hops, any(.fields, .name == "List-Unsubscribe-Post"))
+  and not any(beta.ml_topic(body.current_thread.text).topics,
+              .name in ("Advertising and Promotions", "Newsletters and Digests")
+              and .confidence == "high"
+  )
   
   // negate highly trusted sender domains unless they fail DMARC authentication
   and (
@@ -79,13 +86,14 @@ source: |
     or sender.email.domain.root_domain not in $high_trust_sender_root_domains
   )
   and (
-    not profile.by_sender().solicited
+    not profile.by_sender_email().solicited
+    or profile.by_sender_email().prevalence == "new"
     or (
-      profile.by_sender().any_messages_malicious_or_spam
-      and not profile.by_sender().any_false_positives
+      profile.by_sender_email().any_messages_malicious_or_spam
+      and not profile.by_sender_email().any_false_positives
     )
   )
-  and not profile.by_sender().any_false_positives
+  and not profile.by_sender_email().any_false_positives
 
 attack_types:
   - "Credential Phishing"

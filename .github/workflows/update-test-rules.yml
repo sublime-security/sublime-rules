@@ -23,7 +23,7 @@ jobs:
       # TheModdingInquisition/actions-team-membership@v1.0 could be used for a team check, but we'd need to create a PAT for it.
       - name: Check if commentor is organization member
         id: is_organization_member
-        uses: jamessingleton/is-organization-member@1.0.0
+        uses: jamessingleton/is-organization-member@fb5924a6287762ee5fc71bf9e95a60842af5528d  # 1.0.1
         with:
           organization: sublime-security
           username: ${{ github.event.comment.user.login }}
@@ -44,11 +44,11 @@ jobs:
         run: exit 1
 
       - name: Get PR branch
-        uses: alessbell/pull-request-comment-branch@v1.1 # Fork of xt0rted/pull-request-comment-branch, see https://github.com/xt0rted/pull-request-comment-branch/issues/322
+        uses: alessbell/pull-request-comment-branch@ef3408c9757d05f89cb525036383033a313758a0  # v2.1.0
         id: comment_branch
 
       - name: Wait for Rule Validation Succeed
-        uses: lewagon/wait-on-check-action@v1.3.1
+        uses: lewagon/wait-on-check-action@ccfb013c15c8afb7bf2b7c028fb74dc5a068cccc  # v1.3.4
         with:
           ref: ${{ steps.comment_branch.outputs.head_sha }}
           check-name: 'Rule Tests and ID Updated'
@@ -69,11 +69,11 @@ jobs:
 
     steps:
       - name: Get PR branch
-        uses: alessbell/pull-request-comment-branch@v1.1 # Fork of xt0rted/pull-request-comment-branch, see https://github.com/xt0rted/pull-request-comment-branch/issues/322
+        uses: alessbell/pull-request-comment-branch@ef3408c9757d05f89cb525036383033a313758a0  # v2.1.0
         id: comment_branch
 
       - name: Checkout PR branch
-        uses: actions/checkout@v3
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
         with:
           repository: ${{ steps.comment_branch.outputs.head_owner }}/${{ steps.comment_branch.outputs.head_repo }}
           ref: ${{ steps.comment_branch.outputs.head_ref }}
@@ -81,10 +81,10 @@ jobs:
           path: source
 
       - name: Install yq
-        uses: mikefarah/yq@v4.33.3
+        uses: mikefarah/yq@8bf425b4d1344db7cd469a8d10a390876e0c77fd  # v4.45.1
 
       - name: Checkout test-rules
-        uses: actions/checkout@v3
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
         with:
           ref: test-rules
           path: destination
@@ -93,6 +93,22 @@ jobs:
         run: |
           export pr_num=${{ github.event.issue.number }}
           
+          # Function to generate a deterministic UUID using the DNS namespace and a seed string
+          # This simulates the Python uuid.uuid5() function using native tools
+          generate_uuid() {
+            # Use the standard DNS namespace UUID as defined in RFC 4122
+            local DNS_NAMESPACE="6ba7b810-9dad-11d1-80b4-00c04fd430c8"
+            local seed="$1"
+            
+            # Combine namespace and seed (similar to how Python's uuid5 implementation works)
+            # Generate a deterministic hash using openssl (similar concept to UUID5)
+            local hash=$(echo -n "$DNS_NAMESPACE$seed" | openssl dgst -sha1 | awk '{print $2}')
+            
+            # Format as UUID version 5
+            # First 8 chars, then 4 chars, then 4 chars (with first nibble set to 5 for UUID v5), etc.
+            echo "${hash:0:8}-${hash:8:4}-5${hash:13:3}-${hash:16:4}-${hash:20:12}"
+          }
+                  
           # Delete any files already referencing this PR. If they're no longer included in the PR this will remove them,
           # if they're still included we'll add them back below.
           files=$(ls destination/**/*.yml) || true
@@ -105,12 +121,15 @@ jobs:
           
           # This workflow is trigerred from an issue comment so we don't automatically have context on what changed in the PR
           # TODO: We can only retrieve 100 results, we need to add pagination support.
+          # Get the repository dynamically from the context
+          REPO="${GITHUB_REPOSITORY}"
+          
           curl -L \
             -o pr_files.json \
             -H "Accept: application/vnd.github+json" \
             -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}"\
             -H "X-GitHub-Api-Version: 2022-11-28" \
-            https://api.github.com/repos/sublime-security/sublime-rules/pulls/$pr_num/files?per_page=100
+            "https://api.github.com/repos/${REPO}/pulls/$pr_num/files?per_page=100"
           
           # Any files added/changed/modified will be copied to test-rules
           files_changed=$(jq -r '.[] | select(.status == "added" or .status == "modified" or .status == "changed") | .filename' pr_files.json)
@@ -119,9 +138,8 @@ jobs:
           # always use the latest sha.
           export sha=${{ steps.comment_branch.outputs.head_sha }}
           
-          # Copy any file that was added/changed/modified to the destination git folder (we could do this with git checkout
-          # but it doesn't seem any simpler). And then add testing metadata.
-          # If multiple PRs modify the same file, only one can be tested. This is solveable, but not something we see often.
+          # Copy any file that was added/changed/modified to the destination git folder
+          # Now with prefixing the filename and updating the ID
           for file in $files_changed; do
             # Skip any LA rules. We'll ignore these downstream anyway, but best to keep the branch clean.
             la_count=$(grep -c 'ml.link_analysis' source/$file || true)
@@ -130,9 +148,36 @@ jobs:
               continue
             fi
             
-            cp source/$file destination/$file
-            yq -i '.testing_pr = env(pr_num)' destination/$file
-            yq -i '.testing_sha = env(sha)' destination/$file
+            # Extract the base filename
+            base_filename=$(basename "$file")
+            # Create the prefixed filename with PR number
+            prefixed_filename="${pr_num}_${base_filename}"
+            # Get the directory of the original file
+            dir_path=$(dirname "$file")
+            
+            # Ensure the destination directory exists
+            mkdir -p "destination/$dir_path"
+            
+            # Copy the file to destination with original path structure
+            cp "source/$file" "destination/$dir_path/${prefixed_filename}"
+
+            # Extract the original ID before we update .id to the new_uuid
+            yq -i '.og_id = .id' "destination/$dir_path/${prefixed_filename}"
+            
+            # Generate a deterministic UUID based on the prefixed filename
+            # test-rules requires each rule to have a unique, but deterministic
+            # id.  This will be different than the auto generated one with the main branch
+            new_uuid=$(generate_uuid "${prefixed_filename}")
+            echo "Generated UUID for ${prefixed_filename}: ${new_uuid}"
+            
+            # Update the ID in the YAML file using yq
+            yq -i '.id = "'$new_uuid'"' "destination/$dir_path/${prefixed_filename}"
+            
+            # Add testing_pr and testing_sha using yq
+            yq -i '.testing_pr = env(pr_num)' "destination/$dir_path/${prefixed_filename}"
+            yq -i '.testing_sha = env(sha)' "destination/$dir_path/${prefixed_filename}"
+            
+            echo "Processed $file -> $dir_path/${prefixed_filename}"
           done
           
           echo "Sync from PR#$pr_num" > message.txt

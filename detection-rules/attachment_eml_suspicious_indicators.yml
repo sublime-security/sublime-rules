@@ -4,7 +4,31 @@ type: "rule"
 severity: "medium"
 source: |
   type.inbound
-  and length(attachments) == 1
+  and (
+    // a single attachmed EML
+    length(attachments) == 1
+    // or a single attached EML with one or more images used in the body of the message
+    // likely within the signatures
+    or (
+      length(filter(attachments,
+                    .file_extension == "eml" or .content_type == "message/rfc822"
+             )
+      ) == 1
+      and length(filter(attachments,
+                        .file_type in $file_types_images
+                        and 
+                        (
+                          any(regex.extract(.content_id, '^<(?P<cid>.*)\>$'),
+                            strings.icontains(body.html.raw,
+                                              .named_groups["cid"]
+                            )
+                          )
+                          or strings.icontains(body.html.raw, .content_id)
+                        )
+                 )
+      ) == length(attachments) - 1
+    )
+  )
   and (
     length(body.current_thread.text) < 300
     or body.current_thread.text is null
@@ -13,7 +37,7 @@ source: |
     )
   )
   and not any(ml.nlu_classifier(body.current_thread.text).intents,
-          .name == "benign" and .confidence == "high"
+              .name == "benign" and .confidence == "high"
   )
   and any(attachments,
           (.file_extension == "eml" or .content_type == "message/rfc822")
@@ -22,6 +46,16 @@ source: |
             file.parse_eml(.).sender.email.email == ""
             or length(file.parse_eml(.).body.html.raw) < 10
             or length(file.parse_eml(.).headers.hops) < 2
+            // the sender of the outer message is the recipient of the outer message
+            // and the sender and recipient of the inner message
+            or (
+              sender.email.email in map(recipients.to, .email.email)
+              and length(recipients.to) == 1
+              and sender.email.email == file.parse_eml(.).sender.email.email
+              and sender.email.email in map(file.parse_eml(.).recipients.to, .email.email) 
+              and length(file.parse_eml(.).recipients.to) == 1
+            )
+            
           )
           and not (
             all(file.parse_eml(.).body.links,
@@ -50,7 +84,6 @@ source: |
     )
     or sender.email.domain.root_domain not in $high_trust_sender_root_domains
   )
-
 attack_types:
   - "Credential Phishing"
 tactics_and_techniques:

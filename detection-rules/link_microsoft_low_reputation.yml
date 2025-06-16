@@ -71,7 +71,14 @@ source: |
        and any(ml.logo_detect(.).brands, strings.starts_with(.name, "Microsoft"))
    )
    or strings.istarts_with(strings.replace_confusables(body.current_thread.text), "Microsoft ")
-   or regex.imatch(strings.replace_confusables(body.current_thread.text), '[\n\s]*[o0O]ff[il1]ce\b.*')
+   or (
+     regex.imatch(strings.replace_confusables(body.current_thread.text),
+                  '[\n\s]*[o0O]ff[il1]ce\b.*'
+     )
+     and not regex.icontains(strings.replace_confusables(body.current_thread.text),
+                  'office (for lease|rent|sale)'
+     )
+   )
    or any(ml.logo_detect(beta.message_screenshot()).brands,
           strings.starts_with(.name, "Microsoft")
    )
@@ -362,6 +369,26 @@ source: |
               )
    ) == 0
    and subject.subject == strings.replace_confusables(subject.subject)
+ )
+
+ // negate org domains unless they fail DMARC authentication
+ and (
+   (
+     sender.email.domain.root_domain in $org_domains
+     and (
+       not headers.auth_summary.dmarc.pass
+       // MS quarantine digest emails from an org domain are router "internally" to MS, therefore, there is no authentication information
+       or not (
+         headers.auth_summary.dmarc.pass is null
+         and all(headers.domains,
+                 .root_domain in ("outlook.com", "office365.com")
+         )
+         // typical emails from freemail Outlook accounts are from prod.outlook.com
+         and strings.ends_with(headers.message_id, "protection.outlook.com>")
+       )
+     )
+   )
+   or sender.email.domain.root_domain not in $org_domains
  )
  
  // negate highly trusted sender domains unless they fail DMARC authentication

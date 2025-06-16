@@ -17,7 +17,9 @@ source: |
                           "*invited you to review*",
                           "*received a document*",
                           "*shared a document*",
-                          "*shared this document*"
+                          "*shared this document*",
+                          "*shared an item*",
+                          "*received this email because you*"
             )
         )
         or any(file.explode(beta.message_screenshot()),
@@ -27,7 +29,9 @@ source: |
                              "*invited you to review*",
                              "*received a document*",
                              "*shared a document*",
-                             "*shared this document*"
+                             "*shared this document*",
+                             "*shared an item*",
+                             "*received this email because you*"
                )
         )
       )
@@ -38,8 +42,10 @@ source: |
                       "*sign*",
                       "*review*"
         )
+        or any(recipients.to, strings.icontains(subject.subject, .email.domain.sld))
         or strings.ilike(subject.subject, "*Docs*", "*Sheets*", "*Slides*")
         or any(body.links, strings.icontains(.display_text, "open document"))
+        or strings.ilike(sender.display_name, "*Google Drive*")
         or subject.subject is null
         or subject.subject == ""
       )
@@ -93,13 +99,39 @@ source: |
            .file_type in $file_types_images
            and any(ml.logo_detect(.).brands, strings.starts_with(.name, "Google"))
     )
-    or (
-      strings.icontains(body.current_thread.text,
-                        strings.concat("You have received this email because ",
-                                       sender.email.email,
-                                       " shared a document with you"
-                        )
-      )
+    or strings.icontains(body.current_thread.text,
+                         strings.concat("You have received this email because ",
+                                        sender.email.email,
+                                        " shared a document with you"
+                         )
+    )
+    or strings.icontains(body.current_thread.text,
+                         strings.concat("You have received this email because ",
+                                        sender.email.email,
+                                        " received a file or folder"
+                         )
+    )
+    or any(recipients.to,
+           strings.icontains(body.current_thread.text,
+                             strings.concat("You have received this email because ",
+                                            .email.email,
+                                            " shared a document with you"
+                             )
+           )
+    )
+    or any(recipients.to,
+           strings.icontains(body.current_thread.text,
+                             strings.concat("You have received this email because ",
+                                            .email.email,
+                                            " received a file or folder"
+                             )
+           )
+    )
+    // Google address from footer
+    or 2 of (
+      strings.icontains(body.current_thread.text, 'Google LLC'),
+      strings.icontains(body.current_thread.text, '1600 Amphitheatre Parkway'),
+      strings.icontains(body.current_thread.text, 'Mountain View, CA 94043'),
     )
   )
   and not all(body.links, .href_url.domain.root_domain in ("google.com"))

@@ -5,8 +5,22 @@ severity: "medium"
 source: |
   type.inbound
   and sender.email.domain.domain not in $org_domains
-  and regex.icontains(sender.display_name,
-                      '(\bh\W?r\W?\b|human\s?resources|hr depart(ment)?|employee relations)'
+  and (
+    regex.icontains(sender.display_name,
+                    '(\bh\W?r\W?\b|human\s?resources|hr depart(ment)?|employee relations)'
+    )
+    or (
+      length(filter(ml.nlu_classifier(body.current_thread.text).entities,
+                    .name == "sender"
+             )
+      ) == 1
+      and any(ml.nlu_classifier(body.current_thread.text).entities,
+              .name == "sender"
+              and regex.icontains(.text,
+                                  '(\bh\W?r\W?\b|human\s?resources|hr depart(ment)?|employee relations)'
+              )
+      )
+    )
   )
   and not (
     strings.icontains(sender.display_name, sender.email.domain.domain)
@@ -19,8 +33,11 @@ source: |
     or not any(headers.hops, any(.fields, strings.ilike(.name, "In-Reply-To")))
   )
   // Negate common marketing mailers
-  and not regex.icontains(sender.display_name,
-                          'HR (?:Events|Expert|Support Center|Studies|Knowledge Cloud|News Library|Crowd|Solutions|Interests)|HR and People Operations'
+  and not (
+    sender.display_name is not null
+    and regex.icontains(sender.display_name,
+                        'HR (?:Events|Expert|Support Center|Studies|Knowledge Cloud|News Library|Crowd|Solutions|Interests)|HR and People Operations'
+    )
   )
   and not (
     any(headers.hops,
@@ -66,8 +83,19 @@ source: |
       and any(ml.nlu_classifier(body.current_thread.text).entities,
               .name == "request"
       )
-      and any(ml.nlu_classifier(body.current_thread.text).entities,
-              .name in ("urgency", "financial")
+      and (
+        any(ml.nlu_classifier(body.current_thread.text).entities,
+            .name in ("urgency", "financial")
+        )
+        or (
+          any(beta.ml_topic(body.current_thread.text).topics,
+              .name == "Professional and Career Development"
+              and .confidence == "high"
+          )
+          and any(ml.nlu_classifier(body.current_thread.text).intents,
+                  .name != "benign"
+          )
+        )
       )
     )
     or (
@@ -109,30 +137,40 @@ source: |
   )
   // topic negation
   and not any(beta.ml_topic(body.current_thread.text).topics,
-            .name in (
-              "Newsletters and Digests",
-              "Advertising and Promotions",
-              "Educational and Research",
-            )
-            and .confidence == "high"
+              .name in (
+                "Newsletters and Digests",
+                "Advertising and Promotions",
+                "Educational and Research",
+              )
+              and .confidence == "high"
   )
   and (
-    profile.by_sender().prevalence in ("new", "outlier")
+    profile.by_sender_email().prevalence in ("new", "outlier")
     or (
       profile.by_sender().any_messages_malicious_or_spam
       and not profile.by_sender().any_false_positives
     )
+    or sender.email.email in (
+      "adobesign@adobesign.com",
+      "noreply@salesforce.com",
+      "support@salesforce.com",
+      "no-reply@salesforce.com"
+    ) // abused services
   )
   // negate highly trusted sender domains unless they fail DMARC authentication
   and (
     (
       sender.email.domain.root_domain in $high_trust_sender_root_domains
-      and not headers.auth_summary.dmarc.pass
+      and (
+        not headers.auth_summary.dmarc.pass
+        or (
+          headers.auth_summary.dmarc.pass is null
+          and not headers.auth_summary.spf.pass
+        )
+      )
     )
     or sender.email.domain.root_domain not in $high_trust_sender_root_domains
   )
-
-
 attack_types:
   - "BEC/Fraud"
   - "Credential Phishing"
