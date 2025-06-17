@@ -2,32 +2,7 @@ name: "Body HTML: Recipient SLD In HTML Class"
 description: "Detects when the recipient's domain name is concealed within HTML class attributes. The message comes from either an unauthenticated trusted sender or an untrusted source."
 type: "rule"
 severity: "medium"
-source: |
-  type.inbound
-  and any(recipients.to,
-          any(distinct(html.xpath(body.html, '//*[@class]/@class').nodes, .raw),
-              strings.icontains(.raw, ..email.domain.sld)
-          )
-          and .email.domain.root_domain not in $free_email_providers
-          and sender.email.domain.domain not in $org_domains
-          and length(.email.domain.sld) > 4
-  )
-  // negate replies and messages where the recipient is CC'ed
-  and not (
-    (
-      length(headers.references) > 0
-      or any(headers.hops, any(.fields, strings.ilike(.name, "In-Reply-To")))
-    )
-      or any(recipients.cc, .email.domain.root_domain == sender.email.domain.root_domain)
-  )
-  // negate highly trusted sender domains unless they fail DMARC authentication
-  and (
-    (
-      sender.email.domain.root_domain in $high_trust_sender_root_domains
-      and not headers.auth_summary.dmarc.pass
-    )
-    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
-  )
+source: "type.inbound\n// not an org_domain which passed dmarc\nand not (\n  sender.email.domain.domain in $org_domains and headers.auth_summary.dmarc.pass\n)\n// a single recipient\nand length(recipients.to) == 1\n// a large number of the class attributes contain the recipient's SLD\nand ratio(html.xpath(body.html, '//@class').nodes,\n          any(\n              // filter recipients \n              filter(recipients.to,\n                     .email.domain.root_domain not in $free_email_providers\n                     and length(.email.domain.sld) > 4\n              ),\n              strings.icontains(..raw, .email.domain.sld)\n          )\n) > 0.80\n\n// negate replies and messages where the recipient is CC'ed\nand not (\n  (\n    length(headers.references) > 0\n    or any(headers.hops, any(.fields, strings.ilike(.name, \"In-Reply-To\")))\n  )\n    or any(recipients.cc, .email.domain.root_domain == sender.email.domain.root_domain)\n)\n// negate highly trusted sender domains unless they fail DMARC authentication\nand (\n  (\n    sender.email.domain.root_domain in $high_trust_sender_root_domains\n    and not headers.auth_summary.dmarc.pass\n  )\n  or sender.email.domain.root_domain not in $high_trust_sender_root_domains\n)\n"
 attack_types:
   - "Credential Phishing"
 tactics_and_techniques:
@@ -40,4 +15,4 @@ detection_methods:
 id: "42e0b548-7d6d-5007-954e-43f8ea76e1b5"
 og_id: "d395e41d-534f-5a55-9dce-57f5d0856bf7"
 testing_pr: 2711
-testing_sha: 65f37972762bcedbd67b84fbb0642af6e6376ca0
+testing_sha: 07c4c8e7db989ff1ce2fe069773d30dbbdeb74e9
