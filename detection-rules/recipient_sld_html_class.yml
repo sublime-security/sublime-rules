@@ -4,14 +4,24 @@ type: "rule"
 severity: "medium"
 source: |
   type.inbound
-  and any(recipients.to,
-          any(distinct(html.xpath(body.html, '//*[@class]/@class').nodes, .raw),
-              strings.icontains(.raw, ..email.domain.sld)
-          )
-          and .email.domain.root_domain not in $free_email_providers
-          and sender.email.domain.domain not in $org_domains
-          and length(.email.domain.sld) > 4
+  // not an org_domain which passed dmarc
+  and not (
+    sender.email.domain.domain in $org_domains and headers.auth_summary.dmarc.pass
   )
+  // a single recipient
+  and length(recipients.to) == 1
+  // a large number of the class attributes contain the recipient's SLD
+  and ratio(html.xpath(body.html, '//@class').nodes,
+            any(
+                // filter recipients 
+                filter(recipients.to,
+                       .email.domain.root_domain not in $free_email_providers
+                       and length(.email.domain.sld) > 4
+                ),
+                strings.icontains(..raw, .email.domain.sld)
+            )
+  ) > 0.80
+
   // negate replies and messages where the recipient is CC'ed
   and not (
     (
