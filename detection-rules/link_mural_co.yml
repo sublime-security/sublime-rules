@@ -1,0 +1,30 @@
+name: "Link: Single Direct Link to mural.co"
+description: "Detects when a Mural collaboration board link is shared from a sender outside muralapp.co"
+type: "rule"
+severity: ""
+source: |
+  type.inbound
+  and any(body.links, .href_url.domain.domain == "app.mural.co")
+  // a single link 
+  and length(distinct(filter(body.links,
+                             .href_url.domain.domain == "app.mural.co"
+                             and strings.istarts_with(.href_url.path, '/t/')
+                      ),
+                      .href_url.url
+             )
+  ) == 1
+  and not (
+    sender.email.domain.domain == "muralapp.co"
+    and headers.auth_summary.dmarc.pass
+  )
+  and headers.in_reply_to is null
+  and length(headers.references) == 0
+
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Social engineering"
+detection_methods:
+  - "URL analysis"
+  - "Header analysis"
+  - "Sender analysis"
