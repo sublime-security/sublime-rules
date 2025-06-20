@@ -234,14 +234,20 @@ source: |
       regex.icontains(body.html.raw, 'rgb\(([0-4]),\s?(18[0-1]),\s?(24[0])\)'),
       regex.icontains(body.html.raw, 'rgb\((25[0-5]),\s?(20[0-2]),\s?([0-7])\)')
     )
-    or regex.icontains(body.html.raw,
-                       '<a[^>]+style="[^"]*background-color:\s*#[0-9A-F]{2}[5-9A-F]{2}[0-9A-F]{2}[^"]*"[^>]*>[^<]*(?:open)[^<]*</a>' // blue button containing the word "open"
-    )
     or (
       any(recipients.to,
           strings.icontains(body.current_thread.text,
                             strings.concat(.email.domain.sld,
                                            " shared a file with you"
+                            )
+          )
+      )
+    )
+    or (
+      any(recipients.to,
+          strings.icontains(body.current_thread.text,
+                            strings.concat("This link will work for ",
+                                           .email.email
                             )
           )
       )
@@ -253,13 +259,11 @@ source: |
         // This rule makes use of a beta feature and is subject to change without notice
         // using the beta feature in custom rules is not suggested until it has been formally released
         // 
-                    
+  
         // alt text for the global icon
-        length(beta.html_xpath(body.html, '//img[@alt="permission globe icon"]').nodes
-        ) > 0
+        length(html.xpath(body.html, '//img[@alt="permission globe icon"]').nodes) > 0
         // reference to the global icon id
-        or length(beta.html_xpath(body.html, '//img[@id="Picture_x0020_1"]').nodes
-        ) > 0
+        or length(html.xpath(body.html, '//img[@id="Picture_x0020_1"]').nodes) > 0
         // a comment reference the globe icon
         or strings.icontains(body.html.raw,
                              ' <!-- Permission globe icon placeholder -->'
@@ -270,12 +274,22 @@ source: |
                            'This invite will only work for you and people with existing access'
       )
     )
-    or 2 of 
-      (
-           strings.icontains(body.current_thread.text, 'Microsoft respects your privacy'),
-           strings.icontains(body.current_thread.text, 'please read our Privacy Statement'),
-           strings.icontains(body.current_thread.text, 'Microsoft Corporation, One Microsoft Way, Redmond, WA 98052'),
-      )
+    or any(html.xpath(body.html,
+                      "//*[contains(translate(@style, 'ABCDEF', 'abcdef'), 'color:#605e5c')]"
+           ).nodes,
+           .display_text =~ "Privacy Statement"
+    )
+    or 2 of (
+      strings.icontains(body.current_thread.text,
+                        'Microsoft respects your privacy'
+      ),
+      strings.icontains(body.current_thread.text,
+                        'please read our Privacy Statement'
+      ),
+      strings.icontains(body.current_thread.text,
+                        'Microsoft Corporation, One Microsoft Way, Redmond, WA 98052'
+      ),
+    )
   )
   
   // Negate messages when the message-id indciates the message is from MS actual. DKIM/SPF domains can be custom and therefore are unpredictable.
@@ -313,6 +327,33 @@ source: |
     // ignore microsoft privacy statement links
     "aka.ms"
   )
+
+  and (
+    not (
+      (
+        strings.istarts_with(subject.subject, "RE:")
+        or strings.istarts_with(subject.subject, "R:")
+        or strings.istarts_with(subject.subject, "ODG:")
+        or strings.istarts_with(subject.subject, "答复:")
+        or strings.istarts_with(subject.subject, "AW:")
+        or strings.istarts_with(subject.subject, "TR:")
+        or strings.istarts_with(subject.subject, "FWD:")
+        or regex.imatch(subject.subject, '(\[[^\]]+\]\s?){0,3}(re|fwd?)\s?:')
+        or regex.imatch(subject.subject,
+                        '^\[?(EXT|EXTERNAL)\]?[: ]\s*(RE|FWD?|FW|AW|TR|ODG|答复):.*'
+        )
+      )
+      and (
+        (
+          length(headers.references) > 0
+          or any(headers.hops, any(.fields, strings.ilike(.name, "In-Reply-To")))
+        )
+        // ensure that there are actual threads
+        and (length(body.html.display_text) - length(body.current_thread.text)) > 200
+      )
+    )
+    or length(body.current_thread.text) == 0
+  )
   
   // negate highly trusted sender domains unless they fail DMARC authentication
   and (
@@ -325,6 +366,7 @@ source: |
   and (
     profile.by_sender().solicited == false
     or profile.by_sender_email().prevalence == "new"
+    or profile.by_sender_email().days_since.last_contact > 30
     or (
       profile.by_sender().any_messages_malicious_or_spam
       and not profile.by_sender().any_false_positives
