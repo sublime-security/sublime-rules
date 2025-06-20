@@ -1,0 +1,39 @@
+name: "Suspicious URL Shortener: Cloud Storage and Business Documents"
+description: "Detects links combining cloud storage services and URL shorteners, particularly in business contexts like invoices and estimates, or in threads with financial approval language from untrusted senders."
+type: "rule"
+severity: ""
+source: |
+  type.inbound
+  and (
+    // High-confidence: Suspicious cloud storage + URL shortener combo in business context
+    (
+      any(body.links, strings.icontains(.href_url.domain.domain, "tellwise-sites.s3.amazonaws.com"))
+      and any(body.links, .href_url.domain.domain in~ $url_shorteners)
+      and any(["estimate", "invoice", "proposal", "repair", "service"], strings.icontains(subject.subject, .))
+      and not sender.email.domain.domain in~ $high_trust_sender_root_domains
+    )
+    or
+    // Medium-confidence: Multiple suspicious indicators together
+    (
+      (strings.istarts_with(subject.subject, "RE:") or strings.istarts_with(subject.subject, "FW:"))
+      and any(["approved", "please schedule", "NTE $"], strings.icontains(body.plain.raw, .))
+      and any(body.links, strings.icontains(.href_url.url, "dub.sh"))
+      and not sender.email.domain.domain in~ $high_trust_sender_root_domains
+    )
+  )
+
+attack_types:
+  - "BEC/Fraud"
+  - "Callback Phishing"
+  - "Credential Phishing"
+  - "Extortion"
+  - "Malware/Ransomware"
+  - "Spam"
+tactics_and_techniques:
+  - "Social engineering"
+  - "Evasion"
+detection_methods:
+  - "Content analysis"
+  - "Header analysis"
+  - "URL analysis"
+  - "Sender analysis"
