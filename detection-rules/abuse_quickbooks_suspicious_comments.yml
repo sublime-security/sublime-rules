@@ -7,24 +7,32 @@ source: |
   
   // Legitimate Intuit sending infratructure
   and sender.email.email == "quickbooks@notification.intuit.com"
-  and headers.auth_summary.spf.pass
-  and headers.auth_summary.dmarc.pass
-  and strings.ends_with(headers.auth_summary.spf.details.designator,
-                         '.intuit.com'
-  )
-  
-  // remove payment confirmation messages
-  and not strings.starts_with(subject.subject, 'Payment confirmation:')
-  
   and body.html.raw is not null
   // Comments contains suspicious phrases
-  and (
-    // three different templates where commonly observed, on regex for each template
-    // this could optionally be converted into a "2 of" logic against current_thread if FN are discovered
-    regex.icontains(body.html.raw, '<div class="condensed-email-message-section" style="font-size: 1em; line-height: 1.5em; text-align: center; margin: 2.25em 0;">\s*<span id="condensedEmailMessageSectionContentWebPlayer">.*\b(?:your subscription renewal|couldn.?t be processed|trouble renewing subscription|update your details|just update your|continue your subscription|prefer to use EFT|change payment method|verify your account|suspended due to issue|payment declined notice|account needs verification|confirm your billing|immediate action required|failed payment notification|billing information update|service interruption warning|unable to process payment|subscription payment failed|action needed now|update banking information|subscription expiration notice|payment method change)\b.*</span></div>')
-    or regex.icontains(body.html.raw, '<div id="emailContainer" class="emailContainer" style="font-size: 18px; line-height: 1.5; text-align: left; padding-left: 20px; margin-left: 20px;">.*\b(?:your subscription renewal|couldn.?t be processed|trouble renewing subscription|update your details|just update your|continue your subscription|prefer to use EFT|change payment method|verify your account|suspended due to issue|payment declined notice|account needs verification|confirm your billing|immediate action required|failed payment notification|billing information update|service interruption warning|unable to process payment|subscription payment failed|action needed now|update banking information|subscription expiration notice|payment method change)\b.*</div>')
-    or regex.icontains(body.html.raw, '<table width=\"700\" border=\"0\" cellspacing=\"0\" cellpadding=\"0\" style=\"margin-bottom:10px; font-family:Arial, Helvetica, sans-serif; font-size:12px\">(?:\s*<tbody>)?\s*<tr>\s*<td>\s*.*\b(?:your subscription renewal|couldn.?t be processed|trouble renewing subscription|update your details|just update your|continue your subscription|prefer to use EFT|change payment method|verify your account|suspended due to issue|payment declined notice|account needs verification|confirm your billing|immediate action required|failed payment notification|billing information update|service interruption warning|unable to process payment|subscription payment failed|action needed now|update banking information|subscription expiration notice|payment method change)\b.*</td>')
-  )
+  and not (
+    // several different templates where commonly observed, run regex for each template
+    any([
+          html.xpath(body.html,
+                     '//span[@id="condensedEmailMessageSectionContentWebPlayer"]'
+          ).nodes,
+          html.xpath(body.html, '//div[@id="emailContainer"]').nodes,
+          html.xpath(body.html, '//table[@width="700"][1]//tr/td').nodes,
+          html.xpath(body.html, '//tr[@class="email-header"]').nodes,
+          html.xpath(body.html, '//tr[@class="email-center"]').nodes,
+          html.xpath(body.html, '//div[@class="mlr22"]').nodes,
+          html.xpath(body.html, '//td[@class="itemDesc"]//div').nodes,
+          html.xpath(body.html, '//td[@class="shippingContent"]//div').nodes
+        ],
+        any(.,
+            regex.icontains(.inner_text,
+                            // subscription, renewals, verificaitons, etc
+                            '(?:your subscription renewal|couldn.?t be processed|trouble renewing subscription|update your details|just update your|continue your subscription|prefer to use EFT|change payment method|verify your account|suspended due to issue|payment declined notice|account needs verification|confirm your billing|immediate action required|failed payment notification|billing information update|service interruption warning|unable to process payment|subscription payment failed|action needed now|update banking information|subscription expiration notice|payment method change)', 
+                            // callback wording
+                            'recognize this seller?|For more info.{0,25}Call|To cancel.{0,25}Call|did not authorize',
+            )
+        )
+    )
+  ) 
 attack_types:
   - "Callback Phishing"
   - "Credential Phishing"
