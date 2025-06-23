@@ -8,40 +8,43 @@ source: |
   and any(body.links,
           .href_url.domain.domain == "chatbot.page"
           // pull out the <script> block that contains the JSON
-          and any(html.xpath(ml.link_analysis(.).final_dom,
-                             '//script[contains(text(), "window.form")]'
-                  ).nodes,
-                  // parse out the JSON
-                  any(regex.extract(.raw, 'window.form = (?P<json>{.*})'),
-                      // user didn't fill out any contact info, indicative of abuse
-                      // a legitimate business would complete this information
-                      strings.parse_json(.named_groups['json'])['emailSignature']['name'] == 'John Doe'
-                      // a legitimate business would likely not be on the free plan
-                      or strings.parse_json(.named_groups['json'])['config']['userPlan'] == 'free'
-                      or (
-                        // only 1 question
-                        length(strings.parse_json(.named_groups['json'])['questions']
-                        ) == 1
-                        // pull out the link(s) in the question
-                        and any(strings.parse_json(.named_groups['json'])['questions'],
-                                any(.['links'],
-                                    // NLU on link display text
-                                    any(ml.nlu_classifier(.['text']).intents,
-                                        .name == "cred_theft"
-                                    )
-                                    // LA on the link itself
-                                    or ml.link_analysis(strings.parse_url(.['value']
-                                                        ),
-                                                        mode="aggressive"
-                                    ).credphish.disposition == "phishing"
-                                )
-                        )
+          and (
+            any(html.xpath(ml.link_analysis(.).final_dom,
+                           '//script[contains(text(), "window.form")]'
+                ).nodes,
+                // parse out the JSON
+                any(regex.extract(.raw, 'window.form = (?P<json>{.*})'),
+                    // user didn't fill out any contact info, indicative of abuse
+                    // a legitimate business would complete this information
+                    strings.parse_json(.named_groups['json'])['emailSignature']['name'] == 'John Doe'
+                    // a legitimate business would likely not be on the free plan
+                    or strings.parse_json(.named_groups['json'])['config']['userPlan'] == 'free'
+                    or (
+                      // only 1 question
+                      length(strings.parse_json(.named_groups['json'])['questions']
+                      ) == 1
+                      // pull out the link(s) in the question
+                      and any(strings.parse_json(.named_groups['json'])['questions'],
+                              any(.['links'],
+                                  // NLU on link display text
+                                  any(ml.nlu_classifier(.['text']).intents,
+                                      .name == "cred_theft"
+                                  )
+                                  // LA on the link itself
+                                  or ml.link_analysis(strings.parse_url(.['value']
+                                                      ),
+                                                      mode="aggressive"
+                                  ).credphish.disposition == "phishing"
+                              )
                       )
-                  )
+                    )
+                )
+            )
+            or strings.icontains(ml.link_analysis(.).final_dom.display_text,
+                                 "This chatbot has been blocked by the administrator"
+            )
           )
   )
-  
-
 attack_types:
   - "Credential Phishing"
 tactics_and_techniques:
