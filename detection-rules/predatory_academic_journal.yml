@@ -4,7 +4,6 @@ type: "rule"
 severity: "medium"
 source: |
   type.inbound
-  and length(body.previous_threads) == 0
   and any(beta.ml_topic(body.current_thread.text).topics,
           .name == "Educational and Research"
           and .confidence in ("medium", "high")
@@ -73,7 +72,9 @@ source: |
     // Presumably, this is because names are listed that way on academic papers
     strings.icontains(body.current_thread.text, mailbox.last_name)
     and not strings.icontains(body.current_thread.text, mailbox.first_name)
-    and not any(recipients.to, strings.icontains(body.current_thread.text, .email.email))
+    and not any(recipients.to,
+                strings.icontains(body.current_thread.text, .email.email)
+    )
     and length(mailbox.last_name) > 4,
   
     // Or, message contains the users last, first
@@ -87,11 +88,24 @@ source: |
     network.whois(sender.email.domain).days_old < 90,
     any(body.links, network.whois(.href_url.domain).days_old < 90),
   
+    // Crossref DOI registration abuse (https://doi.org/10.29328)
+    any(body.links,
+        .href_url.domain.root_domain == "doi.org"
+        and strings.istarts_with(.href_url.path, '/10.29328')
+    ),
+  
+    // Sender does not match original thread sender
+    length(body.previous_threads) > 0
+    and any(regex.iextract(body.html.display_text, 'From: (?P<email_address>\S*)'),
+            strings.parse_email(.named_groups['email_address']).email != sender.email.email
+    ),
+  
     // Chinese registrant country
     network.whois(sender.email.domain).registrant_country_code == "CN",
     any(body.links,
         network.whois(.href_url.domain).registrant_country_code == "CN"
     ),
+  
     // Alibaba infrastructure
     any(headers.domains, .root_domain in ("aliyun.com", "aliyun-inc.com")),
   
