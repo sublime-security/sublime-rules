@@ -1,0 +1,51 @@
+name: "Suspicious Links to Cloudflare R2 and Edge Services"
+description: "Detects links to Cloudflare R2 storage buckets, Pages, and Workers domains from unsolicited or previously malicious senders who are not on a trusted sender list or have failed DMARC authentication."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and any(body.links,
+          // R2 buckets with pub-{32hex}.r2.dev pattern
+          regex.icontains(.href_url.url, 'https://pub-[a-f0-9]{32}\.r2\.dev')
+          // generic r2.dev domains
+          or strings.icontains(.href_url.domain.root_domain, "r2.dev")
+          // Cloudflare Pages
+          or strings.icontains(.href_url.domain.root_domain, "pages.dev")
+          // Cloudflare Workers
+          or strings.icontains(.href_url.domain.root_domain, "workers.dev")
+  )
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and not headers.auth_summary.dmarc.pass
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+  and (
+    not profile.by_sender().solicited
+    or (
+      profile.by_sender().any_messages_malicious_or_spam
+      and not profile.by_sender().any_false_positives
+    )
+  )
+  and not profile.by_sender().any_false_positives
+tags:
+  - "Attack surface reduction"
+attack_types:
+  - "BEC/Fraud"
+  - "Callback Phishing"
+  - "Credential Phishing"
+  - "Extortion"
+  - "Malware/Ransomware"
+  - "Spam"
+tactics_and_techniques:
+  - "Free file host"
+detection_methods:
+  - "Header analysis"
+  - "Sender analysis"
+  - "URL analysis"
+id: "68b8721d-eac5-5c3d-3e69-569ef4b4ae17"
+og_id: "5dd3e5c8-7c81-5e2f-8e2b-ef21ea77bf73"
+testing_pr: 2853
+testing_sha: 6d33c88ae5941a605aaec61ed3c46905bf7eceb9
