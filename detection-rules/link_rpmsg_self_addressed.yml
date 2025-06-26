@@ -1,0 +1,32 @@
+name: "Link: Microsoft Protected Message with Matching Sender and Recipient Addresses "
+description: "Detects when a user receives a protected message (RPMSG) with the to and from headers matching."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  // contains the rpmsg
+  and any(attachments,
+          .file_extension == "rpmsg"
+          or .content_type == "application/x-microsoft-rpmsg-message"
+  )
+  // contains the proper link
+  and any(body.links,
+          .href_url.domain.root_domain == "office365.com"
+          and strings.icontains(.href_url.query_params, "InternetMessageID=")
+  )
+  // the To and From headers are the same
+  and length(recipients.to) == 1 
+  and all(recipients.to, .email.email == sender.email.email)
+tags:
+ - "Attack surface reduction"
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Evasion"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "File analysis"
+  - "Header analysis"
+  - "Sender analysis"
+  - "URL analysis"
