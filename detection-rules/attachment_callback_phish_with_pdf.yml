@@ -33,7 +33,43 @@ source: |
             .file_extension == "pdf"
             // get the length of the attached pdf
             and any(file.explode(.),
-                    .depth == 0 and .scan.exiftool.page_count < 3
+                    .depth == 0
+                    and .scan.exiftool.page_count < 3
+                    and (
+                      not (
+                        strings.istarts_with(.scan.exiftool.producer,
+                                             "Aspose.Words for Java"
+                        )
+                        and (
+                          .scan.exiftool.creator == "Anusha T"
+                          or any(.scan.exiftool.fields,
+                                 .key == "Author" and .value == "Anusha T"
+                          )
+                        )
+                      )
+                      or .scan.exiftool.producer is null
+                      or .scan.exiftool.creator is null
+                    )
+            )
+            // negate ML matches to "Professional and Career Development" - tuning resume FPs
+            and not (
+              any(beta.ml_topic(coalesce(body.html.display_text, body.plain.raw)).topics,
+                  .name == "Professional and Career Development"
+                  and .confidence == "high"
+              )
+              or (
+                (
+                  any(attachments,
+                      .file_type == 'pdf'
+                      and any(file.explode(.),
+                              any(beta.ml_topic(.scan.ocr.raw).topics,
+                                  .name == "Professional and Career Development"
+                                  and .confidence == "high"
+                              )
+                      )
+                  )
+                )
+              )
             )
             // check that any _single_ result in the file.explode matches these conditions
             // a second file.explode is required because the OCR is generated at a different depth within 
