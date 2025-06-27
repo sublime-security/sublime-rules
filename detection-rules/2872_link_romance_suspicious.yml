@@ -1,0 +1,36 @@
+name: "Link: Romance/Sexual Language With Suspicious Link"
+description: "Detects messages containing romantic or adult-themed language, combined with links to newly registered domains or suspicious reply-to addresses."
+type: "rule"
+severity: "low"
+source: |
+  type.inbound
+  and any(beta.ml_topic(body.current_thread.text).topics,
+          .name in ("Romance", "Sexually Explicit Messages")
+  )
+  and 1 of (
+    any(body.links, network.whois(.href_url.domain).days_old < 30),
+    any(headers.reply_to, network.whois(.email.domain).days_old < 30),
+    any(headers.reply_to,
+        .email.domain.root_domain != sender.email.domain.root_domain
+    )
+  )
+  and 0 < length(distinct(body.links,
+                          .href_url.domain.root_domain not in ("aka.ms")
+                 )
+  ) < 3
+  and all(body.links,
+          .href_url.domain.root_domain != sender.email.domain.root_domain
+  )
+attack_types:
+  - "Spam"
+tactics_and_techniques:
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Header analysis"
+  - "URL analysis"
+  - "Whois"
+id: "56977dd0-084b-585b-d135-3cb2e945fd1a"
+og_id: "d5694cae-bee8-588e-8123-2c3e3459118b"
+testing_pr: 2872
+testing_sha: f3a1ec776bee2a270020f7631d6b81c1016ed949
