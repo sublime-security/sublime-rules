@@ -1,0 +1,21 @@
+name: "Service Abuse: DocuSign Share From an Unsolicited Reply-To Address"
+description: "DocuSign shares which contain a reply-to address or domain that has not been previously observed by the recipient organization."
+type: "rule"
+severity: "medium"
+source: "type.inbound\n\n// message is from docusign actual\nand sender.email.domain.root_domain == 'docusign.net'\nand not any(headers.reply_to, .email.domain.domain == 'docusign.com')\nand (headers.auth_summary.spf.pass or headers.auth_summary.dmarc.pass)\n\n\n// not a completed DocuSign\n// reminders are sent automatically and can be just as malicious as the initial\n// users often decline malicious ones\nand not strings.istarts_with(subject.subject, \"Completed: \")\nand not strings.istarts_with(subject.subject, \"Here is your signed document: \")\nand not strings.istarts_with(subject.subject, \"Voided: \")\n\n// \n// This rule makes use of a beta feature and is subject to change without notice\n// using the beta feature in custom rules is not suggested until it has been formally released\n// \n\n// reply-to address rarely seen in org\nand beta.profile.by_reply_to().prevalence in~ (\"new\", \"rare\")\n\n// reply-to email address has never been sent an email by the org\nand not beta.profile.by_reply_to().solicited\n\n// do not match if the reply_to address has been observed as a reply_to address\n// of a message that has been classified as benign\nand not beta.profile.by_reply_to().any_messages_benign\n"
+tags:
+  - "Attack surface reduction"
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Evasion"
+  - "Free file host"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Header analysis"
+  - "Sender analysis"
+id: "8b5e9974-caeb-5e3f-58e1-343b945d0299"
+og_id: "2f12d616-f47a-5259-8946-ac2e01940f6f"
+testing_pr: 2873
+testing_sha: b52dafe1a84cad558969502c5a92cbf30e8b24bb
