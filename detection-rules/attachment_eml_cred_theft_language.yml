@@ -7,14 +7,30 @@ source: |
   // we don't look for links because it could be a QR code
   and any(attachments,
           (.content_type == "message/rfc822" or .file_extension =~ "eml")
-          // credential theft language in the attached EML
-          and any(ml.nlu_classifier(file.parse_eml(.).body.current_thread.text).intents,
-                  .name == "cred_theft" and .confidence == "high"
+          and (
+            // credential theft language in the attached EML
+            any(ml.nlu_classifier(file.parse_eml(.).body.current_thread.text).intents,
+                .name == "cred_theft" and .confidence == "high"
+            )
+            // credential theft language in an attachment in the attached EML
+            or any(file.parse_eml(.).attachments,
+                   any(ml.nlu_classifier(beta.ocr(.).text).intents,
+                       .name == "cred_theft" and .confidence == "high"
+                   )
+            )
           )
+          and not file.parse_eml(.).sender.email.domain.root_domain in $org_domains
           and not strings.like(file.parse_eml(.).sender.email.local_part,
                                "*postmaster*",
                                "*mailer-daemon*",
                                "*administrator*"
+          )
+          // some systems attach the bounceback this way
+          and not any(file.parse_eml(.).attachments,
+                      .content_type in (
+                        "message/delivery-status",
+                        "message/feedback-report"
+                      )
           )
           // negate Mimecast Attachment Protection
           and not (
@@ -29,7 +45,7 @@ source: |
           and not (
             length(file.parse_eml(.).attachments) == 0
             and strings.icontains(file.parse_eml(.).body.current_thread.text,
-                                         "Your attachments are currently being scanned by Safe Attachments"
+                                  "Your attachments are currently being scanned by Safe Attachments"
             )
           )
   )
@@ -40,7 +56,12 @@ source: |
                        "*administrator*"
   )
   and not regex.icontains(subject.subject, "^(undelivered|undeliverable|read:)")
-  and not any(attachments, .content_type in ("message/delivery-status", "message/feedback-report"))
+  and not any(attachments,
+              .content_type in (
+                "message/delivery-status",
+                "message/feedback-report"
+              )
+  )
   // if the "References" is in the body of the message, it's probably a bounce
   and not any(headers.references, strings.contains(body.html.display_text, .))
   and (
