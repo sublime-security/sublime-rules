@@ -1,0 +1,64 @@
+name: "Link: Single JotForm Link"
+description: "Detects messages containing exactly one JotForm link and up to three other external URLs, excluding common social media, mapping services, and organizational domains."
+type: "rule"
+severity: "low"
+source: |
+  type.inbound
+  // a single jotform domain
+  and length(distinct(filter(body.links,
+                             .href_url.domain.root_domain == "jotform.com"
+                      ),
+                      .href_url.url
+             )
+  ) == 1
+  // few other links
+  and length(distinct(filter(body.links,
+                             // remove any links that include org domains
+                             not .href_url.domain.domain in $org_domains
+
+                             // remove any links that are to common "signature" sites
+                             // this does open up some FNs due to abuse of redirects of these sites
+                             // if FNs are obsevered, we should tighten the logic of these to account
+                             // for the redirect behavior
+                             and not any([
+                                           'facebook.com',
+                                           'x.com',
+                                           'twitter.com',
+                                           'instagram.com',
+                                           'linkedin.com',
+                                           'maps.apple.com',
+                                           'maps.google.com'
+                                         ],
+                                         ..href_url.domain.root_domain == .
+                                         or ..href_url.domain.domain == .
+                             )
+
+                             // remove links which contain the sender domain if the sender doesn't have any malicious messages
+                             and not (
+                               sender.email.domain.root_domain == .href_url.domain.root_domain
+                               and not profile.by_sender_domain().any_messages_malicious_or_spam
+                             )
+                             // and not with receipient domain's (excluding warning banner
+                             and not .href_url.domain.root_domain in map(recipients.to,
+                                                                         .email.domain.root_domain
+                             )
+                      ),
+                      // distinct urls
+                      .href_url.url
+             )
+  ) <= 3
+tags:
+  - "Attack surface reduction"
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Social engineering"
+  - "Free file host"
+detection_methods:
+  - "URL analysis"
+  - "Header analysis"
+  - "Content analysis"
+id: "4e92549d-d64f-58fe-c4bc-7322e9a2a319"
+og_id: "6ee9defd-2929-5612-ad2a-0538839b8594"
+testing_pr: 2821
+testing_sha: b25cd9478802e49d30d0e64ec86b121a1b32b957
