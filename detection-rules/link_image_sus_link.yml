@@ -5,67 +5,71 @@ severity: "high"
 source: |
   type.inbound
   and 0 < length(attachments) < 10
+  // attachments within the html body
   and strings.contains(body.html.raw, 'cid:')
   and any(
-          // 
-          // This rule makes use of a beta feature and is subject to change without notice
-          // using the beta feature in custom rules is not suggested until it has been formally released
-          // 
-
-                    
-          // get all the links which have an attached image as a decendant
-          beta.html_xpath(body.html,
-                          '//a[descendant::img[starts-with(@src,"cid:")]]'
-          ).nodes,
+          // filter down attachments
+          filter(attachments,
+                 // to include only images displayed within the body
+                 strings.icontains(body.html.raw, .content_id)
+                 and .file_type in $file_types_images
+                 // large
+                 and .size > 5000
+                 // contain "long" OCR output
+                 and length(beta.ocr(.).text) > 50
+          ),
+          any(
+              // get all the links which have an attached image as a decendant
+              filter(html.xpath(body.html,
+                                '//a[descendant::img[starts-with(@src,"cid:")]]'
+                     ).nodes,
+                     strings.icontains(.raw, ..content_id)
+              ),
+              // and the link is sus
+              any(html.xpath(., '@href').nodes,
+                  // the link is within the body.current_thread
+                  strings.parse_url(.raw).url in map(body.current_thread.links,
+                                                     .href_url.url
+                  )
+                  // free file hosts
+                  and (
+                    strings.parse_url(.raw).domain.domain in $free_file_hosts
+                    or strings.parse_url(.raw).domain.root_domain in $free_file_hosts
+                    // url shortners
+                    or strings.parse_url(.raw).domain.domain in $url_shorteners
   
-          // extract the content id of the attached image from the img src
-          any(regex.extract(.raw, 'src=\"cid:(?P<cid>.*)\"'),
-              // loop through the attachments finding the linked image
-              any(filter(attachments,
-                         strings.contains(.content_id, ..named_groups["cid"])
-                  ),
-                  // the linked imagine is "large"
-                  .size > 5000
-                  and beta.parse_exif(.).image_height > 300
-                  and beta.parse_exif(.).image_width > 300
-              )
-              // // and the link is sus
-              and any(beta.html_xpath(.., '@href').nodes,
-              // free file hosts
-                          strings.parse_url(.raw).domain.domain in $free_file_hosts
-                          or strings.parse_url(.raw).domain.root_domain in $free_file_hosts
-                          // free subdomain hosts
-                          or strings.parse_email(.raw).domain.domain in $free_subdomain_hosts
-                          or strings.parse_email(.raw).domain.root_domain in $free_subdomain_hosts
-                          
-                          // TODO - Renable before merging
-                          // phishing
-                          // or ml.link _ analysis(strings.parse_url(.raw)).credphish.disposition == "phishing"
-                          // custom captcha thing
-                          //or strings.istarts_with(ml.link _ analysis(strings.parse_url(.raw
-                          //                                         )
-                          //                        ).final_dom.display_text,
-                          //                        "I'm Human"
-                          //)
-                          
-                          // newly registered domaina
-                          or network.whois(strings.parse_url(.raw).domain).days_old < 31
-                          // contains a the recipient email address
-                          or any(recipients.to,
-                                 .email.domain.valid
-                                 and (
-                                   // plain text
-                                   strings.icontains(..raw, .email.email)
-                                   // base64 encoded
-                                   or any(beta.scan_base64(strings.parse_url(..raw
-                                                           ).url,
-                                                           format="url",
-                                                           ignore_padding=true
-                                          ),
-                                          strings.icontains(., ..email.email)
-                                   )
-                                 )
-                          )
+                    // free subdomain hosts
+                    or strings.parse_email(.raw).domain.domain in $free_subdomain_hosts
+                    or strings.parse_email(.raw).domain.root_domain in $free_subdomain_hosts
+  
+                    // TODO - Renable before merging
+                    // phishing
+                    // or ml.link _ analysis(strings.parse_url(.raw)).credphish.disposition == "phishing"
+                    // custom captcha thing
+                    // or strings.istarts_with(ml.link _ analysis(strings.parse_url(.raw
+                    //                                         )
+                    //                        ).final_dom.display_text,
+                    //                        "I'm Human"
+                    // )
+  
+                    // newly registered domaina
+                    or network.whois(strings.parse_url(.raw).domain).days_old < 31
+                    // contains a the recipient email address
+                    or any(recipients.to,
+                           .email.domain.valid
+                           and (
+                             // plain text
+                             strings.icontains(..raw, .email.email)
+                             // base64 encoded
+                             or any(beta.scan_base64(strings.parse_url(..raw).url,
+                                                     format="url",
+                                                     ignore_padding=true
+                                    ),
+                                    strings.icontains(., ..email.email)
+                             )
+                           )
+                    )
+                  )
               )
           )
   )
