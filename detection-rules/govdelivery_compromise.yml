@@ -4,26 +4,26 @@ type: "rule"
 severity: "high"
 source: |
   type.inbound
-  and sender.email.domain.domain == "public.govdelivery.com"
-  and headers.auth_summary.spf.pass
-  and headers.auth_summary.dmarc.pass
+  and (
+    sender.email.domain.domain == "public.govdelivery.com"
+    or any(headers.domains, .root_domain == "govdelivery.com")
+  )
+  and (headers.auth_summary.spf.pass or headers.auth_summary.dmarc.pass)
   and length(body.links) < 10
   and any(body.links,
           any(filter(regex.extract(.href_url.path, '/CL0/(?P<url>.*?)/1/'),
                      strings.parse_url(.named_groups["url"]).domain.root_domain not in (
                        "google.com",
                        "govdelivery.com",
-                       "granicus.com"
+                       "granicus.com",
+                       "legistar1.com" // domain owned by granicus
                      )
                      and strings.parse_url(.named_groups["url"]).domain.tld not in (
                        "gov"
                      )
               ),
-              // this is inside the filter to avoid flagging this condition on known link domains, as listed above
-              any(ml.nlu_classifier(..display_text).intents,
-                  .name == "cred_theft"
-              )
-              or strings.parse_url(.named_groups["url"]).domain.domain in $url_shorteners
+              // this is inside the filtered results to avoid flagging this condition on known link domains, as listed above
+              strings.parse_url(.named_groups["url"]).domain.domain in $url_shorteners
               or strings.parse_url(.named_groups["url"]).domain.root_domain in $url_shorteners
               or strings.parse_url(.named_groups["url"]).domain.domain in $free_subdomain_hosts
               or strings.parse_url(.named_groups["url"]).domain.root_domain in $free_subdomain_hosts
@@ -41,7 +41,6 @@ source: |
               )
           )
   )
-
 attack_types:
   - "Credential Phishing"
   - "Malware/Ransomware"
