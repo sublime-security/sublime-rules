@@ -29,7 +29,17 @@ source: |
                        '^(?:(?:Final|Last)?\s*Warning|(?:Final|Last|Legal|Critical|Content Violation)?\s*(?:Alert|Noti(?:ce|fication))|Appeal Required|Time.Sensitive|Critical.Alert|Important|Copyright Issue)\s*:\s*'
     )
     or any(ml.logo_detect(beta.message_screenshot()).brands,
-           .name in ("Facebook", "Meta", "Instagram") and .confidence in ("medium", "high")
+           .name in ("Facebook", "Meta", "Instagram", "Threads") and .confidence in ("medium", "high")
+    )
+    // any of the links are for newly registered domains
+    or any(filter(body.links,
+                      .href_url.domain.domain not in $org_domains
+                      and .href_url.domain.root_domain not in (
+                        "salesforce.com",
+                        "force.com",
+                        "site.com" // salesforce CRM 
+                      )
+               ), network.whois(.href_url.domain).days_old < 30
     )
   )
   and 1 of (
@@ -168,6 +178,7 @@ source: |
                     "security breach",
                     "securlty",
                     "signed.*delivery",
+                    "social media",
                     "status of your .{314}? ?delivery",
                     "susp[il1]+c[il1]+ous.*act[il1]+v[il1]+ty",
                     "suspicious.*sign.*[io]n",
