@@ -11,22 +11,26 @@ source: |
     // sender display name is a strong enough indicator
     // that it can be used without any other impersonation logic
     (
-      strings.ilike(sender.display_name,
-                    '*facebook ads*',
-                    '*facebook business*',
-                    '*meta support*',
-                    '*meta for business*',
-                    '*meta policy*',
-                    'Instagram Not*',
-                    'Instagram Policies*',
-                    'Instagram Report*',
-                    'Instagram Helpdesk*',
-                    'Instagram Support*'
+      regex.icontains(sender.display_name,
+                    'facebook ?ads',
+                    'facebook ?business',
+                    'meta ?account',
+                    'meta ?support',
+                    'meta ?business',
+                    'meta ?for ?business',
+                    'meta ?policy',
+                    'page ?ads ?support',
+                    'Instagram ?Not',
+                    'Instagram ?Policies',
+                    'Instagram ?Report',
+                    'Instagram ?Helpdesk',
+                    'Instagram ?Support',
+                    'Ads ?Team'
       )
       or strings.ilevenshtein(sender.display_name, 'facebook ads') <= 2
       or strings.ilevenshtein(sender.display_name, 'facebook business') <= 2
       or (
-        strings.ilevenshtein(sender.display_name, 'meta support') <= 2
+        strings.levenshtein(sender.display_name, 'Meta Support') <= 2
         // negation for Zeta Support
         and not (
           sender.display_name == "Zeta Support"
@@ -35,20 +39,20 @@ source: |
       )
       or strings.ilike(sender.email.domain.domain, '*facebook*')
       or strings.ilike(sender.email.local_part,
-                    "*instagramlive*",
-                    "*facebooksupport*"
+                       "*instagramlive*",
+                       "*facebooksupport*"
       )
     )
     // the use of these keywords (facebook, meta, meta.*support)
-    // or the levenshtien distance to facebook
+    // or the levenshtein distance to facebook
     // are less strong and thus need to be combined with logo detection or nlu 
     or (
       (
         (
           regex.icontains(sender.display_name,
-                          '\bfacebook\b',
-                          '\bmeta\b',
-                          '\bmeta.*support\b',
+                          '\bf[\p{Mn}\p{Cf}]*a[\p{Mn}\p{Cf}]*c[\p{Mn}\p{Cf}]*e[\p{Mn}\p{Cf}]*b[\p{Mn}\p{Cf}]*o[\p{Mn}\p{Cf}]*o[\p{Mn}\p{Cf}]*k[\p{Mn}\p{Cf}]*\b',
+                          '\bm[\p{Mn}\p{Cf}]*e[\p{Mn}\p{Cf}]*t[\p{Mn}\p{Cf}]*a[\p{Mn}\p{Cf}]*\b',
+                          '\bm[\p{Mn}\p{Cf}]*e[\p{Mn}\p{Cf}]*t[\p{Mn}\p{Cf}]*a[\p{Mn}\p{Cf}]*.*support\b',
                           '\binstagr(am)?\b'
           )
           // negate metageek.com
@@ -61,11 +65,11 @@ source: |
       )
       and (
         any(ml.logo_detect(beta.message_screenshot()).brands,
-            .name in ("Facebook", "Meta", "Instagram")
+            .name in ("Facebook", "Meta", "Instagram", "Threads")
         )
         or any(ml.nlu_classifier(body.current_thread.text).intents,
                .name in ("cred_theft", "callback_scam", "steal_pii")
-               and .confidence in ("high")
+               and .confidence in ("medium", "high")
         )
       )
     )
@@ -73,18 +77,18 @@ source: |
     or (
       sender.email.domain.root_domain == "salesforce.com"
       and any(ml.logo_detect(beta.message_screenshot()).brands,
-              .name in ("Facebook", "Meta", "Instagram")
+              .name in ("Facebook", "Meta", "Instagram", "Threads")
       )
       and any(ml.nlu_classifier(body.current_thread.text).intents,
               .name in ("cred_theft", "callback_scam", "steal_pii")
-              and .confidence in ("high")
+              and .confidence in ("medium", "high")
       )
     )
     or 
     // or the body contains a facebook/meta footer with the address citing "community support" 
     (
       regex.icontains(body.current_thread.text,
-                      'Attention: Community Support, 1 (Facebook|Meta)?\s*Way, Menlo Park, CA 94025'
+                      '(1\s+(Facebook|Meta)?\s*Way|1601\s+Willow\s+Rd?).*Menlo\s+Park.*CA.*94025'
       )
       // and it contains a link to spawn a chat with facebook - this is not the way support operates
       and (
@@ -117,6 +121,25 @@ source: |
         )
       )
     )
+    // we've seen advertising "advice/recommendations"
+    or (
+      all(beta.ml_topic(body.current_thread.text).topics,
+          .name in ("Advertising and Promotions", "Reminders and Notifications")
+      )
+      // Meta mention
+      and (
+        any(ml.nlu_classifier(body.current_thread.text).entities,
+            .name == "org"
+            and strings.icontains(.text, 'Community Guidelines')
+        )
+        or regex.icontains(body.current_thread.text,
+                           '(1\s+(Facebook|Meta)?\s*Way|1601\s+Willow\s+Rd?).*Menlo\s+Park.*CA.*94025'
+        )
+      )
+      and any(ml.nlu_classifier(body.current_thread.text).entities,
+              .name == "urgency"
+      )
+    )
   )
   and sender.email.domain.root_domain not in~ (
     'facebook.com',
@@ -128,30 +151,13 @@ source: |
     'instagram.com',
     'medallia.com',
     'fbworkmail.com',
-    'workplace.com'
+    'workplace.com',
+    'capterra.com', // they mention "Community Guidelines"
+    'facebookblueprint.com'
   )
   // negate metaenterprise links
   and not any(headers.reply_to, .email.email == "noreply@facebookmail.com")
-  and (
-    (
-      profile.by_sender().prevalence != "common"
-      and not profile.by_sender().solicited
-    )
-    or sender.email.domain.domain in $replyto_service_domains
-    or (
-      profile.by_sender().any_messages_malicious_or_spam
-      and not profile.by_sender().any_messages_benign
-    )
-    // if saleforce is being abused, sender profiles aren't very useful
-    or sender.email.email in (
-      "noreply@salesforce.com",
-      "support@salesforce.com",
-      "no-reply@salesforce.com"
-    )
-    // sent via Google group
-    or any(headers.hops, any(.fields, .name == "X-Google-Group-Id"))
-  )
-  
+
   // negate highly trusted sender domains unless they fail DMARC authentication
   and (
     (

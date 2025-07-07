@@ -14,6 +14,12 @@ source: |
   )
   and (
     length(subject.subject) <= 10
+    // extract the "real subject" (strip off any external warning keywords)
+    or any(regex.iextract(subject.subject,
+                          '(?:^\[?(?:EXT|EXTERNAL)\]?[: ]\s*){0,3} ?(?P<real_subject>.*)'
+           ),
+           length(.named_groups['real_subject']) <= 10
+    )
     or (
       strings.ilike(subject.subject, "*checking*", "*testing*")
       and length(subject.subject) <= 25
@@ -39,6 +45,16 @@ source: |
       length(body.current_thread.text) < 900
       // or body is most likely all warning banner ending with a generic greeting
       and regex.imatch(body.current_thread.text, '.*(hi|hello)')
+    )
+    // body length without disclaimer is shorter than 50 characters
+    or (
+      any(map(filter(ml.nlu_classifier(body.current_thread.text).entities,
+                     .name == "disclaimer"
+              ),
+              .text
+          ),
+          (length(body.current_thread.text) - length(.)) < 50
+      )
     )
   )
   and profile.by_sender().prevalence != "common"

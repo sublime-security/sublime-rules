@@ -6,11 +6,22 @@ severity: "medium"
 source: |
   type.inbound
   and any(body.links,
-          .href_url.domain.domain == "ib.adnxs.com"
-          and strings.icontains(.href_url.path, '/getuid')
-          // Make sure the redirect is not going back to adnxs.com
-          and not regex.icontains(.href_url.query_params,
-                                  '(?:https?(?:%3a|:))?(?:%2f|\/){2}[^&]*adnxs\.com(?:\&|\/|$|%2f)'
+          (
+            .href_url.domain.domain == "ib.adnxs.com"
+            and strings.icontains(.href_url.path, '/getuid')
+            // Make sure the redirect is not going back to adnxs.com
+            and not regex.icontains(.href_url.query_params,
+                                    'getuid\?(?:https?(?:%3a|:))?(?:%2f|\/){2}[^&]*adnxs\.com(?:\&|\/|$|%2f)'
+            )
+          )
+          // second form of an open redirect
+          or (
+            .href_url.domain.domain == "secure.adnxs.com"
+            and strings.icontains(.href_url.query_params, 'redir=')
+            // Make sure the redirect is not going back to adnxs.com
+            and not regex.icontains(.href_url.query_params,
+                                    'redir=(?:https?(?:%3a|:))?(?:%2f|\/){2}[^&]*adnxs\.com(?:\&|\/|$|%2f)'
+            )
           )
   )
   and not sender.email.domain.root_domain == "adnxs.com"

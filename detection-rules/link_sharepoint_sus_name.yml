@@ -109,49 +109,6 @@ source: |
         or strings.icontains(.display_text, 'Employee Handbook')
         or strings.icontains(.display_text, 'Reimbursement Approved')
         or regex.icontains(.display_text, '(?:Faculty|Staff)\s*(?:\w+\s+){0,3}\s*Eval(?:uation)?')
-
-        // the document name is the same as the org name
-        // as determined by the footer 
-        or (
-          strings.icontains(body.current_thread.text,
-                            strings.concat('This email is generated through ',
-                                           .display_text
-                            )
-          )
-          and strings.icontains(body.current_thread.text,
-                                strings.concat("\'s use of Microsoft 365 and may contain content that is controlled by ",
-                                               .display_text
-                                )
-          )
-        )
-  
-        // use NLU to extract the org name from the Link and compare to the org
-        // as determined by the footer
-        or any(
-               // create a list of org names
-               // if the display_text contains things like "Acme Co. - RFQ"
-               // the "org" via NLU often becomes "Acme Co. -"
-               map(filter(ml.nlu_classifier(.display_text).entities,
-                          .name == "org"
-                          and .text is not null
-                          and not strings.icontains(.text, "Microsoft 365")
-                   ),
-                   .text
-               ),
-               // if we run NLU a second time, it cleans up the extra parts
-               any(ml.nlu_classifier(.).entities,
-                   strings.icontains(body.current_thread.text,
-                                     strings.concat('This email is generated through ',
-                                                    .text
-                                     )
-                   )
-                   and strings.icontains(body.current_thread.text,
-                                         strings.concat("\'s use of Microsoft 365 and may contain content that is controlled by ",
-                                                        .text
-                                         )
-                   )
-               )
-        )
     )
   )
   

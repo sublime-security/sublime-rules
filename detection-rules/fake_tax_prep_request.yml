@@ -5,6 +5,9 @@ severity: "high"
 source: |
   type.inbound
   and length(body.current_thread.text) < 1250
+  and any(beta.ml_topic(body.current_thread.text).topics,
+          .name == "Financial Communications"
+  )
   // there are no links, all the links are to aka.ms, or an extraction from a warning banner that match the senders domain
   and (
     length(body.links) == 0
@@ -19,7 +22,7 @@ source: |
     ) == length(body.links)
   )
   and length(attachments) == 0
-  and strings.ilike(subject.subject, "*tax*") 
+  and (strings.ilike(subject.subject, "*tax*") or length(subject.subject) < 15)
   and strings.icontains(body.current_thread.text, "tax")
   and (
     strings.like(body.current_thread.text,
@@ -29,13 +32,16 @@ source: |
                  "*filing*",
                  "*extension*"
     )
-    or strings.ilike(body.current_thread.text, "*tax preparer*", "*tax*processing*")
+    or strings.ilike(body.current_thread.text,
+                     "*tax preparer*",
+                     "*tax*processing*"
+    )
   )
   and (
     strings.ilike(body.current_thread.text,
                   "*necessary documents*",
                   "*required documents*",
-                  "*paperwork*need*",
+                  "*paperwork*",
                   "*in search of*",
                   "*tax service*",
                   "*professional help*",
@@ -45,7 +51,11 @@ source: |
                   "*assist*processing*tax*",
                   "*schedule*call*",
                   "*zoom meeting*",
-                  "*discuss*fees*"
+                  "*discuss*fees*",
+                  "*W2*",
+                  "*CPA*"
+                  
+                  
     )
     // suspicious patterns
     or (

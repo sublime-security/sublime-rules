@@ -4,8 +4,12 @@ type: "rule"
 severity: "medium"
 source: |
   type.inbound
-  and ( // sender domain matches no body domains
-    0 < length(body.links) < 10
+  and ( 
+    // few links
+    0 < length(body.links) < 20
+    // fewer unique root domain links
+    and length(distinct(body.links, .href_url.domain.root_domain)) < 10
+    // sender domain matches no body domains
     and all(body.links,
             .href_url.domain.root_domain != sender.email.domain.root_domain
     )
@@ -207,6 +211,7 @@ source: |
                        "Security",
                        "Service",
                        "Signature",
+                       "SSA",
                        "Storage",
                        "Support",
                        "Sweepstakes",
@@ -222,6 +227,7 @@ source: |
                        "Webmaster",
                        "Winner",
     )
+    or any(body.links, strings.ends_with(.href_url.url, ".exe"))
   )
   
   // link can't be scanned due to Cloudflare captcha
@@ -263,7 +269,7 @@ source: |
           )
   )
   and (
-    not profile.by_sender().solicited
+    not profile.by_sender_email().solicited
     or (
       profile.by_sender().any_messages_malicious_or_spam
       and not profile.by_sender().any_false_positives
