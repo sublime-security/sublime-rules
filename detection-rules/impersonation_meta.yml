@@ -11,20 +11,21 @@ source: |
     // sender display name is a strong enough indicator
     // that it can be used without any other impersonation logic
     (
-      strings.ilike(sender.display_name,
-                    '*facebook ads*',
-                    '*facebook business*',
-                    '*meta support*',
-                    '*meta business*',
-                    '*meta for business*',
-                    '*meta policy*',
-                    '*page ads support*',
-                    'Instagram Not*',
-                    'Instagram Policies*',
-                    'Instagram Report*',
-                    'Instagram Helpdesk*',
-                    'Instagram Support*',
-                    '*Ads Team'
+      regex.icontains(sender.display_name,
+                    'facebook ?ads',
+                    'facebook ?business',
+                    'meta ?account',
+                    'meta ?support',
+                    'meta ?business',
+                    'meta ?for ?business',
+                    'meta ?policy',
+                    'page ?ads ?support',
+                    'Instagram ?Not',
+                    'Instagram ?Policies',
+                    'Instagram ?Report',
+                    'Instagram ?Helpdesk',
+                    'Instagram ?Support',
+                    'Ads ?Team'
       )
       or strings.ilevenshtein(sender.display_name, 'facebook ads') <= 2
       or strings.ilevenshtein(sender.display_name, 'facebook business') <= 2
@@ -43,7 +44,7 @@ source: |
       )
     )
     // the use of these keywords (facebook, meta, meta.*support)
-    // or the levenshtien distance to facebook
+    // or the levenshtein distance to facebook
     // are less strong and thus need to be combined with logo detection or nlu 
     or (
       (
@@ -87,7 +88,7 @@ source: |
     // or the body contains a facebook/meta footer with the address citing "community support" 
     (
       regex.icontains(body.current_thread.text,
-                      '(1 (Facebook|Meta)?\s*Way|1601 Willow Road), Menlo Park, CA 94025'
+                      '(1\s+(Facebook|Meta)?\s*Way|1601\s+Willow\s+Rd?).*Menlo\s+Park.*CA.*94025'
       )
       // and it contains a link to spawn a chat with facebook - this is not the way support operates
       and (
@@ -132,7 +133,7 @@ source: |
             and strings.icontains(.text, 'Community Guidelines')
         )
         or regex.icontains(body.current_thread.text,
-                           '(1 (Facebook|Meta)?\s*Way|1601 Willow Road), Menlo Park, CA 94025'
+                           '(1\s+(Facebook|Meta)?\s*Way|1601\s+Willow\s+Rd?).*Menlo\s+Park.*CA.*94025'
         )
       )
       and any(ml.nlu_classifier(body.current_thread.text).entities,
@@ -151,30 +152,12 @@ source: |
     'medallia.com',
     'fbworkmail.com',
     'workplace.com',
-    'capterra.com' // they mention "Community Guidelines"
+    'capterra.com', // they mention "Community Guidelines"
+    'facebookblueprint.com'
   )
   // negate metaenterprise links
   and not any(headers.reply_to, .email.email == "noreply@facebookmail.com")
-  and (
-    (
-      profile.by_sender().prevalence != "common"
-      and not profile.by_sender().solicited
-    )
-    or sender.email.domain.domain in $replyto_service_domains
-    or (
-      profile.by_sender().any_messages_malicious_or_spam
-      and not profile.by_sender().any_messages_benign
-    )
-    // if saleforce is being abused, sender profiles aren't very useful
-    or sender.email.email in (
-      "noreply@salesforce.com",
-      "support@salesforce.com",
-      "no-reply@salesforce.com"
-    )
-    // sent via Google group
-    or any(headers.hops, any(.fields, .name == "X-Google-Group-Id"))
-  )
-  
+
   // negate highly trusted sender domains unless they fail DMARC authentication
   and (
     (
