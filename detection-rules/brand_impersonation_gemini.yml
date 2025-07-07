@@ -6,19 +6,23 @@ source: |
   type.inbound
   and (
     // the address in the footer
-    regex.icontains(body.html.display_text,
-                    "600 Third Avenue.{1,2}2nd Floor.{1,2}New York, NY"
-    )
-    or strings.icontains(body.html.display_text,
-                    "Gemini Trust Company"
+    (
+      regex.icontains(body.html.display_text,
+                      "600 Third Avenue.{1,2}2nd Floor.{1,2}New York, NY"
+      )
+      and strings.icontains(body.html.display_text, "Gemini Trust Company")
     )
     // logo detect combined with sender display name 
     // need to be more specific here due to other uses of the word "Gemini"
-    // or (
-    //   sender.display_name  =~ "Gemini"
-    //   and any(ml.logo_detect(beta.message_screenshot()).brands, .name == "Gemini" and .confidence != "low")
-    // )
-    
+    or (
+      sender.display_name =~ "Gemini"
+      and any(ml.logo_detect(beta.message_screenshot()).brands,
+              .name == "Gemini Trust" and .confidence != "low"
+      )
+    )
+    // copyright footer
+    or strings.icontains(body.current_thread.text, '© 2025 Gemini Trust Company, LLC')
+  
     // the social links in the footer
     or (
       length(filter(body.links,
@@ -50,8 +54,6 @@ source: |
     sender.email.domain.root_domain in ("gemini.com")
     and headers.auth_summary.dmarc.pass
   )
-  
-
 attack_types:
   - "Credential Phishing"
 tactics_and_techniques:
