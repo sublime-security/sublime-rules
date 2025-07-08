@@ -1,0 +1,18 @@
+name: "Business Email Compromise: request for mobile number via reply thread hijacking"
+description: "This rule detects BEC attacks that use reply threads to solicit mobile numbers, evading detection rules that exclude RE: subjects."
+type: "rule"
+severity: "medium"
+source: "type.inbound\nand 0 < length(body.previous_threads) < 3\nand length(attachments) == 0\n\n// Check previous_threads for mobile solicitation patterns\nand any(body.previous_threads, \n        length(.text) < 500\n        and regex.icontains(.text, '(mobile|contact|current).{0,10}(phone|number|#|\\bno)|whatsapp|\\bcell|personalcell')\n)\n\n// NLU analysis on previous_threads content\nand (\n  any(body.previous_threads,\n      any(ml.nlu_classifier(.text).intents,\n          .name in (\"bec\", \"advance_fee\") and .confidence in (\"medium\", \"high\")\n      )\n  )\n  or (\n    // confidence can be low on very short bodies\n    any(body.previous_threads, length(.text) < 550)\n    and (\n      any(body.previous_threads, \n          any(ml.nlu_classifier(.text).intents, .name == \"bec\")\n      )\n      or any(ml.nlu_classifier(sender.display_name).intents, .name == \"bec\")\n      or any(body.previous_threads,\n            any(ml.nlu_classifier(.text).entities,\n                strings.icontains(.text, \"kindly\")\n            )\n      )\n    )\n  )\n)\n\n// Sender analysis\nand (\n  not profile.by_sender().solicited\n  or profile.by_sender().any_messages_malicious_or_spam\n)\nand not profile.by_sender().any_messages_benign\n\n// Ensure this is likely a hijacked thread (sender doesn't match thread participants)\nand (\n  length(headers.references) > 0\n  or any(headers.hops,\n        any(.fields, strings.ilike(.name, \"In-Reply-To\"))\n  )\n)\n"
+attack_types:
+  - "BEC/Fraud"
+tactics_and_techniques:
+  - "Social engineering"
+  - "Thread hijacking"
+detection_methods:
+  - "Content analysis"
+  - "Natural Language Understanding"
+  - "Sender analysis"
+id: "ec83cd60-4c48-5d1c-8384-70e14be49df8"
+og_id: "0282f346-7175-5d9c-9b10-a3e99462d263"
+testing_pr: 2902
+testing_sha: e48f7779bfe5d7db92ac3e3152d124f20abfb745
