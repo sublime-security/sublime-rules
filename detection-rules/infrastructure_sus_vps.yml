@@ -1,0 +1,37 @@
+name: "Infrastructure: Suspicious VPS Hosting Service"
+description: "Detects messages originating from virtual private server hosting providers that exhibit patterns of infrastructure usage in multiple message components."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and 2 of (
+    any(body.links,
+        .href_url.domain.root_domain in (
+          "ovh.net",
+          "secureserver.net",
+          "kundenserver.de"
+        )
+        or strings.icontains(.href_url.domain.domain, "vps-")
+    ),
+    any(headers.domains,
+        .root_domain in ("ovh.net", "secureserver.net", "kundenserver.de")
+        or strings.icontains(.domain, "vps-")
+    ),
+    headers.return_path.domain.root_domain in (
+      "ovh.net",
+      "secureserver.net",
+      "kundenserver.de"
+    ),
+    strings.icontains(headers.return_path.domain.domain, "vps-")
+  )
+
+attack_types:
+  - "BEC/Fraud"
+  - "Credential Phishing"
+  - "Spam"
+  - "Callback Phishing"
+tactics_and_techniques:
+  - "Evasion"
+detection_methods:
+  - "Header analysis"
+  - "URL analysis"
