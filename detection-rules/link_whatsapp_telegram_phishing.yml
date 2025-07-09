@@ -1,0 +1,47 @@
+name: "Brand Impersonation: Telegram and WhatsApp"
+description: "Detects when a sender's display name contains Telegram or WhatsApp messaging service names but originates from unauthorized domains with DMARC authentication failures"
+type: "rule"
+severity: "low"
+source: |
+    type.inbound
+  // Display name contains messaging app names
+  and (
+    // Telegram variations
+    strings.ilike(sender.display_name, '*telegram*')
+    or strings.ilike(strings.replace_confusables(sender.display_name),
+                     '*telegram*'
+    )
+    // WhatsApp variations
+    or strings.ilike(sender.display_name, '*whatsapp*')
+    or strings.ilike(sender.display_name, '*whats app*')
+    or strings.ilike(strings.replace_confusables(sender.display_name),
+                     '*whatsapp*'
+    )
+    or strings.ilike(strings.replace_confusables(sender.display_name),
+                     '*whats app*'
+    )
+  )
+  // Not from legitimate messaging app domains
+  and sender.email.domain.root_domain not in (
+    "telegram.org",
+    "telegram.com",
+    "t.me",
+    "whatsapp.com",
+    "whatsapp.net",
+    "fb.com",
+    "facebook.com",
+    "meta.com"
+  )
+  // Authentication validation
+  and not headers.auth_summary.dmarc.pass
+tags:
+ - "Attack surface reduction"
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Social engineering"
+  - "Impersonation: Brand"
+detection_methods:
+  - "Content analysis"
+  - "Header analysis"
+  - "Sender analysis"
