@@ -1,0 +1,79 @@
+name: "Attachment: Legal Notice Phishing with PDF URL Analysis"
+description: |
+  Detects legal notice phishing attempts with PDF attachments containing suspicious URLs.
+  Uses file.explode to analyze PDF attachments for embedded URLs and runs link analysis
+  to identify credential phishing indicators in legal/threatening themed messages.
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and (
+    // subject contains legal/threatening language
+    regex.icontains(subject.subject,
+                    '\b(summon|subpoena|lawsuit|litigation|legal\s+action|court\s+order|warrant|violation|fine|penalty|demand\s+notice|legal\s+notice|court\s+notice|judgment|tribunal|hearing|proceedings|prosecution|contempt|breach|default|liability|damages|settlement|injunction)\b'
+    )
+    or strings.icontains(subject.subject, 'legal')
+    or strings.icontains(subject.subject, 'court')
+    or strings.icontains(subject.subject, 'summon')
+    or strings.icontains(subject.subject, 'notice')
+  )
+  and (
+    // external sender (not from trusted legal domains)
+    sender.email.domain.root_domain not in $org_domains
+    and sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+  and length(attachments) >= 1
+  and any(attachments,
+          .file_extension == "pdf"
+          and any(file.explode(.),
+                  0 < length(.scan.pdf.urls) < 10
+                  and any(.scan.pdf.urls,
+                         // run link analysis on URLs found in PDF
+                         ml.link_analysis(.).credphish.disposition == "phishing"
+                         or ml.link_analysis(.).credphish.contains_captcha
+                         or ml.link_analysis(.).credphish.disposition == "suspicious"
+                         // check for suspicious TLDs or URL shorteners
+                         or .domain.tld in $suspicious_tlds
+                         or .domain.root_domain in $url_shorteners
+                         or .domain.domain in $url_shorteners
+                         // check for free file hosting
+                         or .domain.root_domain in $free_file_hosts
+                         or .domain.domain in $free_file_hosts
+                         // check for suspicious hosting services (like HubSpot used for phishing)
+                         or .domain.root_domain in ("hubspotusercontent-eu1.net", "hubspotusercontent.net")
+                  )
+          )
+  )
+  // Use NLU to detect credential phishing intent in PDF content
+  and any(attachments,
+          .file_extension == "pdf"
+          and any(file.explode(.),
+                  any(.scan.strings.strings,
+                      any(ml.nlu_classifier(.).intents,
+                          .name == "cred_theft" and .confidence in ("medium", "high")
+                      )
+                  )
+          )
+  )
+  // exclude legitimate senders who pass DMARC from known legal domains
+  and not (
+    coalesce(headers.auth_summary.dmarc.pass, false)
+    and sender.email.domain.root_domain in $high_trust_sender_root_domains
+  )
+attack_types:
+  - "Credential Phishing"
+  - "Malware/Ransomware"
+  - "BEC/Fraud"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Social engineering"
+  - "PDF"
+  - "Evasion"
+  - "QR code"
+detection_methods:
+  - "Content analysis"
+  - "File analysis"
+  - "Natural Language Understanding"
+  - "URL analysis"
+  - "Sender analysis"
+id: "8d9e0f1a-2b3c-4d5e-6f7a-8b9c0d1e2f3a"
