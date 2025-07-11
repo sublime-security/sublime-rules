@@ -11,7 +11,7 @@ source: |
             "Customer Service and Support",
             "Security and Authentication"
           )
-          and .confidence == "high"
+          and .confidence != "low"
   )
   and (
     any(ml.nlu_classifier(body.current_thread.text).entities,
@@ -26,12 +26,19 @@ source: |
     or any(body.links,
            strings.ilike(.display_text,
                          "*review*",
+                         "*response*",
                          "*complaint*",
                          "*contact*",
                          "*accommodation*"
            )
            or .display_url.domain.root_domain == "booking.com" and .mismatched
            or network.whois(.href_url.domain).days_old < 30
+           or strings.icontains(.href_url.path, "/redir")
+    )
+    // two seperate HTML elements impersonating the logo
+    or (
+      any(html.xpath(body.html, '//*[text()[normalize-space()]]').nodes, .display_text =~ "Booking")
+      and any(html.xpath(body.html, '//*[text()[normalize-space()]]').nodes, .display_text =~ ".com")
     )
   )
   and sender.email.domain.root_domain not in~ ('booking.com')
