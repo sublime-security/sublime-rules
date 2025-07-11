@@ -63,6 +63,10 @@ class SublimeRuleGenerator:
         
         conditions = ['type.inbound']
         
+        # Add triage flagged rules condition
+        triage_condition = """any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))"""
+        conditions.append(triage_condition)
+        
         # Convert IOK patterns to MQL conditions
         for pattern in patterns:
             mql_condition = self._convert_pattern_to_mql(pattern)

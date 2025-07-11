@@ -3,6 +3,9 @@
 import yaml
 import requests
 import urllib.request
+import zipfile
+import os
+from io import BytesIO
 from pathlib import Path
 from typing import Dict, Any, List, Union
 
@@ -49,75 +52,25 @@ class IOKConverter:
             self.stats['errors'].append(f"Error converting {input_file}: {e}")
             raise
     
-    def download_iok_rules(self, download_dir: Union[str, Path] = "downloaded_iok_rules") -> bool:
+    def download_iok_rules(self, download_dir: Union[str, Path] = "downloaded_iok_rules", **kwargs: Any) -> str:
         """Download IOK rules from the GitHub repository."""
-        
+        URL: str = "https://github.com/phish-report/IOK/zipball/main/"
+        response = requests.get(url=URL, stream=True)
+        response.raise_for_status()
         download_path = Path(download_dir)
         download_path.mkdir(parents=True, exist_ok=True)
-        
-        print("🔽 Downloading IOK rules from GitHub repository...")
-        
-        try:
-            # Fetch rule URLs from GitHub API
-            rule_urls = self._fetch_iok_rule_urls()
-            
-            if not rule_urls:
-                print("❌ No IOK rule URLs found")
-                return False
-            
-            print(f"📥 Found {len(rule_urls)} IOK rules to download...")
-            
-            # Download each rule
-            successful_downloads = 0
-            for i, url in enumerate(rule_urls):
-                try:
-                    # Extract filename from URL
-                    filename = url.split('/')[-1]
-                    local_path = download_path / filename
-                    
-                    # Download file
-                    urllib.request.urlretrieve(url, local_path)
-                    successful_downloads += 1
-                    
-                    if (i + 1) % 25 == 0:
-                        print(f"📥 Downloaded {i + 1}/{len(rule_urls)} rules...")
-                        
-                except Exception as e:
-                    print(f"❌ Error downloading {url}: {e}")
-                    self.stats['errors'].append(f"Download error: {url} - {e}")
-            
-            print(f"✅ Download completed! {successful_downloads}/{len(rule_urls)} files saved to {download_path}/")
-            return successful_downloads > 0
-            
-        except Exception as e:
-            print(f"❌ Failed to download IOK rules: {e}")
-            return False
-    
-    def _fetch_iok_rule_urls(self) -> List[str]:
-        """Fetch IOK rule URLs from GitHub API."""
-        
-        api_url = "https://api.github.com/repos/phish-report/IOK/contents/indicators"
-        headers = {'Accept': 'application/vnd.github.v3+json'}
-        
-        try:
-            response = requests.get(api_url, headers=headers, timeout=30)
-            response.raise_for_status()
-            
-            files = response.json()
-            rule_urls = []
-            
-            for file_info in files:
-                if (file_info.get('type') == 'file' and 
-                    file_info.get('name', '').endswith(('.yml', '.yaml'))):
-                    # Get the raw file URL
-                    raw_url = file_info['download_url']
-                    rule_urls.append(raw_url)
-            
-            return sorted(rule_urls)
-            
-        except requests.RequestException as e:
-            print(f"❌ Failed to fetch IOK rule URLs: {e}")
-            return []
+        with zipfile.ZipFile(BytesIO(response.content)) as zf:
+            for member in zf.infolist():
+                if "/indicators/" in member.filename and member.filename.endswith(('.yml', '.yaml')):
+                    # Extract just the filename without the directory structure
+                    filename = Path(member.filename).name
+                    if filename:  # Skip directories
+                        # Extract the file content and save it directly to the download folder
+                        file_content = zf.read(member)
+                        output_file = download_path / filename
+                        with open(output_file, 'wb') as f:
+                            f.write(file_content)
+        return download_path
     
     def convert_directory(self, input_dir: Union[str, Path], output_dir: Union[str, Path], auto_download: bool = True) -> None:
         """Convert all IOK files in a directory."""

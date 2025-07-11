@@ -21,7 +21,7 @@ def convert_all_iok_rules():
     
     # Path for the IOK rules (will auto-download if needed)
     iok_rules_dir = Path("downloaded_iok_rules")
-    output_dir = Path("converted_sublime_rules_final")
+    output_dir = Path("../../automations")
     
     # Create converter instance
     converter = IOKConverter()
