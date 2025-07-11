@@ -1,0 +1,61 @@
+attack_types:
+- Credential Phishing
+- Brand Impersonation
+description: 'Detects a phishing kit targeting Bancolombia.
+
+  This was found as a result of this kit being deployed on Replit.
+
+
+  This kit has a different message than others.
+
+  (Enter your current data to cancel the blocking of your Dynamic Key)
+
+
+  Converted from IOK rule - original focuses on website analysis.'
+detection_methods:
+- Header analysis
+- Content analysis
+- URL analysis
+- Natural Language Understanding
+- Sender analysis
+id: 9483d122-82f5-4e55-9bc6-5a2e3e1145c3
+name: 'IOK: Bancolombia Phishing Kit nFimdX'
+references:
+- https://urlscan.io/result/aa740cd0-4425-41f3-ba8d-d6c21d40f6a3/
+- https://urlscan.io/result/c7261902-0d35-4580-900d-1ba95c77c5fd/
+- https://urlscan.io/result/423ae757-e8a2-4b1e-b740-d8fca8d40391/
+severity: high
+tactics_and_techniques:
+- 'Impersonation: Brand'
+tags:
+- IOK_Converted
+- IOK_kit
+- IOK_target.bancolombia
+- IOK_target_country.colombia
+type: rule
+source: |
+  type.inbound
+    and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "form action=\"data.php\" method=\"post\" class=\"form_contact\"")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "<img src=\"css/c4.")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "<img _ngcontent-awt-c52=\"\" src=\"./css/trazo1.png\" alt=\"\" class=\"trazo1\">")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "<img _ngcontent-awt-c52=\"\" src=\"./css/trazo2.png\" alt=\"\" class=\"trazo2\">")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "<img _ngcontent-awt-c52=\"\" src=\"./css/trazo3.png\" alt=\"\" class=\"trazo3\">")
+    )
+    and (
+      strings.icontains(subject.subject, "account")
+      or strings.icontains(subject.subject, "verify")
+      or strings.icontains(subject.subject, "suspended")
+    )
+    and (
+      not profile.by_sender().solicited
+      or (
+        profile.by_sender().any_messages_malicious_or_spam
+        and not profile.by_sender().any_false_positives
+      )
+    )

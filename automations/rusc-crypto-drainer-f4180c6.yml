@@ -1,0 +1,53 @@
+attack_types:
+- BEC/Fraud
+- Cryptocurrency Scam
+description: "Detects a crypto drainer that supports English\n& Russian in its logging\
+  \ messages.\nIt also has its own configuration file called \n`import_main.js` and\
+  \ its main draining functionality\nin a file called `main.js`\n\nConverted from\
+  \ IOK rule - original focuses on website analysis."
+detection_methods:
+- Content analysis
+- URL analysis
+- Header analysis
+- Sender analysis
+id: 03e7b9a2-9553-4ef2-b3db-cecbef6e5753
+name: 'IOK: rusc Crypto Drainer f4180c6'
+references:
+- https://urlscan.io/result/f4180c6d-54bb-4bb6-9123-bbc6490f3443
+severity: high
+tactics_and_techniques:
+- Malware delivery
+- Investment scam
+tags:
+- IOK_Converted
+- IOK_cryptocurrency
+- IOK_cryptocurrency.ethereum
+type: rule
+source: |
+  type.inbound
+    and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
+    and (
+      strings.icontains(body.links, "import_main.js")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "sendEth")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "sendToken")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "sendNFT")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "scUniqueId")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "tgConfig")
+    )
+    and (
+      strings.icontains(subject.subject, "coinbase")
+      or strings.icontains(subject.subject, "crypto")
+    )
+    and (
+      not profile.by_sender().solicited
+      or (
+        profile.by_sender().any_messages_malicious_or_spam
+        and not profile.by_sender().any_false_positives
+      )
+    )

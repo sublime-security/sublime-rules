@@ -1,0 +1,52 @@
+attack_types:
+- Malware/Ransomware
+description: "Detects a BbyStealer family dropper website.\n\nBbyStealer is a JavaScript-based\
+  \ information \nstealer created by a threat actor called 'brunxkd'.\n\nIt usually\
+  \ comes packed as an executable (standalone or in an archive)\non fake video game\
+  \ websites (which this rule should detect), \nthese URLs are spread by users of\
+  \ this stealer (or compromised accounts) \nvia Discord messages asking victims to\
+  \ 'test' their game for them, \nas they masquerade as a 'game developer'.\n\nThere\
+  \ are several other info-stealers that use the same C2 domain as BbyStealer\ncurrently\
+  \ they are:\n\n    - Doenerium (JavaScript)\n    - TargetPlay (Python)\n\nConverted\
+  \ from IOK rule - original focuses on website analysis."
+detection_methods:
+- Content analysis
+- URL analysis
+- Header analysis
+- Sender analysis
+id: 717df5ca-9e4e-4789-8300-e39609a390d1
+name: 'IOK: BbyStealer Family Dropper Website 7019ae4'
+references:
+- https://urlscan.io/result/7019ae4a-afdd-48c3-bd08-40027c092910
+- https://urlscan.io/result/7eb43dbb-4673-4ae4-aa2c-f7088f4f8ee5
+severity: high
+tactics_and_techniques:
+- Malware delivery
+tags:
+- IOK_Converted
+- IOK_malware
+- IOK_malware.bbystealer
+- IOK_malware.doenerium
+- IOK_malware.targetplay
+type: rule
+source: |
+  type.inbound
+    and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "msapplication-TileColor")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "M72 60H70V19H81V29H90V10H70V0H90H101V10V29H119H130V40V60H119V40H101V49H111V60H101H90H81H72ZM81 49V40H90V49H81ZM60 70H58H49H40H29H19V81H29V90H11V70H0V90V101H11H29V120V130H40H60V120H40V101H49V111H60V70ZM49 90V81H40V90H49ZM70 70H72H81H90H101H111V81H101V90H119V70H130V90V101H119H101V120V130H90H70V120H90V101H81V111H70V70ZM81 90V81H90V90H81ZM60 60H58H49H40H29H19V49H29V40H11V60H0V40V29H11H29V10V0H40H60V10H40V29H49V19H60V60ZM49 40V49H40V40H49Z")
+    )
+    and (
+      strings.icontains(subject.subject, "account")
+      or strings.icontains(subject.subject, "verify")
+      or strings.icontains(subject.subject, "suspended")
+    )
+    and (
+      not profile.by_sender().solicited
+      or (
+        profile.by_sender().any_messages_malicious_or_spam
+        and not profile.by_sender().any_false_positives
+      )
+    )

@@ -1,0 +1,46 @@
+attack_types:
+- Brand Impersonation
+description: "Detects a phishing page that leverages the Dyno \ndiscord bot as a lure\
+  \ to install a malicious browser\nbookmark to steal the victim's Discord token.\n\
+  \nConverted from IOK rule - original focuses on website analysis."
+detection_methods:
+- Content analysis
+- URL analysis
+- Header analysis
+- Sender analysis
+id: 6517a975-49ed-4107-bd72-e365dfbad143
+name: 'IOK: Bookmark Grabber bf623f6'
+references:
+- https://urlscan.io/result/bf623f6d-f6b8-42cb-af39-97d75a04784c
+- https://urlscan.io/result/e47140ac-d6f9-44d9-83c0-02741a137fbb
+severity: high
+tactics_and_techniques:
+- 'Impersonation: Brand'
+tags:
+- IOK_Converted
+- IOK_target.discord
+type: rule
+source: |
+  type.inbound
+    and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "id=\"div-gpt-ad-1559171339966-0\"")
+    )
+    and (
+      strings.icontains(body.links, "serverlist.c0b3a1eec6.css")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "20222022 Solomid Corporation")
+    )
+    and (
+      strings.icontains(subject.subject, "account")
+      or strings.icontains(subject.subject, "verify")
+      or strings.icontains(subject.subject, "suspended")
+    )
+    and (
+      not profile.by_sender().solicited
+      or (
+        profile.by_sender().any_messages_malicious_or_spam
+        and not profile.by_sender().any_false_positives
+      )
+    )

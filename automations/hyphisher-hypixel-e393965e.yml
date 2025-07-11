@@ -1,0 +1,56 @@
+attack_types:
+- Credential Phishing
+- Brand Impersonation
+description: "`Hyphisher` is a phishing kit that focuses on targeting \nHypixel &\
+  \ LunarClient users using various lures such \nas free ranks, cosmetics or modifications.\
+  \ \n\nIt works by socially engineering victims into thinking they \nhave been gifted\
+  \ an item from the attacker/compromised account, \nit then asks the victim to enter\
+  \ their username and email, upon \ndoing this the backend will send the victim an\
+  \ email asking to \nverify the gift by entering their authentication code into the\
+  \ \nwebsite.\n\nThis specific kit dubbed `Hyphisher` is developed by a threat\n\
+  actor named `GuteNacht` and has since been modified and forked\nby other threat\
+  \ actors within the threat landscape.\n\nConverted from IOK rule - original focuses\
+  \ on website analysis."
+detection_methods:
+- Header analysis
+- Content analysis
+- URL analysis
+- Natural Language Understanding
+- Sender analysis
+id: 584959b9-b2d8-4da3-9f9e-38a90974e2ae
+name: 'IOK: Hyphisher Phishing Kit e393965e'
+references:
+- https://urlscan.io/result/e393965e-1285-489d-b9db-a57aa1cca8cc
+- https://urlscan.io/result/87946bb2-475d-4a89-ab1f-b1bd124736e5
+severity: high
+tactics_and_techniques:
+- 'Impersonation: Brand'
+tags:
+- IOK_Converted
+- IOK_kit
+- IOK_target.hypixel
+- IOK_target.lunar_client
+- IOK_threat_actor.gutenacht
+type: rule
+source: |
+  type.inbound
+    and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
+    and (
+      strings.icontains(body.links, "site.js")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "sendCode")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "sendEmail")
+    )
+    and (
+      strings.icontains(subject.subject, "account")
+      or strings.icontains(subject.subject, "verify")
+      or strings.icontains(subject.subject, "suspended")
+    )
+    and (
+      not profile.by_sender().solicited
+      or (
+        profile.by_sender().any_messages_malicious_or_spam
+        and not profile.by_sender().any_false_positives
+      )
+    )

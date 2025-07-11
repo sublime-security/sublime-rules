@@ -1,0 +1,51 @@
+attack_types:
+- Cryptocurrency Scam
+description: 'Detects a malicious DApp that pretends to be a cloud mining platform.
+
+
+  Converted from IOK rule - original focuses on website analysis.'
+detection_methods:
+- Content analysis
+- URL analysis
+- Header analysis
+- Sender analysis
+id: 419f5978-deca-4f05-afac-9bb1c54b3233
+name: 'IOK: Fake crypto mining - MiningPool'
+references:
+- https://urlscan.io/result/8d6613c0-8489-4938-a243-dd7e3b8d3ffa/
+- https://urlscan.io/result/d31045f8-94f8-4fa1-93a2-d0e632ae1680/
+- https://urlscan.io/result/daeccc05-0a07-4903-b642-b3adc5b73d7c/
+- https://urlscan.io/result/ed9b69a4-dc6c-4652-9451-d65d2df9517b/
+- https://urlscan.io/result/268fe95d-d555-4d6d-af4f-96d7858bda50/
+severity: high
+tactics_and_techniques:
+- Investment scam
+tags:
+- IOK_Converted
+- IOK_cryptocurrency
+type: rule
+source: |
+  type.inbound
+    and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "topText1")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "topText2")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "TeamProfile")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "levelText1")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "checkText1")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "MiningPool")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "CurrentHashrate")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "Totalparticipation")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "miningOutputTip")
+    )
+    and (
+      strings.icontains(subject.subject, "coinbase")
+      or strings.icontains(subject.subject, "crypto")
+    )
+    and (
+      not profile.by_sender().solicited
+      or (
+        profile.by_sender().any_messages_malicious_or_spam
+        and not profile.by_sender().any_false_positives
+      )
+    )

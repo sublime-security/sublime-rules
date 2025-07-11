@@ -1,0 +1,49 @@
+attack_types:
+- Credential Phishing
+- Brand Impersonation
+description: 'Patelco phishing kit which uses the same stylesheet and form error id
+  across various domains.
+
+
+  Converted from IOK rule - original focuses on website analysis.'
+detection_methods:
+- Header analysis
+- Content analysis
+- URL analysis
+- Natural Language Understanding
+- Sender analysis
+id: 74fb664e-3cbe-4cc5-88c9-1822a41f0bc9
+name: 'IOK: Patelco Phishing Kit 48ba653f'
+references:
+- https://urlscan.io/result/48ba653f-645e-4348-9318-dc5811745ab1/
+- https://urlscan.io/result/235d32e0-8321-49e3-9437-1855bbd7e71b/
+- https://urlscan.io/result/726289c0-aa7a-4801-83d2-f4fd32cf7f80/
+severity: high
+tactics_and_techniques:
+- 'Impersonation: Brand'
+tags:
+- IOK_Converted
+- IOK_kit
+- IOK_target.patelco
+type: rule
+source: |
+  type.inbound
+    and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "<link rel=\"stylesheet\" type=\"text/css\" href=\"VisitorIdentificationCSS.aspx.css\">")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "<div class=\"form-error\" id=\"B21AD518E4EF4F3DBCF943D0B6EDE8A3-error\" tabindex=\"-1\">Please")
+    )
+    and (
+      strings.icontains(subject.subject, "account")
+      or strings.icontains(subject.subject, "verify")
+      or strings.icontains(subject.subject, "suspended")
+    )
+    and (
+      not profile.by_sender().solicited
+      or (
+        profile.by_sender().any_messages_malicious_or_spam
+        and not profile.by_sender().any_false_positives
+      )
+    )

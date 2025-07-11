@@ -1,0 +1,57 @@
+attack_types:
+- Credential Phishing
+- Brand Impersonation
+- BEC/Fraud
+- Cryptocurrency Scam
+description: "Detects a generic crypto scam that generally\nleverages on using popular\
+  \ people such as \nElon Musk and companies such as OpenAI to lure\nvictims into\
+  \ sending the target wallet address\ncrypto (like BTC, ETH, XRP or DOGE).\n\nConverted\
+  \ from IOK rule - original focuses on website analysis."
+detection_methods:
+- Content analysis
+- URL analysis
+- Header analysis
+- Sender analysis
+id: 755c3ad5-626b-4bd4-873d-cf76fb732407
+name: 'IOK: Generic Crypto Scam dd1f3101'
+references:
+- https://urlscan.io/result/21898373-e858-453d-9739-7f9a8926400a
+- https://urlscan.io/result/f17fd353-ac2c-41a6-82f9-fa0f979d2b19
+- https://urlscan.io/result/405e404a-0676-4db8-8de9-ee91c17c8cdb
+severity: high
+tactics_and_techniques:
+- 'Impersonation: Brand'
+- Social engineering
+- Investment scam
+tags:
+- IOK_Converted
+- IOK_kit
+- IOK_target.generic_crypto
+- IOK_cryptocurrency.btc
+- IOK_cryptocurrency.eth
+- IOK_cryptocurrency.xrp
+- IOK_cryptocurrency.doge
+type: rule
+source: |
+  type.inbound
+    and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "participate-address")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "you can use the built-in calculator on our website")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "giveaway for all crypto holders!")
+    )
+    and (
+      strings.icontains(subject.subject, "coinbase")
+      or strings.icontains(subject.subject, "crypto")
+    )
+    and (
+      not profile.by_sender().solicited
+      or (
+        profile.by_sender().any_messages_malicious_or_spam
+        and not profile.by_sender().any_false_positives
+      )
+    )

@@ -1,0 +1,62 @@
+attack_types:
+- Credential Phishing
+- Brand Impersonation
+description: 'Detects a Hypixel phishing kit being pushed in-game
+
+  as well as across Discord.
+
+
+  Converted from IOK rule - original focuses on website analysis.'
+detection_methods:
+- Header analysis
+- Content analysis
+- URL analysis
+- Natural Language Understanding
+- Sender analysis
+id: b1c8567a-5b72-492c-8091-97e0006b0e56
+name: 'IOK: Hypixel Phishing Kit b03e14c'
+references:
+- https://urlscan.io/result/c270c37c-89c1-41ab-9eed-1d974f92fdf0
+- https://urlscan.io/result/ad5abd78-6d07-474e-b570-d64b739de56d
+- https://urlscan.io/result/3da7d344-595b-4c13-8db8-07e1b61ea387
+- https://urlscan.io/result/16296181-11c8-4017-ad47-c2afcb97a647
+- https://urlscan.io/result/e71459d6-a20b-4a40-bf1a-aa4d877d385d
+- https://urlscan.io/result/620c191f-428f-4751-a4c9-eb6c722e4a49
+- https://urlscan.io/result/02c0be5f-aa80-4ca7-ae73-f26ce153b0cc
+- https://urlscan.io/result/65956318-75be-4f19-8493-6b94e51c4925
+severity: high
+tactics_and_techniques:
+- 'Impersonation: Brand'
+tags:
+- IOK_Converted
+- IOK_kit
+- IOK_target.hypixel
+type: rule
+source: |
+  type.inbound
+    and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "<div class=\"username-container\">")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "<input id=\"inputBoxID\" type=\"text\" placeholder=\"Username\" name=\"ign\" class=\"username-input\" autocorrect=\"off\" autocapitalize=\"off\" spellcheck=\"false\">")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "<div class=\"username-button\">")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "<input id=\"continueButton\" type=\"submit\" value=\"Continue\" class=\"btn btn-large btn-success\">")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "<div class=\"clearfix\"></div>")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "<td style=\"width:10%;\"><input type=\"text\" name=\"quantity[2755361]\" value=\"1\" class=\"quantity\" disabled=\"disabled\"></td>")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "<td style=\"width:10%;\"><input type=\"text\" name=\"quantity[540085]\" value=\"1\" class=\"quantity\" disabled=\"disabled\"></td>")
+    )
+    and (
+      strings.icontains(subject.subject, "account")
+      or strings.icontains(subject.subject, "verify")
+      or strings.icontains(subject.subject, "suspended")
+    )
+    and (
+      not profile.by_sender().solicited
+      or (
+        profile.by_sender().any_messages_malicious_or_spam
+        and not profile.by_sender().any_false_positives
+      )
+    )

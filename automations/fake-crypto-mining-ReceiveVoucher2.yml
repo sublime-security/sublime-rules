@@ -1,0 +1,58 @@
+attack_types:
+- Cryptocurrency Scam
+description: 'Detects a malicious DApp that requires a mobile browser UA
+
+  and offers fake liquidity mining while presenting fake audit reports.
+
+
+  Converted from IOK rule - original focuses on website analysis.'
+detection_methods:
+- Content analysis
+- URL analysis
+- Header analysis
+- Sender analysis
+id: 92eca124-a3e8-427b-ad57-1afe7ee0d060
+name: 'IOK: Fake crypto mining - ReceiveVoucher2'
+references:
+- https://urlscan.io/result/c98381dc-03b8-4ffe-916e-3f67144ce40e/
+- https://urlscan.io/result/e764274a-defa-4bb3-94ac-23602bde109e/
+- https://urlscan.io/result/fccfeee7-0012-4b0c-a230-89298f6dde0e/
+- https://urlscan.io/result/2662d904-e748-4e9b-b541-5c060258df59/
+- https://urlscan.io/result/20516e77-a31c-45ce-b8d3-0d82e98cfb31/
+- https://urlscan.io/result/4e672f95-9fb7-41bb-b50e-fef9fac5ef4b/
+severity: high
+tactics_and_techniques:
+- Investment scam
+tags:
+- IOK_Converted
+- IOK_cryptocurrency
+type: rule
+source: |
+  type.inbound
+    and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "Remind")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "Please visit in the wallet")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "You are currently visiting a decentralized website")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "Receive voucher")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "Join the node and start")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "the first login reward")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "Mining Pool")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "liquidity mining income")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "Remind")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "visit in the wallet")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "You are currently visiting a decentralized website")
+    )
+    and (
+      strings.icontains(subject.subject, "coinbase")
+      or strings.icontains(subject.subject, "crypto")
+    )
+    and (
+      not profile.by_sender().solicited
+      or (
+        profile.by_sender().any_messages_malicious_or_spam
+        and not profile.by_sender().any_false_positives
+      )
+    )

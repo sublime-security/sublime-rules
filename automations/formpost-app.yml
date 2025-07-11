@@ -1,0 +1,43 @@
+attack_types:
+- Credential Phishing
+description: 'formpost.app is a service that takes HTML form submissions and sends
+  the results to an email address.
+
+
+  It can be used by threat actors building "serverless" phishing pages i.e. where
+  they don''t have a backend server that can send emails or store logs.
+
+
+  Converted from IOK rule - original focuses on website analysis.'
+detection_methods:
+- Content analysis
+- URL analysis
+- Header analysis
+- Sender analysis
+id: b3dc17f0-5c84-44d0-8c0f-0b00812c07ed
+name: 'IOK: Exfiltration using formpost.app'
+severity: high
+tactics_and_techniques:
+- Social engineering
+tags:
+- IOK_Converted
+- IOK_exfiltration
+type: rule
+source: |
+  type.inbound
+    and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "action=\"https://formpost.app/")
+    )
+    and (
+      strings.icontains(subject.subject, "account")
+      or strings.icontains(subject.subject, "verify")
+      or strings.icontains(subject.subject, "suspended")
+    )
+    and (
+      not profile.by_sender().solicited
+      or (
+        profile.by_sender().any_messages_malicious_or_spam
+        and not profile.by_sender().any_false_positives
+      )
+    )

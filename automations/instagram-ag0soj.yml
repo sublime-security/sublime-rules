@@ -1,0 +1,58 @@
+attack_types:
+- Credential Phishing
+- Brand Impersonation
+description: 'Detects a phishing kit targeting Instagram. Talks to "hizliresim.com"
+  to fetch an image.
+
+  Commonly deployed on Freenom domains.
+
+
+  Converted from IOK rule - original focuses on website analysis.'
+detection_methods:
+- Header analysis
+- Content analysis
+- URL analysis
+- Natural Language Understanding
+- Sender analysis
+id: 5b66e38a-7c9c-46d1-90a0-5c9c6cbcfb5d
+name: 'IOK: Instagram Phishing Kit Ag0sOJ'
+references:
+- https://urlscan.io/result/73dcc5cc-f6a2-4ed6-a924-bfad336eb83c/
+- https://urlscan.io/result/ad3ac1dd-da2d-4bfe-b879-286843bf5de6/
+- https://urlscan.io/result/5085f9ce-15a9-4f26-b488-b0889cb5f83b/
+severity: high
+tactics_and_techniques:
+- 'Impersonation: Brand'
+tags:
+- IOK_Converted
+- IOK_kit
+- IOK_target.instagram
+type: rule
+source: |
+  type.inbound
+    and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
+    and (
+      strings.icontains(body.links, "bootstrap.min.css")
+      and strings.icontains(body.links, "material-design-iconic-font.min.css")
+      and strings.icontains(body.links, "util.css")
+      and strings.icontains(body.links, "main.css")
+      and strings.icontains(body.links, "all.css")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "img src=\"images/logo.svg\" width=\"80\"")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "img src=\"https://i.hizliresim.com")
+    )
+    and (
+      strings.icontains(subject.subject, "account")
+      or strings.icontains(subject.subject, "verify")
+      or strings.icontains(subject.subject, "suspended")
+    )
+    and (
+      not profile.by_sender().solicited
+      or (
+        profile.by_sender().any_messages_malicious_or_spam
+        and not profile.by_sender().any_false_positives
+      )
+    )

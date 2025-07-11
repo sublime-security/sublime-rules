@@ -1,0 +1,55 @@
+attack_types:
+- Credential Phishing
+- Brand Impersonation
+description: 'Detects a Bank of Nova Scotia (Scotiabank) phishing kit targeting Spanish
+  speaking users.
+
+  Commonly deployed on `replit.com`.
+
+
+  Converted from IOK rule - original focuses on website analysis.'
+detection_methods:
+- Header analysis
+- Content analysis
+- URL analysis
+- Natural Language Understanding
+- Sender analysis
+id: 14b38a1c-ebaa-4fde-a83a-298db5ce471b
+name: 'IOK: Scotiabank Phishing Kit 76fc8cb'
+references:
+- https://urlscan.io/result/76fc8cb5-bf41-454a-87da-35bef237e243/
+severity: high
+tactics_and_techniques:
+- 'Impersonation: Brand'
+tags:
+- IOK_Converted
+- IOK_kit
+- IOK_target.scotiabank
+type: rule
+source: |
+  type.inbound
+    and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "im/logof.png")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "im/logoa.png")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "im/logog.png")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "im/logob.png")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "action=\"step.php\"")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "button id=\"submitx\"")
+    )
+    and (
+      strings.icontains(subject.subject, "account")
+      or strings.icontains(subject.subject, "verify")
+      or strings.icontains(subject.subject, "suspended")
+    )
+    and (
+      not profile.by_sender().solicited
+      or (
+        profile.by_sender().any_messages_malicious_or_spam
+        and not profile.by_sender().any_false_positives
+      )
+    )

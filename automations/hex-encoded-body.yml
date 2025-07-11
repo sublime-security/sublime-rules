@@ -1,0 +1,44 @@
+attack_types:
+- Credential Phishing
+description: 'To evade static analysis, the document body can returned hex encoded
+  in the response
+
+  where JavaScript can decode it and append it to the DOM.
+
+
+  This helps defeat simple scanners which don''t evaluate JavaScript.
+
+
+  Converted from IOK rule - original focuses on website analysis.'
+detection_methods:
+- Content analysis
+- URL analysis
+- Header analysis
+- Sender analysis
+id: e89e3405-8297-4b0e-98f3-f34d7a06f416
+name: 'IOK: Hex-encoded document body'
+severity: high
+tactics_and_techniques:
+- Social engineering
+tags:
+- IOK_Converted
+- IOK_anti-analysis
+type: rule
+source: |
+  type.inbound
+    and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "document.write(unescape(")
+    )
+    and (
+      strings.icontains(subject.subject, "account")
+      or strings.icontains(subject.subject, "verify")
+      or strings.icontains(subject.subject, "suspended")
+    )
+    and (
+      not profile.by_sender().solicited
+      or (
+        profile.by_sender().any_messages_malicious_or_spam
+        and not profile.by_sender().any_false_positives
+      )
+    )

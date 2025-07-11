@@ -1,0 +1,57 @@
+attack_types:
+- Credential Phishing
+- Brand Impersonation
+description: 'Detects a Bancor phishing kit deployed often on replit.com.
+
+
+  Converted from IOK rule - original focuses on website analysis.'
+detection_methods:
+- Header analysis
+- Content analysis
+- URL analysis
+- Natural Language Understanding
+- Sender analysis
+id: 89c10e76-bca5-46bc-8379-c6a7d465051f
+name: 'IOK: Bancor Phishing Kit 5bb0b5u3'
+references:
+- https://urlscan.io/result/2f5aad26-8754-4dc7-98c7-019b2848c329
+- https://urlscan.io/result/4900ffe0-f28f-4f46-a4c0-2f8fe5484a14
+- https://urlscan.io/result/fa1931a0-fc51-45b0-8fb3-059d472066e6/
+- https://urlscan.io/result/edb68cb2-dd60-4ef1-b812-442855064cd8/
+severity: high
+tactics_and_techniques:
+- 'Impersonation: Brand'
+tags:
+- IOK_Converted
+- IOK_kit
+- IOK_target.bancor
+- IOK_target_country.argentina
+type: rule
+source: |
+  type.inbound
+    and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "form id=\"maleeye\"")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "action=\"clave.php\"")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "href=\"./complementos/main.css\"")
+    )
+    and (
+      strings.icontains(body.links, "complementos/img/Logo-Bancor.png")
+      and strings.icontains(body.links, "complementos/img/user-login.png")
+      and strings.icontains(body.links, "complementos/img/_DSC0103-HDR.jpg")
+      and strings.icontains(body.links, "complementos/font/Roboto-Regular.woff")
+    )
+    and (
+      strings.icontains(subject.subject, "account")
+      or strings.icontains(subject.subject, "verify")
+      or strings.icontains(subject.subject, "suspended")
+    )
+    and (
+      not profile.by_sender().solicited
+      or (
+        profile.by_sender().any_messages_malicious_or_spam
+        and not profile.by_sender().any_false_positives
+      )
+    )

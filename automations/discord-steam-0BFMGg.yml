@@ -1,0 +1,55 @@
+attack_types:
+- Credential Phishing
+- Brand Impersonation
+description: 'Detects a phishing kit impersonating Discord and targeting Steam with
+  a fake popup that opens when the "Get Nitro" button is clicked. The site promises
+  to give you a free Discord Nitro subscription.
+
+  This phishing kit has been discovered by the FishFish.gg team.
+
+
+  Converted from IOK rule - original focuses on website analysis.'
+detection_methods:
+- Header analysis
+- Content analysis
+- URL analysis
+- Natural Language Understanding
+- Sender analysis
+id: 6ed98dc5-712a-4a3d-a795-826c961b5039
+name: 'IOK: Discord/Steam Phishing Kit 0BFMGg'
+references:
+- https://urlscan.io/result/a2bc1037-834a-4b09-8cba-81ad8850d053/
+- https://urlscan.io/result/6e1af6f3-574d-465e-8ff9-2db5ba79f44a/
+- https://urlscan.io/result/8cb54a81-49e5-430d-b504-283829a7fada/
+severity: high
+tactics_and_techniques:
+- 'Impersonation: Brand'
+tags:
+- IOK_Converted
+- IOK_kit
+- IOK_target.discord
+- IOK_target.steam
+type: rule
+source: |
+  type.inbound
+    and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "<title>Free Discord Nitro</title>")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "meta name=\"description\" content=\"Free Discord Nitro\"")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "meta data-react-helmet=\"true\" property=\"og:title\" content=\"3 months of Discord Nitro free from STEAM\"")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "meta data-react-helmet=\"true\" property=\"og:description\" content=\"Get 3 months of Discord Nitro free from STEAM. Upgrade your emoji, enjoy bigger file uploads, stand out in your favorite Discords, and more.\"")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "assets/images/bg.svg?v=7583b449")
+    )
+    and strings.icontains(subject.subject, "steam")
+    and sender.email.domain.domain != "steampowered.com"
+    and (
+      not profile.by_sender().solicited
+      or (
+        profile.by_sender().any_messages_malicious_or_spam
+        and not profile.by_sender().any_false_positives
+      )
+    )

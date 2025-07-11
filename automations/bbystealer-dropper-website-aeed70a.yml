@@ -1,0 +1,60 @@
+attack_types:
+- Malware/Ransomware
+description: "Detects a BbyStealer dropper website.\n\nBbyStealer is a JavaScript-based\
+  \ information \nstealer created by a threat actor called 'brunxkd'.\n\nIt usually\
+  \ comes packed as an executable (standalone or in an archive)\non fake video game\
+  \ websites (which this rule should detect), \nthese URLs are spread by users of\
+  \ this stealer (or compromised accounts) \nvia Discord messages asking victims to\
+  \ 'test' their game for them, \nas they masquerade as a 'game developer'.\n\nConverted\
+  \ from IOK rule - original focuses on website analysis."
+detection_methods:
+- Content analysis
+- URL analysis
+- Header analysis
+- Sender analysis
+id: 438451e9-70b7-4940-9d20-e24e4a3a5492
+name: 'IOK: BbyStealer Dropper Website aeed70a'
+references:
+- https://urlscan.io/result/aeed70a9-ed4e-4577-8a88-e0d679411c6f
+- https://urlscan.io/result/68b1dc31-d579-4b96-b344-24b6f9562479
+severity: high
+tactics_and_techniques:
+- Malware delivery
+tags:
+- IOK_Converted
+- IOK_malware
+- IOK_malware.bbystealer
+type: rule
+source: |
+  type.inbound
+    and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "<meta name=\"msapplication-TileColor\" content=\"#da532c\">")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "The game is almost finished, so we are testing our game as beta right now, we are having it done, but we believe that we will get out of the beta version very soon..")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "<h3 style=\"margin-left: 0;\"> [📢] ANNOUNCE [📢]")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "home-img")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "bot-description")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "botname")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "main.js")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "commands.js")
+    )
+    and (
+      strings.icontains(subject.subject, "account")
+      or strings.icontains(subject.subject, "verify")
+      or strings.icontains(subject.subject, "suspended")
+    )
+    and (
+      not profile.by_sender().solicited
+      or (
+        profile.by_sender().any_messages_malicious_or_spam
+        and not profile.by_sender().any_false_positives
+      )
+    )

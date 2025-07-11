@@ -1,0 +1,57 @@
+attack_types:
+- Credential Phishing
+- Brand Impersonation
+description: 'Detects a phishing kit for the Bank of Nova Scotia (Scotiabank) targeting
+  Spanish speaking users.
+
+  Deployed often on replit.com.
+
+
+  Converted from IOK rule - original focuses on website analysis.'
+detection_methods:
+- Header analysis
+- Content analysis
+- URL analysis
+- Natural Language Understanding
+- Sender analysis
+id: 08639b07-dd12-4e2b-8340-c6f1a7e1760e
+name: 'IOK: Bank of Nova Scotia (Scotiabank) Phishing Kit TYnAqzTX'
+references:
+- https://www.scotiaonline.scotiabank.com/
+- https://urlscan.io/result/1ec9979c-a03d-4466-9696-747e522b07d7/
+- https://urlscan.io/result/cb65e495-fc75-4536-94be-7831e04c4124/
+- https://urlscan.io/result/f3dd32bb-281d-4559-8679-2d287a26e7fd/
+severity: high
+tactics_and_techniques:
+- 'Impersonation: Brand'
+tags:
+- IOK_Converted
+- IOK_kit
+- IOK_target.scotiabank
+type: rule
+source: |
+  type.inbound
+    and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "img src=\"img/war.svg\"")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "img src=\"img/ojo.svg\"")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "img src=\"img/depart.svg\"")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "script src=\"js/funciones.js\"")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "<form autocomplete=\"off\" id=\"fusuario\">")
+    )
+    and (
+      strings.icontains(subject.subject, "account")
+      or strings.icontains(subject.subject, "verify")
+      or strings.icontains(subject.subject, "suspended")
+    )
+    and (
+      not profile.by_sender().solicited
+      or (
+        profile.by_sender().any_messages_malicious_or_spam
+        and not profile.by_sender().any_false_positives
+      )
+    )

@@ -1,0 +1,48 @@
+attack_types:
+- Brand Impersonation
+description: 'Detects a phishing page that uses the disguise of a Wick Bot
+
+  verification in order to install a malicious bookmark that steals
+
+  the victim''s discord token.
+
+
+  Converted from IOK rule - original focuses on website analysis.'
+detection_methods:
+- Content analysis
+- URL analysis
+- Header analysis
+- Sender analysis
+id: 1e3dff2f-2464-4171-9dcc-70d9ffa7de01
+name: 'IOK: Bookmark Grabber f6a19cec'
+references:
+- https://urlscan.io/result/f6a19cec-fcab-4331-8a96-42d9654c0768
+- https://urlscan.io/result/75519f83-1671-4065-9bf7-5de0c8ddd25b
+severity: high
+tactics_and_techniques:
+- 'Impersonation: Brand'
+tags:
+- IOK_Converted
+- IOK_target.wick_bot
+type: rule
+source: |
+  type.inbound
+    and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "321AAAQAA123")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "x.html")
+    )
+    and (
+      strings.icontains(subject.subject, "account")
+      or strings.icontains(subject.subject, "verify")
+      or strings.icontains(subject.subject, "suspended")
+    )
+    and (
+      not profile.by_sender().solicited
+      or (
+        profile.by_sender().any_messages_malicious_or_spam
+        and not profile.by_sender().any_false_positives
+      )
+    )

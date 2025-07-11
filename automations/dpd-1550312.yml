@@ -1,0 +1,56 @@
+attack_types:
+- Credential Phishing
+- Brand Impersonation
+description: 'Detects a DPD phishing kit using the same fake parcel ID
+
+  to lure victims in, additionally reuses the same file names
+
+  and paths for various kit assets.
+
+
+  Converted from IOK rule - original focuses on website analysis.'
+detection_methods:
+- Header analysis
+- Content analysis
+- URL analysis
+- Natural Language Understanding
+- Sender analysis
+id: 57f3b35a-71a9-418c-83c0-1cfe9f43cc9c
+name: 'IOK: DPD Phishing Kit 1550321'
+references:
+- https://urlscan.io/result/af837161-2414-49fd-983b-e9dda042f2a5
+- https://urlscan.io/result/7d7c846c-afa3-4a7e-b1da-4df34e64c71c
+- https://urlscan.io/result/46c15b10-755a-4c00-8da3-60fe1dbcc126
+- https://urlscan.io/result/99908906-522d-4450-9d62-04348fb88432
+severity: high
+tactics_and_techniques:
+- 'Impersonation: Brand'
+tags:
+- IOK_Converted
+- IOK_kit
+- IOK_target.dpd
+type: rule
+source: |
+  type.inbound
+    and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "Parcel details (15503215866135)")
+    )
+    and (
+      strings.icontains(body.links, "parse/real.css?")
+    )
+    and (
+      strings.icontains(body.links, "dpd_group_82x22.png")
+    )
+    and (
+      strings.icontains(subject.subject, "account")
+      or strings.icontains(subject.subject, "verify")
+      or strings.icontains(subject.subject, "suspended")
+    )
+    and (
+      not profile.by_sender().solicited
+      or (
+        profile.by_sender().any_messages_malicious_or_spam
+        and not profile.by_sender().any_false_positives
+      )
+    )

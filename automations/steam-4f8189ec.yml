@@ -1,0 +1,44 @@
+attack_types:
+- Credential Phishing
+- Brand Impersonation
+description: 'Steam Phishing Kit that uses a fake Steam login window to steal user
+  credentials.
+
+
+  Converted from IOK rule - original focuses on website analysis.'
+detection_methods:
+- Header analysis
+- Content analysis
+- URL analysis
+- Natural Language Understanding
+- Sender analysis
+id: bb263c78-dfff-442e-bcb7-b5b35b521710
+name: 'IOK: Steam Phishing Kit 4f8189ec'
+references:
+- https://urlscan.io/result/a8e88026-7174-4830-bfb4-b90baef8a1b8/
+- https://urlscan.io/result/4f8189ec-be6e-4992-a7a7-ce3ecf762657/
+- https://urlscan.io/result/469a2692-f629-4c41-b8c0-493063ae71d1/
+severity: high
+tactics_and_techniques:
+- 'Impersonation: Brand'
+tags:
+- IOK_Converted
+- IOK_kit
+- IOK_target.steam
+type: rule
+source: |
+  type.inbound
+    and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "<p class=\"text\">*Log in through the Steam service</p>")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "<p class=\"sub\">*mailguard accounts cannot participate in our games</p>")
+    )
+    and strings.icontains(subject.subject, "steam")
+    and sender.email.domain.domain != "steampowered.com"
+    and (
+      not profile.by_sender().solicited
+      or (
+        profile.by_sender().any_messages_malicious_or_spam
+        and not profile.by_sender().any_false_positives
+      )
+    )

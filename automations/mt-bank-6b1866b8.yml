@@ -1,0 +1,59 @@
+attack_types:
+- Credential Phishing
+- Brand Impersonation
+description: 'Detects a phishing kit targeting users of M&T Bank.
+
+
+  The core processing of the phishing kit is hidden
+
+  within the file named `min2.js`.
+
+
+  The kit also has a high entropy session ID present
+
+  within the HTML, likely as a result of cloning the
+
+  website.
+
+
+  Converted from IOK rule - original focuses on website analysis.'
+detection_methods:
+- Header analysis
+- Content analysis
+- URL analysis
+- Natural Language Understanding
+- Sender analysis
+id: 187468da-fa65-46b5-bc85-1f6626a6aa88
+name: 'IOK: M&T Bank Phishing Kit 6b1866b8'
+references:
+- https://urlscan.io/result/6b1866b8-84a3-4fb5-9e52-012c0a78e615
+- https://urlscan.io/result/41982e64-5972-4bef-9e1d-ee5bd2de1996
+severity: high
+tactics_and_techniques:
+- 'Impersonation: Brand'
+tags:
+- IOK_Converted
+- IOK_kit
+- IOK_target.m&t_bank
+type: rule
+source: |
+  type.inbound
+    and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "a4e17797-fffe-477e-8870-3e5933445dce")
+    )
+    and (
+      strings.icontains(body.links, "min2.js")
+    )
+    and (
+      strings.icontains(subject.subject, "account")
+      or strings.icontains(subject.subject, "verify")
+      or strings.icontains(subject.subject, "suspended")
+    )
+    and (
+      not profile.by_sender().solicited
+      or (
+        profile.by_sender().any_messages_malicious_or_spam
+        and not profile.by_sender().any_false_positives
+      )
+    )

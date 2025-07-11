@@ -1,0 +1,55 @@
+attack_types:
+- Credential Phishing
+- Brand Impersonation
+description: 'Detects a Banco AV Villas phishing kit deployed often on replit.com
+  targeting Colombian citizens.
+
+
+  Converted from IOK rule - original focuses on website analysis.'
+detection_methods:
+- Header analysis
+- Content analysis
+- URL analysis
+- Natural Language Understanding
+- Sender analysis
+id: a5ae6740-9b7e-43d2-9ed6-a4c0c8f1ff1f
+name: 'IOK: Banco AV Villas Phishing Kit a5lnamb9'
+references:
+- https://urlscan.io/result/c1fd550b-afb4-4532-9c7b-92cd53aa13b9
+- https://www.avvillas.com.co/bancadigital/inicio
+severity: high
+tactics_and_techniques:
+- 'Impersonation: Brand'
+tags:
+- IOK_Converted
+- IOK_kit
+- IOK_target.banco_av_villas
+- IOK_target_country.colombia
+type: rule
+source: |
+  type.inbound
+    and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "<title>Consultas Banca Virtual | Banco AV Villas</title>")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "<meta name=\"description\" content=\"En la Banca Virtual AV Villas realiza consultas, pagos y transferencias en cualquier momento. Conoce también nuestros productos digitales con solicitud en línea.\">")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "<link rel=\"icon\" href=\"https://www.avvillas.com.co/bancadigital/assets/img/favicon.png\">")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "<form _ngcontent-ixl-c3=\"\" class=\"login-form ng-untouched ng-invalid ng-pristine\" method=\"post\">")
+    )
+    and (
+      strings.icontains(subject.subject, "account")
+      or strings.icontains(subject.subject, "verify")
+      or strings.icontains(subject.subject, "suspended")
+    )
+    and (
+      not profile.by_sender().solicited
+      or (
+        profile.by_sender().any_messages_malicious_or_spam
+        and not profile.by_sender().any_false_positives
+      )
+    )

@@ -1,0 +1,55 @@
+attack_types:
+- Credential Phishing
+- BEC/Fraud
+- Cryptocurrency Scam
+description: 'Detects a crypto drainer that usually appears
+
+  on websites that impersonate the Discord Bots
+
+  `MEE6` and `Dyno`.
+
+
+  Converted from IOK rule - original focuses on website analysis.'
+detection_methods:
+- Content analysis
+- URL analysis
+- Header analysis
+- Sender analysis
+id: eeb7af38-a989-46af-b240-9f0477de8581
+name: 'IOK: finesse Crypto Drainer 9c933ae7'
+references:
+- https://urlscan.io/result/9c933ae7-b793-4bf6-8cb2-2fae91bc5c27
+- https://urlscan.io/result/a2b44a14-8f67-4af5-ab79-048c8d4590b0
+severity: high
+tactics_and_techniques:
+- 'Impersonation: Brand'
+- Malware delivery
+- Investment scam
+tags:
+- IOK_Converted
+- IOK_kit
+- IOK_cryptocurrency
+- IOK_cryptocurrency.ethereum
+type: rule
+source: |
+  type.inbound
+    and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
+    and (
+      strings.icontains(body.links, "settings")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "finesseReceiveAddress")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "minETHFinesse")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "lastUsedNonce")
+    )
+    and (
+      strings.icontains(subject.subject, "coinbase")
+      or strings.icontains(subject.subject, "crypto")
+    )
+    and (
+      not profile.by_sender().solicited
+      or (
+        profile.by_sender().any_messages_malicious_or_spam
+        and not profile.by_sender().any_false_positives
+      )
+    )

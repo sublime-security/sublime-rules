@@ -1,0 +1,46 @@
+attack_types:
+- Credential Phishing
+- Brand Impersonation
+description: "Detects a DHL phishing kit that uses KillBot to \ndetect bots with a\
+  \ unique API key and a session \nhash that was left behind when cloning the original\n\
+  page.\n\nConverted from IOK rule - original focuses on website analysis."
+detection_methods:
+- Header analysis
+- Content analysis
+- URL analysis
+- Natural Language Understanding
+- Sender analysis
+id: 12068321-e79e-49b9-839d-03d32a106b7d
+name: 'IOK: DHL Phishing Kit 27b89b9e'
+references:
+- https://urlscan.io/result/27b89b9e-23c7-4987-a6a6-696863b2bf2f
+- https://urlscan.io/result/75cbf995-0dd6-43bd-b07c-6c89646221cc
+severity: high
+tactics_and_techniques:
+- 'Impersonation: Brand'
+tags:
+- IOK_Converted
+- IOK_kit
+- IOK_target.dhl
+type: rule
+source: |
+  type.inbound
+    and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "XVMpB5exZpe6LjHpLHitdhu8mRZbRdZtq5UF6LD4hpXOX")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "fa08304132bc7b0252df9782a2491d28")
+    )
+    and (
+      strings.icontains(subject.subject, "account")
+      or strings.icontains(subject.subject, "verify")
+      or strings.icontains(subject.subject, "suspended")
+    )
+    and (
+      not profile.by_sender().solicited
+      or (
+        profile.by_sender().any_messages_malicious_or_spam
+        and not profile.by_sender().any_false_positives
+      )
+    )

@@ -1,0 +1,48 @@
+attack_types:
+- Credential Phishing
+- Brand Impersonation
+description: 'Detects a Rakuten phishing kit targeting Japanese users.
+
+
+  Converted from IOK rule - original focuses on website analysis.'
+detection_methods:
+- Header analysis
+- Content analysis
+- URL analysis
+- Natural Language Understanding
+- Sender analysis
+id: 4074eef9-f0f0-49e0-bef9-27cde0c22503
+name: 'IOK: Rakuten Phishing Kit 1f160470'
+references:
+- https://urlscan.io/result/1f160470-9cc5-4ba3-b5a1-1f24a9bc113c
+- https://urlscan.io/result/236af6c7-cc5f-49ee-b72e-5dc01f023899
+severity: high
+tactics_and_techniques:
+- 'Impersonation: Brand'
+tags:
+- IOK_Converted
+- IOK_kit
+- IOK_target.rakuten
+- IOK_target_country.japan
+type: rule
+source: |
+  type.inbound
+    and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "<script language=\"JavaScript\" src=\"count.php\"></script>")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "<input type=\"hidden\" name=\"rat\" id=\"ratAccountId\" value=\"429\">")
+    )
+    and (
+      strings.icontains(subject.subject, "account")
+      or strings.icontains(subject.subject, "verify")
+      or strings.icontains(subject.subject, "suspended")
+    )
+    and (
+      not profile.by_sender().solicited
+      or (
+        profile.by_sender().any_messages_malicious_or_spam
+        and not profile.by_sender().any_false_positives
+      )
+    )

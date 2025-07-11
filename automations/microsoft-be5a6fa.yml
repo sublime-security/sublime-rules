@@ -1,0 +1,53 @@
+attack_types:
+- Credential Phishing
+- Brand Impersonation
+description: 'Detects a Microsoft phishing kit targeting Spanish speaking users.
+
+
+  Converted from IOK rule - original focuses on website analysis.'
+detection_methods:
+- Header analysis
+- Content analysis
+- URL analysis
+- Natural Language Understanding
+- Sender analysis
+id: f5fb15e9-481a-4c43-8d1c-5821d696791b
+name: 'IOK: Microsoft Phishing Kit be5a6fa'
+references:
+- https://urlscan.io/result/be5a6faa-f5fc-41e1-8274-4999b5d8c616
+- https://urlscan.io/result/00495934-edf4-4625-9a35-7955f6df5367
+severity: high
+tactics_and_techniques:
+- 'Impersonation: Brand'
+tags:
+- IOK_Converted
+- IOK_kit
+- IOK_target.microsoft
+type: rule
+source: |
+  type.inbound
+    and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "class=\"padree\"")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "class=\"hijoi\"")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "class=\"hijo_uno\"")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "for-lt-ie10.png")
+    )
+    and (
+      strings.icontains(subject.subject, "microsoft")
+      or strings.icontains(subject.subject, "office")
+    )
+    and sender.email.domain.domain not in ("microsoft.com", "office.com")
+    and (
+      not profile.by_sender().solicited
+      or (
+        profile.by_sender().any_messages_malicious_or_spam
+        and not profile.by_sender().any_false_positives
+      )
+    )

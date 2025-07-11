@@ -1,0 +1,48 @@
+attack_types:
+- Credential Phishing
+- Brand Impersonation
+description: 'Detects a phishing kit for a creditcard processor which uses the same
+  hidden value across various domains.
+
+
+  Converted from IOK rule - original focuses on website analysis.'
+detection_methods:
+- Header analysis
+- Content analysis
+- URL analysis
+- Natural Language Understanding
+- Sender analysis
+id: 35a2bc88-8c8f-4bd1-86f4-00ade94eaf4b
+name: 'IOK: International Card Services Phishing Kit'
+references:
+- https://urlscan.io/result/5cea2922-3642-4dc0-b41b-89e914a70f94
+- https://urlscan.io/result/44382989-2570-4b17-9fe8-962b6e341ddb
+- https://urlscan.io/result/7d2a26cd-8307-46be-9991-e691c962c2ea
+- https://urlscan.io/result/52ccdfe2-5af4-4b5b-a70c-73e2cd7b56e6
+severity: high
+tactics_and_techniques:
+- 'Impersonation: Brand'
+tags:
+- IOK_Converted
+- IOK_kit
+- IOK_target.international_card_services
+- IOK_target_country.netherlands
+type: rule
+source: |
+  type.inbound
+    and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "<input id=\"did_proxy\" name=\"did_proxy\" type=\"hidden\" value=\"1:zEUeQFVqXRrb1FthfkZ64ABdt_5GKQC5gxwQD8dmYXkPJuYmhQBLey8Rpq4xyTEU0FS3yivFtzoWrZDVqZEzXw\">")
+    )
+    and (
+      strings.icontains(subject.subject, "account")
+      or strings.icontains(subject.subject, "verify")
+      or strings.icontains(subject.subject, "suspended")
+    )
+    and (
+      not profile.by_sender().solicited
+      or (
+        profile.by_sender().any_messages_malicious_or_spam
+        and not profile.by_sender().any_false_positives
+      )
+    )

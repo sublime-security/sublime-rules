@@ -1,0 +1,52 @@
+attack_types:
+- Credential Phishing
+description: "Detects a phishing kit targeting banks for Latin America, \nthese kits\
+  \ are often deployed on `replit.com`. \nIt uses `api.ipify.org` to fetch the victim's\
+  \ IP.\nHarvested credentials are delivered into the scammer's Telegram channel\n\
+  through the use of the `sax.js` script file.\n\nConverted from IOK rule - original\
+  \ focuses on website analysis."
+detection_methods:
+- Header analysis
+- Content analysis
+- URL analysis
+- Natural Language Understanding
+- Sender analysis
+id: f0c0592d-1823-4839-b437-7f8d9ef4a443
+name: 'IOK: Generic Latin America Bank Phishing Kit c419e0d'
+references:
+- https://urlscan.io/result/eec45a86-7b2e-4924-9d2a-70164653692e/
+- https://urlscan.io/result/c419e0d3-1a0d-49f3-814d-211027d681c8
+severity: high
+tactics_and_techniques:
+- 'Impersonation: Brand'
+tags:
+- IOK_Converted
+- IOK_kit
+- IOK_target_region.latin_america
+type: rule
+source: |
+  type.inbound
+    and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "$(\"#ip\")")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "id=\"gfg\"")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "id=\"address\"")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "onsubmit=\"return sender()\"")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "src=\"js/sax.js\"")
+    )
+    and (
+      strings.icontains(subject.subject, "account")
+      or strings.icontains(subject.subject, "verify")
+      or strings.icontains(subject.subject, "suspended")
+    )
+    and (
+      not profile.by_sender().solicited
+      or (
+        profile.by_sender().any_messages_malicious_or_spam
+        and not profile.by_sender().any_false_positives
+      )
+    )

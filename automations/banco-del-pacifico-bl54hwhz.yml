@@ -1,0 +1,59 @@
+attack_types:
+- Credential Phishing
+- Brand Impersonation
+description: 'Detects a different Banco del Pacífico phishing kit deployed often on
+  replit.com.
+
+
+  Converted from IOK rule - original focuses on website analysis.'
+detection_methods:
+- Header analysis
+- Content analysis
+- URL analysis
+- Natural Language Understanding
+- Sender analysis
+id: da813514-4ed1-45b1-91a2-bf2000e40007
+name: 'IOK: Banco del Pacífico Phishing Kit bl54hwhz'
+references:
+- https://urlscan.io/result/28c040ae-192d-483d-9447-f9a45fd652d7
+- https://www.intermatico.com/ebanking/seguridad/login.htm
+severity: high
+tactics_and_techniques:
+- 'Impersonation: Brand'
+tags:
+- IOK_Converted
+- IOK_kit
+- IOK_target.banco_del_pacifico
+- IOK_target_country.ecuador
+type: rule
+source: |
+  type.inbound
+    and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "<title>Banco del Pacífico</title>")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "href=\"img/pacificon.ico\"")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "form id=\"login\" name=\"login\" method=\"post\"")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "action=\"load.php\"")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "img src=\"img/logo_pacifico1.png\"")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "img src=\"img/alert-octagon.png\"")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "img src=\"img/key.png\"")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "img src=\"img/globe.png\"")
+    )
+    and (
+      strings.icontains(subject.subject, "account")
+      or strings.icontains(subject.subject, "verify")
+      or strings.icontains(subject.subject, "suspended")
+    )
+    and (
+      not profile.by_sender().solicited
+      or (
+        profile.by_sender().any_messages_malicious_or_spam
+        and not profile.by_sender().any_false_positives
+      )
+    )

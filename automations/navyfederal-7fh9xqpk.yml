@@ -1,0 +1,53 @@
+attack_types:
+- Credential Phishing
+- Brand Impersonation
+description: 'Navy Federal Credit Union phishing kit cloned with Save Page WE.
+
+  The kit uses the obfuscated function `_f0` to send credentials to a telegram chat.
+
+  Save Page WE is a chrome extension used by phishers to clone a target website and
+  save it as a single HTML file
+
+
+  Converted from IOK rule - original focuses on website analysis.'
+detection_methods:
+- Header analysis
+- Content analysis
+- URL analysis
+- Natural Language Understanding
+- Sender analysis
+id: 3875f78b-b1c5-45b2-8d50-61a21b5cebfd
+name: 'IOK: Navy Federal Credit Union Phishing Kit 7fh9xqpk'
+references:
+- https://urlscan.io/result/0b9420f8-5aa2-442f-9e0c-ec3813aaea2a
+- https://urlscan.io/result/65e0bb5b-76f0-45a1-a60f-af9971ea83ca
+severity: high
+tactics_and_techniques:
+- 'Impersonation: Brand'
+tags:
+- IOK_Converted
+- IOK_kit
+- IOK_target.navyfederal
+type: rule
+source: |
+  type.inbound
+    and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "Thu Mar 25 2021 16:38:13 GMT+0300 (East Africa Time)")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "sendEmail")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "function _f0")
+    )
+    and (
+      strings.icontains(subject.subject, "account")
+      or strings.icontains(subject.subject, "verify")
+      or strings.icontains(subject.subject, "suspended")
+    )
+    and (
+      not profile.by_sender().solicited
+      or (
+        profile.by_sender().any_messages_malicious_or_spam
+        and not profile.by_sender().any_false_positives
+      )
+    )

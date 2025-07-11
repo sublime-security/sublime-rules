@@ -1,0 +1,54 @@
+attack_types:
+- Credential Phishing
+- Brand Impersonation
+description: 'Detects a phishing kit targeting users of Chase Bank.
+
+
+  The phishing kit is called `Spox` after the name of the
+
+  kit author.
+
+
+  Converted from IOK rule - original focuses on website analysis.'
+detection_methods:
+- Header analysis
+- Content analysis
+- URL analysis
+- Natural Language Understanding
+- Sender analysis
+id: 44715a0d-03de-4517-a9bf-e179b14b082b
+name: 'IOK: Spox Chase Phishing Kit 8b20b051'
+references:
+- https://lukeleal.com/research/posts/spox-phishing-kit
+- https://urlscan.io/result/20608545-c0f1-4c39-b2d8-71c4b7270fa1
+- https://urlscan.io/result/8b20b051-31aa-4a2c-a40b-0493574a7372
+severity: high
+tactics_and_techniques:
+- 'Impersonation: Brand'
+tags:
+- IOK_Converted
+- IOK_kit
+- IOK_threat_actor.spox
+- IOK_target.chase
+type: rule
+source: |
+  type.inbound
+    and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
+    and any(body.links,
+      ml.link_analysis(.).credphish.disposition == "phishing"
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "name=\"spox\" value=\"fuck_you_bot\"")
+    )
+    and (
+      strings.icontains(subject.subject, "account")
+      or strings.icontains(subject.subject, "verify")
+      or strings.icontains(subject.subject, "suspended")
+    )
+    and (
+      not profile.by_sender().solicited
+      or (
+        profile.by_sender().any_messages_malicious_or_spam
+        and not profile.by_sender().any_false_positives
+      )
+    )

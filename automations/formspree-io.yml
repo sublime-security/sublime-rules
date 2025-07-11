@@ -1,0 +1,43 @@
+attack_types:
+- Credential Phishing
+description: 'Formspree is a service that takes HTML form submissions and sends the
+  results to an email address.
+
+
+  It can be used by threat actors building "serverless" phishing pages i.e. where
+  they don''t have a backend server that can send emails or store logs.
+
+
+  Converted from IOK rule - original focuses on website analysis.'
+detection_methods:
+- Content analysis
+- URL analysis
+- Header analysis
+- Sender analysis
+id: d20daf8b-398d-4dfe-849b-b2918867eb38
+name: 'IOK: Exfiltration using formspree.io'
+severity: high
+tactics_and_techniques:
+- Social engineering
+tags:
+- IOK_Converted
+- IOK_exfiltration
+type: rule
+source: |
+  type.inbound
+    and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "action=\"https://formspree.io/f/")
+    )
+    and (
+      strings.icontains(subject.subject, "account")
+      or strings.icontains(subject.subject, "verify")
+      or strings.icontains(subject.subject, "suspended")
+    )
+    and (
+      not profile.by_sender().solicited
+      or (
+        profile.by_sender().any_messages_malicious_or_spam
+        and not profile.by_sender().any_false_positives
+      )
+    )

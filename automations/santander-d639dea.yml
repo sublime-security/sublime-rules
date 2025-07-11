@@ -1,0 +1,47 @@
+attack_types:
+- Credential Phishing
+- Brand Impersonation
+description: "Detects a Santander phishing kit developed by the threat \nactor known\
+  \ as 'Kr3pto'\n\nConverted from IOK rule - original focuses on website analysis."
+detection_methods:
+- Header analysis
+- Content analysis
+- URL analysis
+- Natural Language Understanding
+- Sender analysis
+id: da0af76f-9cf5-4fec-9bcc-3c4c17e54af6
+name: 'IOK: Santander Phishing Kit d639dea'
+references:
+- https://urlscan.io/result/9809712b-e35c-4f50-b972-79379c77ca22
+- https://urlscan.io/result/1990ca0a-02a3-4f3f-8862-5945e4ec68ed
+severity: high
+tactics_and_techniques:
+- 'Impersonation: Brand'
+tags:
+- IOK_Converted
+- IOK_kit
+- IOK_target.santander
+- IOK_threat_actor.kr3pto
+type: rule
+source: |
+  type.inbound
+    and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "Personal Online Banking:")
+    )
+    and (
+      strings.icontains(body.links, "asset-3-3-x.png")
+      and strings.icontains(body.links, "asset-2.png")
+    )
+    and (
+      strings.icontains(subject.subject, "account")
+      or strings.icontains(subject.subject, "verify")
+      or strings.icontains(subject.subject, "suspended")
+    )
+    and (
+      not profile.by_sender().solicited
+      or (
+        profile.by_sender().any_messages_malicious_or_spam
+        and not profile.by_sender().any_false_positives
+      )
+    )

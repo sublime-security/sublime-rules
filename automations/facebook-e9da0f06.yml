@@ -1,0 +1,52 @@
+attack_types:
+- Credential Phishing
+- Brand Impersonation
+description: 'Detects a phishing page targeting Facebook users
+
+  asking them to enter the credentials to verify
+
+  they own the account in question.
+
+
+  Converted from IOK rule - original focuses on website analysis.'
+detection_methods:
+- Header analysis
+- Content analysis
+- URL analysis
+- Natural Language Understanding
+- Sender analysis
+id: 60ca317a-8dc9-4bb6-83a4-de9ded2270f8
+name: 'IOK: Facebook Phishing Kit e9da0f06'
+references:
+- https://urlscan.io/result/e9da0f06-c14d-41d1-ad3c-c1e17e87a95a
+- https://urlscan.io/result/a0a7feb0-8510-4222-8c7e-7c6dc9a3f81e
+- https://urlscan.io/result/bf7d1fb0-ef51-416b-ab81-739d523eee32
+severity: high
+tactics_and_techniques:
+- 'Impersonation: Brand'
+tags:
+- IOK_Converted
+- IOK_kit
+- IOK_target.facebook
+type: rule
+source: |
+  type.inbound
+    and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "AQEeSudqCxLiEhc:9:1637830325")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "u_0_9_SZ")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "Account security")
+    )
+    and strings.icontains(subject.subject, "facebook")
+    and sender.email.domain.domain != "facebook.com"
+    and (
+      not profile.by_sender().solicited
+      or (
+        profile.by_sender().any_messages_malicious_or_spam
+        and not profile.by_sender().any_false_positives
+      )
+    )

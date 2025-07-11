@@ -1,0 +1,51 @@
+attack_types:
+- Credential Phishing
+- Brand Impersonation
+- BEC/Fraud
+description: "Detects websites that target Roblox players by \npretending to offer\
+  \ free in-game currency, in reality \nthese sites are designed to trick users into\
+  \ completing \nsurveys.\n\nConverted from IOK rule - original focuses on website\
+  \ analysis."
+detection_methods:
+- Content analysis
+- URL analysis
+- Header analysis
+- Sender analysis
+id: 5db9b37f-89c4-413e-9f59-b5d375a8cf52
+name: 'IOK: Roblox Survey Scam 9170a30d'
+references:
+- https://urlscan.io/result/9170a30d-f431-4645-9bf6-767e604ea175/
+- https://urlscan.io/result/2bf52523-8c46-4dd2-9ac9-3f355bd1e8ee/
+- https://urlscan.io/result/14628838-282f-4bdb-b727-42a996d654a4/
+- https://urlscan.io/result/84856127-bba2-45e9-83bb-62a2bf8c5515/
+- https://urlscan.io/result/24f989a8-4985-4ffd-93d7-4837236e5835/
+severity: high
+tactics_and_techniques:
+- 'Impersonation: Brand'
+- Social engineering
+tags:
+- IOK_Converted
+- IOK_kit
+- IOK_target.roblox
+type: rule
+source: |
+  type.inbound
+    and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "searching for amjad ...")
+    )
+    and (
+      strings.icontains(body.links, "/public/external/check.php")
+    )
+    and (
+      strings.icontains(subject.subject, "account")
+      or strings.icontains(subject.subject, "verify")
+      or strings.icontains(subject.subject, "suspended")
+    )
+    and (
+      not profile.by_sender().solicited
+      or (
+        profile.by_sender().any_messages_malicious_or_spam
+        and not profile.by_sender().any_false_positives
+      )
+    )

@@ -1,0 +1,46 @@
+attack_types:
+- Credential Phishing
+- Brand Impersonation
+description: 'A Facebook phishing kit displaying a faked post
+
+
+  Converted from IOK rule - original focuses on website analysis.'
+detection_methods:
+- Header analysis
+- Content analysis
+- URL analysis
+- Natural Language Understanding
+- Sender analysis
+id: e1218c8d-f17d-4ef1-9b04-6aff9dcc4d0a
+name: 'IOK: Facebook Phishing Kit 9z3vzzzj2s'
+references:
+- https://urlscan.io/result/a6819830-5d19-427e-a366-f1f6a5121e06/
+severity: high
+tactics_and_techniques:
+- 'Impersonation: Brand'
+tags:
+- IOK_Converted
+- IOK_kit
+- IOK_target.facebook
+type: rule
+source: |
+  type.inbound
+    and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "G-9Z3VZZZJ2S")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "<form action=\"/auth/facebook\" method=\"post\" id=\"formm\">")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "<input id=\"pass-input\" type=\"password\" name=\"pass\" placeholder=\"Hasło\">")
+    )
+    and strings.icontains(subject.subject, "facebook")
+    and sender.email.domain.domain != "facebook.com"
+    and (
+      not profile.by_sender().solicited
+      or (
+        profile.by_sender().any_messages_malicious_or_spam
+        and not profile.by_sender().any_false_positives
+      )
+    )

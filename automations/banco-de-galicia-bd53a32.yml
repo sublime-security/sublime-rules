@@ -1,0 +1,50 @@
+attack_types:
+- Credential Phishing
+- Brand Impersonation
+description: 'Detects a Banco de Galicia phishing kit deployed quite oftenly on `replit.com`.
+
+
+  Converted from IOK rule - original focuses on website analysis.'
+detection_methods:
+- Header analysis
+- Content analysis
+- URL analysis
+- Natural Language Understanding
+- Sender analysis
+id: 36097b34-bd00-4a42-b645-5dded1c7c2fa
+name: 'IOK: Banco de Galicia Phishing Kit bd53a32'
+references:
+- https://urlscan.io/result/bd53a324-fc80-4bd5-801e-e9b3f10f3564
+- https://urlscan.io/result/c88ca20b-ab76-415e-90b5-08f36fcacedd
+severity: high
+tactics_and_techniques:
+- 'Impersonation: Brand'
+tags:
+- IOK_Converted
+- IOK_kit
+- IOK_target.banco_de_galicia
+- IOK_target_country.argentina
+type: rule
+source: |
+  type.inbound
+    and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "action=\"secure.php\" method=\"post\" id=\"form1\"")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "name=\"sol\"")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "name=\"nahual\"")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "name=\"chaneque\"")
+    )
+    and (
+      strings.icontains(subject.subject, "account")
+      or strings.icontains(subject.subject, "verify")
+      or strings.icontains(subject.subject, "suspended")
+    )
+    and (
+      not profile.by_sender().solicited
+      or (
+        profile.by_sender().any_messages_malicious_or_spam
+        and not profile.by_sender().any_false_positives
+      )
+    )

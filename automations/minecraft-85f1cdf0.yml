@@ -1,0 +1,66 @@
+attack_types:
+- Credential Phishing
+- Brand Impersonation
+description: 'Detects a Minecraft phishing kit that''s being spread through Discord
+
+
+  Converted from IOK rule - original focuses on website analysis.'
+detection_methods:
+- Header analysis
+- Content analysis
+- URL analysis
+- Natural Language Understanding
+- Sender analysis
+id: 56cfbb44-94fa-49ec-8ed3-87471cb3b600
+name: 'IOK: Minecraft Phishing Kit 85f1cdf0'
+references:
+- https://urlscan.io/result/c1532fae-edac-4e99-9333-7c083c062d79/
+- https://urlscan.io/result/c635f07c-5caa-4653-b661-ffee683cbaa1/
+- https://urlscan.io/result/8a1cfa2f-d443-413f-97b4-d6265bb48abc/
+- https://urlscan.io/result/85f1cdf0-5a35-4162-a32f-605b527c1422/
+- https://urlscan.io/result/15fec1fe-b1cb-4fc2-a497-5c9f9d5adf00/
+- https://urlscan.io/result/7c9aab8b-e0f8-44e1-b27c-873b62f419a3/
+- https://urlscan.io/result/f72c8b69-ac59-4302-97f5-e5e033703cd1/
+- https://urlscan.io/result/bf2a7227-2f6a-457d-9182-5fcb1dc88d5a/
+severity: high
+tactics_and_techniques:
+- 'Impersonation: Brand'
+tags:
+- IOK_Converted
+- IOK_kit
+- IOK_target.minecraft
+type: rule
+source: |
+  type.inbound
+    and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "xsts?userhash=")
+      or strings.icontains(ml.link_analysis(.).final_dom.raw, "&xsts=")
+      or strings.icontains(ml.link_analysis(.).final_dom.raw, "&xbl=")
+      or strings.icontains(ml.link_analysis(.).final_dom.raw, "&accessToken=")
+      or strings.icontains(ml.link_analysis(.).final_dom.raw, "rp://api.minecraftservices.com/")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "<link rel=\"icon\" type=\"image/png\" href=\"https://www.freepnglogos.com/uploads/discord-logo-png/discord-logo-logodownload-download-logotipos-1.png\">")
+    )
+    and (
+      strings.icontains(body.links, "https://cdn.mos.cms.futurecdn.net/my8AUCgUhKERqBBwdPQuXG.jpg")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "<button class=\"svelte-1ca0u07\">I'm not a Robot</button>")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "<div class=\"center svelte-194ct39\"><button class=\"svelte-wewfeb\">Link account →</button> </div>")
+    )
+    and (
+      strings.icontains(subject.subject, "account")
+      or strings.icontains(subject.subject, "verify")
+      or strings.icontains(subject.subject, "suspended")
+    )
+    and (
+      not profile.by_sender().solicited
+      or (
+        profile.by_sender().any_messages_malicious_or_spam
+        and not profile.by_sender().any_false_positives
+      )
+    )

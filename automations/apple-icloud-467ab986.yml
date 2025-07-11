@@ -1,0 +1,58 @@
+attack_types:
+- Credential Phishing
+- Brand Impersonation
+description: 'An Apple iCloud Phishing Kit appearing in English and Spanish.
+
+  This looks for file name references of a stylesheet, title styling and a loader
+  image.
+
+
+  Converted from IOK rule - original focuses on website analysis.'
+detection_methods:
+- Header analysis
+- Content analysis
+- URL analysis
+- Natural Language Understanding
+- Sender analysis
+id: 53db7641-471f-403b-b464-c90e12c2170f
+name: 'IOK: Apple iCloud Phishing Kit 467ab986'
+references:
+- https://urlscan.io/result/467ab986-22c1-466a-a9b4-173f6bd75205/
+- https://urlscan.io/result/ec2b7fc2-7906-4f72-9f00-c8b35e6d6328/
+- https://urlscan.io/result/e8eb17de-97c5-4e0a-a755-984208e6c35e/
+- https://urlscan.io/result/224947d7-24c8-4c5f-b67c-236b150e87c2/
+- https://urlscan.io/result/a40f91d6-fd26-4094-b9c6-70976c0df9d2/
+- https://urlscan.io/search/#(filename%3A%22assets%2Flayout%2Fapple.css%22)%20AND%20(filename%3A%22assets%2Fimg%2Fajax-loader.gif%22)
+severity: high
+tactics_and_techniques:
+- 'Impersonation: Brand'
+tags:
+- IOK_Converted
+- IOK_kit
+- IOK_target.icloud
+- IOK_target.apple
+type: rule
+source: |
+  type.inbound
+    and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "href=\"assets/layout/apple.css\"")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, ".Estilo2")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "src=\"assets/img/ajax-loader.gif\"")
+    )
+    and (
+      strings.icontains(subject.subject, "account")
+      or strings.icontains(subject.subject, "verify")
+      or strings.icontains(subject.subject, "suspended")
+    )
+    and (
+      not profile.by_sender().solicited
+      or (
+        profile.by_sender().any_messages_malicious_or_spam
+        and not profile.by_sender().any_false_positives
+      )
+    )

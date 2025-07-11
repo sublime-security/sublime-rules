@@ -1,0 +1,46 @@
+attack_types:
+- Credential Phishing
+- Brand Impersonation
+description: "Phishing campaign using the lure of GitHub Jobs, targeting developers\
+  \ \nfrom the crypto sphere via phishing emails sent through the use of \ncomments\
+  \ on GitHub issues and pull requests.\n\nConverted from IOK rule - original focuses\
+  \ on website analysis."
+detection_methods:
+- Header analysis
+- Content analysis
+- URL analysis
+- Natural Language Understanding
+- Sender analysis
+id: c7b02d72-0f8c-46a4-86d0-b166a10f4fa3
+name: 'IOK: Helopbs GitHub Phishing Kit 03d6d129'
+references:
+- https://urlscan.io/result/03d6d129-667b-4f8e-b762-ddd432fed168
+- https://twitter.com/realScamSniffer/status/1760124587298488508
+severity: high
+tactics_and_techniques:
+- 'Impersonation: Brand'
+tags:
+- IOK_Converted
+- IOK_target.github
+- IOK_threat_actor.helopbs
+type: rule
+source: |
+  type.inbound
+    and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "function Github()")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "function Redirect()")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "function isDevToolsOpened()")
+    )
+    and (
+      strings.icontains(subject.subject, "account")
+      or strings.icontains(subject.subject, "verify")
+      or strings.icontains(subject.subject, "suspended")
+    )
+    and (
+      not profile.by_sender().solicited
+      or (
+        profile.by_sender().any_messages_malicious_or_spam
+        and not profile.by_sender().any_false_positives
+      )
+    )

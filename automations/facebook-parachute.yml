@@ -1,0 +1,43 @@
+attack_types:
+- Credential Phishing
+- Brand Impersonation
+description: 'A Facebook phishing kit which includes some peculiar OpenGraph tags
+  originally from https://www.jpl.nasa.gov/news/testing-proves-its-worth-with-successful-mars-parachute-deployment
+
+
+  Converted from IOK rule - original focuses on website analysis.'
+detection_methods:
+- Header analysis
+- Content analysis
+- URL analysis
+- Natural Language Understanding
+- Sender analysis
+id: 8ddc3442-6727-44c8-85c7-10f5e099789b
+name: 'IOK: Facebook Phishing Kit with peculiar opengraph tags'
+severity: high
+tactics_and_techniques:
+- 'Impersonation: Brand'
+tags:
+- IOK_Converted
+- IOK_kit
+- IOK_target.facebook
+type: rule
+source: |
+  type.inbound
+    and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "<meta property=\"og:title\" content=\"Testing Proves Its Worth With Successful Mars Parachute Deployment\">")
+      or strings.icontains(ml.link_analysis(.).final_dom.raw, "<meta property=\"og:description\" content=\"Testing Proves Its Worth With Successful Mars Parachute Deployment\" />")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "The giant canopy that helped land Perseverance on Mars was tested here on Earth at NASA’s Wallops Flight Facility in Virginia.")
+    )
+    and strings.icontains(subject.subject, "facebook")
+    and sender.email.domain.domain != "facebook.com"
+    and (
+      not profile.by_sender().solicited
+      or (
+        profile.by_sender().any_messages_malicious_or_spam
+        and not profile.by_sender().any_false_positives
+      )
+    )
