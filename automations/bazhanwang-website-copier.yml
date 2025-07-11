@@ -1,0 +1,40 @@
+attack_types:
+- Credential Phishing
+description: 'Detects the BazhanWang website copier.
+
+
+  Converted from IOK rule - original focuses on website analysis.'
+detection_methods:
+- Content analysis
+- URL analysis
+- Header analysis
+- Sender analysis
+id: 80325e84-66fd-4ae2-8a3a-01abb0f31e95
+name: 'IOK: BazhanWang Website Copier'
+references:
+- https://urlscan.io/result/09890a1d-f314-4409-9ce8-75d4980361f5/
+severity: high
+tactics_and_techniques:
+- Social engineering
+tags:
+- IOK_Converted
+- IOK_cloning
+type: rule
+source: |
+  type.inbound
+    and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "<!-- This web page is copied by the \"https://bazhan.wang\" -->")
+    )
+    and (
+      strings.icontains(subject.subject, "account")
+      or strings.icontains(subject.subject, "verify")
+      or strings.icontains(subject.subject, "suspended")
+    )
+    and (
+      not profile.by_sender().solicited
+      or (
+        profile.by_sender().any_messages_malicious_or_spam
+        and not profile.by_sender().any_false_positives
+      )
+    )

@@ -1,0 +1,45 @@
+attack_types:
+- Malware/Ransomware
+description: "Detects the `Mystic` stealer C2 panel page. \n\nAs the page likes to\
+  \ broadcast the fact that\nit is a Mystic Stealer C2 page in the title.\n\nConverted\
+  \ from IOK rule - original focuses on website analysis."
+detection_methods:
+- Content analysis
+- URL analysis
+- Header analysis
+- Sender analysis
+id: c68e14c7-ad1f-404b-b3ba-6e36eace9390
+name: 'IOK: MysticStealer C2 Panel 88b6ef2f'
+references:
+- https://twitter.com/0xrb/status/1653364901384003585
+- https://urlscan.io/result/5d326ed9-3bcc-40f3-9fd2-2bdea6fd800f
+- https://urlscan.io/result/3fdaf5e7-a741-4cb8-8fa9-dedb00b1672b
+severity: high
+tactics_and_techniques:
+- Malware delivery
+tags:
+- IOK_Converted
+- IOK_malware.mystic
+- IOK_malware
+type: rule
+source: |
+  type.inbound
+    and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "        Mystic Stealer -  Login")
+    )
+    and (
+      strings.icontains(body.links, "datta-icon.css")
+    )
+    and (
+      strings.icontains(subject.subject, "account")
+      or strings.icontains(subject.subject, "verify")
+      or strings.icontains(subject.subject, "suspended")
+    )
+    and (
+      not profile.by_sender().solicited
+      or (
+        profile.by_sender().any_messages_malicious_or_spam
+        and not profile.by_sender().any_false_positives
+      )
+    )

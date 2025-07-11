@@ -1,0 +1,57 @@
+attack_types:
+- Credential Phishing
+- Brand Impersonation
+description: 'Detects a BBVA (Banco Bilbao Vizcaya Argentaria) phishing kit deployed
+  often on replit.com.
+
+
+  Converted from IOK rule - original focuses on website analysis.'
+detection_methods:
+- Header analysis
+- Content analysis
+- URL analysis
+- Natural Language Understanding
+- Sender analysis
+id: 93c56651-aa86-4e50-8600-549ade97501f
+name: 'IOK: BBVA Phishing Kit aeng1e8e'
+references:
+- https://urlscan.io/result/46a91562-0580-49c7-9ec5-017a21677382
+- https://urlscan.io/result/3e8e58e6-7491-4a3f-b841-1a3c958aa7bb
+severity: high
+tactics_and_techniques:
+- 'Impersonation: Brand'
+tags:
+- IOK_Converted
+- IOK_kit
+- IOK_target.bbva
+- IOK_target_country.argentina
+type: rule
+source: |
+  type.inbound
+    and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "<title>BBVA | Net</title>")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "href=\"./Index BBVA _ Net_files/style_crown.css\"")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "src=\"./Index BBVA _ Net_files/2f55199c\"")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "src=\"./Index BBVA _ Net_files/tdcWY\"")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "form method=\"POST\"  id=\"loggin\"")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "form method=\"post\"  id=\"des\" target=\"_self\"")
+    )
+    and (
+      strings.icontains(subject.subject, "account")
+      or strings.icontains(subject.subject, "verify")
+      or strings.icontains(subject.subject, "suspended")
+    )
+    and (
+      not profile.by_sender().solicited
+      or (
+        profile.by_sender().any_messages_malicious_or_spam
+        and not profile.by_sender().any_false_positives
+      )
+    )

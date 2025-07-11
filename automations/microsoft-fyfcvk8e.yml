@@ -1,0 +1,58 @@
+attack_types:
+- Credential Phishing
+- Brand Impersonation
+description: 'Detects a Microsoft phishing kit with a hardcoded MFA phone number and
+  misspelled words.
+
+  The phishing kit calls sc.php to perform license validation prior to loading page
+  content.
+
+
+  Converted from IOK rule - original focuses on website analysis.'
+detection_methods:
+- Header analysis
+- Content analysis
+- URL analysis
+- Natural Language Understanding
+- Sender analysis
+id: 0a633f1f-066b-4d8e-aabd-5160e05fc037
+name: 'IOK: Microsoft Phishing Kit fyfcvk8e'
+references:
+- https://urlscan.io/result/0f35c05b-73e0-4397-9e7e-9e3edb508d16
+- https://urlscan.io/result/e73ca666-5a09-4c0e-949b-33a8f6ee7564
+- https://urlscan.io/result/0ebaab43-0235-42cc-9304-153f698868d4
+- https://urlscan.io/search/#filename%3A%22sc.php%22%20AND%20filename%3A%22jquery-3.1.1.min.js%22%20AND%20filename%3A%22crypto-js.min.js%22
+severity: high
+tactics_and_techniques:
+- 'Impersonation: Brand'
+tags:
+- IOK_Converted
+- IOK_kit
+- IOK_target.microsoft
+type: rule
+source: |
+  type.inbound
+    and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "+X XXXXXXXX71")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "THIS WORKS AS A SIGNA TURE CHANGE FOR DETECED BROWSER")
+    )
+    and (
+      strings.icontains(body.links, "sc.php")
+      and strings.icontains(body.links, "jquery-3.1.1.min.js")
+      and strings.icontains(body.links, "crypto-js.min.js")
+    )
+    and (
+      strings.icontains(subject.subject, "microsoft")
+      or strings.icontains(subject.subject, "office")
+    )
+    and sender.email.domain.domain not in ("microsoft.com", "office.com")
+    and (
+      not profile.by_sender().solicited
+      or (
+        profile.by_sender().any_messages_malicious_or_spam
+        and not profile.by_sender().any_false_positives
+      )
+    )

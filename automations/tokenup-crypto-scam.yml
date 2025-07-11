@@ -1,0 +1,55 @@
+attack_types:
+- BEC/Fraud
+- Cryptocurrency Scam
+description: 'Detects a Solana cryptocurrency wallet drainer that fakes the number
+
+  of minted NFTs to initiate Fear of Missing Out (FOMO) against the victim.
+
+
+  Converted from IOK rule - original focuses on website analysis.'
+detection_methods:
+- Content analysis
+- URL analysis
+- Header analysis
+- Sender analysis
+id: aeeab9c4-d07f-4be7-b58f-1cf173fc068d
+name: 'IOK: Solana cryptocurrency wallet drainer - tokenup'
+references:
+- https://urlscan.io/search/#filename%3A%22tokenup.js%22
+- https://urlscan.io/result/e72a0ab1-adfb-4e34-871d-6c9903c1e7e0/
+- https://urlscan.io/result/c1c9e6f2-c66b-4545-acf3-f5ceec21f6b0/
+severity: high
+tactics_and_techniques:
+- Malware delivery
+- Investment scam
+tags:
+- IOK_Converted
+- IOK_cryptocurrency
+- IOK_cryptocurrency.solana
+type: rule
+source: |
+  type.inbound
+    and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
+    and (
+      strings.icontains(body.links, "tokenup.js")
+    )
+    and (
+      strings.icontains(body.links, "settings.js")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "tokennumber")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "solana")
+    )
+    and (
+      strings.icontains(subject.subject, "coinbase")
+      or strings.icontains(subject.subject, "crypto")
+    )
+    and (
+      not profile.by_sender().solicited
+      or (
+        profile.by_sender().any_messages_malicious_or_spam
+        and not profile.by_sender().any_false_positives
+      )
+    )

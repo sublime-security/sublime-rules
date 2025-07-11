@@ -1,0 +1,54 @@
+attack_types:
+- Credential Phishing
+- Brand Impersonation
+description: "This kit seems to define a few configuration\nvalues within the page's\
+  \ javascript, possibly\nto communicate with the backend which user \nof the phishing\
+  \ service owns the phishing page.\n\nConverted from IOK rule - original focuses\
+  \ on website analysis."
+detection_methods:
+- Header analysis
+- Content analysis
+- URL analysis
+- Natural Language Understanding
+- Sender analysis
+id: cd07567c-7c7d-428b-9675-34454e1c0e6d
+name: 'IOK: ANZ Bank Phishing Kit cd6ec9e7'
+references:
+- https://urlscan.io/result/cd6ec9e7-b588-469b-986c-1e2b84d3e9b4
+- https://urlscan.io/result/45395d64-b370-4fee-94ae-964fe92965b4
+- https://urlscan.io/result/895d7b3b-6bf7-4f42-b36c-150c14867728
+severity: high
+tactics_and_techniques:
+- 'Impersonation: Brand'
+tags:
+- IOK_Converted
+- IOK_kit
+- IOK_target.anz_bank
+- IOK_target_country.new_zealand
+type: rule
+source: |
+  type.inbound
+    and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "var urlroot")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "var uniqueid")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "//js/option.js")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "//js/browser.js")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "//panel/img/logo.PNG")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "//panel/img/img-01.PNG")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "//panel/img/anz-logo.1.0.0.svg")
+    )
+    and (
+      strings.icontains(subject.subject, "account")
+      or strings.icontains(subject.subject, "verify")
+      or strings.icontains(subject.subject, "suspended")
+    )
+    and (
+      not profile.by_sender().solicited
+      or (
+        profile.by_sender().any_messages_malicious_or_spam
+        and not profile.by_sender().any_false_positives
+      )
+    )

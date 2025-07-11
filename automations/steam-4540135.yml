@@ -1,0 +1,40 @@
+attack_types:
+- Credential Phishing
+- Brand Impersonation
+description: "Steam phishing kit containing an image (sha256: `8c89c4f3023d02b04197a30ca20f42ca7eb2634e1432ffff7b9d641a1f71a066`)\
+  \ \nthat only appears in phishing pages. \nIt uses Discord Nitro as a lure to make\
+  \ the victim willingly \ngive away their login credentials.\n\nConverted from IOK\
+  \ rule - original focuses on website analysis."
+detection_methods:
+- Header analysis
+- Content analysis
+- URL analysis
+- Natural Language Understanding
+- Sender analysis
+id: 648806e3-be2c-42e5-be60-11b55c83e708
+name: 'IOK: Steam Phishing Kit 4540135'
+references:
+- https://urlscan.io/search/#hash%3A8c89c4f3023d02b04197a30ca20f42ca7eb2634e1432ffff7b9d641a1f71a066
+severity: high
+tactics_and_techniques:
+- 'Impersonation: Brand'
+tags:
+- IOK_Converted
+- IOK_kit
+- IOK_target.steam
+type: rule
+source: |
+  type.inbound
+    and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "https://cdn.discordapp.com/attachments/454013565381115916/938124584446754846/nitro.png")
+    )
+    and strings.icontains(subject.subject, "steam")
+    and sender.email.domain.domain != "steampowered.com"
+    and (
+      not profile.by_sender().solicited
+      or (
+        profile.by_sender().any_messages_malicious_or_spam
+        and not profile.by_sender().any_false_positives
+      )
+    )

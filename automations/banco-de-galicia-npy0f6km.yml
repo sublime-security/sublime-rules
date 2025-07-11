@@ -1,0 +1,61 @@
+attack_types:
+- Credential Phishing
+- Brand Impersonation
+description: 'Detects a different Banco de Galicia phishing kit deployed often on
+  replit.com.
+
+
+  Converted from IOK rule - original focuses on website analysis.'
+detection_methods:
+- Header analysis
+- Content analysis
+- URL analysis
+- Natural Language Understanding
+- Sender analysis
+id: c642977d-8b9b-4360-a269-9a210e463c8b
+name: 'IOK: Banco de Galicia Phishing Kit npy0f6km'
+references:
+- https://urlscan.io/result/ae6ab5a8-6965-4b44-996a-248636849607
+severity: high
+tactics_and_techniques:
+- 'Impersonation: Brand'
+tags:
+- IOK_Converted
+- IOK_kit
+- IOK_target.banco_de_galicia
+- IOK_target_country.argentina
+type: rule
+source: |
+  type.inbound
+    and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "link rel=\"icon\" type=\"image/gif/png\" href=\"fis/titulo.png\"")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "<title>Galicia</title>")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "href=\"./fis/default.min.css\"")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "href=\"./fis/customcarousel.min.css\"")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "form action=\"index2.php\" method=\"post\" id=\"form1\"")
+    )
+    and (
+      strings.icontains(body.links, "fis/titl.png")
+      and strings.icontains(body.links, "fis/tecl.png")
+      and strings.icontains(body.links, "fis/logo.png")
+      and strings.icontains(body.links, "fis/burbu.png")
+    )
+    and (
+      strings.icontains(subject.subject, "account")
+      or strings.icontains(subject.subject, "verify")
+      or strings.icontains(subject.subject, "suspended")
+    )
+    and (
+      not profile.by_sender().solicited
+      or (
+        profile.by_sender().any_messages_malicious_or_spam
+        and not profile.by_sender().any_false_positives
+      )
+    )

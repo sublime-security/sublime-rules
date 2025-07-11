@@ -1,0 +1,68 @@
+attack_types:
+- Credential Phishing
+- Brand Impersonation
+description: 'Detects a phishing kit targeting Bancolombia with a simple centered
+  login form.
+
+  This was detected as a result of this kit being deployed on Replit.
+
+
+  Converted from IOK rule - original focuses on website analysis.'
+detection_methods:
+- Header analysis
+- Content analysis
+- URL analysis
+- Natural Language Understanding
+- Sender analysis
+id: 1ee84fbb-d6ae-42b7-be89-e823d45891fa
+name: 'IOK: Bancolombia Phishing Kit GM866x'
+references:
+- https://urlscan.io/result/056508ef-a7c6-40b1-8778-5b180662a59d/
+- https://urlscan.io/result/a878d133-716c-495f-89a3-daa8c1b3f8b1/
+- https://urlscan.io/result/4efb97ab-2eb7-4eb6-bb3e-070cf2492f5c/
+- https://urlscan.io/result/af65c797-d244-438b-91db-8450d0c42381/
+- https://urlscan.io/result/32b05873-e5ac-4099-bda6-082b80d7e377/
+- https://urlscan.io/result/b7c96948-36dc-45de-91d1-b96621d4d49f/
+- https://urlscan.io/result/abbcb8aa-9a07-4394-995f-f5a3622da43f/
+- https://urlscan.io/result/dd5c04e9-6d7a-4ec5-83f6-bae7ca553944/
+- https://urlscan.io/result/e6082228-fdd9-4b71-81bb-57a0796b79a6/
+- https://urlscan.io/result/abcea60a-e6e1-4fdb-8a34-cec1be9fdbb1/
+severity: high
+tactics_and_techniques:
+- 'Impersonation: Brand'
+tags:
+- IOK_Converted
+- IOK_kit
+- IOK_target.bancolombia
+- IOK_target_country.colombia
+type: rule
+source: |
+  type.inbound
+    and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "<title>home</title>")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "background-image: url('archivero/bg-01.jpg')")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "div class=\"wrap-login100 p-l-110 p-r-110 p-t-62 p-b-33\"")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "link rel=\"stylesheet\" type=\"text/css\" href=\"archivero/font-awesome.min.css\"")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "link rel=\"stylesheet\" type=\"text/css\" href=\"archivero/icon-font.min.css\"")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "link rel=\"stylesheet\" type=\"text/css\" href=\"archivero/util.css\"")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "link rel=\"stylesheet\" type=\"text/css\" href=\"archivero/main.css\"")
+    )
+    and (
+      strings.icontains(subject.subject, "account")
+      or strings.icontains(subject.subject, "verify")
+      or strings.icontains(subject.subject, "suspended")
+    )
+    and (
+      not profile.by_sender().solicited
+      or (
+        profile.by_sender().any_messages_malicious_or_spam
+        and not profile.by_sender().any_false_positives
+      )
+    )

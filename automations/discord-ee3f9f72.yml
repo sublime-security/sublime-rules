@@ -1,0 +1,52 @@
+attack_types:
+- Credential Phishing
+- Brand Impersonation
+description: 'Detects a `Discord` phishing kit targeting Discord users.
+
+
+  This kit proxies all requests made by the original Discord
+
+  website to the domain the kit is running on.
+
+
+  Converted from IOK rule - original focuses on website analysis.'
+detection_methods:
+- Header analysis
+- Content analysis
+- URL analysis
+- Natural Language Understanding
+- Sender analysis
+id: f24b8bc1-b62b-4189-b1fd-008c6793df89
+name: 'IOK: Discord Phishing Kit ee3f9f72'
+references:
+- https://urlscan.io/result/a0823bf6-9814-44ce-9517-271904fa7eed
+- https://urlscan.io/result/ee3f9f72-fe13-4729-b11e-ebcf51a02ed8
+severity: high
+tactics_and_techniques:
+- 'Impersonation: Brand'
+tags:
+- IOK_Converted
+- IOK_kit
+- IOK_target.discord
+type: rule
+source: |
+  type.inbound
+    and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "oldXHROpen")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "oldFetch")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "url.includes('://discord.com/api/')")
+    )
+    and strings.icontains(subject.subject, "discord")
+    and sender.email.domain.domain != "discord.com"
+    and (
+      not profile.by_sender().solicited
+      or (
+        profile.by_sender().any_messages_malicious_or_spam
+        and not profile.by_sender().any_false_positives
+      )
+    )

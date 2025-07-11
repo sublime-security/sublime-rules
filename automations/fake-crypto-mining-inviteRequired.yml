@@ -1,0 +1,50 @@
+attack_types:
+- Cryptocurrency Scam
+description: 'Detects a malicious DApp that requires injected Web3 and
+
+  invitation code to gain access to the fake mining offer.
+
+
+  Converted from IOK rule - original focuses on website analysis.'
+detection_methods:
+- Content analysis
+- URL analysis
+- Header analysis
+- Sender analysis
+id: eaa5240d-a54d-4b43-b1d2-e7592c1d21b5
+name: 'IOK: Fake crypto mining - inviteRequired'
+references:
+- https://urlscan.io/result/ed797530-aec2-4bc9-9a41-108ecce0cc29/
+- https://urlscan.io/result/b9317df7-f3c9-4516-9ea3-b7a6886612b9/
+- https://urlscan.io/result/6ca2cf59-cf33-4d5f-9b77-3209529cccab/
+severity: high
+tactics_and_techniques:
+- Investment scam
+tags:
+- IOK_Converted
+- IOK_cryptocurrency
+type: rule
+source: |
+  type.inbound
+    and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "warnPage")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "invitation")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "invitation_code")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "invitation_error")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "invitation_notexist")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "mining_pool")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "mining_income")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "how_join_text")
+    )
+    and (
+      strings.icontains(subject.subject, "coinbase")
+      or strings.icontains(subject.subject, "crypto")
+    )
+    and (
+      not profile.by_sender().solicited
+      or (
+        profile.by_sender().any_messages_malicious_or_spam
+        and not profile.by_sender().any_false_positives
+      )
+    )

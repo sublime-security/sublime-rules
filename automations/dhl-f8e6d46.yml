@@ -1,0 +1,53 @@
+attack_types:
+- Credential Phishing
+- Brand Impersonation
+description: "Detects a DHL phishing kit that has several indicators that are \nexclusive\
+  \ to the kit itself, such as the endpoint where the \ncredentials are exfiltrated\
+  \ to, and the name of credit card \nvalidation function.\n\nConverted from IOK rule\
+  \ - original focuses on website analysis."
+detection_methods:
+- Header analysis
+- Content analysis
+- URL analysis
+- Natural Language Understanding
+- Sender analysis
+id: 683033f4-4abe-4241-af06-b4bcfec050b5
+name: 'IOK: DHL Phishing Kit f8e6d46'
+references:
+- https://urlscan.io/result/073b610e-dcee-4acb-9a08-20ed20e8cf6a
+- https://urlscan.io/result/adec9c75-4f47-4563-aee8-d8b9bfebc3f7
+- https://urlscan.io/result/27b6403b-ea2d-45a6-918f-d08bc5e37534
+- https://urlscan.io/result/71c1dc24-d7de-4ca1-9a62-113ad2b61264
+- https://urlscan.io/result/0c66df93-8a8d-41d4-ba4e-61dfda7b50d8
+severity: high
+tactics_and_techniques:
+- 'Impersonation: Brand'
+tags:
+- IOK_Converted
+- IOK_kit
+- IOK_target.dhl
+type: rule
+source: |
+  type.inbound
+    and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "action=\"./app/jeandhl")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "src=\"./files/img/delivery-truck.png\"")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "onkeyup=\"$cc.validate(event)\"")
+    )
+    and (
+      strings.icontains(subject.subject, "account")
+      or strings.icontains(subject.subject, "verify")
+      or strings.icontains(subject.subject, "suspended")
+    )
+    and (
+      not profile.by_sender().solicited
+      or (
+        profile.by_sender().any_messages_malicious_or_spam
+        and not profile.by_sender().any_false_positives
+      )
+    )

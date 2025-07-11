@@ -1,0 +1,59 @@
+attack_types:
+- Credential Phishing
+description: 'Save Page WE is a chrome extension used by phishers to clone a target
+  website and save it as a single HTML file.
+
+
+  Unlike HTTrack (another commonly used tool):
+
+  * It''s a browser extension so doesn''t require any additional tools to be installed.
+
+  * It saves pages as a single HTML file (with all assets embedded in it) which makes
+  the resulting kit more portable and easier to deploy.
+
+
+  Converted from IOK rule - original focuses on website analysis.'
+detection_methods:
+- Content analysis
+- URL analysis
+- Header analysis
+- Sender analysis
+id: 1e3b78c0-7a30-4ee4-b823-b0ca2d043c50
+name: 'IOK: Save Page WE website saver'
+references:
+- https://chrome.google.com/webstore/detail/save-page-we/dhhpefjklgkmgeafimnjhojgjamoafof
+severity: high
+tactics_and_techniques:
+- Social engineering
+tags:
+- IOK_Converted
+- IOK_cloning
+type: rule
+source: |
+  type.inbound
+    and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "/*savepage-url=")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "<meta name=\"savepage-url\" content=\"")
+      or strings.icontains(ml.link_analysis(.).final_dom.raw, "<meta name=\"savepage-title\" content=\"")
+      or strings.icontains(ml.link_analysis(.).final_dom.raw, "<meta name=\"savepage-pubdate\" content=\"")
+      or strings.icontains(ml.link_analysis(.).final_dom.raw, "<meta name=\"savepage-from\" content=\"")
+      or strings.icontains(ml.link_analysis(.).final_dom.raw, "<meta name=\"savepage-date\" content=\"")
+      or strings.icontains(ml.link_analysis(.).final_dom.raw, "<meta name=\"savepage-state\" content=\"")
+      or strings.icontains(ml.link_analysis(.).final_dom.raw, "<meta name=\"savepage-version\" content=\"")
+      or strings.icontains(ml.link_analysis(.).final_dom.raw, "<meta name=\"savepage-comments\" content=\"")
+    )
+    and (
+      strings.icontains(subject.subject, "account")
+      or strings.icontains(subject.subject, "verify")
+      or strings.icontains(subject.subject, "suspended")
+    )
+    and (
+      not profile.by_sender().solicited
+      or (
+        profile.by_sender().any_messages_malicious_or_spam
+        and not profile.by_sender().any_false_positives
+      )
+    )

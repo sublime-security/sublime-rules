@@ -1,0 +1,63 @@
+attack_types:
+- Credential Phishing
+- Brand Impersonation
+description: 'Detects a phishing kit targeting square-enix.com with a fake FFXIV forum
+  gil giveaway.
+
+  Phishing kit consists of two pages, a forum page and a login page.
+
+
+  Converted from IOK rule - original focuses on website analysis.'
+detection_methods:
+- Header analysis
+- Content analysis
+- URL analysis
+- Natural Language Understanding
+- Sender analysis
+id: 98d6cad8-c8fb-437a-958a-876997ff1451
+name: 'IOK: Square Enix FFXIV Gil Phishing Kit'
+references:
+- https://urlscan.io/result/654111fb-82ac-4973-880f-bbaec82694b9/
+- https://urlscan.io/result/67b4fe92-f667-4201-a310-2cd2cf72af8a/
+- https://urlscan.io/result/9e171326-b335-498c-a68f-63e1e16a4499/
+- https://urlscan.io/result/e056ca66-5288-4fb6-8a47-06e03b0f1eba/
+severity: high
+tactics_and_techniques:
+- 'Impersonation: Brand'
+tags:
+- IOK_Converted
+- IOK_kit
+- IOK_target.square-enix
+type: rule
+source: |
+  type.inbound
+    and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "threads/429347-Healers-and-6.0-What-we-can-learn-from-AST-and-what-I-d-like-to-see-going-forward")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "300M Gil Raffle")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, ".php\" method=\"post\"")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "Square Enix ID")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "Square Enix Password")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "One-Time Password")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "name=\"key_value\"")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "<form id=\"loginForm\" name=\"login\" method=\"post\" action=\"")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, ".php\">")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "Square Enix ID")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "Square Enix Password")
+    )
+    and (
+      strings.icontains(subject.subject, "account")
+      or strings.icontains(subject.subject, "verify")
+      or strings.icontains(subject.subject, "suspended")
+    )
+    and (
+      not profile.by_sender().solicited
+      or (
+        profile.by_sender().any_messages_malicious_or_spam
+        and not profile.by_sender().any_false_positives
+      )
+    )

@@ -1,0 +1,52 @@
+attack_types:
+- Brand Impersonation
+- BEC/Fraud
+description: 'Detects a Discord oAuth2 scam confirmation page, which is often used
+  in combination with social engineering to get the user to authorize for a spam application.
+
+  This for example enables the attacker to add the victims into further scam/advertised
+  servers using the `guilds.join` scope.
+
+
+  Converted from IOK rule - original focuses on website analysis.'
+detection_methods:
+- Content analysis
+- URL analysis
+- Header analysis
+- Sender analysis
+id: de2ab56e-e4bc-45aa-bf1f-b50ac87f52ec
+name: 'IOK: Discord oAuth2 Scam u8eviyps'
+references:
+- https://urlscan.io/result/1314542e-6bdd-496d-a89c-dd20eb60cc99/
+- https://urlscan.io/result/8b41d331-9749-492c-9616-b133e27880df/
+- https://urlscan.io/result/0fe1135e-6d7a-4ee9-8da0-c19d971d0ab0/
+severity: high
+tactics_and_techniques:
+- 'Impersonation: Brand'
+- Social engineering
+tags:
+- IOK_Converted
+- IOK_scam
+- IOK_target.discord
+type: rule
+source: |
+  type.inbound
+    and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "<title>Discord Confirmation</title>")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "<img id=\"server_pic\" src=\"https://media.discordapp.net/attachments/851389970840944640/851390759998586910/755244169898885160.gif\">")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "<p>Your Discord account has been successfully verified, you can close this page</p>")
+    )
+    and strings.icontains(subject.subject, "discord")
+    and sender.email.domain.domain != "discord.com"
+    and (
+      not profile.by_sender().solicited
+      or (
+        profile.by_sender().any_messages_malicious_or_spam
+        and not profile.by_sender().any_false_positives
+      )
+    )

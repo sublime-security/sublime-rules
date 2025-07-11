@@ -1,0 +1,46 @@
+attack_types:
+- Malware/Ransomware
+description: "Detects the `Amadey` botnet C2 panel page. \n\nUses the fact that the\
+  \ assets are delimited \nusing a backslash instead of the normal forward\nslash.\n\
+  \nConverted from IOK rule - original focuses on website analysis."
+detection_methods:
+- Content analysis
+- URL analysis
+- Header analysis
+- Sender analysis
+id: e1ae711e-01a6-4de7-938f-60a0249eb013
+name: 'IOK: Amadey C2 Panel afb0c86a'
+references:
+- https://tracker.viriback.com
+- https://malpedia.caad.fkie.fraunhofer.de/details/win.amadey
+- https://urlscan.io/result/afb0c86a-7aba-492c-936c-87f59d872271
+severity: high
+tactics_and_techniques:
+- Social engineering
+tags:
+- IOK_Converted
+- IOK_malware.amadey
+- IOK_malware
+type: rule
+source: |
+  type.inbound
+    and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "Css\Style.css")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "Images\bg_1.png")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "Authorization")
+    )
+    and (
+      strings.icontains(subject.subject, "account")
+      or strings.icontains(subject.subject, "verify")
+      or strings.icontains(subject.subject, "suspended")
+    )
+    and (
+      not profile.by_sender().solicited
+      or (
+        profile.by_sender().any_messages_malicious_or_spam
+        and not profile.by_sender().any_false_positives
+      )
+    )

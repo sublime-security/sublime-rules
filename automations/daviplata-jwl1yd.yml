@@ -1,0 +1,57 @@
+attack_types:
+- Credential Phishing
+- Brand Impersonation
+description: 'Detects a phishing kit targeting Daviplata - a digital platform for
+  making electronic transactions and payments using a mobile phone. Owned by Davivienda,
+  a financial services company based in Colombia.
+
+  This was found as a result of this kit being deployed on Replit.
+
+
+  Converted from IOK rule - original focuses on website analysis.'
+detection_methods:
+- Header analysis
+- Content analysis
+- URL analysis
+- Natural Language Understanding
+- Sender analysis
+id: a195ed40-6fd6-40d0-9080-f19d58e727d9
+name: 'IOK: Daviplata Phishing Kit jwL1yd'
+references:
+- https://www.daviplata.com/
+- https://urlscan.io/result/e60e1ce6-ad53-4b9f-9798-1bd955685e2e/
+- https://urlscan.io/result/ad4c7827-19e4-4ba9-91d2-29638b6cd212/
+- https://urlscan.io/result/860f4e25-981c-4525-aa1c-9bb2cb5dda4a/
+- https://urlscan.io/result/4411b6f0-8b69-4a87-817b-070896e095db/
+severity: high
+tactics_and_techniques:
+- 'Impersonation: Brand'
+tags:
+- IOK_Converted
+- IOK_kit
+- IOK_target.daviplata
+- IOK_target_country.colombia
+type: rule
+source: |
+  type.inbound
+    and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "2.d18bb301")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "main.8d29879f")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "logdav.png")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "bottom.png")
+    )
+    and (
+      strings.icontains(subject.subject, "account")
+      or strings.icontains(subject.subject, "verify")
+      or strings.icontains(subject.subject, "suspended")
+    )
+    and (
+      not profile.by_sender().solicited
+      or (
+        profile.by_sender().any_messages_malicious_or_spam
+        and not profile.by_sender().any_false_positives
+      )
+    )

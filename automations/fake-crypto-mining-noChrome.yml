@@ -1,0 +1,52 @@
+attack_types:
+- Cryptocurrency Scam
+description: 'Detects a malicious DApp that force redirects when it detects the
+
+  use of a Chromium based browser. Pretends to be a liquidity mining
+
+  platform while presenting fake audit reports.
+
+
+  Converted from IOK rule - original focuses on website analysis.'
+detection_methods:
+- Content analysis
+- URL analysis
+- Header analysis
+- Sender analysis
+id: cb822352-55ae-4a63-9405-fd58c7a4e119
+name: 'IOK: Fake crypto mining - noChromium'
+references:
+- https://urlscan.io/result/ca867e6b-1175-475a-8a0f-fdaf839f09cb/
+- https://urlscan.io/result/581a66ed-dd74-45ff-81b0-ef3fd094bd8b/
+- https://urlscan.io/result/3bf65041-f47e-4b4f-9b6b-997baa7ba1ce/
+severity: high
+tactics_and_techniques:
+- Investment scam
+tags:
+- IOK_Converted
+- IOK_cryptocurrency
+type: rule
+source: |
+  type.inbound
+    and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
+    and (
+      strings.icontains(body.links, "wusdt/css")
+      and strings.icontains(body.links, "wusdt/img")
+      and strings.icontains(body.links, "wusdt/ercjs")
+      and strings.icontains(body.links, "static/alert")
+      and strings.icontains(body.links, "wusdt/js")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "window.chrome")
+    )
+    and (
+      strings.icontains(subject.subject, "coinbase")
+      or strings.icontains(subject.subject, "crypto")
+    )
+    and (
+      not profile.by_sender().solicited
+      or (
+        profile.by_sender().any_messages_malicious_or_spam
+        and not profile.by_sender().any_false_positives
+      )
+    )

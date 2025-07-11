@@ -1,0 +1,46 @@
+attack_types:
+- Credential Phishing
+- Brand Impersonation
+description: "Discord Hypesquad phishing kit containing a comment \nleft behind by\
+  \ the supposed developer of the kit.\nAs well as a unique nonce value that is present.\n\
+  \nConverted from IOK rule - original focuses on website analysis."
+detection_methods:
+- Header analysis
+- Content analysis
+- URL analysis
+- Natural Language Understanding
+- Sender analysis
+id: a7297ad9-35c3-4c5d-a1f4-282e3be21426
+name: 'IOK: Discord Hypesquad Phishing Kit 9e6c4a9'
+references:
+- https://urlscan.io/search/#hash%3Ae6054519e1271faf9134d92dc22e29fbba341275641596a9c32ed37a3c73905f
+- https://urlscan.io/search/#hash%3A5ee7eb3becab8cd3bf3cf095211f4d35041e9009bb1755771a3fa66aa3a75897
+- https://urlscan.io/search/#hash%3A0063c8ab81d88071cbe5d1ba5c49a36afd660cc0824e6fac1532c95d5dde1f6f
+- https://urlscan.io/result/9e6c4a9f-62b4-4b07-81f2-09f10be41cc7
+severity: high
+tactics_and_techniques:
+- 'Impersonation: Brand'
+tags:
+- IOK_Converted
+- IOK_kit
+- IOK_target.discord
+- IOK_threat_actor.strolly
+type: rule
+source: |
+  type.inbound
+    and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "<!---By strolly#9548-->")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "nonce=\"MjE2LDE0MCwxNzgsMTgwLDY1LDEwOCwxNCwyMjQ=\"")
+    )
+    and strings.icontains(subject.subject, "discord")
+    and sender.email.domain.domain != "discord.com"
+    and (
+      not profile.by_sender().solicited
+      or (
+        profile.by_sender().any_messages_malicious_or_spam
+        and not profile.by_sender().any_false_positives
+      )
+    )

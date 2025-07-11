@@ -1,0 +1,42 @@
+attack_types:
+- Credential Phishing
+- Brand Impersonation
+description: "Detects a fake 404 page that is used by Discord phishing kits. \nThese\
+  \ sites often have a hidden path (/login) that displays a fake Discord login page.\n\
+  \nConverted from IOK rule - original focuses on website analysis."
+detection_methods:
+- Content analysis
+- URL analysis
+- Header analysis
+- Sender analysis
+id: c5000a13-a6be-4d3f-8bc7-921df42ee2a5
+name: 'IOK: Discord Fake Error 43143a94'
+references:
+- https://urlscan.io/result/43143a94-ee73-46da-a877-e0f0e5eb5d0c/
+- https://urlscan.io/result/d360ec5c-ec44-484e-8bf5-7ad3a296adbb/
+- https://urlscan.io/search/#page.title%3A%22Page%20Not%20Found%20%7C%20404%22
+severity: high
+tactics_and_techniques:
+- 'Impersonation: Brand'
+tags:
+- IOK_Converted
+- IOK_kit
+- IOK_target.discord
+type: rule
+source: |
+  type.inbound
+    and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "https://fonts.googleapis.com/css2?family=Roboto:ital,wght@0,100;0,300;0,400;0,500;0,700;0,900;1,100;1,300;1,400;1,500;1,700;1,900&display=swap")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "This page was not found, please try again later!")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "<h1>PAGE NOT FOUND!</h1>")
+    )
+    and strings.icontains(subject.subject, "discord")
+    and sender.email.domain.domain != "discord.com"
+    and (
+      not profile.by_sender().solicited
+      or (
+        profile.by_sender().any_messages_malicious_or_spam
+        and not profile.by_sender().any_false_positives
+      )
+    )

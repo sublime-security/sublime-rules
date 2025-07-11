@@ -1,0 +1,46 @@
+attack_types:
+- Credential Phishing
+- Brand Impersonation
+description: 'Metamask Phishing kit that uses WebFlow.
+
+  Allowing us to flag it due to it having the same WebFlow site key for each phish.
+
+
+  Converted from IOK rule - original focuses on website analysis.'
+detection_methods:
+- Header analysis
+- Content analysis
+- URL analysis
+- Natural Language Understanding
+- Sender analysis
+id: af0f04b3-11b4-429f-99a0-003b79c8c925
+name: 'IOK: Metamask Phishing Kit 604ec65'
+references:
+- https://urlscan.io/result/8953ff2a-f891-40cb-9310-7edab6f0876a
+- https://urlscan.io/result/b4830e43-ef8c-40ac-b4d7-ddf540f2c43b
+severity: high
+tactics_and_techniques:
+- 'Impersonation: Brand'
+tags:
+- IOK_Converted
+- IOK_kit
+- IOK_target.metamask
+type: rule
+source: |
+  type.inbound
+    and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "data-wf-site=\"604ec65d7935b45ce251b35e\"")
+    )
+    and (
+      strings.icontains(subject.subject, "account")
+      or strings.icontains(subject.subject, "verify")
+      or strings.icontains(subject.subject, "suspended")
+    )
+    and (
+      not profile.by_sender().solicited
+      or (
+        profile.by_sender().any_messages_malicious_or_spam
+        and not profile.by_sender().any_false_positives
+      )
+    )

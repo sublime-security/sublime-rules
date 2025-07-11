@@ -1,0 +1,47 @@
+attack_types:
+- Credential Phishing
+- Brand Impersonation
+- Cryptocurrency Scam
+description: 'Detects Coinbase recovery phrase scam websites. Often hosted on Glitch
+  (https://glitch.com/).
+
+
+  Converted from IOK rule - original focuses on website analysis.'
+detection_methods:
+- Header analysis
+- Content analysis
+- URL analysis
+- Natural Language Understanding
+- Sender analysis
+id: 9b030d44-2be2-489e-a587-75eae14b9a35
+name: 'IOK: Coinbase Phishing zG3nVT0g'
+references:
+- https://urlscan.io/result/68d77307-6932-4eae-b7b0-ca8157b2a50f/
+- https://urlscan.io/result/bdf5c218-896f-4e17-b5ef-2b67f80041e2/
+- https://urlscan.io/result/4a5ee737-6cf8-4028-9bfc-4e93afbe6627/
+severity: high
+tactics_and_techniques:
+- 'Impersonation: Brand'
+- Investment scam
+tags:
+- IOK_Converted
+- IOK_target.coinbase
+- IOK_cryptocurrency
+type: rule
+source: |
+  type.inbound
+    and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "https://i.postimg.cc/zG3nVT0g/cb675.png")
+    )
+    and (
+      strings.icontains(subject.subject, "coinbase")
+      or strings.icontains(subject.subject, "crypto")
+    )
+    and (
+      not profile.by_sender().solicited
+      or (
+        profile.by_sender().any_messages_malicious_or_spam
+        and not profile.by_sender().any_false_positives
+      )
+    )

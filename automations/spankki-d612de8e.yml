@@ -1,0 +1,46 @@
+attack_types:
+- Credential Phishing
+- Brand Impersonation
+description: 'S-Pankki phishing kit which uses the same hidden value across various
+  domains.
+
+
+  Converted from IOK rule - original focuses on website analysis.'
+detection_methods:
+- Header analysis
+- Content analysis
+- URL analysis
+- Natural Language Understanding
+- Sender analysis
+id: 3c1ce3f9-8259-4ebe-b387-04c7deb9e814
+name: 'IOK: S-Pankki Phishing Kit d612de8e'
+references:
+- https://urlscan.io/result/f78a4aff-c3c6-45e4-a37e-db5808a8fb31/
+- https://urlscan.io/result/d612de8e-2c65-4c93-96b1-f2975d66fa2c/
+- https://urlscan.io/result/383931f0-0ccf-49b6-9703-d82d2745c3a1/
+severity: high
+tactics_and_techniques:
+- 'Impersonation: Brand'
+tags:
+- IOK_Converted
+- IOK_kit
+- IOK_target.spankki
+type: rule
+source: |
+  type.inbound
+    and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "<input type=\"hidden\" name=\"qrId\" id=\"qrId\" value=\"NETBANKE445349A3B4F6B10E01A162C5\">")
+    )
+    and (
+      strings.icontains(subject.subject, "account")
+      or strings.icontains(subject.subject, "verify")
+      or strings.icontains(subject.subject, "suspended")
+    )
+    and (
+      not profile.by_sender().solicited
+      or (
+        profile.by_sender().any_messages_malicious_or_spam
+        and not profile.by_sender().any_false_positives
+      )
+    )

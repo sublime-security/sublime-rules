@@ -1,0 +1,46 @@
+attack_types:
+- Credential Phishing
+- Brand Impersonation
+description: "A Steam phishing kit that uses a fake Steam login \nwindow to steal\
+  \ user credentials and 50/100$ gift \ncards as bait.\n\nConverted from IOK rule\
+  \ - original focuses on website analysis."
+detection_methods:
+- Header analysis
+- Content analysis
+- URL analysis
+- Natural Language Understanding
+- Sender analysis
+id: 2c98926b-0787-4f0d-bd32-0655f6290fc9
+name: 'IOK: Steam Phishing Kit ee34fa99'
+references:
+- https://urlscan.io/result/ee34fa99-6cf8-4b16-8cf5-e617e238dea0
+- https://urlscan.io/result/d09c1f36-773f-437c-b533-4dced6cecc1f
+severity: high
+tactics_and_techniques:
+- 'Impersonation: Brand'
+tags:
+- IOK_Converted
+- IOK_target.steam
+- IOK_threat_actor_country.russia
+type: rule
+source: |
+  type.inbound
+    and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
+    and (
+      strings.icontains(body.links, "https://s12.gifyu.com/images/")
+    )
+    and (
+      strings.icontains(body.links, "metrica.php")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "auronplay")
+    )
+    and strings.icontains(subject.subject, "steam")
+    and sender.email.domain.domain != "steampowered.com"
+    and (
+      not profile.by_sender().solicited
+      or (
+        profile.by_sender().any_messages_malicious_or_spam
+        and not profile.by_sender().any_false_positives
+      )
+    )

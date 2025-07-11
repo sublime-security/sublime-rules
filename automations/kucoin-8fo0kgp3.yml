@@ -1,0 +1,58 @@
+attack_types:
+- Credential Phishing
+- Brand Impersonation
+description: 'Detects a KuCoin phishing kit deployed often on replit.com.
+
+
+  Converted from IOK rule - original focuses on website analysis.'
+detection_methods:
+- Header analysis
+- Content analysis
+- URL analysis
+- Natural Language Understanding
+- Sender analysis
+id: 9f6e6ac6-91ea-43e4-a62f-68d65130616b
+name: 'IOK: KuCoin Phishing Kit 8fo0kgp3'
+references:
+- https://urlscan.io/result/768a3795-b37c-44c4-9ff3-8bd14dc0ec97
+severity: high
+tactics_and_techniques:
+- 'Impersonation: Brand'
+tags:
+- IOK_Converted
+- IOK_kit
+- IOK_target.kucoin
+- IOK_target_country.argentina
+type: rule
+source: |
+  type.inbound
+    and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "<title>Iniciar Sesión | KuCoin</title>")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "form action=\"step.php\" method=\"post\"")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "class=\"cointer\"")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "<a href=\"celu.html\">Celular</a>")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "<td id=\"db\">Email</td>")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "<td id=\"dc\">con codigo QR</td>")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "<td id=\"da\">Celular</td>")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "<a href=\"ku.html\">Email</a>")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "<td id=\"dc\">con codigo QR</td>")
+    )
+    and (
+      strings.icontains(subject.subject, "account")
+      or strings.icontains(subject.subject, "verify")
+      or strings.icontains(subject.subject, "suspended")
+    )
+    and (
+      not profile.by_sender().solicited
+      or (
+        profile.by_sender().any_messages_malicious_or_spam
+        and not profile.by_sender().any_false_positives
+      )
+    )

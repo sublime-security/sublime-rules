@@ -1,0 +1,48 @@
+attack_types:
+- Credential Phishing
+description: 'Detects websites made with the WebFlow website builder.
+
+
+  WebFlow provides software as a service (SaaS) for website
+
+  building as well as hosting.
+
+
+  Converted from IOK rule - original focuses on website analysis.'
+detection_methods:
+- Content analysis
+- URL analysis
+- Header analysis
+- Sender analysis
+id: 566a4538-d0ad-4944-a6a8-251ff3ec1598
+name: 'IOK: Webflow Website Creator'
+references:
+- https://webflow.com/
+- https://urlscan.io/result/8953ff2a-f891-40cb-9310-7edab6f0876a
+- https://urlscan.io/result/44812aa4-942c-43e1-a451-a1c3aeecdb40
+severity: high
+tactics_and_techniques:
+- Social engineering
+tags:
+- IOK_Converted
+- IOK_website_builder
+- IOK_website_builder.webflow
+type: rule
+source: |
+  type.inbound
+    and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "<meta content=\"Webflow\" name=\"generator\">")
+    )
+    and (
+      strings.icontains(subject.subject, "account")
+      or strings.icontains(subject.subject, "verify")
+      or strings.icontains(subject.subject, "suspended")
+    )
+    and (
+      not profile.by_sender().solicited
+      or (
+        profile.by_sender().any_messages_malicious_or_spam
+        and not profile.by_sender().any_false_positives
+      )
+    )

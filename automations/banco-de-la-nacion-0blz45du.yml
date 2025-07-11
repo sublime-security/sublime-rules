@@ -1,0 +1,52 @@
+attack_types:
+- Credential Phishing
+- Brand Impersonation
+description: 'Detects a Banco de la Nación phishing kit using a form action URL and
+  a button ID that only appear in this kit.
+
+  Deployed often on `replit.com`.
+
+
+  Converted from IOK rule - original focuses on website analysis.'
+detection_methods:
+- Header analysis
+- Content analysis
+- URL analysis
+- Natural Language Understanding
+- Sender analysis
+id: bede9f0c-17e0-4bba-886d-144bb71a3743
+name: 'IOK: Banco de la Nación Phishing Kit 0blz45du'
+references:
+- https://urlscan.io/result/3d822399-1fe2-49fb-b989-7d3d976c7af9/
+- https://hb.redlink.com.ar/bna/login.htm
+severity: high
+tactics_and_techniques:
+- 'Impersonation: Brand'
+tags:
+- IOK_Converted
+- IOK_kit
+- IOK_target.banco_de_la_nacion
+- IOK_target_country.argentina
+type: rule
+source: |
+  type.inbound
+    and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "action=\"$icko.php\"")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "name=\"ksfmn\"")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "id=\"frostie\"")
+    )
+    and (
+      strings.icontains(subject.subject, "account")
+      or strings.icontains(subject.subject, "verify")
+      or strings.icontains(subject.subject, "suspended")
+    )
+    and (
+      not profile.by_sender().solicited
+      or (
+        profile.by_sender().any_messages_malicious_or_spam
+        and not profile.by_sender().any_false_positives
+      )
+    )

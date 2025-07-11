@@ -1,0 +1,46 @@
+attack_types:
+- Credential Phishing
+- Brand Impersonation
+description: 'Detects a Paypal phishing kit.
+
+
+  Converted from IOK rule - original focuses on website analysis.'
+detection_methods:
+- Header analysis
+- Content analysis
+- URL analysis
+- Natural Language Understanding
+- Sender analysis
+id: a9af7362-1e04-4722-9024-a71d013a834c
+name: 'IOK: Paypal Phishing Kit 6c455a6'
+references:
+- https://urlscan.io/result/6c455a62-1533-49d8-ae6d-db0905cc779f
+severity: high
+tactics_and_techniques:
+- 'Impersonation: Brand'
+tags:
+- IOK_Converted
+- IOK_kit
+- IOK_target.paypal
+type: rule
+source: |
+  type.inbound
+    and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "login.php")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "p02PG7qTPOzRbBlVOVYcIZp207FMD847ffoS0=")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "OdHJON702gbbVy4cAFWxaboMpVOk5muI1jhED3XwaB6eOIPN")
+    )
+    and strings.icontains(subject.subject, "paypal")
+    and sender.email.domain.domain != "paypal.com"
+    and (
+      not profile.by_sender().solicited
+      or (
+        profile.by_sender().any_messages_malicious_or_spam
+        and not profile.by_sender().any_false_positives
+      )
+    )

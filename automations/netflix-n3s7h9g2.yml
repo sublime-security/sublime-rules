@@ -1,0 +1,49 @@
+attack_types:
+- Credential Phishing
+- Brand Impersonation
+description: 'Phishing kit for Netflix credentials with assets hosted on ImgBB.
+
+
+  Converted from IOK rule - original focuses on website analysis.'
+detection_methods:
+- Header analysis
+- Content analysis
+- URL analysis
+- Natural Language Understanding
+- Sender analysis
+id: b10fc4f8-8e08-4210-a495-963b303a28e7
+name: 'IOK: Netflix Phishing Kit n3s7h9g2'
+references:
+- https://urlscan.io/result/859d4083-fb92-4c14-a01f-dd16bb7c461e
+- https://urlscan.io/result/ffbabb8f-5397-4c01-8731-582ab3ecbb24
+- https://urlscan.io/search/#hash%3Acaf69067b53f840529b7cc3a2494e90878dc9f62307fc458dd893fac746d37a0%20%7C%7C%20hash%3Ae80af08a4fc42043410733f64494a8094c202e1f8cf1fc2edfd39f40cf4124bd
+severity: high
+tactics_and_techniques:
+- 'Impersonation: Brand'
+tags:
+- IOK_Converted
+- IOK_kit
+- IOK_target.netflix
+type: rule
+source: |
+  type.inbound
+    and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
+    and (
+      strings.icontains(subject.subject, "Netflix")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "i.ibb.co/vXqDmnh/background.jpg")
+      or strings.icontains(ml.link_analysis(.).final_dom.raw, "i.ibb.co/r5krrdz/logo.png")
+    )
+    and (
+      strings.icontains(subject.subject, "account")
+      or strings.icontains(subject.subject, "verify")
+      or strings.icontains(subject.subject, "suspended")
+    )
+    and (
+      not profile.by_sender().solicited
+      or (
+        profile.by_sender().any_messages_malicious_or_spam
+        and not profile.by_sender().any_false_positives
+      )
+    )

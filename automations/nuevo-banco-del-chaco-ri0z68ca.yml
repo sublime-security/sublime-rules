@@ -1,0 +1,52 @@
+attack_types:
+- Credential Phishing
+- Brand Impersonation
+description: 'Detects a Nuevo Banco del Chaco phishing kit using a form action URL
+  and a CSRF token that only appears in this kit.
+
+  Deployed often on replit.com.
+
+
+  Converted from IOK rule - original focuses on website analysis.'
+detection_methods:
+- Header analysis
+- Content analysis
+- URL analysis
+- Natural Language Understanding
+- Sender analysis
+id: 32df5b1a-246a-49c0-8ac7-7d73bb4ea0a3
+name: 'IOK: Nuevo Banco del Chaco Phishing Kit ri0z68ca'
+references:
+- https://urlscan.io/result/060511f7-f141-44ec-b2f6-d3801c6c76a3/
+- https://hb.redlink.com.ar/nbch/login.htm
+severity: high
+tactics_and_techniques:
+- 'Impersonation: Brand'
+tags:
+- IOK_Converted
+- IOK_kit
+- IOK_target.nuevobancodelchaco
+- IOK_target_country.argentina
+type: rule
+source: |
+  type.inbound
+    and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "action=\"now.php\"")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "12-4-90A98F803C403A735F6BC70078D90D82")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "12-6-90A98F803C403A735F6BC70078D90D82")
+    )
+    and (
+      strings.icontains(subject.subject, "account")
+      or strings.icontains(subject.subject, "verify")
+      or strings.icontains(subject.subject, "suspended")
+    )
+    and (
+      not profile.by_sender().solicited
+      or (
+        profile.by_sender().any_messages_malicious_or_spam
+        and not profile.by_sender().any_false_positives
+      )
+    )

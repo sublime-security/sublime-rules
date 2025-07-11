@@ -1,0 +1,46 @@
+attack_types:
+- Credential Phishing
+- Brand Impersonation
+description: 'Detects a Facebook phishing kit, telling the victim
+
+  to enter their details to reactivate their account.
+
+
+  Converted from IOK rule - original focuses on website analysis.'
+detection_methods:
+- Header analysis
+- Content analysis
+- URL analysis
+- Natural Language Understanding
+- Sender analysis
+id: 1b7ea559-a488-4ebb-9371-2c6ad651a62c
+name: 'IOK: Facebook Account Recovery Phishing Kit 0e420f8'
+references:
+- https://urlscan.io/result/0e420f8e-1743-41dc-82cd-13f3a2b73d28
+- https://urlscan.io/result/e2a62f41-1aa9-4de9-8e64-d3b56dcf958d
+severity: high
+tactics_and_techniques:
+- 'Impersonation: Brand'
+tags:
+- IOK_Converted
+- IOK_kit
+- IOK_target.facebook
+type: rule
+source: |
+  type.inbound
+    and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
+    and (
+      strings.icontains(body.links, "https://db.onlinewebfonts.com/c/0c5e6f133b0b25edfed47aca4ab57676?family=Segoe+UI+Historic")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "styles.c9105ee458e38d6dd088.css")
+    )
+    and strings.icontains(subject.subject, "facebook")
+    and sender.email.domain.domain != "facebook.com"
+    and (
+      not profile.by_sender().solicited
+      or (
+        profile.by_sender().any_messages_malicious_or_spam
+        and not profile.by_sender().any_false_positives
+      )
+    )

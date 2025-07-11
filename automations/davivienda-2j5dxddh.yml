@@ -1,0 +1,63 @@
+attack_types:
+- Credential Phishing
+- Brand Impersonation
+description: 'Detects a Davivienda phishing kit deployed often on replit.com targeting
+  Colombian citizens.
+
+
+  Converted from IOK rule - original focuses on website analysis.'
+detection_methods:
+- Header analysis
+- Content analysis
+- URL analysis
+- Natural Language Understanding
+- Sender analysis
+id: 8089842f-59c8-40e8-89f1-7e18a576b73d
+name: 'IOK: Davivienda Phishing Kit 2j5dxddh'
+references:
+- https://urlscan.io/result/5d33c5b2-eb5f-4d88-8638-a1054580ef9e
+severity: high
+tactics_and_techniques:
+- 'Impersonation: Brand'
+tags:
+- IOK_Converted
+- IOK_kit
+- IOK_target.davivienda
+- IOK_target_country.colombia
+type: rule
+source: |
+  type.inbound
+    and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "<title>Banca Digital Davivienda</title>")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "href=\"./index_files/theme.css.davivienda\"")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "href=\"./index_files/primefaces.css.davivienda\"")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "src=\"./index_files/jquery.js.davivienda\"")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "src=\"./index_files/analytics.js.descarga\"")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "link rel=\"shortcut icon\" type=\"image/x-icon\" href=\"https://miredireciosnq.yj.lu/favicon.ico\"")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "form method=\"post\" action=\"tos.php\"")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "src=\"./index_files/logo-davivienda-black.png\"")
+      or strings.icontains(ml.link_analysis(.).final_dom.raw, "src=\"./index_files/logo-davivienda.png\"")
+    )
+    and (
+      strings.icontains(subject.subject, "account")
+      or strings.icontains(subject.subject, "verify")
+      or strings.icontains(subject.subject, "suspended")
+    )
+    and (
+      not profile.by_sender().solicited
+      or (
+        profile.by_sender().any_messages_malicious_or_spam
+        and not profile.by_sender().any_false_positives
+      )
+    )

@@ -1,0 +1,51 @@
+attack_types:
+- Cryptocurrency Scam
+description: 'Detects a scam giveaway landing page which claims to host a large cryptocurrency
+  event.
+
+  It asks you to send coins to a wallet to have them doubled.
+
+
+  Converted from IOK rule - original focuses on website analysis.'
+detection_methods:
+- Content analysis
+- URL analysis
+- Header analysis
+- Sender analysis
+id: de3709a5-f37a-40fb-bb92-5ae4cdb09702
+name: 'IOK: Vitalik Buterin fake crypto giveaway cbn4xt8m'
+references:
+- https://urlscan.io/result/2c218734-675b-495f-a0cb-a6002ef562ad/
+severity: high
+tactics_and_techniques:
+- Investment scam
+tags:
+- IOK_Converted
+- IOK_cryptocurrency
+- IOK_cryptocurrency.ethereum
+type: rule
+source: |
+  type.inbound
+    and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "<title>Ethereum Giveaway 2022</title>")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "const MULTIPLIER = +'2';")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "const GIVEAWAY_AMOUNT = +'500000';")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "const GIVEAWAY_AMOUNT_REDISUE = +'165000';")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "img src=\"images/tope3f5.png\" alt=\"Image\"")
+    )
+    and (
+      strings.icontains(subject.subject, "coinbase")
+      or strings.icontains(subject.subject, "crypto")
+    )
+    and (
+      not profile.by_sender().solicited
+      or (
+        profile.by_sender().any_messages_malicious_or_spam
+        and not profile.by_sender().any_false_positives
+      )
+    )

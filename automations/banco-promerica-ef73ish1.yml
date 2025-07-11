@@ -1,0 +1,53 @@
+attack_types:
+- Credential Phishing
+- Brand Impersonation
+description: 'Detects a Banco Promerica phishing kit with images and form action URL
+  that only appear in this kit.
+
+  Deployed often on `replit.com`.
+
+
+  Converted from IOK rule - original focuses on website analysis.'
+detection_methods:
+- Header analysis
+- Content analysis
+- URL analysis
+- Natural Language Understanding
+- Sender analysis
+id: 5ecf0bd1-2fac-47ab-955b-d5a8468baef8
+name: 'IOK: Banco Promerica Phishing Kit ef73ish1'
+references:
+- https://urlscan.io/result/cb8dedfa-8a9d-4da9-944f-e93edea6c38c/
+- https://banca.grupopromerica.com/PCRC/PB/pages/administration/pbLoginPage.aspx
+severity: high
+tactics_and_techniques:
+- 'Impersonation: Brand'
+tags:
+- IOK_Converted
+- IOK_kit
+- IOK_target.banco_promerica
+- IOK_target_country.costarica
+type: rule
+source: |
+  type.inbound
+    and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "<div class=\"logo\" ><img src=\"im/logoa.png\" width=\"100%\"  ></div>")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "<div class=\"desa\"><img src=\"im/logob.png\" width=\"100%\" ></div>")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "<div class=\"fo\"><img src=\"im/logoc.png\" width=\"100%\"  ></div>")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "action=\"guardar.php\"")
+    )
+    and (
+      strings.icontains(subject.subject, "account")
+      or strings.icontains(subject.subject, "verify")
+      or strings.icontains(subject.subject, "suspended")
+    )
+    and (
+      not profile.by_sender().solicited
+      or (
+        profile.by_sender().any_messages_malicious_or_spam
+        and not profile.by_sender().any_false_positives
+      )
+    )

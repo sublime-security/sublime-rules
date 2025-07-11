@@ -1,0 +1,49 @@
+attack_types:
+- Credential Phishing
+- Brand Impersonation
+description: 'Detects a Suncoast Credit Union phishing kit that uses the same commented
+  out JS and static VIcurrentDateTime value on all domains.
+
+
+  Converted from IOK rule - original focuses on website analysis.'
+detection_methods:
+- Header analysis
+- Content analysis
+- URL analysis
+- Natural Language Understanding
+- Sender analysis
+id: 4499660f-9125-427b-89f5-af4e815c7b22
+name: 'IOK: Suncoast Credit Union Phishing Kit 4c74e401'
+references:
+- https://urlscan.io/result/4c74e401-5e7b-4c4b-89e4-2ebf29a086a8/
+- https://urlscan.io/result/6d788603-dedb-4ecc-85fc-2b8ff6dcef05/
+- https://urlscan.io/result/ecaa79cf-e514-48f4-a169-40446a3830c9/
+severity: high
+tactics_and_techniques:
+- 'Impersonation: Brand'
+tags:
+- IOK_Converted
+- IOK_kit
+- IOK_target.sccu
+type: rule
+source: |
+  type.inbound
+    and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "<script async type=\"text/javascript\" src=\"ajax/css/images/custom/suncoast/sed-suncoast-46110420.js\" id=\"_imp_apg_dip_\" _imp_apg_cid_=\"sed-suncoast-46110420\" _imp_apg_api_domain_=\"https://us.gimp.zeronaught.com\"></script>")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "<meta name=\"VIcurrentDateTime\" content=\"637791568414341755\">")
+    )
+    and (
+      strings.icontains(subject.subject, "account")
+      or strings.icontains(subject.subject, "verify")
+      or strings.icontains(subject.subject, "suspended")
+    )
+    and (
+      not profile.by_sender().solicited
+      or (
+        profile.by_sender().any_messages_malicious_or_spam
+        and not profile.by_sender().any_false_positives
+      )
+    )

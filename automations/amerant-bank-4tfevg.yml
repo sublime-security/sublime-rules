@@ -1,0 +1,53 @@
+attack_types:
+- Credential Phishing
+- Brand Impersonation
+description: 'Detects a phishing kit targeting Amerant Bank.
+
+  This was found as a result of this kit being deployed on Replit.
+
+
+  Converted from IOK rule - original focuses on website analysis.'
+detection_methods:
+- Header analysis
+- Content analysis
+- URL analysis
+- Natural Language Understanding
+- Sender analysis
+id: 021768d7-0756-4dd6-ad8c-ba758d222dab
+name: 'IOK: Amerant Bank Phishing Kit 4TfEvG'
+references:
+- https://www.amerantbank.com/
+- https://urlscan.io/result/88c70641-58c8-45f2-843e-a9026f8110cd/
+severity: high
+tactics_and_techniques:
+- 'Impersonation: Brand'
+tags:
+- IOK_Converted
+- IOK_kit
+- IOK_target.amerant
+- IOK_target_country.usa
+type: rule
+source: |
+  type.inbound
+    and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "script id=\"GTMSnippet\" nonce=\"\" data-nonce=\"8A089EEA61455255137694196DA9B4F13B99A2F276BDFAF6EA792DC184C1CE16\"")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "meta name=\"csrf-token\" content=\"0_L40lRrtLFzDrKWqGRzeK1Mamr7OvY6ZQ2GU_k7jbHcXRj-BKuuIAkBlMmyeJ1CT5x5KCTlQsajhs3ec7U_1R6eJCg1\"")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "input name=\"__RequestVerificationToken\" type=\"hidden\" value=\"9Sb_nRgfghLwjsglA0aLodG6PcRbAkzYwVZr65U7_BWfj_45RxOFA6ID9WBHrzvHIhGn7fDTkV6KhFiINVLLAK0r62g1\"")
+    )
+    and (
+      strings.icontains(subject.subject, "account")
+      or strings.icontains(subject.subject, "verify")
+      or strings.icontains(subject.subject, "suspended")
+    )
+    and (
+      not profile.by_sender().solicited
+      or (
+        profile.by_sender().any_messages_malicious_or_spam
+        and not profile.by_sender().any_false_positives
+      )
+    )

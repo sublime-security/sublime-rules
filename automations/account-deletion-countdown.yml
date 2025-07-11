@@ -1,0 +1,47 @@
+attack_types:
+- Credential Phishing
+- Brand Impersonation
+description: 'This phishing kit (reported on by Cofense in 2022, but first seen on
+  urlscan.io in 2018) has a live countdown
+
+  until a user''s email is supposedly "deleted from our server".
+
+
+  Converted from IOK rule - original focuses on website analysis.'
+detection_methods:
+- Content analysis
+- URL analysis
+- Header analysis
+- Sender analysis
+id: 7b8ed18e-1237-480f-a073-341cc4eb4c48
+name: 'IOK: "Validate your account" countdown timer'
+references:
+- https://cofense.com/blog/countdown-timer-ransomware-themed-phishing-attack
+severity: high
+tactics_and_techniques:
+- 'Impersonation: Brand'
+tags:
+- IOK_Converted
+- IOK_kit
+- IOK_target.generic-email
+type: rule
+source: |
+  type.inbound
+    and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "<span style=\"color:gold; font-size:35px;\"><span id=\"timer\">")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "<span style=\"color:gold;\">seconds</span> to validate your account (")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, ") else it will be deleted from our server")
+    )
+    and (
+      strings.icontains(subject.subject, "account")
+      or strings.icontains(subject.subject, "verify")
+      or strings.icontains(subject.subject, "suspended")
+    )
+    and (
+      not profile.by_sender().solicited
+      or (
+        profile.by_sender().any_messages_malicious_or_spam
+        and not profile.by_sender().any_false_positives
+      )
+    )

@@ -1,0 +1,52 @@
+attack_types:
+- Credential Phishing
+- Brand Impersonation
+description: 'Detects a phishing kit targeting Instagram by impersonating Instagram
+  staff and tricking the user into filling out a fake copyright appeal form.
+
+
+  Converted from IOK rule - original focuses on website analysis.'
+detection_methods:
+- Header analysis
+- Content analysis
+- URL analysis
+- Natural Language Understanding
+- Sender analysis
+id: 9e8d3b40-596b-42e6-80c8-063b1137c833
+name: 'IOK: Instagram Copyright Phishing Kit YZvbOv'
+references:
+- https://urlscan.io/result/683c7d86-38a0-4297-a2e1-a9fffe01db01/
+severity: high
+tactics_and_techniques:
+- 'Impersonation: Brand'
+tags:
+- IOK_Converted
+- IOK_kit
+- IOK_target.instagram
+type: rule
+source: |
+  type.inbound
+    and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "link rel=\"stylesheet\" type=\"text/css\" href=\"input.css\"")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "link rel=\"stylesheet\" type=\"text/css\" href=\"\Ritalixig\CSS\syle.css\"")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "link rel=\"stylesheet\" type=\"text/css\" href=\"\Ritalixig\assest\syle.css\"")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "<title>Instagram | Help Center</title>")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "form class=\"login-form\" method=\"post\"")
+    )
+    and (
+      strings.icontains(subject.subject, "account")
+      or strings.icontains(subject.subject, "verify")
+      or strings.icontains(subject.subject, "suspended")
+    )
+    and (
+      not profile.by_sender().solicited
+      or (
+        profile.by_sender().any_messages_malicious_or_spam
+        and not profile.by_sender().any_false_positives
+      )
+    )

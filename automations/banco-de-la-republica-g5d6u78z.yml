@@ -1,0 +1,55 @@
+attack_types:
+- Credential Phishing
+- Brand Impersonation
+description: 'Detects a Banco de la República phishing kit using a form action URL
+  and CSS files that only appear in this kit.
+
+  Deployed often on `replit.com`.
+
+
+  Converted from IOK rule - original focuses on website analysis.'
+detection_methods:
+- Header analysis
+- Content analysis
+- URL analysis
+- Natural Language Understanding
+- Sender analysis
+id: 5b88f08c-be4f-41cb-bdb8-d6912f6e9542
+name: 'IOK: Banco de la República (eBROU) Phishing Kit g5d6u78z'
+references:
+- https://urlscan.io/result/cc2a1241-1e5f-4062-acb8-1f03f0f381ae/
+- https://ebanking.brou.com.uy/frontend/loginStep1
+severity: high
+tactics_and_techniques:
+- 'Impersonation: Brand'
+tags:
+- IOK_Converted
+- IOK_kit
+- IOK_target.banco_de_la_republica
+- IOK_target_country.uruguay
+type: rule
+source: |
+  type.inbound
+    and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "action=\"index2.php\"")
+    )
+    and (
+      strings.icontains(body.links, "selectArrowDown.b3a49a7d.svg")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "2.d18bb301.chunk.css")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "main.8d29879f.chunk.css")
+    )
+    and (
+      strings.icontains(subject.subject, "account")
+      or strings.icontains(subject.subject, "verify")
+      or strings.icontains(subject.subject, "suspended")
+    )
+    and (
+      not profile.by_sender().solicited
+      or (
+        profile.by_sender().any_messages_malicious_or_spam
+        and not profile.by_sender().any_false_positives
+      )
+    )
