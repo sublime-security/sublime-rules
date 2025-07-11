@@ -13,8 +13,12 @@ source: |
       or strings.ilevenshtein(strings.replace_confusables(sender.display_name),
                               'tiktok'
       ) <= 1
-      or any(ml.logo_detect(beta.message_screenshot()).brands,
-             .name == "TikTok" and .confidence == "high"
+      or (
+        any(ml.logo_detect(beta.message_screenshot()).brands,
+            .name == "TikTok" and .confidence == "high"
+        )
+        // ignore logo if there are links leading directly to a tiktok profile
+        and not any(body.links, strings.icontains(.href_url.url, 'tiktok.com/@'))
       )
     )
     // OR TikTok verification language
@@ -67,6 +71,11 @@ source: |
       )
       and headers.auth_summary.dmarc.pass
     )
+  )
+  // negate iCloud Private Message Relay
+  and not (
+    sender.email.domain.root_domain == "privaterelay.appleid.com"
+    or any(headers.hops, any(.fields, .name == "X-ICLOUD-HME"))
   )
   // negate highly trusted sender domains unless they fail DMARC authentication
   and (
