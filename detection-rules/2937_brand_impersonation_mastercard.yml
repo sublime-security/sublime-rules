@@ -1,0 +1,21 @@
+name: "Brand Impersonation: Mastercard"
+description: "Detects messages impersonating Mastercard through similar display names, combined with security-themed content and authentication failures. Excludes legitimate Mastercard communications and trusted senders."
+type: "rule"
+severity: "medium"
+source: "type.inbound\nand (\n  // Mastercard Brand Detection \n  (\n    // display name contains mastercard\n    strings.ilike(strings.replace_confusables(sender.display_name), '*mastercard*')\n    // levenshtein distance similar to mastercard\n    or strings.ilevenshtein(strings.replace_confusables(sender.display_name),\n                            'mastercard'\n    ) <= 1\n  )\n  // OR Mastercard related language\n  or (\n    strings.icontains(body.current_thread.text, \"mastercard\")\n    and (\n      strings.icontains(body.current_thread.text, \"unusual activity\")\n      or strings.icontains(body.current_thread.text, \"transaction\")\n    )\n  )\n)\nand (\n  // ML Topic Analysis and Credential Theft Detection\n  any(beta.ml_topic(body.current_thread.text).topics,\n      .name in (\n        \"Security and Authentication\",\n        \"Secure Message\",\n        \"Reminders and Notifications\"\n      )\n      and .confidence in (\"medium\", \"high\")\n  )\n  or any(ml.nlu_classifier(body.current_thread.text).intents,\n         .name == \"cred_theft\" and .confidence == \"high\"\n  )\n)\n// Not from legitimate Mastercard domains with DMARC pass\nand not (\n  sender.email.domain.root_domain in $org_domains\n  or (\n    sender.email.domain.root_domain in (\n      \"mastercard.com\"\n    )\n    and headers.auth_summary.dmarc.pass\n  )\n)\n// negate highly trusted sender domains unless they fail DMARC authentication\nand (\n  (\n    sender.email.domain.root_domain in $high_trust_sender_root_domains\n    and not headers.auth_summary.dmarc.pass\n  )\n  or sender.email.domain.root_domain not in $high_trust_sender_root_domains\n)\nand not profile.by_sender().solicited\n"
+attack_types:
+  - "Callback Phishing"
+  - "BEC/Fraud"
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Header analysis"
+  - "Natural Language Understanding"
+  - "Sender analysis"
+id: "a14805e4-57be-52b3-395a-adafaf88dbec"
+og_id: "85acbbfd-f119-5337-a421-8e2d5771e213"
+testing_pr: 2937
+testing_sha: d76691da213f5b60cfc724272ae066d69d580644
