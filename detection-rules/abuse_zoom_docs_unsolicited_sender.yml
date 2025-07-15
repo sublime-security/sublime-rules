@@ -1,5 +1,5 @@
-name: "Service Abuse: Zoom Docs From an Unsolicited Sender Address"
-description: "Detects messages from Zoom Docs in which the document originates from a newly observed email address.  The email address is extracted from the body message."
+name: "Service Abuse: Suspicious Zoom Docs Link"
+description: "Detects messages from Zoom Docs in which the document originates from a newly observed email address or contains suspicious indicators."
 type: "rule"
 severity: "low"
 source: |
@@ -19,6 +19,38 @@ source: |
                 and .named_groups["sender_domain"] in $recipient_domains
                 and .named_groups["sender_domain"] in $sender_domains
               )
+          )
+          or any(body.links,
+                 .href_url.domain.domain == "docs.zoom.us"
+                 and any(filter(ml.link_analysis(., mode="aggressive").final_dom.links,
+                                .href_url.domain.root_domain != 'zoom.us'
+                                and .href_url.domain.domain != 'zoom.us'
+                         ),
+                         (
+                           // any of those links domains are new
+                           network.whois(.href_url.domain).days_old < 30
+                           // go to free file hosts
+                           or .href_url.domain.root_domain in $free_file_hosts
+                           or .href_url.domain.domain in $free_file_hosts
+  
+                           // go to free subdomains hosts
+                           or (
+                             .href_url.domain.root_domain in $free_subdomain_hosts
+                             // where there is a subdomain
+                             and .href_url.domain.subdomain is not null
+                             and .href_url.domain.subdomain != "www"
+                           )
+                           // go to url shortners
+                           or .href_url.domain.root_domain in $url_shorteners
+                           or .href_url.domain.domain in $url_shorteners
+                           or (
+                             // find any links that mention common "action" words
+                             regex.icontains(.display_text,
+                                             '(?:view|click|show|access|download|goto|Validate|Va[il]idar|login|verify|account)'
+                             )
+                           )
+                         )
+                 )
           )
   )
 tags:
