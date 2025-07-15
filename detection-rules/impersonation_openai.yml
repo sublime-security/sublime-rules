@@ -1,38 +1,39 @@
 name: "Brand Impersonation: OpenAI"
-description: "Detects when sender attempts to impersonate OpenAI through display name or domain manipulation, while excluding legitimate OpenAI communications."
+description: "Detects messages impersonating OpenAI through display name spoofing or lookalike domains, while excluding legitimate OpenAI communications and trusted senders with valid DMARC authentication."
 type: "rule"
 severity: "medium"
 source: |
   type.inbound
-and (
-  sender.display_name =~ "openai"
-  or strings.ilevenshtein(sender.display_name, 'openai') <= 1
-  or strings.ilike(sender.email.domain.domain, '*openai*')
-)
-// Exclude legitimate OpenAI domains
-and sender.email.domain.root_domain not in~ ("openai.com", "chatgpt.com")
-// negate highly trusted sender domains unless they fail DMARC authentication
-and (
-  (
-    sender.email.domain.root_domain in $high_trust_sender_root_domains
-    and not headers.auth_summary.dmarc.pass
+  and (
+    sender.display_name =~ "openai"
+    or strings.ilevenshtein(sender.display_name, 'openai') <= 1
+    or strings.ilike(sender.email.domain.domain, '*openai*')
   )
-  or sender.email.domain.root_domain not in $high_trust_sender_root_domains
-)
-and (
-  not profile.by_sender().solicited
-  or (
-    profile.by_sender().any_messages_malicious_or_spam
-    and not profile.by_sender().any_false_positives
+  // Exclude legitimate OpenAI domains
+  and sender.email.domain.root_domain not in~ ("openai.com", "chatgpt.com")
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and not headers.auth_summary.dmarc.pass
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
   )
-)
-and not profile.by_sender().any_false_positives
+  and (
+    not profile.by_sender().solicited
+    or (
+      profile.by_sender().any_messages_malicious_or_spam
+      and not profile.by_sender().any_false_positives
+    )
+  )
+  and not profile.by_sender().any_false_positives
 
 attack_types:
   - "BEC/Fraud"
   - "Callback Phishing"
   - "Credential Phishing"
   - "Extortion"
+  - "Malware/Ransomware"
   - "Spam"
 tactics_and_techniques:
   - "Impersonation: Brand"
