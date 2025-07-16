@@ -1,0 +1,48 @@
+attack_types:
+- Credential Phishing
+- Brand Impersonation
+description: "Detects a Microsoft tech support kit targeting \nJapanese speaking users.\
+  \ Using the same name for the warning\naudio file as well as the same class `name`\
+  \ attribute for the \nbanner elements.\n\nConverted from IOK rule - original focuses\
+  \ on website analysis."
+detection_methods:
+- Content analysis
+- Sender analysis
+- Header analysis
+- URL analysis
+id: 32857f45-22c4-459e-99d9-2f7f139bd966
+name: 'IOK: Microsoft Tech Support Kit d94c3cf'
+references:
+- https://urlscan.io/result/d94c3cf3-223e-4460-b29b-9d50fdb2caad
+- https://urlscan.io/result/3f9eb89b-f1a8-4bf1-9c2a-604c0efff9ac
+severity: high
+tactics_and_techniques:
+- 'Impersonation: Brand'
+tags:
+- IOK_Converted
+- IOK_target.microsoft
+- IOK_target_country.japan
+type: rule
+source: |
+  type.inbound
+    and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
+    and (
+      strings.icontains(body.links, "takashi.mp3")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "banner_chat_tel")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "banner_chat_contact")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "banner_chat_label")
+    )
+    and (
+      strings.icontains(subject.subject, "microsoft")
+      or strings.icontains(subject.subject, "office")
+    )
+    and sender.email.domain.domain not in ("microsoft.com", "office.com")
+    and (
+      not profile.by_sender().solicited
+      or (
+        profile.by_sender().any_messages_malicious_or_spam
+        and not profile.by_sender().any_false_positives
+      )
+    )

@@ -1,0 +1,51 @@
+attack_types:
+- BEC/Fraud
+- Cryptocurrency Scam
+description: 'Detects the "Monkey Drainer" phishing script kit
+
+
+  Converted from IOK rule - original focuses on website analysis.'
+detection_methods:
+- Content analysis
+- Sender analysis
+- Header analysis
+- URL analysis
+id: 3aa12a7c-be1c-4123-998f-bb45ffe710db
+name: 'IOK: Ethereum Wallet Drainer (Monkey Drainer)'
+references:
+- https://twitter.com/zachxbt/status/1584955933452484613
+- https://urlscan.io/result/8540a3f9-ee2e-43b4-aa75-c79379103bb3/
+- https://urlscan.io/result/f5348120-cbbd-4185-b652-89c6cdbaef9d/
+- https://urlscan.io/result/492cecf2-7f52-4f52-8c5a-c78cfb838025/
+- https://urlscan.io/search/#hash%3Ac64e9c818d03878f82b48c2e2778935a1acb3b867e31b1473e19e856cde37b6e
+- https://urlscan.io/search/#hash%3A95c66625ee20f53d542e23dded002b021b24e9d28c3d193a076d45cba4dc8618
+- https://urlscan.io/search/#hash%3A67ad2454feca6eb213f4a70cc588137e6bd21ad95c0eda2709faa2317ff90359
+severity: high
+tactics_and_techniques:
+- Malware delivery
+- Investment scam
+tags:
+- IOK_Converted
+- IOK_cryptocurrency
+- IOK_cryptocurrency.ethereum
+- IOK_threat_actor.monkeydrainer
+type: rule
+source: |
+  type.inbound
+    and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "<script src=\"chain-common.js\"></script>")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "<script src=\"chain-bundle.js\"></script>")
+    )
+    and (
+      strings.icontains(subject.subject, "account")
+      or strings.icontains(subject.subject, "verify")
+      or strings.icontains(subject.subject, "suspended")
+    )
+    and (
+      not profile.by_sender().solicited
+      or (
+        profile.by_sender().any_messages_malicious_or_spam
+        and not profile.by_sender().any_false_positives
+      )
+    )

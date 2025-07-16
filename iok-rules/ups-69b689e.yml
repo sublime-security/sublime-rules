@@ -1,0 +1,49 @@
+attack_types:
+- Credential Phishing
+- Brand Impersonation
+description: "Detects a UPS phishing kit using a fake parcel ID to lure victims in,\
+  \ \nadditionally has a high entropy string that does not change assigned \nas the\
+  \ `data-upstoken` attribute of a HTML element within the page, \npossibly left behind\
+  \ when the original UPS page was cloned.\n\nConverted from IOK rule - original focuses\
+  \ on website analysis."
+detection_methods:
+- Content analysis
+- URL analysis
+- Header analysis
+- Natural Language Understanding
+- Sender analysis
+id: 4f41510d-b9be-4c46-b17b-d3506d09cb36
+name: 'IOK: UPS Phishing Kit 69b689e'
+references:
+- https://urlscan.io/result/24ecab33-02be-4213-9e94-e362f12f9357
+- https://urlscan.io/result/6fd8922a-873c-4ae4-98e8-b93f3f15a6cc
+- https://urlscan.io/result/b3259998-efb3-4865-b936-9c81c020f997
+severity: high
+tactics_and_techniques:
+- 'Impersonation: Brand'
+tags:
+- IOK_Converted
+- IOK_kit
+- IOK_target.ups
+type: rule
+source: |
+  type.inbound
+    and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "RAxxxxxxxxxUS")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "69b689e92856af4eda14fb2bd0418c69158f2943d18691e934ada3ceefb3b914f225910c8bbd05dc221d336eac174899277c8bef3b610c7aa622d42913525889")
+    )
+    and (
+      strings.icontains(subject.subject, "account")
+      or strings.icontains(subject.subject, "verify")
+      or strings.icontains(subject.subject, "suspended")
+    )
+    and (
+      not profile.by_sender().solicited
+      or (
+        profile.by_sender().any_messages_malicious_or_spam
+        and not profile.by_sender().any_false_positives
+      )
+    )

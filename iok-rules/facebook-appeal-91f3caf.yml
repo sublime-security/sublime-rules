@@ -1,0 +1,51 @@
+attack_types:
+- Credential Phishing
+- Brand Impersonation
+description: "Detects a fake Facebook appeal form, that \nphishes for credentials,\
+  \ the kit was \ndesigned by an Arabic-speaking threat actor.\n\nConverted from IOK\
+  \ rule - original focuses on website analysis."
+detection_methods:
+- Content analysis
+- URL analysis
+- Header analysis
+- Natural Language Understanding
+- Sender analysis
+id: b91a58f7-4a2e-4b5e-83a7-fd76f65de16a
+name: 'IOK: Facebook Appeal Form Phishing Kit 91f3caf'
+references:
+- https://urlscan.io/result/1cc9fce4-7b0b-47bd-938d-ee2df6ab858b
+- https://urlscan.io/result/91f3caf0-6164-48da-9a28-3bf30f812500
+severity: high
+tactics_and_techniques:
+- 'Impersonation: Brand'
+tags:
+- IOK_Converted
+- IOK_kit
+- IOK_target.facebook
+type: rule
+source: |
+  type.inbound
+    and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "desk-meta")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "/api/activity")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "mpassword.php")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "Rahmetli i ri")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "images/fbSmallLogo.png")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "RegForm")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "return submitForm()")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "Help Center")
+    )
+    and strings.icontains(subject.subject, "facebook")
+    and sender.email.domain.domain != "facebook.com"
+    and (
+      not profile.by_sender().solicited
+      or (
+        profile.by_sender().any_messages_malicious_or_spam
+        and not profile.by_sender().any_false_positives
+      )
+    )

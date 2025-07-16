@@ -1,0 +1,47 @@
+attack_types:
+- Cryptocurrency Scam
+description: "Detects a malicious DApp that pretends to be a liquidity mining\nplatform\
+  \ while presenting fake audit reports. Older version of \nthe fake-crypto-mining-noChrome\
+  \ rule.\n\nConverted from IOK rule - original focuses on website analysis."
+detection_methods:
+- Content analysis
+- Sender analysis
+- Header analysis
+- URL analysis
+id: 4b3d5900-d9d1-46b4-9b43-41398ae8dd01
+name: 'IOK: Fake crypto mining - ReceiveVoucher3'
+references:
+- https://urlscan.io/result/3bf65041-f47e-4b4f-9b6b-997baa7ba1ce/
+- https://urlscan.io/result/ec5f8399-3560-4f6e-a3dd-e4efb87defef/
+- https://urlscan.io/result/02e3f645-638c-4004-b6b8-63274ba3677e/
+- https://urlscan.io/result/6479841b-b9e0-4346-8868-8467a6460ac6/
+- https://urlscan.io/result/7f1c19fe-6861-4742-865e-9caba6d72976/
+severity: high
+tactics_and_techniques:
+- Investment scam
+tags:
+- IOK_Converted
+- IOK_cryptocurrency
+type: rule
+source: |
+  type.inbound
+    and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "Receive Voucher")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "lang_start_mining")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "lang_pool")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "lang_team")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "lang_profit")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "lang_sub_liquidity_ming")
+    )
+    and (
+      strings.icontains(subject.subject, "coinbase")
+      or strings.icontains(subject.subject, "crypto")
+    )
+    and (
+      not profile.by_sender().solicited
+      or (
+        profile.by_sender().any_messages_malicious_or_spam
+        and not profile.by_sender().any_false_positives
+      )
+    )

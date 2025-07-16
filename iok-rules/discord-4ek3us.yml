@@ -1,0 +1,48 @@
+attack_types:
+- Credential Phishing
+- Brand Impersonation
+description: 'Detects a phishing kit targeting Discord and Steam by promising a Free
+  Discord Nitro subscription.
+
+
+  Converted from IOK rule - original focuses on website analysis.'
+detection_methods:
+- Content analysis
+- URL analysis
+- Header analysis
+- Natural Language Understanding
+- Sender analysis
+id: 73d37779-a8a2-4f2c-afda-92dff17ce2bc
+name: 'IOK: Discord Phishing Kit 4EK3uS'
+references:
+- https://urlscan.io/result/0030c20b-4573-4e83-8048-47692aa9bf6d/
+- https://urlscan.io/result/44812aa4-942c-43e1-a451-a1c3aeecdb40/
+- https://urlscan.io/result/4bccb167-a836-41ee-9b5e-fecd937445f6/
+- https://urlscan.io/result/a2274bd5-1b28-4bdf-9952-a2fa103f6e84/
+- https://urlscan.io/result/6d7c16d7-374c-40d1-b863-178afb9ba5e6/
+severity: high
+tactics_and_techniques:
+- 'Impersonation: Brand'
+tags:
+- IOK_Converted
+- IOK_kit
+- IOK_target.discord
+type: rule
+source: |
+  type.inbound
+    and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "<img src=\"https://sapientist.ru/images/62a315f45888ab5517509314_b941bc1dfe379db6cc1f2acc5a612f41.png\"")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "<meta content=\"https://assets-global.website-files.com/6257adef93867e50d84d30e2/625d07708827f8702cce4899_photo_2022-04-18_10-38-29.jpg\" property=\"twitter:image\">")
+    )
+    and strings.icontains(subject.subject, "discord")
+    and sender.email.domain.domain != "discord.com"
+    and (
+      not profile.by_sender().solicited
+      or (
+        profile.by_sender().any_messages_malicious_or_spam
+        and not profile.by_sender().any_false_positives
+      )
+    )

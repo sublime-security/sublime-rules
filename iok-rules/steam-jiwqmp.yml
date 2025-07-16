@@ -1,0 +1,49 @@
+attack_types:
+- Credential Phishing
+- Brand Impersonation
+description: "Detects a phishing kit impersonating Discord and targeting Steam users\
+  \ with a fake popup that opens when the \"Get Nitro\" button is clicked. \nThe site\
+  \ promises to give you a free Discord Nitro subscription upon entering your Steam\
+  \ credentials.\n\nThis phishing kit has been discovered by the FishFish.gg team.\n\
+  \nConverted from IOK rule - original focuses on website analysis."
+detection_methods:
+- Content analysis
+- URL analysis
+- Header analysis
+- Natural Language Understanding
+- Sender analysis
+id: e14ee5e3-3304-46b7-8569-ebcfdc8f743c
+name: 'IOK: Steam Phishing Kit jIwQMP'
+references:
+- https://urlscan.io/result/7d69a2f2-047e-4e82-89ed-bac9d322c662/
+severity: high
+tactics_and_techniques:
+- 'Impersonation: Brand'
+tags:
+- IOK_Converted
+- IOK_kit
+- IOK_target.discord
+- IOK_target.steam
+type: rule
+source: |
+  type.inbound
+    and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "<title>Free Discord Nitro from Steam</title>")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "link href=\"/c29e212f2e1d1360ad262d5e56437edf69d4b16111c5/6fce5123c54fab983c7d6685168525c2d9f7f5f5f161.css\" rel=\"stylesheet\"")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "link href=\"/c29e212f2e1d1360ad262d5e56437edf69d4b16111c5/609e858fb15ecb308dd736273f0c5a23e7ef90a6d7ed.css\" rel=\"stylesheet\"")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "link href=\"/c29e212f2e1d1360ad262d5e56437edf69d4b16111c5/800e2135483e49ce84fedb4c685bdc1e6065fea8f5e0.css\" rel=\"stylesheet\"")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "link href=\"/c29e212f2e1d1360ad262d5e56437edf69d4b16111c5/03269d738aed6b1925fa085ad5427e1dddd8a5144b09.css\" rel=\"stylesheet\"")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "link href=\"/c29e212f2e1d1360ad262d5e56437edf69d4b16111c5/4cd84e662b43c81f546a50a0df62bffa39a7a13915e4.css\" rel=\"stylesheet\"")
+    )
+    and strings.icontains(subject.subject, "steam")
+    and sender.email.domain.domain != "steampowered.com"
+    and (
+      not profile.by_sender().solicited
+      or (
+        profile.by_sender().any_messages_malicious_or_spam
+        and not profile.by_sender().any_false_positives
+      )
+    )

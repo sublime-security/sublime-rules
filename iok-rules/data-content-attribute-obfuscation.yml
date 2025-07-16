@@ -1,0 +1,48 @@
+attack_types:
+- Credential Phishing
+description: 'Detects an obfuscation technique found being used
+
+  by a phishing kit where it appends the content of
+
+  the parent tag into the `data-content` attribute
+
+  with the data being encoded using ASCII values to
+
+  evade static analysis.
+
+
+  Converted from IOK rule - original focuses on website analysis.'
+detection_methods:
+- Content analysis
+- Sender analysis
+- Header analysis
+- URL analysis
+id: 6d44ab00-447d-40cb-a3a1-ba927a66a0e9
+name: 'IOK: Data-Content attribute obfuscation'
+references:
+- https://urlscan.io/result/06f6d4f9-0bc6-4519-9ffb-96bd07212c29
+severity: high
+tactics_and_techniques:
+- Social engineering
+tags:
+- IOK_Converted
+- IOK_anti-analysis
+type: rule
+source: |
+  type.inbound
+    and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
+    and any(body.links,
+      ml.link_analysis(.).credphish.disposition == "phishing"
+    )
+    and (
+      strings.icontains(subject.subject, "account")
+      or strings.icontains(subject.subject, "verify")
+      or strings.icontains(subject.subject, "suspended")
+    )
+    and (
+      not profile.by_sender().solicited
+      or (
+        profile.by_sender().any_messages_malicious_or_spam
+        and not profile.by_sender().any_false_positives
+      )
+    )

@@ -1,0 +1,70 @@
+attack_types:
+- Credential Phishing
+- Brand Impersonation
+description: 'Detects a phishing kit targeting Instagram (Meta) by tricking users
+  into filling out a fake copyright appeal form.
+
+  Threat actors observed in:
+
+  - Turkey 🇹🇷 (TT_MOBIL 20978; TTNET 9121; TURKCELL-AS 16135; VODAFONETURKEY 15897)
+
+  - France 🇫🇷 (SECFIREWALLAS 206092)
+
+
+  Converted from IOK rule - original focuses on website analysis.'
+detection_methods:
+- Content analysis
+- URL analysis
+- Header analysis
+- Natural Language Understanding
+- Sender analysis
+id: 45fd61f8-5a1c-49e8-bf0b-94bfa3ff2b63
+name: 'IOK: Instragram Copyright Phishing Kit kVRJSB'
+references:
+- https://urlscan.io/result/16895faa-8c3c-4a34-9016-ed991a491d39/
+- https://urlscan.io/result/4c9626fc-29a5-4208-bbc4-5406ce71de73/
+- https://urlscan.io/result/ec903627-adf8-4583-bda5-d2de6c27ef1d/
+- https://urlscan.io/result/4af5fa50-6573-4421-9314-9c93c523d601/
+- https://urlscan.io/result/d16a13ce-8602-4d26-a803-11fb4a0bd650/
+- https://urlscan.io/result/893e4542-49d8-4fcb-93ff-fddd76689fea/
+- https://urlscan.io/result/b614d724-2d16-4b99-9212-49315b6ca668/
+severity: high
+tactics_and_techniques:
+- 'Impersonation: Brand'
+tags:
+- IOK_Converted
+- IOK_kit
+- IOK_target.instagram
+- IOK_target.meta
+type: rule
+source: |
+  type.inbound
+    and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "meta property=\"og:title\"")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "meta property=\"og:description\"")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "meta property=\"og:image\"")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "img src=\"./assets/images/img.svg\" alt=\"\"")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "div class=\"login-container\"")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "div class=\"div1\"")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "div class=\"form-control\"")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "form class=\"login-form\" method=\"post\"")
+    )
+    and (
+      strings.icontains(subject.subject, "account")
+      or strings.icontains(subject.subject, "verify")
+      or strings.icontains(subject.subject, "suspended")
+    )
+    and (
+      not profile.by_sender().solicited
+      or (
+        profile.by_sender().any_messages_malicious_or_spam
+        and not profile.by_sender().any_false_positives
+      )
+    )

@@ -1,0 +1,51 @@
+attack_types:
+- Credential Phishing
+- Brand Impersonation
+- Cryptocurrency Scam
+description: "Detects a crypto phishing kit using Ark Investment \nas proof of the\
+  \ giveaway being legitmate, this kit \nalso uses people like Elon Musk to lure victims.\n\
+  \nConverted from IOK rule - original focuses on website analysis."
+detection_methods:
+- Content analysis
+- URL analysis
+- Header analysis
+- Natural Language Understanding
+- Sender analysis
+id: 3818efe4-9ae5-433f-8ebc-5e963bf43f6c
+name: 'IOK: Ark Investment Crypto Phishing Kit 3465f6c'
+references:
+- https://urlscan.io/result/3465f6c7-429f-4ad6-9fa3-a3a43787e36a
+- https://urlscan.io/result/d96e74a6-88a4-432b-9b22-04134ab1fac1
+severity: high
+tactics_and_techniques:
+- 'Impersonation: Brand'
+- Investment scam
+tags:
+- IOK_Converted
+- IOK_kit
+- IOK_target.arkinvestment
+- IOK_cryptocurrency
+- IOK_cryptocurrency.bitcoin
+- IOK_cryptocurrency.ethereum
+type: rule
+source: |
+  type.inbound
+    and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "input type=\"hidden\" name=\"address_eth\"")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "input type=\"hidden\" name=\"address_btc\"")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "Biggest giveaway Ark Invest of")
+    )
+    and (
+      strings.icontains(subject.subject, "coinbase")
+      or strings.icontains(subject.subject, "crypto")
+    )
+    and (
+      not profile.by_sender().solicited
+      or (
+        profile.by_sender().any_messages_malicious_or_spam
+        and not profile.by_sender().any_false_positives
+      )
+    )

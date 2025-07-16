@@ -1,0 +1,49 @@
+attack_types:
+- Credential Phishing
+- Brand Impersonation
+description: 'Detects a Coinsbit phishing kit.
+
+
+  Converted from IOK rule - original focuses on website analysis.'
+detection_methods:
+- Content analysis
+- URL analysis
+- Header analysis
+- Natural Language Understanding
+- Sender analysis
+id: f134e363-ff95-4b25-8825-f8de52490f47
+name: 'IOK: Coinsbit Phishing Kit a4a01a8'
+references:
+- https://urlscan.io/result/a4a01a85-548f-46cd-94cf-91634a4f30bd
+- https://urlscan.io/result/ff1d5bdf-e40a-420b-89d8-5669bd800a5a
+severity: high
+tactics_and_techniques:
+- 'Impersonation: Brand'
+tags:
+- IOK_Converted
+- IOK_kit
+- IOK_target.coinsbit
+type: rule
+source: |
+  type.inbound
+    and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "enviarlogin();")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "input_16")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "input_17")
+    )
+    and (
+      strings.icontains(body.links, "iconfontd630.js?v=1643358052")
+    )
+    and (
+      strings.icontains(subject.subject, "account")
+      or strings.icontains(subject.subject, "verify")
+      or strings.icontains(subject.subject, "suspended")
+    )
+    and (
+      not profile.by_sender().solicited
+      or (
+        profile.by_sender().any_messages_malicious_or_spam
+        and not profile.by_sender().any_false_positives
+      )
+    )

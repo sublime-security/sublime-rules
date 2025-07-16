@@ -1,0 +1,52 @@
+attack_types:
+- Credential Phishing
+- Brand Impersonation
+description: 'Detects a Facebook phishing kit targeting Polish users.
+
+
+  Converted from IOK rule - original focuses on website analysis.'
+detection_methods:
+- Content analysis
+- URL analysis
+- Header analysis
+- Natural Language Understanding
+- Sender analysis
+id: 9f7f4aed-7c4e-4020-bdbf-0d5d45ca6d99
+name: 'IOK: Facebook Phishing Kit f675021b'
+references:
+- https://urlscan.io/result/f675021b-9b3d-4729-885d-796c2b42433d
+- https://urlscan.io/result/3fc04106-e4aa-41ab-824e-a9e364cff5dc
+- https://urlscan.io/result/5bad220a-d5ed-479e-b00d-bd6e875d4fa8
+severity: high
+tactics_and_techniques:
+- 'Impersonation: Brand'
+tags:
+- IOK_Converted
+- IOK_kit
+- IOK_target.facebook
+- IOK_target_country.poland
+type: rule
+source: |
+  type.inbound
+    and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
+    and (
+      strings.icontains(body.links, "/img/logo-fb.png")
+    )
+    and (
+      strings.icontains(body.links, "authorize.php")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "/savetofile.php")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "1BmE4kWBq78iYhFldvKuhfTAU6auU8tT94WrHftjDbrCEXSU1oBoqyl2QvZ6jIW3")
+    )
+    and strings.icontains(subject.subject, "facebook")
+    and sender.email.domain.domain != "facebook.com"
+    and (
+      not profile.by_sender().solicited
+      or (
+        profile.by_sender().any_messages_malicious_or_spam
+        and not profile.by_sender().any_false_positives
+      )
+    )

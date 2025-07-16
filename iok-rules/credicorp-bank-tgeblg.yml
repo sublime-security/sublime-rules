@@ -1,0 +1,58 @@
+attack_types:
+- Credential Phishing
+- Brand Impersonation
+description: 'Detects a phishing kit targeting Credicorp Bank.
+
+  This was found as a result of this kit being deployed on Replit.
+
+
+  Converted from IOK rule - original focuses on website analysis.'
+detection_methods:
+- Content analysis
+- URL analysis
+- Header analysis
+- Natural Language Understanding
+- Sender analysis
+id: c7d76e58-5e69-478a-a12d-3b8e9e90f9e0
+name: 'IOK: Credicorp Bank Phishing Kit tGeBlg'
+references:
+- https://www.credicorpbank.com/
+- https://urlscan.io/result/c3582f08-595f-4796-8cb6-a794fdf13c2d/
+- https://urlscan.io/result/5fc51b7e-6122-427b-9d06-c8e6f16f4b8f/
+- https://urlscan.io/result/2684e40f-2619-46b9-9206-1fdb2e57b38a/
+severity: high
+tactics_and_techniques:
+- 'Impersonation: Brand'
+tags:
+- IOK_Converted
+- IOK_kit
+- IOK_target.credicorp_bank
+- IOK_target_country.panama
+type: rule
+source: |
+  type.inbound
+    and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "name=\"SESSION_CSRF_TOKEN\" tabindex=\"0\" lang=\"es\" id=\"loginToken\" value=\"0f234c429f530238b63c6793ca994d0c85c6f37b\"")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "src=\"js/dojo.js.descarga\" djconfig=\"parseOnLoad: true,modulePaths: {'dwr': '../../../../dwr-cache/2207051811','ec':'../ec'},fisaTheme:'fisaDesert', isContext:false\"")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "<title>CREDICORP BANK</title>")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "form data-dojo-attach-point=\"containerNode\" data-dojo-attach-event=\"onreset:_onReset,onsubmit:_onSubmit\" name=\"frmLogin\" lang=\"es\" id=\"frmLogin\" method=\"post\" action=\"sg1.php\" accept-charset=\"UTF-8\" widgetid=\"frmLogin\" style=\"margin: 0px;\"")
+    )
+    and (
+      strings.icontains(subject.subject, "account")
+      or strings.icontains(subject.subject, "verify")
+      or strings.icontains(subject.subject, "suspended")
+    )
+    and (
+      not profile.by_sender().solicited
+      or (
+        profile.by_sender().any_messages_malicious_or_spam
+        and not profile.by_sender().any_false_positives
+      )
+    )

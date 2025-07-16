@@ -1,0 +1,54 @@
+attack_types:
+- Credential Phishing
+- Brand Impersonation
+description: 'Detects a Visa phishing kit, that makes it
+
+  seem as if the victim is purchasing something
+
+  from Aramex, likely targets citizens of the UAE.
+
+
+  Converted from IOK rule - original focuses on website analysis.'
+detection_methods:
+- Content analysis
+- URL analysis
+- Header analysis
+- Natural Language Understanding
+- Sender analysis
+id: 44590d39-d7ea-4fd1-a2db-7655b9873389
+name: 'IOK: Visa Phishing Kit dff000d'
+references:
+- https://urlscan.io/result/dff000d2-d1c9-473a-a573-3510276bda14
+severity: high
+tactics_and_techniques:
+- 'Impersonation: Brand'
+tags:
+- IOK_Converted
+- IOK_kit
+- IOK_target.visa
+- IOK_target_country.uae
+type: rule
+source: |
+  type.inbound
+    and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "k0kt0yymkrk0y9am-eb-9a5b-0afc43bb000")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "5f245978abc9c57b49f6703b")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "vP5T9ujrM8fAffJstc4FNoZGFOZ0")
+    )
+    and (
+      strings.icontains(subject.subject, "account")
+      or strings.icontains(subject.subject, "verify")
+      or strings.icontains(subject.subject, "suspended")
+    )
+    and (
+      not profile.by_sender().solicited
+      or (
+        profile.by_sender().any_messages_malicious_or_spam
+        and not profile.by_sender().any_false_positives
+      )
+    )

@@ -1,0 +1,48 @@
+attack_types:
+- Credential Phishing
+- Brand Impersonation
+description: 'Commbank phishing kit displaying a fake login
+
+
+  Converted from IOK rule - original focuses on website analysis.'
+detection_methods:
+- Content analysis
+- URL analysis
+- Header analysis
+- Natural Language Understanding
+- Sender analysis
+id: a1740038-e004-4d89-8fd6-cf6a4db500ad
+name: 'IOK: Commbank Phishing Kit d69bdec1'
+references:
+- https://urlscan.io/result/49a46f7c-b531-417c-8110-b94942132039/
+- https://urlscan.io/result/605d7c8f-20dd-438d-8e2e-e4232bb067ef/
+- https://urlscan.io/result/d69bdec1-7377-466c-a1fd-44966dad8e0e/
+severity: high
+tactics_and_techniques:
+- 'Impersonation: Brand'
+tags:
+- IOK_Converted
+- IOK_kit
+- IOK_target.commbank
+type: rule
+source: |
+  type.inbound
+    and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "<link href=\"/secure/static/css/main.27d81c4d.chunk.css\" rel=\"stylesheet\">")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "<script src=\"/secure/static/js/3.b4db8f5a.chunk.js\"></script>")
+    )
+    and (
+      strings.icontains(subject.subject, "account")
+      or strings.icontains(subject.subject, "verify")
+      or strings.icontains(subject.subject, "suspended")
+    )
+    and (
+      not profile.by_sender().solicited
+      or (
+        profile.by_sender().any_messages_malicious_or_spam
+        and not profile.by_sender().any_false_positives
+      )
+    )

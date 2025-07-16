@@ -1,0 +1,54 @@
+attack_types:
+- Credential Phishing
+- Brand Impersonation
+description: 'Detects Steam phishing pages that obtain their template
+
+  configuration from `/api/getsiteconfig`
+
+
+  Converted from IOK rule - original focuses on website analysis.'
+detection_methods:
+- Content analysis
+- URL analysis
+- Header analysis
+- Natural Language Understanding
+- Sender analysis
+id: 8679f31a-a528-425e-90a0-af28cf291275
+name: 'IOK: Steam Phishing Kit 732d40f3'
+references:
+- https://urlscan.io/result/732d40f3-c113-44da-bcd4-5f39ff173e83
+- https://urlscan.io/result/0712a363-be77-4482-960a-886738d7f882
+- https://urlscan.io/result/01e4685b-9001-4843-a50f-a41ad126fc8c
+- https://urlscan.io/result/64c8c423-5e1e-4779-a4b0-66c9e0beb8d7
+- https://urlscan.io/result/02d78cc5-5035-490d-ade3-8043a1d29d29
+- https://urlscan.io/result/65902fde-168e-4492-a039-b678cedc23c8
+- https://urlscan.io/result/2acf7249-7864-4148-aa3a-161286fce118
+severity: high
+tactics_and_techniques:
+- 'Impersonation: Brand'
+tags:
+- IOK_Converted
+- IOK_target.steam
+- IOK_threat_actor_country.russia
+type: rule
+source: |
+  type.inbound
+    and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
+    and (
+      strings.icontains(body.links, "/api/getsiteconfig/")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "<iframe id=\"iframe\" title=\"main\" name=\"site\" style=\"height: 0px; width: 0px; border: 0px; outline: none; z-index: 1000;\"></iframe>")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "<div style=\"font-size: 1px; font-family: &quot;Support Assets&quot;; color: rgba(0, 0, 0, 0.01);\">Hello</div>")
+    )
+    and strings.icontains(subject.subject, "steam")
+    and sender.email.domain.domain != "steampowered.com"
+    and (
+      not profile.by_sender().solicited
+      or (
+        profile.by_sender().any_messages_malicious_or_spam
+        and not profile.by_sender().any_false_positives
+      )
+    )

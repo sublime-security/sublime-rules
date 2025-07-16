@@ -1,0 +1,53 @@
+attack_types:
+- Credential Phishing
+- Brand Impersonation
+description: 'Detects a Banco Atlántida phishing kit deployed often on replit.com.
+
+
+  Converted from IOK rule - original focuses on website analysis.'
+detection_methods:
+- Content analysis
+- URL analysis
+- Header analysis
+- Natural Language Understanding
+- Sender analysis
+id: 3c18efb7-18bd-4f1b-adc2-8e16f5208e2d
+name: 'IOK: Banco Atlántida Phishing Kit dxde4jyt'
+references:
+- https://urlscan.io/result/8d1ab6fe-25f5-4418-8afb-ea7cb29c293b
+- https://urlscan.io/result/ed00d101-e91d-4013-bbc5-636f793c3168
+- https://urlscan.io/result/ebcc8d44-337f-4648-964a-d957d9c4acba
+- https://urlscan.io/result/d9673b15-1867-4c76-8769-da48ed3c2c33
+severity: high
+tactics_and_techniques:
+- 'Impersonation: Brand'
+tags:
+- IOK_Converted
+- IOK_kit
+- IOK_target.banco_atlantida
+- IOK_target_country.honduras
+type: rule
+source: |
+  type.inbound
+    and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "form class=\"sapUiForm sapUiFormEdit sapUiFormEdit-CTX sapUiFormLblColon sapUiFormM\"")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "action=\"load.php\"")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "logo_banco_single_red_gradient.svg\"")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "logo002.svg")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "logo_banco_single_white.svg")
+    )
+    and (
+      strings.icontains(subject.subject, "account")
+      or strings.icontains(subject.subject, "verify")
+      or strings.icontains(subject.subject, "suspended")
+    )
+    and (
+      not profile.by_sender().solicited
+      or (
+        profile.by_sender().any_messages_malicious_or_spam
+        and not profile.by_sender().any_false_positives
+      )
+    )

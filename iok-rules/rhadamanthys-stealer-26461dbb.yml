@@ -1,0 +1,48 @@
+attack_types:
+- Malware/Ransomware
+description: "Detects the `Rhadamanthys` stealer C2 panel page. \n\nFor some reason\
+  \ this stealer decides to explicitly\nstate that the page is for the Rhadamanthys\
+  \ stealer panel\n\nConverted from IOK rule - original focuses on website analysis."
+detection_methods:
+- Content analysis
+- Sender analysis
+- Header analysis
+- URL analysis
+id: 6313ba5d-5fda-47a2-a012-dc51d6b392ae
+name: 'IOK: Rhadamanthys C2 Panel 26461dbb'
+references:
+- https://tracker.viriback.com
+- https://blog.cyble.com/2023/01/12/rhadamanthys-new-stealer-spreading-through-google-ads
+- https://urlscan.io/result/26461dbb-9ea7-4a18-9f50-2c9d6503947e
+severity: high
+tactics_and_techniques:
+- Social engineering
+tags:
+- IOK_Converted
+- IOK_malware.rhadamanthys
+- IOK_malware
+type: rule
+source: |
+  type.inbound
+    and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "Dashboard - Rhadamanthys")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "data-v-9beba3d6=\"\" src=\"assets/logo.faa4fd30.svg\"")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "Copyright © 2022 rhadamanthys")
+    )
+    and (
+      strings.icontains(subject.subject, "account")
+      or strings.icontains(subject.subject, "verify")
+      or strings.icontains(subject.subject, "suspended")
+    )
+    and (
+      not profile.by_sender().solicited
+      or (
+        profile.by_sender().any_messages_malicious_or_spam
+        and not profile.by_sender().any_false_positives
+      )
+    )

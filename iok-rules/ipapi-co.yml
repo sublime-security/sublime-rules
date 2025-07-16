@@ -1,0 +1,44 @@
+attack_types:
+- Credential Phishing
+description: 'ipapi is a GeoIP service allowing you to get the country code and other
+  information from an IP address. It''s regularly used by phishing kits which want
+  to hide themselves to analysts outside the country they''re targeting.
+
+
+  This is a very naive approach (often the entire phishing site is loaded but then
+  immediately redirected away from), but is often enough to evade basic sandboxes.
+
+
+  Converted from IOK rule - original focuses on website analysis.'
+detection_methods:
+- Content analysis
+- Sender analysis
+- Header analysis
+- URL analysis
+id: f0148366-3639-4bb9-b28d-4c158bf30935
+name: 'IOK: ipapi'
+severity: high
+tactics_and_techniques:
+- Social engineering
+tags:
+- IOK_Converted
+- IOK_cloaking
+type: rule
+source: |
+  type.inbound
+    and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "https://ipapi.co/")
+    )
+    and (
+      strings.icontains(subject.subject, "account")
+      or strings.icontains(subject.subject, "verify")
+      or strings.icontains(subject.subject, "suspended")
+    )
+    and (
+      not profile.by_sender().solicited
+      or (
+        profile.by_sender().any_messages_malicious_or_spam
+        and not profile.by_sender().any_false_positives
+      )
+    )

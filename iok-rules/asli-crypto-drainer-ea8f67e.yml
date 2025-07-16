@@ -1,0 +1,56 @@
+attack_types:
+- BEC/Fraud
+- Cryptocurrency Scam
+description: 'Detects a family of crypto drainers that utilises
+
+  a similarly structured landing page.
+
+
+  Converted from IOK rule - original focuses on website analysis.'
+detection_methods:
+- Content analysis
+- Sender analysis
+- Header analysis
+- URL analysis
+id: 16853840-103d-439c-b91b-db22fc49f39f
+name: 'IOK: Asli Crypto Drainer ea8f67e'
+references:
+- https://urlscan.io/result/f930ba09-8c22-4b4f-8cfe-6506e1f01bfb
+- https://urlscan.io/result/168274a9-c66b-44c3-b7f8-ce6412a9b2d7
+severity: high
+tactics_and_techniques:
+- Malware delivery
+- Investment scam
+tags:
+- IOK_Converted
+- IOK_threat_actor_country.china
+- IOK_crypto_drainer.asli
+- IOK_cryptocurrency
+- IOK_cryptocurrency.ethereum
+type: rule
+source: |
+  type.inbound
+    and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "894YE6QWD5I59HgZOGReFYm4dnWc1Qt5NtvYSaNcOP+u1T9qYdvdihz0PPSiiqn/+/3e7Jo4EaG7TubfWGUrMQ==")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "<span id=\"timess\">")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "PRE-SALE IS LIVE")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "LIMITED SALE")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "All other links are FAKE")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "Thank you for your support and patience!")
+    )
+    and (
+      strings.icontains(subject.subject, "coinbase")
+      or strings.icontains(subject.subject, "crypto")
+    )
+    and (
+      not profile.by_sender().solicited
+      or (
+        profile.by_sender().any_messages_malicious_or_spam
+        and not profile.by_sender().any_false_positives
+      )
+    )

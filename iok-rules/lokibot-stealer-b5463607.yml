@@ -1,0 +1,52 @@
+attack_types:
+- Malware/Ransomware
+description: "Detects the `Lokibot` stealer C2 panel page. \n\nUses a combination\
+  \ of various unique characteristics\nof the page design to detect it.\n\nConverted\
+  \ from IOK rule - original focuses on website analysis."
+detection_methods:
+- Content analysis
+- Sender analysis
+- Header analysis
+- URL analysis
+id: 2d8e99ee-5cf0-4518-bf6a-01fea03fe972
+name: 'IOK: Lokibot C2 Panel b5463607'
+references:
+- https://tracker.viriback.com
+- https://www.cisa.gov/news-events/cybersecurity-advisories/aa20-266a
+- https://urlscan.io/result/b5463607-2836-4966-a92d-bf73bf964593
+severity: high
+tactics_and_techniques:
+- Social engineering
+tags:
+- IOK_Converted
+- IOK_malware.lokibot
+- IOK_malware
+type: rule
+source: |
+  type.inbound
+    and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "iP")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "iU")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "#5466da")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "login_")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "Auth")
+    )
+    and (
+      strings.icontains(subject.subject, "account")
+      or strings.icontains(subject.subject, "verify")
+      or strings.icontains(subject.subject, "suspended")
+    )
+    and (
+      not profile.by_sender().solicited
+      or (
+        profile.by_sender().any_messages_malicious_or_spam
+        and not profile.by_sender().any_false_positives
+      )
+    )

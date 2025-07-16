@@ -1,0 +1,56 @@
+attack_types:
+- Credential Phishing
+- Brand Impersonation
+- BEC/Fraud
+- Cryptocurrency Scam
+description: 'Detects a cyptocurrency phishing kit targeting Amazon. It claims to
+  offer an Amazon (AMZ) token pre-sale and leads to an exchange where you can swap
+  cryptocurrencies for this fake token.
+
+  This was found as a result of this kit being deployed on Replit.
+
+
+  Converted from IOK rule - original focuses on website analysis.'
+detection_methods:
+- Content analysis
+- Sender analysis
+- Header analysis
+- URL analysis
+id: 37fc0aba-2be0-44c7-8321-224ef7c4bc1c
+name: 'IOK: Amazon Token Cryptocurrency Scam SHFXgk'
+references:
+- https://urlscan.io/result/fdab2610-a5ad-4665-8ebb-bdcc5b8fb515/
+- https://urlscan.io/result/f045f38d-044d-4445-86d3-c5b1004a5fc9/
+- https://urlscan.io/result/b87affd1-1f6e-4bd8-b49e-d534993e96bb/
+severity: high
+tactics_and_techniques:
+- 'Impersonation: Brand'
+- Social engineering
+- Investment scam
+tags:
+- IOK_Converted
+- IOK_kit
+- IOK_target.amazon
+- IOK_cryptocurrency
+type: rule
+source: |
+  type.inbound
+    and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "<title>Amazon Pre-Sale for AMZ (up to 200% bonus)</title>")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "<meta name=\"description\" content=\"Cryptocash is Professional Creative Template\" />")
+    )
+    and (
+      strings.icontains(body.links, "cryptocoins.css")
+    )
+    and strings.icontains(subject.subject, "amazon")
+    and sender.email.domain.domain != "amazon.com"
+    and (
+      not profile.by_sender().solicited
+      or (
+        profile.by_sender().any_messages_malicious_or_spam
+        and not profile.by_sender().any_false_positives
+      )
+    )

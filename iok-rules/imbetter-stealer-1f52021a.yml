@@ -1,0 +1,49 @@
+attack_types:
+- Malware/Ransomware
+description: "Detects the `ImBetter` stealer C2 panel page. \n\nUsing the SVG data\
+  \ we can confidentially detect \nthe SVG element that is used for the login page\
+  \ \nlogo.\n\nConverted from IOK rule - original focuses on website analysis."
+detection_methods:
+- Content analysis
+- Sender analysis
+- Header analysis
+- URL analysis
+id: 9e312c9a-e0c4-4a2a-98a5-b2f30fa9fbda
+name: 'IOK: ImBetter C2 Panel 1f52021a'
+references:
+- https://www.bridewell.com/insights/blogs/detail/threat-advisory-bridewell-malware-impersonating-online-tools-and-video-games
+- https://twitter.com/bridewellsec/status/1631349963840970757
+severity: high
+tactics_and_techniques:
+- Social engineering
+tags:
+- IOK_Converted
+- IOK_threat_actor.arv6
+- IOK_malware.imbetter
+- IOK_malware
+type: rule
+source: |
+  type.inbound
+    and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "M6 19C6 16.7909 8.68629 15 12 15C15.3137 15 18 16.7909 18 19")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "M12 12C14.2091 12 16 10.2091 16 8C16 5.79086 14.2091 4 12 4C9.79086 4 8 5.79086 8 8C8 10.2091 9.79086 12 12 12Z")
+    )
+    and (
+      strings.icontains(body.links, "auf.js")
+    )
+    and (
+      strings.icontains(body.links, "114cd0fcfa927565b082.png")
+    )
+    and (
+      strings.icontains(subject.subject, "account")
+      or strings.icontains(subject.subject, "verify")
+      or strings.icontains(subject.subject, "suspended")
+    )
+    and (
+      not profile.by_sender().solicited
+      or (
+        profile.by_sender().any_messages_malicious_or_spam
+        and not profile.by_sender().any_false_positives
+      )
+    )

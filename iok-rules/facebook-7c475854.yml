@@ -1,0 +1,46 @@
+attack_types:
+- Credential Phishing
+- Brand Impersonation
+description: "This kit imitates the Facebook help center page\nand asks the user to\
+  \ enter their page name, email \naddress, phone number & full name in order to 'unblock'\
+  \ \ntheir removed facebook page. \n\nAfter filling out the form the user is prompted\
+  \ \nwith a dialog box where they must enter their \nFacebook password for their\
+  \ 'security'.\n\nConverted from IOK rule - original focuses on website analysis."
+detection_methods:
+- Content analysis
+- URL analysis
+- Header analysis
+- Natural Language Understanding
+- Sender analysis
+id: 42e5865e-7f90-4f66-9fb2-dbe3d8342862
+name: 'IOK: Facebook Phishing Kit 7c475854'
+references:
+- https://urlscan.io/result/7c475854-9102-4803-8293-11c4bc17142e
+- https://urlscan.io/result/36d2d95b-7a09-408e-abd9-710ff9703aa3
+- https://urlscan.io/result/3e88c0af-e0ad-4b42-af21-9ed13dec36f5
+severity: high
+tactics_and_techniques:
+- 'Impersonation: Brand'
+tags:
+- IOK_Converted
+- IOK_kit
+- IOK_target.facebook
+type: rule
+source: |
+  type.inbound
+    and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "https://www.edigitalagency.com.au/wp-content/uploads/Facebook-logo-blue-circle-large-transparent-png.png")
+    )
+    and (
+      strings.icontains(body.links, "netflixlogo-28853c47.png")
+    )
+    and strings.icontains(subject.subject, "facebook")
+    and sender.email.domain.domain != "facebook.com"
+    and (
+      not profile.by_sender().solicited
+      or (
+        profile.by_sender().any_messages_malicious_or_spam
+        and not profile.by_sender().any_false_positives
+      )
+    )

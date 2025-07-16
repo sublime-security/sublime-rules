@@ -1,0 +1,52 @@
+attack_types:
+- Credential Phishing
+- Brand Impersonation
+description: 'Detects a phishing kit targeting Instagram by impersonating Instagram
+  staff and tricking the user into filling out a fake appeal form.
+
+
+  Converted from IOK rule - original focuses on website analysis.'
+detection_methods:
+- Content analysis
+- URL analysis
+- Header analysis
+- Natural Language Understanding
+- Sender analysis
+id: 10f10a07-b4a1-4e3d-b052-d70bc48be852
+name: 'IOK: Instagram Appeal Phishing Kit 510EMm'
+references:
+- https://i.imgur.com/fv7nXjX.png
+- https://urlscan.io/result/4a87ebf6-8e33-42d6-94b9-87b0035184aa/
+- https://urlscan.io/result/799fc14b-9551-4875-8806-d2a97354586a/
+severity: high
+tactics_and_techniques:
+- 'Impersonation: Brand'
+tags:
+- IOK_Converted
+- IOK_kit
+- IOK_target.instagram
+type: rule
+source: |
+  type.inbound
+    and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "<title></title>")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "<video width=\"100%\" src=\"imgs/arka.mp4\" autoplay=\"\" muted=\"\" loop=\"\"></video>")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "<p>Language English (US)</p>")
+    )
+    and (
+      strings.icontains(subject.subject, "account")
+      or strings.icontains(subject.subject, "verify")
+      or strings.icontains(subject.subject, "suspended")
+    )
+    and (
+      not profile.by_sender().solicited
+      or (
+        profile.by_sender().any_messages_malicious_or_spam
+        and not profile.by_sender().any_false_positives
+      )
+    )

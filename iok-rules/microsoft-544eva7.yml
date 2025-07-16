@@ -1,0 +1,53 @@
+attack_types:
+- Credential Phishing
+- Brand Impersonation
+description: 'Detects a Microsoft phishing kit targeting Spanish speaking users.
+
+
+  Converted from IOK rule - original focuses on website analysis.'
+detection_methods:
+- Content analysis
+- URL analysis
+- Header analysis
+- Natural Language Understanding
+- Sender analysis
+id: e8bd440b-2240-43a0-bcca-1cd3be295a43
+name: 'IOK: Microsoft Phishing Kit 544eva7'
+references:
+- https://urlscan.io/result/31fcc1b0-fb7e-4947-94d3-1a4de1700954
+- https://urlscan.io/result/a4edc336-5315-471b-b1d6-4c2486a293fd
+- https://urlscan.io/result/9fad07e2-cb91-4cef-b047-bb5f794eb8c2
+- https://urlscan.io/result/c5c7ff3c-fa7c-47d9-a976-e00ea96b2a1c
+- https://urlscan.io/result/62ccd072-f825-49a8-bb6e-74d74dd7f6c0
+severity: high
+tactics_and_techniques:
+- 'Impersonation: Brand'
+tags:
+- IOK_Converted
+- IOK_kit
+- IOK_target.microsoft
+type: rule
+source: |
+  type.inbound
+    and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "id=\"dropDownSelect1\"")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "soloNumeros")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "#544eva77")
+    )
+    and (
+      strings.icontains(subject.subject, "microsoft")
+      or strings.icontains(subject.subject, "office")
+    )
+    and sender.email.domain.domain not in ("microsoft.com", "office.com")
+    and (
+      not profile.by_sender().solicited
+      or (
+        profile.by_sender().any_messages_malicious_or_spam
+        and not profile.by_sender().any_false_positives
+      )
+    )

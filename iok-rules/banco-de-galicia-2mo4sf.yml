@@ -1,0 +1,54 @@
+attack_types:
+- Credential Phishing
+- Brand Impersonation
+description: 'Detects a phishing kit targeting Banco de Galicia. The threat actor
+  operates from Argentina itself.
+
+
+  Converted from IOK rule - original focuses on website analysis.'
+detection_methods:
+- Content analysis
+- URL analysis
+- Header analysis
+- Natural Language Understanding
+- Sender analysis
+id: cae2434e-5213-4c12-b412-0b82125a541a
+name: 'IOK: Banco de Galicia Phishing Kit 2mO4SF'
+references:
+- https://urlscan.io/result/d432c567-d1de-4b56-9ddb-af47248ab423/
+severity: high
+tactics_and_techniques:
+- 'Impersonation: Brand'
+tags:
+- IOK_Converted
+- IOK_kit
+- IOK_target.banco_de_galicia
+- IOK_target_country.argentina
+type: rule
+source: |
+  type.inbound
+    and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "<img src=\"img/109.jpg\" width=\"100%\" <title=\"\">")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "div class=\"logo_login\" role=\"banner\" data-automation-id=\"galicia-banner\"")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "form action=\"send.php\" method=\"post\" id=\"form1\" onkeypress=\"return evalEnter(event);\" autocomplete=\"off\"")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "input name=\"__RequestVerificationToken\" type=\"hidden\" value=\"NOkPDuCJE_NXUBMT9OQG-KhVO3-R8Uruo-giLM1tLPZAsdDMuxuWaFsp-kpbIt1CHFjZx6z644GVwxBiB9gp6U0zaZWoM_pAGYsQZLEfUM01\"")
+    )
+    and (
+      strings.icontains(subject.subject, "account")
+      or strings.icontains(subject.subject, "verify")
+      or strings.icontains(subject.subject, "suspended")
+    )
+    and (
+      not profile.by_sender().solicited
+      or (
+        profile.by_sender().any_messages_malicious_or_spam
+        and not profile.by_sender().any_false_positives
+      )
+    )

@@ -1,0 +1,46 @@
+attack_types:
+- Credential Phishing
+description: 'To evade static analysis, the document body can returned base64 encoded
+  in the response
+
+  where JavaScript can decode it and append it to the DOM.
+
+  This helps defeat simple scanners which don''t evaluate JavaScript.
+
+
+  Converted from IOK rule - original focuses on website analysis.'
+detection_methods:
+- Content analysis
+- Sender analysis
+- Header analysis
+- URL analysis
+id: 8491a153-69a0-4d34-8e26-a0cba20223da
+name: 'IOK: Base64-encoded document body'
+references:
+- https://urlscan.io/result/3b445b90-5d04-4b36-b29a-cdee4bf9a28e
+- https://urlscan.io/search/#hash%3A71f119e31661198a11f2c5a24f9a3e01c4b405413efde35a7fb838beb15611df
+severity: high
+tactics_and_techniques:
+- Social engineering
+tags:
+- IOK_Converted
+- IOK_anti-analysis
+type: rule
+source: |
+  type.inbound
+    and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "document.write(atob(")
+    )
+    and (
+      strings.icontains(subject.subject, "account")
+      or strings.icontains(subject.subject, "verify")
+      or strings.icontains(subject.subject, "suspended")
+    )
+    and (
+      not profile.by_sender().solicited
+      or (
+        profile.by_sender().any_messages_malicious_or_spam
+        and not profile.by_sender().any_false_positives
+      )
+    )

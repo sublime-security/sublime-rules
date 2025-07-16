@@ -1,0 +1,64 @@
+attack_types:
+- Credential Phishing
+- Brand Impersonation
+description: 'Detects a phishing kit targeting Facebook (Meta) by displaying a fake
+  copyright infringement appeal form and tricking the user into giving away their
+  credentials. This has over 600 hits on Urlscan.
+
+  Threat actors observed in:
+
+  - United States 🇺🇸 (BELLSOUTH-NET-BLK 6389; ASN-CXA-ALL-CCI-22773-RDC 22773; CDNEXT
+  212238)
+
+
+  Converted from IOK rule - original focuses on website analysis.'
+detection_methods:
+- Content analysis
+- URL analysis
+- Header analysis
+- Natural Language Understanding
+- Sender analysis
+id: ef0a5d7f-9340-484c-ab96-0d6d441322c6
+name: 'IOK: Facebook Copyright Phishing Kit XpkqU8'
+references:
+- https://urlscan.io/result/bbd605d3-bedb-495a-83f1-8e06bf61b2fd/
+- https://urlscan.io/result/e715e783-d565-4de9-bab2-4ed4140880a6/
+- https://urlscan.io/result/0e31435d-b5ed-4b76-b1a8-9d92033526f4/
+- https://urlscan.io/result/c4b80952-19fc-47ba-8de8-f72092e79969/
+- https://urlscan.io/result/efcdfbb3-1bb7-4b0f-a733-6d2598665f78/
+- https://urlscan.io/result/79ef7b30-cb8f-462f-9e91-9012d99318d3/
+- https://urlscan.io/result/f68304cc-8cbc-4a24-9d8d-dd4b1fba6656/
+- https://urlscan.io/result/03717e96-c474-421b-bd29-3904fba0f000/
+- https://urlscan.io/result/8c408e06-1e9d-4c8d-a7a6-da1ca03bd6ac/
+- https://urlscan.io/result/edacf843-5a5a-4f08-a97e-163169bc3ded/
+severity: high
+tactics_and_techniques:
+- 'Impersonation: Brand'
+tags:
+- IOK_Converted
+- IOK_kit
+- IOK_target.facebook
+- IOK_target.meta
+type: rule
+source: |
+  type.inbound
+    and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "<title> Page Help Support Team </title>")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "meta property=\"og:url\" content=\"\"")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "meta property=\"og:type\" content=\"\"")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "meta property=\"og:title\" content=\"Page Help Support Team\"")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "meta property=\"og:description\" content=\"We saw unusual activity on your account.To protect you, your profile is hidden now and you can't access some features\"")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "https://i.ibb.co/m6wKKzb/885434810.jpg")
+    )
+    and strings.icontains(subject.subject, "facebook")
+    and sender.email.domain.domain != "facebook.com"
+    and (
+      not profile.by_sender().solicited
+      or (
+        profile.by_sender().any_messages_malicious_or_spam
+        and not profile.by_sender().any_false_positives
+      )
+    )

@@ -1,0 +1,52 @@
+attack_types:
+- Credential Phishing
+- Brand Impersonation
+description: 'Detects a SAISON Card phishing kit targeting Japanese users.
+
+
+  Converted from IOK rule - original focuses on website analysis.'
+detection_methods:
+- Content analysis
+- URL analysis
+- Header analysis
+- Natural Language Understanding
+- Sender analysis
+id: deb75a7e-9146-4667-a895-f8c008bd1919
+name: 'IOK: SAISON Card Phishing Kit b85570be'
+references:
+- https://urlscan.io/result/b85570be-adc3-45f8-83ee-9a4a46737f89
+- https://urlscan.io/result/4332baf6-7b01-49e9-9d88-b7dcb9ad5a33
+- https://urlscan.io/result/7ddc9c4a-2a7d-403d-9743-82cb62f0eb02
+severity: high
+tactics_and_techniques:
+- 'Impersonation: Brand'
+tags:
+- IOK_Converted
+- IOK_kit
+- IOK_target.saison_card
+- IOK_target_country.japan
+type: rule
+source: |
+  type.inbound
+    and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "name=\"loginForm\" id=\"loginForm\" method=\"post\" action=\"USA0201UIP01SCR.do.php\"")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "type=\"hidden\" name=\"_csrf\" value=\"a9410f4f-e742-47a4-bcb4-78b655267747\"")
+    )
+    and (
+      strings.icontains(body.links, "auth.php")
+    )
+    and (
+      strings.icontains(subject.subject, "account")
+      or strings.icontains(subject.subject, "verify")
+      or strings.icontains(subject.subject, "suspended")
+    )
+    and (
+      not profile.by_sender().solicited
+      or (
+        profile.by_sender().any_messages_malicious_or_spam
+        and not profile.by_sender().any_false_positives
+      )
+    )

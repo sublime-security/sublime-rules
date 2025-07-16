@@ -1,0 +1,63 @@
+title: Okta ("0ktapus"/"Scatter Swine") phishing kit
+references:
+  - https://blog.group-ib.com/0ktapus
+  - https://sec.okta.com/scatterswine
+  - https://blog.cloudflare.com/cloudflare-investigation-of-the-january-2022-okta-compromise/
+description: |
+  Okta is a Single Sign-On (SSO) provider used by many enterprises and this phishing kit targets those enterprises.
+  It aims to steal the victim's email address, SSO password, and MFA details.
+  
+  To decrease victim's suspicion this kit (like many) includes details specific to the targeted company e.g. their name and logo.
+  However, unlike similar kits, this is hardcoded per instance of the phishing site and isn't dynamic based on the victim's email.
+  
+  ![Screenshot of one of these camouflaged Okta phishing kits (in this case, actually targeting Okta's own employees). [Via urlscan.io](https://urlscan.io/result/63fc7edd-116c-4128-a934-8ad6c9ad76e2/)](/static/63fc7edd-116c-4128-a934-8ad6c9ad76e2-BIDTSTDO.png)
+  
+  The same frontend code (HTML, CSS, and JS) is deployed regardless of the company being targeted, but the company name and logo is provided by the C2 server.
+  
+  ### Capabilities
+  
+  From analysing the code it appears this kit is set up to:
+  * Steal email address and password
+  * Capture MFA codes
+  * Push the download of a (trojanized?) remote desktop tool `AnyDesk.exe`
+  
+  ### Timeline
+  
+  So far, the earliest observed appearance of this campaign was on July 1st ([urlscan.io](https://urlscan.io/result/4125359d-3fea-4161-b0a9-bed1e3c04e16)).
+  This is a slightly earlier version of the phishing kit (referencing slightly different JS files) and was last seen on July 13th.
+  
+  The more recent version of the kit (using the JS filenames referenced in this rule) was first observed on [July 17th](https://urlscan.io/result/0c7aba52-edf4-4280-9bc5-783fb8c93d87/).
+  
+  ### Attack Infrastructure
+  Unlike many less sophisticated kits, this isn't deployed on a PHP hosting provider but is instead deployed on virtual machines (usually provided by Digital Ocean or Vultr).
+  * Frontend assets (HTML/JS/CSS) are loaded from the domain itself
+  * The config (for example, which logo to display) is loaded from a separate, non-HTTPS endpoint hosted on port 8080 on the same server
+
+  ```mermaid
+  graph LR
+      subgraph C2[Attack Infrastructure]
+      Domain[Lookalike Domain] --> IP[Server IP]
+      end
+      Browser[Victim's Browser] -->|Load frontend: GET https://domain| Domain
+      Browser -->|Fetch name and logo: GET http://ip:8080/api/app/settings| IP
+  ```
+  
+  Most infrastructure is unique to each attack but there's occasionally some crossover:
+  * [45[.]63[.]39[.]151](https://urlscan.io/ip/45.63.39.151) has been seen targeting multiple companies.
+  * [mailchimp-help[.]com](https://urlscan.io/domain/mailchimp-help.com) has been observed targeting multiple companies.
+related:
+  - id: okta-6a6c442
+
+detection:
+  jsChunks:
+    requests|contains|all:
+      - _nuxt/5844ad4.js
+      - _nuxt/8dd50ed.js
+      - _nuxt/30ce58a.js
+      - _nuxt/90a4226.js
+
+  condition: jsChunks
+
+tags:
+  - kit
+  - target.okta

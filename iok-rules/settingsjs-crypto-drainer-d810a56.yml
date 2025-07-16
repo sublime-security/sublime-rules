@@ -1,0 +1,54 @@
+attack_types:
+- BEC/Fraud
+- Cryptocurrency Scam
+description: 'Detects a crypto drainer that has its
+
+  own configuration file called settings.js.
+
+
+  Converted from IOK rule - original focuses on website analysis.'
+detection_methods:
+- Content analysis
+- Sender analysis
+- Header analysis
+- URL analysis
+id: 5a3f5984-8ff0-4feb-a82f-a0be235d83c3
+name: 'IOK: SettingsJS Crypto Drainer d810a56'
+references:
+- https://urlscan.io/result/fec90b9f-cc8c-4d83-ac66-7b58010b7ad0
+severity: high
+tactics_and_techniques:
+- Malware delivery
+- Investment scam
+tags:
+- IOK_Converted
+- IOK_cryptocurrency
+- IOK_cryptocurrency.ethereum
+type: rule
+source: |
+  type.inbound
+    and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
+    and (
+      strings.icontains(body.links, "settings.js")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "collectionInfo")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "Welcome, ")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "Click to sign in and accept the Terms of Service.")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "This request will not trigger a blockchain transaction or cost any gas fees.")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "Wallet Address:")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "Nonce:")
+    )
+    and (
+      strings.icontains(subject.subject, "coinbase")
+      or strings.icontains(subject.subject, "crypto")
+    )
+    and (
+      not profile.by_sender().solicited
+      or (
+        profile.by_sender().any_messages_malicious_or_spam
+        and not profile.by_sender().any_false_positives
+      )
+    )

@@ -1,0 +1,50 @@
+attack_types:
+- Credential Phishing
+- Brand Impersonation
+description: 'Detects a Bancolombia phishing kit targeting Spanish speaking users.
+
+  Commonly deployed on `replit.com`.
+
+
+  Converted from IOK rule - original focuses on website analysis.'
+detection_methods:
+- Content analysis
+- URL analysis
+- Header analysis
+- Natural Language Understanding
+- Sender analysis
+id: 09a06c5f-c4d8-4142-9012-defe5caa76ce
+name: 'IOK: Bancolombia Phishing Kit 68a8d3f'
+references:
+- https://urlscan.io/result/68a8d3f3-ecaa-4fec-a4bc-95ce3a1c1859
+- https://urlscan.io/result/e98a899c-a68a-43ec-ade5-caefc01e4fbf
+severity: high
+tactics_and_techniques:
+- 'Impersonation: Brand'
+tags:
+- IOK_Converted
+- IOK_kit
+- IOK_target.bancolombia
+- IOK_target_country.colombia
+type: rule
+source: |
+  type.inbound
+    and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "?v=4.2.0.RC1_1624831458747")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "?scis=\"YIi1lR6Pw8XXW+BFzGbgVa9/N5InkmIFmcP91Ale3jg=")
+    )
+    and (
+      strings.icontains(subject.subject, "account")
+      or strings.icontains(subject.subject, "verify")
+      or strings.icontains(subject.subject, "suspended")
+    )
+    and (
+      not profile.by_sender().solicited
+      or (
+        profile.by_sender().any_messages_malicious_or_spam
+        and not profile.by_sender().any_false_positives
+      )
+    )

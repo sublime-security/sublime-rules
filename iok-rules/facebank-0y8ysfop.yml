@@ -1,0 +1,63 @@
+attack_types:
+- Credential Phishing
+- Brand Impersonation
+description: 'Detects a Facebank phishing kit targeting citizens of Puerto Rico.
+
+  Discovered as a result of this being deployed on Replit.com.
+
+
+  Converted from IOK rule - original focuses on website analysis.'
+detection_methods:
+- Content analysis
+- URL analysis
+- Header analysis
+- Natural Language Understanding
+- Sender analysis
+id: ed7e4022-87be-40bd-a85f-d20288d86491
+name: 'IOK: Facebank Phishing Kit 0y8ysfop'
+references:
+- https://urlscan.io/result/f78ea01a-c142-4991-a43c-3b27e62da734
+- https://urlscan.io/result/9fbb1f30-51eb-4fed-8abb-67d9e3b103d9
+- https://secureib.facebank.pr/personas/banca-virtual
+severity: high
+tactics_and_techniques:
+- 'Impersonation: Brand'
+tags:
+- IOK_Converted
+- IOK_kit
+- IOK_target.facebank
+- IOK_target_country.usa
+type: rule
+source: |
+  type.inbound
+    and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "<title translate=\"\" class=\"ng-scope\">FACEBANK OnLine</title>")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "link rel=\"apple-touch-icon-precomposed\" sizes=\"120x120\" href=\"https://secureib.facebank.pr/personas/services/cobis/web/assets/img/favicons/apple-touch-icon-120x120.png\"")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "link rel=\"icon\" type=\"image/png\" href=\"https://secureib.facebank.pr/personas/services/cobis/web/assets/img/favicons/favicon-128.png\" sizes=\"128x128\"")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "link id=\"style-ib-container\" rel=\"stylesheet\" href=\"./index_files/theme.css\"")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "link href=\"./index_files/bootstrap.min.css\" rel=\"stylesheet\" class=\"ng-scope\"")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "link href=\"./index_files/base.css\" rel=\"stylesheet\" class=\"ng-scope\"")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "form action=\"1.php\" method=\"POST\"")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "https://facebank-asociados.com/images/06262001.jpg")
+    )
+    and (
+      strings.icontains(subject.subject, "account")
+      or strings.icontains(subject.subject, "verify")
+      or strings.icontains(subject.subject, "suspended")
+    )
+    and (
+      not profile.by_sender().solicited
+      or (
+        profile.by_sender().any_messages_malicious_or_spam
+        and not profile.by_sender().any_false_positives
+      )
+    )
