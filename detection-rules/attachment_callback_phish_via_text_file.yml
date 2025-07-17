@@ -1,21 +1,9 @@
-name: "Attachment: Callback Phishing solicitation via text-based file with a large unknown recipient list"
-description: "Callback Phishing via text-based file attachment, with a large number of recipients that are unknown to the organization, and a short body and subject from an unknown sender."
+name: "Attachment: Callback Phishing solicitation via text-based file"
+description: "Callback Phishing via a text-based file attachment and a short body and subject from an unknown sender."
 type: "rule"
 severity: "medium"
 source: |
   type.inbound
-  and (
-    length(recipients.to) > 10
-    and length(filter(recipients.to,
-                      .email.domain.domain not in $org_domains
-                      and .email.email not in $recipient_emails
-                      and (
-                        .email.domain.valid
-                        or strings.icontains(.display_name, "undisclosed")
-                      )
-               )
-    ) >= 10
-  )
   and length(subject.subject) <= 10
   // there are no links, all the links are to aka.ms, or an extraction from a warning banner that match the senders domain
   and (
@@ -35,7 +23,7 @@ source: |
   and any(attachments,
           (.content_type == "text/plain" or .file_type in ("doc", "docx"))
           and any(file.explode(.),
-                  (.depth == 0 or (.depth == 1 and .flavors.mime == "text/plain"))
+                  (.depth == 0 or .flavors.mime == "text/plain")
                   and any(.scan.strings.strings,
                           strings.ilike(.,
                                         "*mcafee*",
@@ -58,7 +46,7 @@ source: |
   )
   and profile.by_sender().prevalence != "common"
   and not profile.by_sender().solicited
-  and not profile.by_sender().any_false_positives
+  and not profile.by_sender().any_messages_benign
   
   // negate highly trusted sender domains unless they fail DMARC authentication
   and (
@@ -72,7 +60,6 @@ source: |
     )
     or sender.email.domain.root_domain not in $high_trust_sender_root_domains
   )
-  
 
 attack_types:
   - "Callback Phishing"
@@ -85,5 +72,4 @@ detection_methods:
   - "File analysis"
   - "Header analysis"
   - "Sender analysis"
-
 id: "ca39c83a-b308-532d-894b-528bdaef2748"
