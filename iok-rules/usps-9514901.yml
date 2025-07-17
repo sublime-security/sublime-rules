@@ -1,0 +1,52 @@
+attack_types:
+- Credential Phishing
+- Brand Impersonation
+description: 'Detects a USPS phishing kit that uses the same fake tracking ID
+
+  & same stylesheet on every phish.
+
+
+  Converted from IOK rule - original focuses on website analysis.'
+detection_methods:
+- Content analysis
+- URL analysis
+- Header analysis
+- Natural Language Understanding
+- Sender analysis
+id: a70ebe1a-812c-458b-b60d-bbb6a3455549
+name: 'IOK: USPS Phishing Kit 9514901'
+references:
+- https://urlscan.io/result/eb515c96-1e02-4d48-a07f-6fe1d1590059
+- https://urlscan.io/result/6f9262b2-7809-4000-b5d1-d89c90bd16ff
+- https://urlscan.io/result/532bc1f5-319e-4b1d-abbb-d35057788e7a
+- https://urlscan.io/result/3b801aaf-ace4-40e0-8653-0fdbe456b9e9
+- https://urlscan.io/result/d0eb1705-9e5d-40c1-81d9-56c49686b9f9
+severity: high
+tactics_and_techniques:
+- 'Impersonation: Brand'
+tags:
+- IOK_Converted
+- IOK_kit
+- IOK_target.usps
+type: rule
+source: |
+  type.inbound
+    and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "class=\"tracking-number\"> US9514901185421</span>")
+    )
+    and (
+      strings.icontains(body.links, "1.css?apiType=css&projectid=ee38900c-6459-4e0c-95d6-896c0208d3d0")
+    )
+    and (
+      strings.icontains(subject.subject, "account")
+      or strings.icontains(subject.subject, "verify")
+      or strings.icontains(subject.subject, "suspended")
+    )
+    and (
+      not profile.by_sender().solicited
+      or (
+        profile.by_sender().any_messages_malicious_or_spam
+        and not profile.by_sender().any_false_positives
+      )
+    )

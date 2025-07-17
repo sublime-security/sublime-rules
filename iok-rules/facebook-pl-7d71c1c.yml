@@ -1,0 +1,49 @@
+attack_types:
+- Credential Phishing
+- Brand Impersonation
+description: "Detects a Facebook phishing kit targeting \nPolish speaking users. Using\
+  \ the same Google\nTag ID across every domain deploying this kit\nand using the\
+  \ same name for the logo file.\n\nConverted from IOK rule - original focuses on\
+  \ website analysis."
+detection_methods:
+- Content analysis
+- URL analysis
+- Header analysis
+- Natural Language Understanding
+- Sender analysis
+id: e0e5f701-e172-4930-9f6d-268fd0748ef4
+name: 'IOK: Facebook Phishing Kit 7d71c1c'
+references:
+- https://urlscan.io/result/4467573b-d13a-4f2c-85df-5dbce3de9eda
+- https://urlscan.io/result/7d71c1c0-da74-41bf-b4c7-25e9ba421f1e
+- https://urlscan.io/result/d4890e94-a7e6-4b9a-b4b2-fab8eaa3ccc3
+severity: high
+tactics_and_techniques:
+- 'Impersonation: Brand'
+tags:
+- IOK_Converted
+- IOK_kit
+- IOK_target.facebook
+- IOK_target_country.poland
+type: rule
+source: |
+  type.inbound
+    and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
+    and (
+      strings.icontains(body.links, "fb4.png")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "UA-178388451-1")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "https://fonts.googlay=swap")
+    )
+    and strings.icontains(subject.subject, "facebook")
+    and sender.email.domain.domain != "facebook.com"
+    and (
+      not profile.by_sender().solicited
+      or (
+        profile.by_sender().any_messages_malicious_or_spam
+        and not profile.by_sender().any_false_positives
+      )
+    )

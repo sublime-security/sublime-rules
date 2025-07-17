@@ -1,0 +1,50 @@
+attack_types:
+- Credential Phishing
+- Brand Impersonation
+description: 'HSBC phishing kit which uses the same fake login detected
+
+  HTML element across various domains.
+
+
+  Converted from IOK rule - original focuses on website analysis.'
+detection_methods:
+- Content analysis
+- URL analysis
+- Header analysis
+- Natural Language Understanding
+- Sender analysis
+id: 994c6299-4de1-42cf-b119-ec63ddf4315c
+name: 'IOK: HSBC Phishing Kit ea738a3'
+references:
+- https://urlscan.io/result/ae98e500-1ff5-46f8-9cdc-3f433466bb2c/
+- https://urlscan.io/result/aa72b513-8260-46e6-a431-0d6e496fc4e3/
+- https://urlscan.io/result/ff7ef587-fa1c-4ad8-8258-caea477723b4/
+severity: high
+tactics_and_techniques:
+- 'Impersonation: Brand'
+tags:
+- IOK_Converted
+- IOK_kit
+- IOK_target.hsbc
+type: rule
+source: |
+  type.inbound
+    and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "A login attempt was made in:")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "Location: Bangkok, Thailand")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "IP : 290.630.232.85")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "If this was NOT your please verify your credentials.")
+    )
+    and (
+      strings.icontains(subject.subject, "account")
+      or strings.icontains(subject.subject, "verify")
+      or strings.icontains(subject.subject, "suspended")
+    )
+    and (
+      not profile.by_sender().solicited
+      or (
+        profile.by_sender().any_messages_malicious_or_spam
+        and not profile.by_sender().any_false_positives
+      )
+    )

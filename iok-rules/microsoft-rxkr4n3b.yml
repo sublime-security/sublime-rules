@@ -1,0 +1,60 @@
+attack_types:
+- Credential Phishing
+- Brand Impersonation
+description: 'Detects a poorly designed and simple Microsoft phishing kit.
+
+  Discovered as a result of this being deployed on Replit.com.
+
+
+  Converted from IOK rule - original focuses on website analysis.'
+detection_methods:
+- Content analysis
+- URL analysis
+- Header analysis
+- Natural Language Understanding
+- Sender analysis
+id: de4c5b93-3700-442c-83e2-342f308e9f3c
+name: 'IOK: Microsoft Phishing Kit rxkr4n3b'
+references:
+- https://urlscan.io/result/b88dcbad-2ef0-4904-8046-3ca438fb4afa
+- https://urlscan.io/result/4a06b13e-57b1-47a6-852b-d68c9518d25f
+severity: high
+tactics_and_techniques:
+- 'Impersonation: Brand'
+tags:
+- IOK_Converted
+- IOK_kit
+- IOK_target.microsoft
+type: rule
+source: |
+  type.inbound
+    and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "<title>PROCESO</title>")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "link rel=\"stylesheet\" type=\"text/css\" href=\"forma.css\"")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "form action=\"complete.php\" method=\"post\"")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "input type=\"email\" name=\"lgdmdp\" placeholder=\"EMAIL ALCTUAL\"")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "input id=\"clave\" type=\"password\" name=\"djddhd\" placeholder=\"CLAVE ACTUAL\"")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "input type=\"submit\" class=\"boton\" value=\"Confirmar\"")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "img  style=\"width: 101px;\" src=\"imagen.jpg\"  alt=\"\"")
+    )
+    and (
+      strings.icontains(subject.subject, "microsoft")
+      or strings.icontains(subject.subject, "office")
+    )
+    and sender.email.domain.domain not in ("microsoft.com", "office.com")
+    and (
+      not profile.by_sender().solicited
+      or (
+        profile.by_sender().any_messages_malicious_or_spam
+        and not profile.by_sender().any_false_positives
+      )
+    )

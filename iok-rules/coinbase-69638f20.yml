@@ -1,0 +1,42 @@
+attack_types:
+- Credential Phishing
+description: "A Coinbase Phishing Kit asking the user to enter their\n12-word seed\
+  \ phrase. \nThis kit seems to be exclusively deployed on Glitch.\n\nConverted from\
+  \ IOK rule - original focuses on website analysis."
+detection_methods:
+- Content analysis
+- URL analysis
+- Header analysis
+- Natural Language Understanding
+- Sender analysis
+id: 743abf1e-3765-4b9c-9a94-000d05ca095e
+name: 'IOK: Coinbase Phishing Kit 69638f20'
+references:
+- https://urlscan.io/result/69638f20-d983-4d53-9ec5-21955f96b0ae
+- https://urlscan.io/search/#filename:%22cb675.png%22
+severity: high
+tactics_and_techniques:
+- 'Impersonation: Brand'
+tags:
+- IOK_Converted
+type: rule
+source: |
+  type.inbound
+    and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
+    and (
+      strings.icontains(body.links, "i.postimg.cc/zG3nVT0g/cb675.png")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "newmh78")
+    )
+    and (
+      strings.icontains(subject.subject, "coinbase")
+      or strings.icontains(subject.subject, "crypto")
+    )
+    and (
+      not profile.by_sender().solicited
+      or (
+        profile.by_sender().any_messages_malicious_or_spam
+        and not profile.by_sender().any_false_positives
+      )
+    )

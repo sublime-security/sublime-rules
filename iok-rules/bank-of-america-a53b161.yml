@@ -1,0 +1,51 @@
+attack_types:
+- Credential Phishing
+- Brand Impersonation
+description: 'Detects a Bank of America phishing kit.
+
+
+  Converted from IOK rule - original focuses on website analysis.'
+detection_methods:
+- Content analysis
+- URL analysis
+- Header analysis
+- Natural Language Understanding
+- Sender analysis
+id: 783e247b-328f-4cc4-9655-1a760d073f5c
+name: 'IOK: Bank of America Phishing Kit a53b161'
+references:
+- https://urlscan.io/result/c38fab40-3a0b-4c90-b01e-605d4b8e0b4c
+severity: high
+tactics_and_techniques:
+- 'Impersonation: Brand'
+tags:
+- IOK_Converted
+- IOK_kit
+- IOK_target.bank_of_america
+- IOK_target_country.usa
+type: rule
+source: |
+  type.inbound
+    and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "conplas/sand.php")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "a53b161c2b3f889e")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "Security Message!!")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "The importance of security and the integrity of our services.  To avoid blockages and the suspension of services in our online banking, complete the information requested below correctly.!")
+    )
+    and (
+      strings.icontains(subject.subject, "account")
+      or strings.icontains(subject.subject, "verify")
+      or strings.icontains(subject.subject, "suspended")
+    )
+    and (
+      not profile.by_sender().solicited
+      or (
+        profile.by_sender().any_messages_malicious_or_spam
+        and not profile.by_sender().any_false_positives
+      )
+    )

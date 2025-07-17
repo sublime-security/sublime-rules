@@ -1,0 +1,45 @@
+attack_types:
+- Credential Phishing
+description: '`testcookie-nginx-module` is a basic anti-bot mechanism using a JavaScript-based
+  challenge to defeat simple analysis by sandboxes which don''t evaluate JavaScript.
+
+
+  Converted from IOK rule - original focuses on website analysis.'
+detection_methods:
+- Content analysis
+- Sender analysis
+- Header analysis
+- URL analysis
+id: d211fe82-a04e-4814-9eb6-dff5aa5e2817
+name: 'IOK: testcookie NGINX anti-bot'
+references:
+- https://github.com/kyprizel/testcookie-nginx-module
+- https://blog.kwiatkowski.fr/?q=en/testcookie
+severity: high
+tactics_and_techniques:
+- Social engineering
+tags:
+- IOK_Converted
+- IOK_anti-analysis
+type: rule
+source: |
+  type.inbound
+    and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "a=toNumbers(")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "b=toNumbers(")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "c=toNumbers(")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "toHex(slowAES.decrypt(c,2,a,b))")
+    )
+    and (
+      strings.icontains(subject.subject, "account")
+      or strings.icontains(subject.subject, "verify")
+      or strings.icontains(subject.subject, "suspended")
+    )
+    and (
+      not profile.by_sender().solicited
+      or (
+        profile.by_sender().any_messages_malicious_or_spam
+        and not profile.by_sender().any_false_positives
+      )
+    )

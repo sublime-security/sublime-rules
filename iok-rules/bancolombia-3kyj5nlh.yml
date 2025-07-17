@@ -1,0 +1,65 @@
+attack_types:
+- Credential Phishing
+- Brand Impersonation
+description: 'Detects a different Bancolombia phishing kit deployed often on replit.com
+  targeting Colombian citizens.
+
+
+  Converted from IOK rule - original focuses on website analysis.'
+detection_methods:
+- Content analysis
+- URL analysis
+- Header analysis
+- Natural Language Understanding
+- Sender analysis
+id: db6b9268-5790-4c51-8afc-2c8888c6d789
+name: 'IOK: Bancolombia Phishing Kit 3kyj5nlh'
+references:
+- https://urlscan.io/result/e5886efa-db1c-419b-8b34-cb7ea945cfc0
+- https://urlscan.io/result/40ceb859-6bb1-47ea-ad37-83f869ed75af
+- https://urlscan.io/result/a054c3a2-3598-4f5a-bc72-f2b93c56be48
+- https://urlscan.io/result/34e08ef5-de06-4355-81eb-08963daea67b
+- https://sucursalpersonas.transaccionesbancolombia.com/mua/USER
+severity: high
+tactics_and_techniques:
+- 'Impersonation: Brand'
+tags:
+- IOK_Converted
+- IOK_kit
+- IOK_target.bancolombia
+- IOK_target_country.colombia
+type: rule
+source: |
+  type.inbound
+    and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "href=\"./hfh/styles.css\"")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "href=\"./hfh/bootstrap.css\"")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "href=\"./hfh/jquery-ui.css\"")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "href=\"./hfh/ui.css\"")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "form method=\"POST\" id=\"main_form\" autocomplete=\"off\" action=\"index2.php\"")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "div id=\"contenidoWeb\"")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "div id=\"contenido\"")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "div class=\"mua_tooltip_msg\"")
+    )
+    and (
+      strings.icontains(body.links, "icc.png")
+      and strings.icontains(body.links, "1es.png")
+      and strings.icontains(body.links, "imgPublicidad.png")
+    )
+    and (
+      strings.icontains(subject.subject, "account")
+      or strings.icontains(subject.subject, "verify")
+      or strings.icontains(subject.subject, "suspended")
+    )
+    and (
+      not profile.by_sender().solicited
+      or (
+        profile.by_sender().any_messages_malicious_or_spam
+        and not profile.by_sender().any_false_positives
+      )
+    )

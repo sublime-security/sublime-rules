@@ -1,0 +1,62 @@
+attack_types:
+- Credential Phishing
+- Brand Impersonation
+description: 'Detects a phishing kit impersonating the Massachusetts Unemployment
+  Insurance (UI) Online Application available at uionline.detma.org in an attempt
+  to steal sensitive personal information from the victims.
+
+  This was found as a result of this kit being deployed on Replit.
+
+
+  Converted from IOK rule - original focuses on website analysis.'
+detection_methods:
+- Content analysis
+- Sender analysis
+- Header analysis
+- URL analysis
+id: 48e04db0-a5af-4157-a06c-527a0a23b771
+name: 'IOK: Massachusetts UI Online Application 5hGwWB'
+references:
+- https://uionline.detma.org/Claimant/Core/Login.ASPX
+- https://urlscan.io/result/2b7245f1-b6bd-4331-9277-77ff41812df2/
+- https://urlscan.io/result/d5527770-0b11-439c-8b1b-76d530d8a4fa/
+- https://urlscan.io/result/4aa8b015-5806-4e40-8cd8-46300f4cf267/
+- https://urlscan.io/result/8a4fb2a9-f494-40a1-9759-b4a0a5f1277e/
+- https://urlscan.io/result/a7416c6c-0254-4494-89b5-3775455be8b7/
+severity: high
+tactics_and_techniques:
+- 'Impersonation: Brand'
+tags:
+- IOK_Converted
+- IOK_kit
+- IOK_target.massachusetts_ui_online_application
+- IOK_target_country.usa
+type: rule
+source: |
+  type.inbound
+    and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
+    and (
+      strings.icontains(body.links, "ControlLibrary.css")
+      and strings.icontains(body.links, "ui.css")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "link rel=\"shortcut icon\" type=\"image/x-icon\" href=\"https://uionline.detma.org/favicon.ico\"")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "main_logo.gif")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "value=\"oPPd/MmJh8S2vBndhzQnxV9FJkjWRdgkiw==\"")
+    )
+    and (
+      strings.icontains(subject.subject, "account")
+      or strings.icontains(subject.subject, "verify")
+      or strings.icontains(subject.subject, "suspended")
+    )
+    and (
+      not profile.by_sender().solicited
+      or (
+        profile.by_sender().any_messages_malicious_or_spam
+        and not profile.by_sender().any_false_positives
+      )
+    )

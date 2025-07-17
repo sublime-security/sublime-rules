@@ -1,0 +1,48 @@
+attack_types:
+- Credential Phishing
+- Brand Impersonation
+- Cryptocurrency Scam
+description: 'Detects OpenSea wallet drainers - mystery box scam. Often hosted on
+  Vercel (https://vercel.com/).
+
+
+  Converted from IOK rule - original focuses on website analysis.'
+detection_methods:
+- Content analysis
+- URL analysis
+- Header analysis
+- Natural Language Understanding
+- Sender analysis
+id: 07f45d40-8332-43a1-9e09-c373761dd951
+name: 'IOK: OpenSea Phishing 389-9bec97c22fa2e411'
+references:
+- https://urlscan.io/result/03383a08-4618-4a92-9bff-99bd8b2be9f2/
+- https://urlscan.io/result/672f40d7-78fb-4b28-8ef5-9f09591e20ea/
+- https://urlscan.io/result/c6ed3c5a-e79a-491b-b316-deedc0527c49/
+severity: high
+tactics_and_techniques:
+- 'Impersonation: Brand'
+- Investment scam
+tags:
+- IOK_Converted
+- IOK_target.opensea
+- IOK_cryptocurrency
+type: rule
+source: |
+  type.inbound
+    and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "/389-9bec97c22fa2e411.gif")
+    )
+    and (
+      strings.icontains(subject.subject, "account")
+      or strings.icontains(subject.subject, "verify")
+      or strings.icontains(subject.subject, "suspended")
+    )
+    and (
+      not profile.by_sender().solicited
+      or (
+        profile.by_sender().any_messages_malicious_or_spam
+        and not profile.by_sender().any_false_positives
+      )
+    )

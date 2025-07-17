@@ -1,0 +1,57 @@
+attack_types:
+- Credential Phishing
+- Brand Impersonation
+description: 'Detects a phishing kit targeting Unibank. Unibank is one of the largest
+  private banks established in Azerbaijan.
+
+  Threat actors working with this phishing kit appear to be coming from Ukraine (EVEREST
+  AS49223).
+
+
+  Converted from IOK rule - original focuses on website analysis.'
+detection_methods:
+- Content analysis
+- URL analysis
+- Header analysis
+- Natural Language Understanding
+- Sender analysis
+id: 3ecbb187-113b-439d-801d-95dd821139b5
+name: 'IOK: Unibank Phishing Kit NJdEmH'
+references:
+- https://unibank.az/
+- https://urlscan.io/result/449e4d19-254f-487b-a911-65986cf99384/
+- https://urlscan.io/result/ae412a17-f89b-4f4b-99df-de652b4ddcb9/
+- https://urlscan.io/result/6dab8fb5-4667-4ddd-8a28-c4bfc1ff86ec/
+severity: high
+tactics_and_techniques:
+- 'Impersonation: Brand'
+tags:
+- IOK_Converted
+- IOK_kit
+- IOK_target.unibank
+- IOK_target_country.azerbaijan
+type: rule
+source: |
+  type.inbound
+    and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "<title>UNİBANK</title>")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "form name=\"form\" id=\"form\" method=\"post\" action=\"indexSend.php\" autocomplete=\"off\" onsubmit=\"return validation()\"")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "meta name=\"facebook-domain-verification\" content=\"atzt8tk6o7zuo0wjw3fgp66oqag9uq\"")
+    )
+    and (
+      strings.icontains(subject.subject, "account")
+      or strings.icontains(subject.subject, "verify")
+      or strings.icontains(subject.subject, "suspended")
+    )
+    and (
+      not profile.by_sender().solicited
+      or (
+        profile.by_sender().any_messages_malicious_or_spam
+        and not profile.by_sender().any_false_positives
+      )
+    )

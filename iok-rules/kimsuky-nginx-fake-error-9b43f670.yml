@@ -1,0 +1,53 @@
+attack_types:
+- Credential Phishing
+description: 'Detects a fake nginx 404 error page that is
+
+  mainly used by the Kimsuky APT from North Korea.
+
+
+  Converted from IOK rule - original focuses on website analysis.'
+detection_methods:
+- Content analysis
+- Sender analysis
+- Header analysis
+- URL analysis
+id: 528431d1-9722-46bd-86be-51b26548f6f2
+name: 'IOK: Kimsuky Nginx Fake Error 9b43f670'
+references:
+- https://twitter.com/Bank_Security/status/1621034213465067520
+- https://urlscan.io/search/#hash%3A9b43f670273b6a12b2b6894a9e29157c1859717594e98ccc5fb3eea05e71f4ed
+severity: high
+tactics_and_techniques:
+- Social engineering
+tags:
+- IOK_Converted
+- IOK_threat_actor.kimsuky_apt
+- IOK_target_country.south_korea
+type: rule
+source: |
+  type.inbound
+    and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "<meta http-equiv=\"Content-Type\" content=\"text/html; charset=windows-1252\">")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "<body bgcolor=\"white\">")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "<center>")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "<h1>404 Not Found</h1>")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "</center>")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "<hr>")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "<center>nginx</center>")
+    )
+    and (
+      strings.icontains(headers.hops, "nginx")
+    )
+    and (
+      strings.icontains(subject.subject, "account")
+      or strings.icontains(subject.subject, "verify")
+      or strings.icontains(subject.subject, "suspended")
+    )
+    and (
+      not profile.by_sender().solicited
+      or (
+        profile.by_sender().any_messages_malicious_or_spam
+        and not profile.by_sender().any_false_positives
+      )
+    )

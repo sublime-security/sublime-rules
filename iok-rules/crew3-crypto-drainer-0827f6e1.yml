@@ -1,0 +1,46 @@
+attack_types:
+- BEC/Fraud
+- Cryptocurrency Scam
+description: "Detects the crypto drainer created by a Chinese \nthreat actor that\
+  \ is hidden within the file named \n`main.69e3e80e.js` commonly hosted on a subdomain\n\
+  with the apex domain being either `server-crew3.xyz`\nor `web3-crew3.xyz`\n\nConverted\
+  \ from IOK rule - original focuses on website analysis."
+detection_methods:
+- Content analysis
+- Sender analysis
+- Header analysis
+- URL analysis
+id: e8e195d6-da18-45c6-95dd-15bd41cb2dfe
+name: 'IOK: crew3 Crypto Drainer 0827f6e1'
+references:
+- https://urlscan.io/result/0827f6e1-6d3e-4e2b-8ff4-3024111c18a5
+severity: high
+tactics_and_techniques:
+- Malware delivery
+- Investment scam
+tags:
+- IOK_Converted
+- IOK_cryptocurrency
+- IOK_cryptocurrency.ethereum
+- IOK_crypto_drainer.crew3
+type: rule
+source: |
+  type.inbound
+    and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
+    and (
+      strings.icontains(body.links, "main.69e3e80e.js")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "shakeima")
+    )
+    and (
+      strings.icontains(subject.subject, "coinbase")
+      or strings.icontains(subject.subject, "crypto")
+    )
+    and (
+      not profile.by_sender().solicited
+      or (
+        profile.by_sender().any_messages_malicious_or_spam
+        and not profile.by_sender().any_false_positives
+      )
+    )

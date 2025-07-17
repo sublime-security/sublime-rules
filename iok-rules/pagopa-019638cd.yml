@@ -1,0 +1,57 @@
+attack_types:
+- Credential Phishing
+- Brand Impersonation
+description: 'Detects sites that mimic the payment process of the PagoPA platform
+  established by the Italian Government for payments to public administrations.
+
+  The kit uses the Cleave JS library to validate credit card numbers and dates.
+
+
+  Converted from IOK rule - original focuses on website analysis.'
+detection_methods:
+- Content analysis
+- URL analysis
+- Header analysis
+- Natural Language Understanding
+- Sender analysis
+id: e52bebd0-9469-4e51-90f0-c622263bd557
+name: 'IOK: PagoPA Phishing Kit 019638cd'
+references:
+- https://cert-agid.gov.it/wp-content/uploads/2025/04/pagoPA.json
+- https://urlscan.io/result/019638cd-0a40-76fc-8fe0-4bcd550f9c0f
+- https://urlscan.io/result/01963b32-dccf-75d1-bfc9-00807a035688
+severity: high
+tactics_and_techniques:
+- 'Impersonation: Brand'
+tags:
+- IOK_Converted
+- IOK_kit
+- IOK_target_country.italy
+- IOK_target.pagopa
+type: rule
+source: |
+  type.inbound
+    and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
+    and (
+      strings.icontains(body.links, "cleave.min.js")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "function isInputNumber(evt)")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "pagamento")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "pagopa")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "action=\"logz/log.php\"")
+    )
+    and (
+      strings.icontains(subject.subject, "account")
+      or strings.icontains(subject.subject, "verify")
+      or strings.icontains(subject.subject, "suspended")
+    )
+    and (
+      not profile.by_sender().solicited
+      or (
+        profile.by_sender().any_messages_malicious_or_spam
+        and not profile.by_sender().any_false_positives
+      )
+    )
