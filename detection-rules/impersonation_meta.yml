@@ -142,6 +142,27 @@ source: |
               .name == "urgency"
       )
     )
+    // utilize enrichments to surface legal notices & negate mismatched display text phishing links, while not depending on sender specific signals or lack of display name.
+    or (
+      any(beta.ml_topic(body.html.display_text).topics,
+          .name == "Legal and Compliance" and .confidence in ("medium", "high")
+      )
+      and regex.icontains(body.current_thread.text,
+                          '\bFacebook\b',
+                          '\bInstagram\b',
+                          '\bMeta\b',
+                          '\bThreads\b'
+      )
+      // negate footer social links
+      and not any(body.links,
+                  regex.icontains(.display_text,
+                                  '\bFacebook\b',
+                                  '\bInstagram\b',
+                                  '\bMeta\b',
+                                  '\bThreads\b'
+                  )
+      )
+    )
   )
   and sender.email.domain.root_domain not in~ (
     'facebook.com',
