@@ -11,7 +11,7 @@ source: |
     not profile.by_sender().solicited
     or (
       profile.by_sender().any_messages_malicious_or_spam
-      and not profile.by_sender().any_false_positives
+      and not profile.by_sender().any_messages_benign
     )
   )
   
@@ -33,7 +33,23 @@ source: |
             .file_extension == "pdf"
             // get the length of the attached pdf
             and any(file.explode(.),
-                    .depth == 0 and .scan.exiftool.page_count < 3
+                    .depth == 0
+                    and .scan.exiftool.page_count < 3
+                    and (
+                      not (
+                        strings.istarts_with(.scan.exiftool.producer,
+                                             "Aspose.Words for Java"
+                        )
+                        and (
+                          .scan.exiftool.creator == "Anusha T"
+                          or any(.scan.exiftool.fields,
+                                 .key == "Author" and .value == "Anusha T"
+                          )
+                        )
+                      )
+                      or .scan.exiftool.producer is null
+                      or .scan.exiftool.creator is null
+                    )
             )
             // negate ML matches to "Professional and Career Development" - tuning resume FPs
             and not (
