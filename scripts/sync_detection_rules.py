@@ -830,8 +830,6 @@ def handle_pr_rules(mode):
                     if not has_label(pr_number, IN_TEST_RULES_LABEL):
                         print(f"\tPR #{pr_number} doesn't have the '{IN_TEST_RULES_LABEL}' label. Applying...")
                         apply_label(pr_number, IN_TEST_RULES_LABEL)
-                    else:
-                        print(f"\tPR #{pr_number} already has the '{IN_TEST_RULES_LABEL}' label.")
 
     # Clean up files no longer in open PRs
     clean_output_folder(new_files)
