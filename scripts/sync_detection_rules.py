@@ -60,7 +60,7 @@ INCLUDE_PRS_WITH_COMMENT = os.getenv('INCLUDE_PRS_WITH_COMMENT', 'false').lower(
 COMMENT_TRIGGER = os.getenv('COMMENT_TRIGGER', '/update-test-rules')
 
 # flag to enable applying labels to PRs
-ADD_TEST_RULES_LABELS = os.getenv('ADD_TEST_RULES_LABELS', 'false').lower() == 'true'
+ADD_TEST_RULES_LABEL = os.getenv('ADD_TEST_RULES_LABEL', 'false').lower() == 'true'
 # label to apply to PRs that have rules in test-rules
 IN_TEST_RULES_LABEL = os.getenv('IN_TEST_RULES_LABEL', 'in-test-rules')
 
@@ -69,6 +69,8 @@ IN_TEST_RULES_LABEL = os.getenv('IN_TEST_RULES_LABEL', 'in-test-rules')
 SKIP_FILES_WITH_TEXT = os.getenv('SKIP_FILES_WITH_TEXT', 'false').lower() == 'true'
 # text to search for in files to skip
 SKIP_TEXT = os.getenv('SKIP_TEXT', 'ml.link_analysis')
+ADD_SKIP_TEXT_LABEL = os.getenv('ADD_SKIP_TEXT_LABEL', 'false').lower() == 'true'
+SKIP_TEXT_LABEL = os.getenv('SKIP_TEXT_LABEL', 'hunting-required')
 
 # flag to check if required actions have completed
 # we should only include rules which have passed validation
@@ -777,6 +779,9 @@ def handle_pr_rules(mode):
                 # Skip files with specific text if flag is set
                 if SKIP_FILES_WITH_TEXT and contains_skip_text(content, SKIP_TEXT):
                     print(f"\tSkipping file {file['filename']}: contains {SKIP_TEXT}")
+                    if ADD_SKIP_TEXT_LABEL and not has_label(pr_number, SKIP_TEXT_LABEL):
+                        print(f"\tPR #{pr_number} doesn't have the '{SKIP_TEXT_LABEL}' label. Applying...")
+                        apply_label(pr_number, SKIP_TEXT_LABEL)
                     continue
 
                 # Process file (common for both modes)
@@ -825,13 +830,11 @@ def handle_pr_rules(mode):
                 print(f"\tSaved: {target_save_filename}")
 
                 # apply the label
-                if mode == 'test-rules' and ADD_TEST_RULES_LABELS:
+                if mode == 'test-rules' and ADD_TEST_RULES_LABEL:
                     # Check if PR already has the label
                     if not has_label(pr_number, IN_TEST_RULES_LABEL):
                         print(f"\tPR #{pr_number} doesn't have the '{IN_TEST_RULES_LABEL}' label. Applying...")
                         apply_label(pr_number, IN_TEST_RULES_LABEL)
-                    else:
-                        print(f"\tPR #{pr_number} already has the '{IN_TEST_RULES_LABEL}' label.")
 
     # Clean up files no longer in open PRs
     clean_output_folder(new_files)
