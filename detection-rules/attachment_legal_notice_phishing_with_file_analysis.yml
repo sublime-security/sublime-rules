@@ -17,11 +17,6 @@ source: |
     or strings.icontains(subject.subject, 'summon')
     or strings.icontains(subject.subject, 'notice')
   )
-  and (
-    // external sender (not from trusted legal domains)
-    sender.email.domain.root_domain not in $org_domains
-    and sender.email.domain.root_domain not in $high_trust_sender_root_domains
-  )
   and length(attachments) >= 1
   and any(attachments,
           .file_extension == "pdf"
@@ -55,10 +50,13 @@ source: |
                   )
           )
   )
-  // exclude legitimate senders who pass DMARC from known legal domains
-  and not (
-    coalesce(headers.auth_summary.dmarc.pass, false)
-    and sender.email.domain.root_domain in $high_trust_sender_root_domains
+  // not high trust sender domains
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and not headers.auth_summary.dmarc.pass
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
   )
 attack_types:
   - "Credential Phishing"
