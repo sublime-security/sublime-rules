@@ -2,7 +2,85 @@ name: "Attachment: EML with Suspicious Indicators"
 description: "Attached EML contains suspicious indicators, such as a missing sender email or short HTML body."
 type: "rule"
 severity: "medium"
-source: "type.inbound\nand (\n  // a single attachmed EML\n  length(attachments) == 1\n  // or a single attached EML with one or more images used in the body of the message\n  // likely within the signatures\n  or (\n    length(filter(attachments,\n                  .file_extension == \"eml\" or .content_type == \"message/rfc822\"\n           )\n    ) == 1\n    and length(filter(attachments,\n                      .file_type in $file_types_images\n                      and \n                      (\n                        any(regex.extract(.content_id, '^<(?P<cid>.*)\\>$'),\n                          strings.icontains(body.html.raw,\n                                            .named_groups[\"cid\"]\n                          )\n                        )\n                        or strings.icontains(body.html.raw, .content_id)\n                      )\n               )\n    ) == length(attachments) - 1\n  )\n)\nand (\n  length(body.current_thread.text) < 300\n  or body.current_thread.text is null\n  or any(ml.nlu_classifier(body.current_thread.text).intents,\n         .name in (\"cred_theft\", \"steal_pii\")\n  )\n)\nand any(attachments,\n        (.file_extension == \"eml\" or .content_type == \"message/rfc822\")\n        and (\n          // suspicious indicators\n          file.parse_eml(.).sender.email.email == \"\"\n          or length(file.parse_eml(.).body.html.raw) < 10\n          or length(file.parse_eml(.).headers.hops) < 2\n          // the sender of the outer message is the recipient of the outer message\n          // and the sender and recipient of the inner message\n          or (\n            sender.email.email in map(recipients.to, .email.email)\n            and length(recipients.to) == 1\n            and sender.email.email == file.parse_eml(.).sender.email.email\n            and sender.email.email in map(file.parse_eml(.).recipients.to, .email.email) \n            and length(file.parse_eml(.).recipients.to) == 1\n          )\n          \n        )\n        and not (\n          all(file.parse_eml(.).body.links,\n              .href_url.domain.root_domain in (\"aka.ms\", \"office365.com\")\n              or .href_url.url == \"#additionalatt\"\n          )\n          and strings.icontains(file.parse_eml(.).body.current_thread.text,\n                                \"We’re making sure your attachments are safe\"\n          )\n        )\n        and file.parse_eml(.).sender.email.domain.root_domain not in $org_domains\n)\nand (\n  not profile.by_sender().solicited\n  or (\n    profile.by_sender().any_messages_malicious_or_spam\n    and not profile.by_sender().any_false_positives\n  )\n)\n\n// negate highly trusted sender domains unless they fail DMARC authentication\nand (\n  (\n    sender.email.domain.root_domain in $high_trust_sender_root_domains\n    and not headers.auth_summary.dmarc.pass\n  )\n  or sender.email.domain.root_domain not in $high_trust_sender_root_domains\n)\n"
+source: |
+  type.inbound
+  and (
+    // a single attachmed EML
+    length(attachments) == 1
+    // or a single attached EML with one or more images used in the body of the message
+    // likely within the signatures
+    or (
+      length(filter(attachments,
+                    .file_extension == "eml" or .content_type == "message/rfc822"
+             )
+      ) == 1
+      and length(filter(attachments,
+                        .file_type in $file_types_images
+                        and 
+                        (
+                          any(regex.extract(.content_id, '^<(?P<cid>.*)\>$'),
+                            strings.icontains(body.html.raw,
+                                              .named_groups["cid"]
+                            )
+                          )
+                          or strings.icontains(body.html.raw, .content_id)
+                        )
+                 )
+      ) == length(attachments) - 1
+    )
+  )
+  and (
+    length(body.current_thread.text) < 300
+    or body.current_thread.text is null
+    or any(ml.nlu_classifier(body.current_thread.text).intents,
+           .name in ("cred_theft", "steal_pii")
+    )
+  )
+  and any(attachments,
+          (.file_extension == "eml" or .content_type == "message/rfc822")
+          and (
+            // suspicious indicators
+            file.parse_eml(.).sender.email.email == ""
+            or length(file.parse_eml(.).body.html.raw) < 10
+            or length(file.parse_eml(.).headers.hops) < 2
+            // the sender of the outer message is the recipient of the outer message
+            // and the sender and recipient of the inner message
+            or (
+              sender.email.email in map(recipients.to, .email.email)
+              and length(recipients.to) == 1
+              and sender.email.email == file.parse_eml(.).sender.email.email
+              and sender.email.email in map(file.parse_eml(.).recipients.to, .email.email) 
+              and length(file.parse_eml(.).recipients.to) == 1
+            )
+            
+          )
+          and not (
+            all(file.parse_eml(.).body.links,
+                .href_url.domain.root_domain in ("aka.ms", "office365.com")
+                or .href_url.url == "#additionalatt"
+            )
+            and strings.icontains(file.parse_eml(.).body.current_thread.text,
+                                  "We’re making sure your attachments are safe"
+            )
+          )
+          and file.parse_eml(.).sender.email.domain.root_domain not in $org_domains
+  )
+  and (
+    not profile.by_sender().solicited
+    or (
+      profile.by_sender().any_messages_malicious_or_spam
+      and not profile.by_sender().any_false_positives
+    )
+  )
+  
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and not headers.auth_summary.dmarc.pass
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
 attack_types:
   - "Credential Phishing"
 tactics_and_techniques:
@@ -12,7 +90,7 @@ tactics_and_techniques:
 detection_methods:
   - "Content analysis"
   - "File analysis"
-id: "b8295f60-c5bd-5f8f-9557-9d90eb517a99"
+id: "a0d88f80-6e5b-5837-9d54-9d8226a99ae3"
 og_id: "deb5d08d-92b7-5f7b-a7b0-e5053221c2f5"
 testing_pr: 2901
 testing_sha: 9fa10ffc40081c6658a613fe12f67fee9ca7c0c7
