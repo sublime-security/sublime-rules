@@ -830,7 +830,7 @@ def handle_pr_rules(mode):
                 print(f"\tSaved: {target_save_filename}")
 
                 # apply the label
-                if mode == 'test-rules' and ADD_TEST_RULES_LABELS:
+                if mode == 'test-rules' and ADD_TEST_RULES_LABEL:
                     # Check if PR already has the label
                     if not has_label(pr_number, IN_TEST_RULES_LABEL):
                         print(f"\tPR #{pr_number} doesn't have the '{IN_TEST_RULES_LABEL}' label. Applying...")
