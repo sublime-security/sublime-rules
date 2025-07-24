@@ -65,7 +65,7 @@ source: |
     profile.by_sender().prevalence in ("new", "outlier")
     or (
       profile.by_sender().any_messages_malicious_or_spam
-      and not profile.by_sender().any_false_positives
+      and not profile.by_sender().any_messages_benign
     )
   )
 
@@ -79,6 +79,20 @@ source: |
       or strings.starts_with(sender.email.local_part, 'microsoftexchange')
     )
     and strings.contains(subject.subject, 'Undeliverable:')
+  )
+
+  // negate other legitimate MS notifications
+  and not (
+    length(body.links) > 0
+    and all(body.links,
+            .href_url.domain.root_domain in (
+              "aka.ms",
+              "microsoftonline.com",
+              "microsoft.com"
+            )
+            or .href_url.domain.tld == "microsoft"
+    )
+    and headers.auth_summary.dmarc.pass
   )
   
   // negate highly trusted sender domains unless they fail DMARC authentication
