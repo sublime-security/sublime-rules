@@ -60,7 +60,7 @@ INCLUDE_PRS_WITH_COMMENT = os.getenv('INCLUDE_PRS_WITH_COMMENT', 'false').lower(
 COMMENT_TRIGGER = os.getenv('COMMENT_TRIGGER', '/update-test-rules')
 
 # flag to enable applying labels to PRs
-ADD_TEST_RULES_LABELS = os.getenv('ADD_TEST_RULES_LABELS', 'false').lower() == 'true'
+ADD_TEST_RULES_LABEL = os.getenv('ADD_TEST_RULES_LABEL', 'false').lower() == 'true'
 # label to apply to PRs that have rules in test-rules
 IN_TEST_RULES_LABEL = os.getenv('IN_TEST_RULES_LABEL', 'in-test-rules')
 
@@ -69,6 +69,7 @@ IN_TEST_RULES_LABEL = os.getenv('IN_TEST_RULES_LABEL', 'in-test-rules')
 SKIP_FILES_WITH_TEXT = os.getenv('SKIP_FILES_WITH_TEXT', 'false').lower() == 'true'
 # text to search for in files to skip
 SKIP_TEXT = os.getenv('SKIP_TEXT', 'ml.link_analysis')
+ADD_SKIP_TEXT_LABEL = os.getenv('ADD_SKIP_TEXT_LABEL', 'false').lower() == 'true'
 SKIP_TEXT_LABEL = os.getenv('SKIP_TEXT_LABEL', 'hunting-required')
 
 # flag to check if required actions have completed
