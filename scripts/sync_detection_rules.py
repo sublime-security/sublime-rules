@@ -176,6 +176,8 @@ def has_trigger_comment(pr_number, org_name, trigger_comment):
                 return True
             print(f"\tPR #{pr_number}: Author not in {ORG_NAME} and trigger comment from {comment['user']['login']} is NOT a {ORG_NAME} member")
 
+    print(f"\tPR #{pr_number}: Author not in {ORG_NAME} and trigger comment NOT found")
+
     return False
 
 
@@ -735,6 +737,7 @@ def handle_pr_rules(mode):
                 has_comment = has_trigger_comment(pr['number'], ORG_NAME, COMMENT_TRIGGER)
 
                 if not author_in_org and not has_comment:
+                    print(f"\tSkipping PR #{pr_number}: Author {pr['user']['login']} is not in {ORG_NAME} and is missing comment trigger")
                     process_pr = False
 
         if not process_pr:
