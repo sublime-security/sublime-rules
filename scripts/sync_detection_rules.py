@@ -779,7 +779,7 @@ def handle_pr_rules(mode):
                 # Skip files with specific text if flag is set
                 if SKIP_FILES_WITH_TEXT and contains_skip_text(content, SKIP_TEXT):
                     print(f"\tSkipping file {file['filename']}: contains {SKIP_TEXT}")
-                    if not has_label(pr_number, SKIP_TEXT_LABEL):
+                    if ADD_SKIP_TEXT_LABEL and not has_label(pr_number, SKIP_TEXT_LABEL):
                         print(f"\tPR #{pr_number} doesn't have the '{SKIP_TEXT_LABEL}' label. Applying...")
                         apply_label(pr_number, SKIP_TEXT_LABEL)
                     continue
