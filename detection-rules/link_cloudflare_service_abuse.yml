@@ -3,58 +3,58 @@ description: "Detects links to Cloudflare R2 storage buckets, Pages, and Workers
 type: "rule"
 severity: "medium"
 source: |
-type.inbound:
+type.inbound
   and any(body.links,
-        // R2 buckets with pub-{32hex}.r2.dev pattern
-        regex.icontains(.href_url.url, 'https://pub-[a-f0-9]{32}\.r2\.dev')
-        // generic r2.dev domains
-        or strings.icontains(.href_url.domain.root_domain, "r2.dev")
-        // Cloudflare Pages
-        or strings.icontains(.href_url.domain.root_domain, "pages.dev")
-        // Cloudflare Workers
-        or strings.icontains(.href_url.domain.root_domain, "workers.dev")
-)
-// negate emails with unsubscribe links
-and not any(body.links,
-            strings.icontains(.href_url.url, "unsubscribe")
-            or strings.icontains(.display_text, "unsubscribe")
-)
-// negate bulk mailer domains
-and not any(body.links,
-            .href_url.domain.root_domain in $bulk_mailer_url_root_domains
-            and not any(beta.ml_topic(body.current_thread.text).topics,
-                        .name in (
-                          "Newsletters and Digests",
-                          "Advertising and Promotions",
-                          "Educational and Research",
-                          "B2B Cold Outreach",
-                          "Health and Wellness",
-                          "Professional and Career Development",
-                          "Romance",
-                          "Sexually Explicit Messages",
-                          "Software and App Updates",
-                          "Acts of Violence",
-                          "Voicemail Call and Missed Call Notifications"
-                        )
-                        and .confidence == "high"
-            )
-            // negate highly trusted sender domains unless they fail DMARC authentication
-            and (
-              (
-                sender.email.domain.root_domain in $high_trust_sender_root_domains
-                and not headers.auth_summary.dmarc.pass
+          // R2 buckets with pub-{32hex}.r2.dev pattern
+          regex.icontains(.href_url.url, 'https://pub-[a-f0-9]{32}\.r2\.dev')
+          // generic r2.dev domains
+          or strings.icontains(.href_url.domain.root_domain, "r2.dev")
+          // Cloudflare Pages
+          or strings.icontains(.href_url.domain.root_domain, "pages.dev")
+          // Cloudflare Workers
+          or strings.icontains(.href_url.domain.root_domain, "workers.dev")
+  )
+  // negate emails with unsubscribe links
+  and not any(body.links,
+              strings.icontains(.href_url.url, "unsubscribe")
+              or strings.icontains(.display_text, "unsubscribe")
+  )
+  // negate bulk mailer domains
+  and not any(body.links,
+              .href_url.domain.root_domain in $bulk_mailer_url_root_domains
+              and not any(beta.ml_topic(body.current_thread.text).topics,
+                          .name in (
+                            "Newsletters and Digests",
+                            "Advertising and Promotions",
+                            "Educational and Research",
+                            "B2B Cold Outreach",
+                            "Health and Wellness",
+                            "Professional and Career Development",
+                            "Romance",
+                            "Sexually Explicit Messages",
+                            "Software and App Updates",
+                            "Acts of Violence",
+                            "Voicemail Call and Missed Call Notifications"
+                          )
+                          and .confidence == "high"
               )
-              or sender.email.domain.root_domain not in $high_trust_sender_root_domains
-            )
-            and (
-              not profile.by_sender().solicited
-              or (
-                profile.by_sender().any_messages_malicious_or_spam
-                and not profile.by_sender().any_messages_benign
+              // negate highly trusted sender domains unless they fail DMARC authentication
+              and (
+                (
+                  sender.email.domain.root_domain in $high_trust_sender_root_domains
+                  and not headers.auth_summary.dmarc.pass
+                )
+                or sender.email.domain.root_domain not in $high_trust_sender_root_domains
               )
-            )
-            and not profile.by_sender().any_messages_benign
-)
+              and (
+                not profile.by_sender().solicited
+                or (
+                  profile.by_sender().any_messages_malicious_or_spam
+                  and not profile.by_sender().any_messages_benign
+                )
+              )
+              and not profile.by_sender().any_messages_benign
+  )
 tags:
  - "Attack surface reduction"
 attack_types:
