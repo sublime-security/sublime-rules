@@ -69,6 +69,7 @@ IN_TEST_RULES_LABEL = os.getenv('IN_TEST_RULES_LABEL', 'in-test-rules')
 SKIP_FILES_WITH_TEXT = os.getenv('SKIP_FILES_WITH_TEXT', 'false').lower() == 'true'
 # text to search for in files to skip
 SKIP_TEXT = os.getenv('SKIP_TEXT', 'ml.link_analysis')
+SKIP_TEXT_LABEL = os.getenv('SKIP_TEXT_LABEL', 'hunting-required')
 
 # flag to check if required actions have completed
 # we should only include rules which have passed validation
@@ -777,6 +778,9 @@ def handle_pr_rules(mode):
                 # Skip files with specific text if flag is set
                 if SKIP_FILES_WITH_TEXT and contains_skip_text(content, SKIP_TEXT):
                     print(f"\tSkipping file {file['filename']}: contains {SKIP_TEXT}")
+                    if not has_label(pr_number, SKIP_TEXT_LABEL):
+                        print(f"\tPR #{pr_number} doesn't have the '{SKIP_TEXT_LABEL}' label. Applying...")
+                        apply_label(pr_number, SKIP_TEXT_LABEL)
                     continue
 
                 # Process file (common for both modes)
