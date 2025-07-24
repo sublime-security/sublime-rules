@@ -727,16 +727,17 @@ def handle_pr_rules(mode):
             author_in_org = is_user_in_org(pr['user']['login'], ORG_NAME)
             has_comment = False
 
-            if INCLUDE_PRS_WITH_COMMENT:
+            # only invoke has_trigger_comment when author_in_org is false
+            if INCLUDE_PRS_WITH_COMMENT and not author_in_org:
                 has_comment = has_trigger_comment(pr['number'], ORG_NAME, COMMENT_TRIGGER)
 
-            if not (author_in_org or has_comment):
-                print(f"\tSkipping PR #{pr['number']}: Author not in {ORG_NAME} and no trigger comment found")
-                process_pr = False
+                if not author_in_org and not has_comment:
+                    print(f"\tSkipping PR #{pr['number']}: Author not in {ORG_NAME} and no trigger comment found")
+                    process_pr = False
 
         if not process_pr:
             continue
-
+        print(f"\tPR #{pr['number']}: Author {pr['user']['login']} is in {ORG_NAME}")
 
         # Get the latest commit SHA directly from the PR data
         latest_sha = pr['head']['sha']
