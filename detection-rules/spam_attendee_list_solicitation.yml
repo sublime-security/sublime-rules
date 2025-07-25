@@ -16,7 +16,7 @@ source: |
         any([subject.subject, body.current_thread.text],
             (
               regex.icontains(.,
-                              '(?:Attendee|Buyer|Contact|Decision Maker|Email|Member|Participant|Professional|Registrant|User|Visitor|Store|Grocer)(?:[[:punct:]]*s)?(?:\s\w*){0,9}(?:\blist(?:\b|[^ei])|database)'
+                              '(?:Attendee|Buyer|Contact|Client|Decision Maker|Email|Member|Participant|Professional|Registrant|User|Visitor|Store|Grocer)(?:[[:punct:]]*s)?(?:\s\w*){0,9}(?:list(?:\b|[^ei])|database|Information)'
               )
               and not (
                 regex.icount(.,
@@ -37,7 +37,7 @@ source: |
                           "(?:interest(s|ed)|accessing|purchas|obtain|acuir|sample|provide.{0,10}samples|counts|pricing)"
       )
       and not regex.icontains(body.current_thread.text,
-                              "(?:debit card|transaction.{0,20}processed)"
+                              "(?:debit card|transaction.{0,20}processed|receipt?)"
       )
     )
     // if there are indicators of a previous thread, also inspect the previous thread
@@ -58,6 +58,10 @@ source: |
         regex.icontains(body.current_thread.text,
                           // "the email I sent you earlier"
                         '(e?mail|message).{0,20}(sent).{0,20}(?:below|previous(ly)?|last|prior|earlier)'
+        ),
+        regex.icontains(body.current_thread.text,
+                          // "below email"
+                        '(?:below) (e?mail|message|request)'
         ),
         regex.icontains(body.current_thread.text,
                         '(sent).{0,50}(e?mail|message) (?:below|previous(ly)?|last|prior|earlier)'
@@ -90,6 +94,13 @@ source: |
                                                     "> wrote:"
                                     )
                 )
+                // If there is no display_name we still check for <email> wrote:
+                or strings.icontains(.,
+                                  strings.concat(" <",
+                                                  sender.email.email,
+                                                  "> wrote:"
+                                  )
+              )
               )
               // match _after_ the previous thread indciators
               and (
