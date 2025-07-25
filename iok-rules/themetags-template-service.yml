@@ -1,0 +1,43 @@
+attack_types:
+- Credential Phishing
+description: 'Detects page templates made by ThemeTags.
+
+  Services like this are commonly abused by phishing pages.
+
+
+  Converted from IOK rule - original focuses on website analysis.'
+detection_methods:
+- Content analysis
+- Sender analysis
+- Header analysis
+- URL analysis
+id: 7345c25b-8645-4abb-bf90-0284b6b230e2
+name: 'IOK: ThemeTags Template Service'
+references:
+- https://urlscan.io/result/54b8f7ec-22f8-416f-b253-213d28262587
+- https://urlscan.io/result/d45ebbf2-ecf0-4a83-a908-7c7d08522d1c
+severity: high
+tactics_and_techniques:
+- Social engineering
+tags:
+- IOK_Converted
+- IOK_template_service.themetags
+type: rule
+source: |
+  type.inbound
+    and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "name=\"author\" content=\"ThemeTags\"")
+    )
+    and (
+      strings.icontains(subject.subject, "account")
+      or strings.icontains(subject.subject, "verify")
+      or strings.icontains(subject.subject, "suspended")
+    )
+    and (
+      not profile.by_sender().solicited
+      or (
+        profile.by_sender().any_messages_malicious_or_spam
+        and not profile.by_sender().any_false_positives
+      )
+    )

@@ -1,0 +1,48 @@
+attack_types:
+- Credential Phishing
+- Brand Impersonation
+description: 'Detects a SMBC phishing kit targeting Japanese users.
+
+
+  Converted from IOK rule - original focuses on website analysis.'
+detection_methods:
+- Content analysis
+- URL analysis
+- Header analysis
+- Natural Language Understanding
+- Sender analysis
+id: 82264805-57cb-4d51-a54d-39a2bc22d8b6
+name: 'IOK: SMBC Phishing Kit 9776441'
+references:
+- https://urlscan.io/result/9776441a-677b-4fc8-be55-0a1a9f4a6ee9
+- https://urlscan.io/search/#hash%3Aae9da3c9a568a7b3602dc54e10c324166db3abe1d3a6892770d6ce6a7cc8c1c6
+severity: high
+tactics_and_techniques:
+- 'Impersonation: Brand'
+tags:
+- IOK_Converted
+- IOK_kit
+- IOK_target_country.japan
+- IOK_target.smbc
+type: rule
+source: |
+  type.inbound
+    and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "method=\"post\" action=\"/action/login.php\"")
+    )
+    and (
+      strings.icontains(body.links, "vendor.23238u92u82.js")
+    )
+    and (
+      strings.icontains(subject.subject, "account")
+      or strings.icontains(subject.subject, "verify")
+      or strings.icontains(subject.subject, "suspended")
+    )
+    and (
+      not profile.by_sender().solicited
+      or (
+        profile.by_sender().any_messages_malicious_or_spam
+        and not profile.by_sender().any_false_positives
+      )
+    )

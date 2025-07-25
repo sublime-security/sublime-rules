@@ -1,0 +1,44 @@
+attack_types:
+- Credential Phishing
+- Brand Impersonation
+description: 'Shopify phishing kit containing a high-entropy CSP nonce which should
+  be a high quality indicator.
+
+
+  Converted from IOK rule - original focuses on website analysis.'
+detection_methods:
+- Content analysis
+- URL analysis
+- Header analysis
+- Natural Language Understanding
+- Sender analysis
+id: df81aab4-9ec6-40e5-90a3-02cdc8801b51
+name: 'IOK: Shopify phishing kit NCv2F'
+references:
+- https://urlscan.io/result/63289b3a-190b-494d-8f58-fca3394dc2c9
+severity: high
+tactics_and_techniques:
+- 'Impersonation: Brand'
+tags:
+- IOK_Converted
+- IOK_kit
+- IOK_target.shopify
+type: rule
+source: |
+  type.inbound
+    and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "nonce=\"NCv2FFfdPZWddG+A/Zi5yTs/nZJyLqZDkwaDP81TGJ4=\"")
+    )
+    and (
+      strings.icontains(subject.subject, "account")
+      or strings.icontains(subject.subject, "verify")
+      or strings.icontains(subject.subject, "suspended")
+    )
+    and (
+      not profile.by_sender().solicited
+      or (
+        profile.by_sender().any_messages_malicious_or_spam
+        and not profile.by_sender().any_false_positives
+      )
+    )

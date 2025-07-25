@@ -1,0 +1,54 @@
+attack_types:
+- Credential Phishing
+- Brand Impersonation
+description: 'Detects a phishing kit targeting Banco Cuscatlan, a bank and financial
+  institution operating in Central America.
+
+  Found as a result of this kit being deployed on Replit.
+
+
+  Converted from IOK rule - original focuses on website analysis.'
+detection_methods:
+- Content analysis
+- URL analysis
+- Header analysis
+- Natural Language Understanding
+- Sender analysis
+id: 75a72a21-e93c-45b6-b785-485fdf9d1a30
+name: 'IOK: Banco Cuscatlan Phishing Kit sDtLTM'
+references:
+- https://www.bancocuscatlan.com/
+- https://urlscan.io/result/75fa3a29-7305-4215-bac2-159718725693/
+- https://urlscan.io/result/671232a5-e570-4e15-a0a4-e93e7d75d500/
+severity: high
+tactics_and_techniques:
+- 'Impersonation: Brand'
+tags:
+- IOK_Converted
+- IOK_kit
+- IOK_target.banco_cuscatlan
+type: rule
+source: |
+  type.inbound
+    and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "src=\"img/log.png\"")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "src=\"img/arr.png\"")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "src=\"img/olv.png\"")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "src=\"img/titulo.png\"")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "form action=\"php/inde.php\" class=\"form\" method=\"post\"")
+    )
+    and (
+      strings.icontains(subject.subject, "account")
+      or strings.icontains(subject.subject, "verify")
+      or strings.icontains(subject.subject, "suspended")
+    )
+    and (
+      not profile.by_sender().solicited
+      or (
+        profile.by_sender().any_messages_malicious_or_spam
+        and not profile.by_sender().any_false_positives
+      )
+    )

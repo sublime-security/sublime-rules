@@ -1,0 +1,50 @@
+attack_types:
+- Credential Phishing
+- Brand Impersonation
+description: 'Detects sites that mimic the payment process of the PagoPA platform
+  established by the Italian Government for payments to public administrations
+
+
+  Converted from IOK rule - original focuses on website analysis.'
+detection_methods:
+- Content analysis
+- URL analysis
+- Header analysis
+- Natural Language Understanding
+- Sender analysis
+id: 1d444ffa-23d5-4101-9012-d35eed0b3aaf
+name: 'IOK: PagoPA Phishing Kit 197bb96bc'
+references:
+- https://cert-agid.gov.it/wp-content/uploads/2025/03/phishing_pagoPA.json
+severity: high
+tactics_and_techniques:
+- 'Impersonation: Brand'
+tags:
+- IOK_Converted
+- IOK_kit
+- IOK_target_country.italy
+- IOK_target.pagopa
+type: rule
+source: |
+  type.inbound
+    and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
+    and (
+      strings.icontains(body.links, "choose.php")
+      or strings.icontains(body.links, "loader.php")
+      or strings.icontains(body.links, "keyb.png")
+      or strings.icontains(body.links, "fin.php")
+      or strings.icontains(body.links, "informations.php")
+      or strings.icontains(body.links, "recap.php")
+    )
+    and (
+      strings.icontains(subject.subject, "account")
+      or strings.icontains(subject.subject, "verify")
+      or strings.icontains(subject.subject, "suspended")
+    )
+    and (
+      not profile.by_sender().solicited
+      or (
+        profile.by_sender().any_messages_malicious_or_spam
+        and not profile.by_sender().any_false_positives
+      )
+    )

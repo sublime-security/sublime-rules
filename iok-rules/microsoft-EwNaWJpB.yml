@@ -1,0 +1,55 @@
+attack_types:
+- Credential Phishing
+- Brand Impersonation
+description: 'Detects a Microsoft phishing kit in Spanish, targeting the citizens
+  of Argentina.
+
+
+  Converted from IOK rule - original focuses on website analysis.'
+detection_methods:
+- Content analysis
+- URL analysis
+- Header analysis
+- Natural Language Understanding
+- Sender analysis
+id: ef715b5a-f49a-42b5-9044-83a55d8295d6
+name: 'IOK: Microsoft Phishing Kit EwNaWJpB'
+references:
+- https://urlscan.io/result/8024516d-703a-4a4c-93c2-611549bde820
+- https://urlscan.io/result/16043b90-f719-4fcf-a9db-f12db5d943c7
+severity: high
+tactics_and_techniques:
+- 'Impersonation: Brand'
+tags:
+- IOK_Converted
+- IOK_kit
+- IOK_target.microsoft
+- IOK_target_country.argentina
+type: rule
+source: |
+  type.inbound
+    and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "<img class=\"imagen\" src=\"222hotmail.jpg\" alt=\"\" />")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "type=\"email\" name=\"emil\"")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "SCAM/favicon.png")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "estilo.css")
+    )
+    and (
+      strings.icontains(subject.subject, "microsoft")
+      or strings.icontains(subject.subject, "office")
+    )
+    and sender.email.domain.domain not in ("microsoft.com", "office.com")
+    and (
+      not profile.by_sender().solicited
+      or (
+        profile.by_sender().any_messages_malicious_or_spam
+        and not profile.by_sender().any_false_positives
+      )
+    )

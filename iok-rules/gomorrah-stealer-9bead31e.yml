@@ -1,0 +1,45 @@
+attack_types:
+- Malware/Ransomware
+description: "Detects the `Gomorrah` stealer C2 panel page. \n\nFor some reason this\
+  \ stealer decides to explicitly\nstate that the page is for the Gomorrah stealer\
+  \ panel\n\nConverted from IOK rule - original focuses on website analysis."
+detection_methods:
+- Content analysis
+- Sender analysis
+- Header analysis
+- URL analysis
+id: bd36d4c2-150a-4342-9b82-6feb3c146f06
+name: 'IOK: Gomorrah C2 Panel 9bead31e'
+references:
+- https://tracker.viriback.com
+- https://malpedia.caad.fkie.fraunhofer.de/details/win.gomorrah_stealer
+- https://urlscan.io/result/9bead31e-e965-44cb-bdfa-284e75476f25
+severity: high
+tactics_and_techniques:
+- Social engineering
+tags:
+- IOK_Converted
+- IOK_malware.gomorrah
+- IOK_malware
+type: rule
+source: |
+  type.inbound
+    and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "Gomorrah v5.0 Stealer")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "../img/img/bg/login.jpg")
+    )
+    and (
+      strings.icontains(subject.subject, "account")
+      or strings.icontains(subject.subject, "verify")
+      or strings.icontains(subject.subject, "suspended")
+    )
+    and (
+      not profile.by_sender().solicited
+      or (
+        profile.by_sender().any_messages_malicious_or_spam
+        and not profile.by_sender().any_false_positives
+      )
+    )

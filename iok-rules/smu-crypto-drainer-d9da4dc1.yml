@@ -1,0 +1,56 @@
+attack_types:
+- Credential Phishing
+- BEC/Fraud
+- Cryptocurrency Scam
+description: "Detects a crypto drainer that hides commonly within the \nfile named\
+  \ `utils.js` and has a seperate `showMess.js` file\nwith functions used to send\
+  \ window alerts.\n\nConverted from IOK rule - original focuses on website analysis."
+detection_methods:
+- Content analysis
+- Sender analysis
+- Header analysis
+- URL analysis
+id: 184c0c7d-6c9b-4066-a7e6-9596d56d76b6
+name: 'IOK: SMU Crypto Drainer d9da4dc1'
+references:
+- https://urlscan.io/result/d9da4dc1-2252-45b6-b23a-2860b3d31531
+- https://urlscan.io/result/b7c65cea-65fe-44c8-ae80-40407936ddc9
+- https://urlscan.io/search/#filename%3A%22utils.js%22%20AND%20filename%3A%22showMess.js%22
+severity: high
+tactics_and_techniques:
+- 'Impersonation: Brand'
+- Malware delivery
+- Investment scam
+tags:
+- IOK_Converted
+- IOK_kit
+- IOK_crypto_drainer.smu
+- IOK_cryptocurrency
+- IOK_cryptocurrency.ethereum
+type: rule
+source: |
+  type.inbound
+    and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
+    and (
+      strings.icontains(body.links, "utils.js")
+      and strings.icontains(body.links, "showMess.js")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "showSuccess")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "showError")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "showInfo")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "logo1.png")
+    )
+    and (
+      strings.icontains(subject.subject, "coinbase")
+      or strings.icontains(subject.subject, "crypto")
+    )
+    and (
+      not profile.by_sender().solicited
+      or (
+        profile.by_sender().any_messages_malicious_or_spam
+        and not profile.by_sender().any_false_positives
+      )
+    )

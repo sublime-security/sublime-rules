@@ -1,0 +1,56 @@
+attack_types:
+- Brand Impersonation
+- Cryptocurrency Scam
+description: "Detects a phishing page that uses the disguise of an intellectual\n\
+  property consent form of a crypto news site in order to lure users \ninto installing\
+  \ a malicious bookmark that steals their Discord token.\n\nConverted from IOK rule\
+  \ - original focuses on website analysis."
+detection_methods:
+- Content analysis
+- Sender analysis
+- Header analysis
+- URL analysis
+id: eb7145e4-f2ac-47c7-835a-6c204b2f34de
+name: 'IOK: Bookmark Grabber d7eb986c'
+references:
+- https://urlscan.io/result/d7eb986c-364b-4308-b434-a85888e6195a
+- https://urlscan.io/result/82758014-7cff-475b-b9e9-7dc812252ebf
+- https://urlscan.io/result/a54708a1-17ec-4a0f-89b7-134f37a25f02
+- https://urlscan.io/result/8e9957cf-09dc-4fdd-bb66-c7cab5136815
+severity: high
+tactics_and_techniques:
+- 'Impersonation: Brand'
+- Investment scam
+tags:
+- IOK_Converted
+- IOK_target.cryptoslate
+- IOK_target.cryptodose
+- IOK_target.datawallet
+type: rule
+source: |
+  type.inbound
+    and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "document.createElement('iframe')")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "document.createElement('frame')")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "contentWindow.localStorage")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "discord.com")
+    )
+    and (
+      strings.icontains(subject.subject, "account")
+      or strings.icontains(subject.subject, "verify")
+      or strings.icontains(subject.subject, "suspended")
+    )
+    and (
+      not profile.by_sender().solicited
+      or (
+        profile.by_sender().any_messages_malicious_or_spam
+        and not profile.by_sender().any_false_positives
+      )
+    )

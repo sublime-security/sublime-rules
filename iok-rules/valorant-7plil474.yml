@@ -1,0 +1,49 @@
+attack_types:
+- Credential Phishing
+- Brand Impersonation
+description: "Detects a phishing kit targeting Valorant players. It is typically spread\
+  \ on \nsocial media platforms such as TikTok, often luring in gamers using popular\
+  \ \nfigures such as Tenz, Kyedae and MrBeast.\n\nConverted from IOK rule - original\
+  \ focuses on website analysis."
+detection_methods:
+- Content analysis
+- URL analysis
+- Header analysis
+- Natural Language Understanding
+- Sender analysis
+id: a8f00037-f39d-41a0-9ceb-e5b2af8fbc6c
+name: 'IOK: Valorant Phishing Kit 7plil474'
+references:
+- https://www.tiktok.com/search/video?q=mrbeast%20valorant
+- https://urlscan.io/result/ceb1f3d8-efed-40b3-85e4-6c9eecd182b7/
+- https://urlscan.io/result/48118e59-979c-48e7-b332-bb802dc5e941/
+- https://urlscan.io/result/5421601f-f2aa-41a5-bf6b-85a264bee2f7/
+severity: high
+tactics_and_techniques:
+- 'Impersonation: Brand'
+tags:
+- IOK_Converted
+- IOK_kit
+- IOK_target.valorant
+- IOK_target.riotgames
+type: rule
+source: |
+  type.inbound
+    and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "makeid")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "rqdata_token")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "login_mfa")
+    )
+    and (
+      strings.icontains(subject.subject, "account")
+      or strings.icontains(subject.subject, "verify")
+      or strings.icontains(subject.subject, "suspended")
+    )
+    and (
+      not profile.by_sender().solicited
+      or (
+        profile.by_sender().any_messages_malicious_or_spam
+        and not profile.by_sender().any_false_positives
+      )
+    )

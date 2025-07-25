@@ -1,0 +1,50 @@
+attack_types:
+- Credential Phishing
+- Brand Impersonation
+description: 'Detects a phishing kit using the MyGov Australia branding.
+
+
+  Converted from IOK rule - original focuses on website analysis.'
+detection_methods:
+- Content analysis
+- URL analysis
+- Header analysis
+- Natural Language Understanding
+- Sender analysis
+id: 36845baa-b71f-4be3-a6ca-72fc4abc1777
+name: 'IOK: MyGovAU Phishing Kit d0a5f9fd'
+references:
+- https://urlscan.io/result/d0a5f9fd-b960-47a5-8b44-3f9c7ffc9cd8
+- https://urlscan.io/result/d9b6c4f6-3f15-417c-bcc8-e03e9c91e702
+severity: high
+tactics_and_techniques:
+- 'Impersonation: Brand'
+tags:
+- IOK_Converted
+- IOK_kit
+- IOK_target.mygovau
+type: rule
+source: |
+  type.inbound
+    and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "<form id=\"mygov-login-form\" aria-describedby=\"error-msg\" class=\"mygov-login-form alternative\" action=\"CONFIG/login_db.php\"")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "Sign in with myGov - myGov")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "apiKey: \"Gwhrue6nv7INVxMChew6XgpGD3_aLJ3imwX5OnvbETNpA\"")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "/css/mgv2-application.css")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "/css/blugov.css")
+    )
+    and (
+      strings.icontains(subject.subject, "account")
+      or strings.icontains(subject.subject, "verify")
+      or strings.icontains(subject.subject, "suspended")
+    )
+    and (
+      not profile.by_sender().solicited
+      or (
+        profile.by_sender().any_messages_malicious_or_spam
+        and not profile.by_sender().any_false_positives
+      )
+    )

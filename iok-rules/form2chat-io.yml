@@ -1,0 +1,43 @@
+attack_types:
+- Credential Phishing
+description: 'Form2Chat is a service that takes HTML form submissions and sends the
+  results to an email address or instant messenger service.
+
+
+  It can be used by threat actors building "serverless" phishing pages i.e. where
+  they don''t have a backend server that can send emails or store logs.
+
+
+  Converted from IOK rule - original focuses on website analysis.'
+detection_methods:
+- Content analysis
+- Sender analysis
+- Header analysis
+- URL analysis
+id: c4d2c62f-2ec5-439f-af58-0cd979a4a790
+name: 'IOK: Exfiltration using Form2Chat'
+severity: high
+tactics_and_techniques:
+- Social engineering
+tags:
+- IOK_Converted
+- IOK_exfiltration
+type: rule
+source: |
+  type.inbound
+    and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "https://app.form2chat.io/f/")
+    )
+    and (
+      strings.icontains(subject.subject, "account")
+      or strings.icontains(subject.subject, "verify")
+      or strings.icontains(subject.subject, "suspended")
+    )
+    and (
+      not profile.by_sender().solicited
+      or (
+        profile.by_sender().any_messages_malicious_or_spam
+        and not profile.by_sender().any_false_positives
+      )
+    )

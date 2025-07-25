@@ -1,0 +1,43 @@
+attack_types:
+- Credential Phishing
+description: 'Detects signatures left behind by the Mobirise Website Builder.
+
+
+  Converted from IOK rule - original focuses on website analysis.'
+detection_methods:
+- Content analysis
+- Sender analysis
+- Header analysis
+- URL analysis
+id: 87e60524-48fb-4153-850e-ff1b9a6b3bcb
+name: 'IOK: Mobirise Website Builder'
+references:
+- https://mobirise.com
+- https://urlscan.io/result/0fbd3caa-14be-4565-ad9f-d11d7ec0fdf5
+severity: high
+tactics_and_techniques:
+- Social engineering
+tags:
+- IOK_Converted
+- IOK_website_builder
+- IOK_website_builder.mobirise
+type: rule
+source: |
+  type.inbound
+    and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "Site made with Mobirise Website Builder")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "https://mobirise.com")
+    )
+    and (
+      strings.icontains(subject.subject, "account")
+      or strings.icontains(subject.subject, "verify")
+      or strings.icontains(subject.subject, "suspended")
+    )
+    and (
+      not profile.by_sender().solicited
+      or (
+        profile.by_sender().any_messages_malicious_or_spam
+        and not profile.by_sender().any_false_positives
+      )
+    )

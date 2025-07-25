@@ -1,0 +1,50 @@
+attack_types:
+- Credential Phishing
+- Brand Impersonation
+description: 'Detects a Santander phishing kit targeting Spanish speaking users.
+
+
+  Converted from IOK rule - original focuses on website analysis.'
+detection_methods:
+- Content analysis
+- URL analysis
+- Header analysis
+- Natural Language Understanding
+- Sender analysis
+id: c37bd64b-87e1-4d7b-9f73-8385ab1f82b8
+name: 'IOK: Santander Phishing Kit 951d27d'
+references:
+- https://urlscan.io/result/d7f3f389-d10b-4b83-a45c-ba7f8ec54035
+- https://urlscan.io/result/1c849740-38f2-4442-94f8-bf2147cc587e
+severity: high
+tactics_and_techniques:
+- 'Impersonation: Brand'
+tags:
+- IOK_Converted
+- IOK_kit
+- IOK_target.santander
+type: rule
+source: |
+  type.inbound
+    and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
+    and (
+      strings.icontains(body.links, "?v=1655293257536")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "name=\"senha\"")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "/atualiza")
+    )
+    and (
+      strings.icontains(subject.subject, "account")
+      or strings.icontains(subject.subject, "verify")
+      or strings.icontains(subject.subject, "suspended")
+    )
+    and (
+      not profile.by_sender().solicited
+      or (
+        profile.by_sender().any_messages_malicious_or_spam
+        and not profile.by_sender().any_false_positives
+      )
+    )

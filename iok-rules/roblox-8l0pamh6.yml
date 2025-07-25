@@ -1,0 +1,57 @@
+attack_types:
+- Credential Phishing
+- Brand Impersonation
+description: 'Detects Roblox phishing sites using a Roblox specific strings
+
+  within the DOM.
+
+
+  Usually at /controlPage/create you can create a "Beaming link"
+
+  These are often spread through Discord to victims.
+
+
+  Converted from IOK rule - original focuses on website analysis.'
+detection_methods:
+- Content analysis
+- URL analysis
+- Header analysis
+- Natural Language Understanding
+- Sender analysis
+id: d5f54a42-b451-408f-8426-b838798226b2
+name: 'IOK: Roblox Phishing Kit 8l0pamh6'
+references:
+- https://www.youtube.com/watch?v=lUL2vgyhsw4
+- https://urlscan.io/result/c716b820-174e-4211-9c09-4663b4a7e47d/
+- https://urlscan.io/result/e76d7a2f-3e6d-455e-8da8-1a94ea6c222f/
+- https://urlscan.io/result/f9ccb8a3-624b-4cb1-b237-36dd81cef6e3/
+- https://urlscan.io/result/1a62439f-de11-4ee6-a0ed-9c482c0c1906/
+severity: high
+tactics_and_techniques:
+- 'Impersonation: Brand'
+tags:
+- IOK_Converted
+- IOK_kit
+- IOK_target.roblox
+type: rule
+source: |
+  type.inbound
+    and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "body id=\"rbx-body\"")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "rbxcdn")
+    )
+    and (
+      strings.icontains(subject.subject, "account")
+      or strings.icontains(subject.subject, "verify")
+      or strings.icontains(subject.subject, "suspended")
+    )
+    and (
+      not profile.by_sender().solicited
+      or (
+        profile.by_sender().any_messages_malicious_or_spam
+        and not profile.by_sender().any_false_positives
+      )
+    )
