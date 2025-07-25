@@ -1,0 +1,34 @@
+name: "Suspicious Link to TLD with Iranian Manticore Signals"
+description: "Detects messages containing links to specific top-level domains (.online, .best, .info, .xyz, .fashion, .fit) that also exhibit technical indicators associated with Iranian Educated Manticore activity, including specific API calls and React debug messages."
+type: "rule"
+severity: "low"
+source: |
+  type.inbound
+  and any(body.links,
+          .href_url.domain.tld in~ (
+            'online',
+            'best',
+            'info',
+            'xyz',
+            'fashion',
+            'fit' // domains used in recent Iranian Educated Manticore activity https://research.checkpoint.com/2025/iranian-educated-manticore-targets-leading-tech-academics/
+          )
+          and (
+            strings.icontains(ml.link_analysis(., mode="aggressive").final_dom.raw,
+                              "https://api.my-ip.io/v2/ip.json" // API response to IP
+            )
+            and strings.icontains(ml.link_analysis(., mode="aggressive").final_dom.raw,
+                                  "SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED" // React debug note
+            )
+          )
+  )
+tags:
+ - "Attack surface reduction"
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Evasion"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "URL analysis"

@@ -16,6 +16,17 @@ source: |
           strings.contains(subject.subject, .display_name)
           and strings.contains(.display_name, " ")
   )
+  // not being sent to said VIP
+  and not (
+    length(recipients.to) == 1
+    and all(recipients.to,
+            any($org_vips,
+                .email == ..email.email
+                and strings.contains(subject.subject, .display_name)
+                and strings.contains(.display_name, " ")
+            )
+    )
+  )
   and (
     // ignore personal <> work emails
     // where the sender and mailbox's display name are the same
@@ -43,7 +54,7 @@ source: |
     )
     or (
       profile.by_sender().any_messages_malicious_or_spam
-      and not profile.by_sender().any_false_positives
+      and not profile.by_sender().any_messages_benign
     )
   )
   
@@ -64,8 +75,6 @@ source: |
     )
     or sender.email.domain.root_domain not in $high_trust_sender_root_domains
   )
-  
-  and not profile.by_sender().any_false_positives
 
 tags:
   - "Attack surface reduction"
