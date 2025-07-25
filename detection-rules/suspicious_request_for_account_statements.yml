@@ -1,0 +1,48 @@
+name: "Suspicious Request for Account Statements"
+description: "Detects messages containing multiple payment-related text patterns combined with authentication failure. The rule checks both current and previous message threads for these patterns within reasonable text length limits."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and (
+    (
+      length(body.current_thread.text) < 2500
+      and 3 of (
+        regex.icontains(body.current_thread.text, "process.{0,10} payment"),
+        strings.icontains(body.current_thread.text, "confim if they match"),
+        strings.icontains(body.current_thread.text, "on system"),
+        strings.icontains(body.current_thread.text, "current statement"),
+        strings.icontains(body.current_thread.text, "obtain a copy"),
+        strings.icontains(body.current_thread.text, "send your documentation"),
+        regex.icontains(body.current_thread.text, "invoices|credits|rebates"),
+        regex.icontains(body.current_thread.text, "(past due|current) invoices")
+      )
+    )
+    or (
+      0 < length(body.previous_threads) <= 5
+      and any(body.previous_threads,
+              length(.text) < 2500
+              and 3 of (
+                regex.icontains(.text, "process.{0,10} payment"),
+                strings.icontains(.text, "confirm if they match"),
+                strings.icontains(.text, "on system"),
+                strings.icontains(.text, "current statement"),
+                strings.icontains(.text, "obtain a copy"),
+                strings.icontains(.text, "send your documentation"),
+                regex.icontains(.text, "invoices|credits|rebates"),
+                regex.icontains(.text, "(past due|current) invoices")
+              )
+      )
+    )
+  )
+  and (
+    headers.auth_summary.dmarc.pass is null or not headers.auth_summary.dmarc.pass
+  )
+
+attack_types:
+  - "BEC/Fraud"
+tactics_and_techniques:
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Header analysis"
