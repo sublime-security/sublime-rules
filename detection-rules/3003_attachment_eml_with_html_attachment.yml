@@ -1,0 +1,60 @@
+name: "Attachment: EML file with HTML attachment (unsolicited)"
+description: |
+  Detects HTML files in EML attachments from unsolicited senders.
+
+  Reduces attack surface against HTML smuggling.
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  
+  // has EML attachment
+  and any(attachments,
+          (.file_extension == "eml" or .content_type == "message/rfc822")
+          and any(file.parse_eml(.).attachments,
+                  // HTML file inside EML attachment
+                  // we've seen files named ".htm.", which results in an empty
+                  // .file_extension, so instead we look at .file_name
+                  // they should be rare enough in EML attachments to not cause
+                  // extraneous FPs
+                  strings.ilike(.file_name, "*htm*")
+                  or .file_type == "html"
+                  or any(file.explode(.), .flavors.mime == "text/html")
+          )
+  )
+  
+  // exclude bounce backs & read receipts
+  and not strings.like(sender.email.local_part,
+                       "*postmaster*",
+                       "*mailer-daemon*",
+                       "*administrator*"
+  )
+  and not regex.icontains(subject.subject, "^(undeliverable|read:)")
+  and not any(attachments, .content_type == "message/delivery-status")
+  // if the "References" is in the body of the message, it's probably a bounce
+  and not any(headers.references, strings.contains(body.html.display_text, .))
+  // unsolicited or fails authentation
+  and (
+    not profile.by_sender_email().solicited
+    or not headers.auth_summary.dmarc.pass
+    or not headers.auth_summary.spf.pass
+  )
+
+tags:
+  - "Attack surface reduction"
+attack_types:
+  - "Credential Phishing"
+  - "Malware/Ransomware"
+tactics_and_techniques:
+  - "Evasion"
+  - "HTML smuggling"
+detection_methods:
+  - "Content analysis"
+  - "File analysis"
+  - "Header analysis"
+  - "HTML analysis"
+  - "Sender analysis"
+id: "1ac34c8b-2ed3-55bc-9437-6b65fd207033"
+og_id: "c24fd191-1685-5cb8-83ef-618225401332"
+testing_pr: 3003
+testing_sha: 4d625f403e50d4094252b1af4bbad7c777ef3a57
