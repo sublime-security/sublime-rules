@@ -3,6 +3,7 @@
 from .converter import IOKConverter
 from .parser import IOKParser
 from .generator import SublimeRuleGenerator
+from .installer import AutomationClient
 
 __version__ = "0.1.0"
-__all__ = ["IOKConverter", "IOKParser", "SublimeRuleGenerator"] 
+__all__ = ["IOKConverter", "IOKParser", "SublimeRuleGenerator", "AutomationClient"] 
