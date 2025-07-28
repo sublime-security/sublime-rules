@@ -5,12 +5,12 @@ description: "Detects a Facebook phishing kit \nthat uses a unique URL to host \
   the banner image used in the fake\nlogin form.\n\nConverted from IOK rule - original\
   \ focuses on website analysis."
 detection_methods:
-- Content analysis
-- URL analysis
 - Header analysis
-- Natural Language Understanding
 - Sender analysis
-id: 722ba558-4571-4a65-a059-747dd57ddffd
+- URL analysis
+- Content analysis
+- Natural Language Understanding
+id: 15b874c7-03cb-41b8-97bc-0746866ef768
 name: 'IOK: Facebook Phishing Kit 2b493308'
 references:
 - https://urlscan.io/result/2b493308-d637-434e-9719-de252ccc9852
@@ -20,17 +20,17 @@ tactics_and_techniques:
 - 'Impersonation: Brand'
 tags:
 - IOK_Converted
-- IOK_kit
-- IOK_target.facebook
-type: rule
+- kit
+- target.facebook
+type: triage
 source: |
   type.inbound
     and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
-    and (
-      strings.icontains(body.links, "dc07b6ec287142c5519483f3d678b2d2.png")
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "dc07b6ec287142c5519483f3d678b2d2.png")
     )
-    and (
-      strings.icontains(body.links, "www.pointstar.co.id/wp-content/uploads/2020/07/google-security.jpg")
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "www.pointstar.co.id/wp-content/uploads/2020/07/google-security.jpg")
     )
     and strings.icontains(subject.subject, "facebook")
     and sender.email.domain.domain != "facebook.com"
@@ -38,6 +38,6 @@ source: |
       not profile.by_sender().solicited
       or (
         profile.by_sender().any_messages_malicious_or_spam
-        and not profile.by_sender().any_false_positives
+        and not profile.by_sender().any_messages_benign
       )
     )

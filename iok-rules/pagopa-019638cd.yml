@@ -9,12 +9,12 @@ description: 'Detects sites that mimic the payment process of the PagoPA platfor
 
   Converted from IOK rule - original focuses on website analysis.'
 detection_methods:
-- Content analysis
-- URL analysis
 - Header analysis
-- Natural Language Understanding
 - Sender analysis
-id: e52bebd0-9469-4e51-90f0-c622263bd557
+- URL analysis
+- Content analysis
+- Natural Language Understanding
+id: 877af070-3b76-498e-bf30-2851a6eea846
 name: 'IOK: PagoPA Phishing Kit 019638cd'
 references:
 - https://cert-agid.gov.it/wp-content/uploads/2025/04/pagoPA.json
@@ -25,15 +25,15 @@ tactics_and_techniques:
 - 'Impersonation: Brand'
 tags:
 - IOK_Converted
-- IOK_kit
-- IOK_target_country.italy
-- IOK_target.pagopa
-type: rule
+- kit
+- target_country.italy
+- target.pagopa
+type: triage
 source: |
   type.inbound
     and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
-    and (
-      strings.icontains(body.links, "cleave.min.js")
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "cleave.min.js")
     )
     and any(body.links,
       strings.icontains(ml.link_analysis(.).final_dom.raw, "function isInputNumber(evt)")
@@ -52,6 +52,6 @@ source: |
       not profile.by_sender().solicited
       or (
         profile.by_sender().any_messages_malicious_or_spam
-        and not profile.by_sender().any_false_positives
+        and not profile.by_sender().any_messages_benign
       )
     )

@@ -5,12 +5,12 @@ description: 'Detects a phishing kit impersonating Webmail.
 
   Converted from IOK rule - original focuses on website analysis.'
 detection_methods:
-- Content analysis
-- URL analysis
 - Header analysis
-- Natural Language Understanding
 - Sender analysis
-id: 2bb6fa00-82b0-4a8c-87fe-995560fb90ca
+- URL analysis
+- Content analysis
+- Natural Language Understanding
+id: bec636a8-0e63-446e-9c8f-03f5f425e188
 name: 'IOK: Webmail Phishing 27971b3a'
 references:
 - https://urlscan.io/result/27971b3a-f9f4-44ea-9df6-b3af1e386048/
@@ -20,10 +20,13 @@ tactics_and_techniques:
 - Social engineering
 tags:
 - IOK_Converted
-type: rule
+type: triage
 source: |
   type.inbound
     and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
+    and any(body.links,
+      ml.link_analysis(.).credphish.disposition == "phishing"
+    )
     and any(body.links,
       strings.icontains(ml.link_analysis(.).final_dom.raw, "bis_register=\"W3sibWFzdGVyIjp0cnVlLCJleHRlbnNpb25JZCI6ImVwcGlvY2VtaG1ubGJoanBsY2drb2ZjaWllZ29tY29uIiwiYWRibG9ja2VyU3RhdHVzIjp7IkRJU1BMQVkiOiJlbmFibGVkIiwiRkFDRUJPT0siOiJlbmFibGVkIiwiVFdJVFRFUiI6ImVuYWJsZWQiLCJSRURESVQiOiJkaXNhYmxlZCJ9LCJ2ZXJzaW9uIjoiMS45LjAzIiwic2NvcmUiOjEwOTAzMH1d\"")
     )
@@ -36,6 +39,6 @@ source: |
       not profile.by_sender().solicited
       or (
         profile.by_sender().any_messages_malicious_or_spam
-        and not profile.by_sender().any_false_positives
+        and not profile.by_sender().any_messages_benign
       )
     )

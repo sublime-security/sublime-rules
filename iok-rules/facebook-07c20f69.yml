@@ -5,12 +5,12 @@ description: "Detects a Facebook phishing kit \nthat uses unique filenames for \
   image assets of the fake login \npage.\n\nConverted from IOK rule - original focuses\
   \ on website analysis."
 detection_methods:
-- Content analysis
-- URL analysis
 - Header analysis
-- Natural Language Understanding
 - Sender analysis
-id: ff77782b-f45b-4498-99d3-e2bbdbd3ffa7
+- URL analysis
+- Content analysis
+- Natural Language Understanding
+id: cf225ddf-c441-4a91-ba04-5f4628fa466b
 name: 'IOK: Facebook Phishing Kit 07c20f69'
 references:
 - https://urlscan.io/result/07c20f69-b46c-45cd-8405-69545f3d65b8
@@ -22,20 +22,20 @@ tactics_and_techniques:
 - 'Impersonation: Brand'
 tags:
 - IOK_Converted
-- IOK_kit
-- IOK_target.facebook
-type: rule
+- kit
+- target.facebook
+type: triage
 source: |
   type.inbound
     and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
-    and (
-      strings.icontains(body.links, "5yj6qxk6guu51.jpg")
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "5yj6qxk6guu51.jpg")
     )
-    and (
-      strings.icontains(body.links, "190947209-1002880900116912-4375102209501448340-n.jpg")
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "190947209-1002880900116912-4375102209501448340-n.jpg")
     )
-    and (
-      strings.icontains(body.links, "ilham@sultan")
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "ilham@sultan")
     )
     and strings.icontains(subject.subject, "facebook")
     and sender.email.domain.domain != "facebook.com"
@@ -43,6 +43,6 @@ source: |
       not profile.by_sender().solicited
       or (
         profile.by_sender().any_messages_malicious_or_spam
-        and not profile.by_sender().any_false_positives
+        and not profile.by_sender().any_messages_benign
       )
     )

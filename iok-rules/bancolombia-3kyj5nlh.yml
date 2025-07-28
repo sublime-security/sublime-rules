@@ -7,12 +7,12 @@ description: 'Detects a different Bancolombia phishing kit deployed often on rep
 
   Converted from IOK rule - original focuses on website analysis.'
 detection_methods:
-- Content analysis
-- URL analysis
 - Header analysis
-- Natural Language Understanding
 - Sender analysis
-id: db6b9268-5790-4c51-8afc-2c8888c6d789
+- URL analysis
+- Content analysis
+- Natural Language Understanding
+id: aed67ec8-610c-43c0-881b-b5a17e6e2dfa
 name: 'IOK: Bancolombia Phishing Kit 3kyj5nlh'
 references:
 - https://urlscan.io/result/e5886efa-db1c-419b-8b34-cb7ea945cfc0
@@ -25,10 +25,10 @@ tactics_and_techniques:
 - 'Impersonation: Brand'
 tags:
 - IOK_Converted
-- IOK_kit
-- IOK_target.bancolombia
-- IOK_target_country.colombia
-type: rule
+- kit
+- target.bancolombia
+- target_country.colombia
+type: triage
 source: |
   type.inbound
     and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
@@ -46,10 +46,10 @@ source: |
       and strings.icontains(ml.link_analysis(.).final_dom.raw, "div id=\"contenido\"")
       and strings.icontains(ml.link_analysis(.).final_dom.raw, "div class=\"mua_tooltip_msg\"")
     )
-    and (
-      strings.icontains(body.links, "icc.png")
-      and strings.icontains(body.links, "1es.png")
-      and strings.icontains(body.links, "imgPublicidad.png")
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "icc.png")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "1es.png")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "imgPublicidad.png")
     )
     and (
       strings.icontains(subject.subject, "account")
@@ -60,6 +60,6 @@ source: |
       not profile.by_sender().solicited
       or (
         profile.by_sender().any_messages_malicious_or_spam
-        and not profile.by_sender().any_false_positives
+        and not profile.by_sender().any_messages_benign
       )
     )

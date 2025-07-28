@@ -8,12 +8,12 @@ description: "Discord phishing kit that uses a external application invite as a 
   \ \nthe same CSS file name is used across all domains that use this kit.\n\nConverted\
   \ from IOK rule - original focuses on website analysis."
 detection_methods:
-- Content analysis
-- URL analysis
 - Header analysis
-- Natural Language Understanding
 - Sender analysis
-id: a8ebe37d-a1dd-48ed-aff5-7998120e1a8b
+- URL analysis
+- Content analysis
+- Natural Language Understanding
+id: 83393b6d-cc64-49b7-8cfd-e1ebda9a946f
 name: 'IOK: Discord Phishing Kit 664a17b'
 references:
 - https://urlscan.io/result/bae8151a-351e-43c5-ba96-46a3f0ea747b
@@ -24,14 +24,14 @@ tactics_and_techniques:
 - 'Impersonation: Brand'
 tags:
 - IOK_Converted
-- IOK_kit
-- IOK_target.discord
-type: rule
+- kit
+- target.discord
+type: triage
 source: |
   type.inbound
     and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
-    and (
-      strings.icontains(body.links, "general.664a17b86a0ff56191d0.css")
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "general.664a17b86a0ff56191d0.css")
     )
     and strings.icontains(subject.subject, "discord")
     and sender.email.domain.domain != "discord.com"
@@ -39,6 +39,6 @@ source: |
       not profile.by_sender().solicited
       or (
         profile.by_sender().any_messages_malicious_or_spam
-        and not profile.by_sender().any_false_positives
+        and not profile.by_sender().any_messages_benign
       )
     )

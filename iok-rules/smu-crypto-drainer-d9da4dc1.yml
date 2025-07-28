@@ -6,11 +6,11 @@ description: "Detects a crypto drainer that hides commonly within the \nfile nam
   \ `utils.js` and has a seperate `showMess.js` file\nwith functions used to send\
   \ window alerts.\n\nConverted from IOK rule - original focuses on website analysis."
 detection_methods:
-- Content analysis
-- Sender analysis
 - Header analysis
 - URL analysis
-id: 184c0c7d-6c9b-4066-a7e6-9596d56d76b6
+- Content analysis
+- Sender analysis
+id: 6735251c-f3ae-40e9-bcbb-ca34a3cee7e4
 name: 'IOK: SMU Crypto Drainer d9da4dc1'
 references:
 - https://urlscan.io/result/d9da4dc1-2252-45b6-b23a-2860b3d31531
@@ -23,17 +23,17 @@ tactics_and_techniques:
 - Investment scam
 tags:
 - IOK_Converted
-- IOK_kit
-- IOK_crypto_drainer.smu
-- IOK_cryptocurrency
-- IOK_cryptocurrency.ethereum
-type: rule
+- kit
+- crypto_drainer.smu
+- cryptocurrency
+- cryptocurrency.ethereum
+type: triage
 source: |
   type.inbound
     and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
-    and (
-      strings.icontains(body.links, "utils.js")
-      and strings.icontains(body.links, "showMess.js")
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "utils.js")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "showMess.js")
     )
     and any(body.links,
       strings.icontains(ml.link_analysis(.).final_dom.raw, "showSuccess")
@@ -51,6 +51,6 @@ source: |
       not profile.by_sender().solicited
       or (
         profile.by_sender().any_messages_malicious_or_spam
-        and not profile.by_sender().any_false_positives
+        and not profile.by_sender().any_messages_benign
       )
     )

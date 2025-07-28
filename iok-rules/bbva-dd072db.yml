@@ -7,12 +7,12 @@ description: 'Detects a Banco Bilbao Vizcaya Argentaria (BBVA) phishing kit targ
 
   Converted from IOK rule - original focuses on website analysis.'
 detection_methods:
-- Content analysis
-- URL analysis
 - Header analysis
-- Natural Language Understanding
 - Sender analysis
-id: d9204d05-902a-465f-b580-faf53e10b514
+- URL analysis
+- Content analysis
+- Natural Language Understanding
+id: 0310e364-488b-460f-874f-a593d1dd170c
 name: 'IOK: BBVA Phishing Kit dd072db'
 references:
 - https://urlscan.io/result/dec43513-7a12-4cfa-84c1-1a73b9fba8d5
@@ -23,15 +23,15 @@ tactics_and_techniques:
 - 'Impersonation: Brand'
 tags:
 - IOK_Converted
-- IOK_kit
-- IOK_target.bbva
-- IOK_target_country.argentina
-type: rule
+- kit
+- target.bbva
+- target_country.argentina
+type: triage
 source: |
   type.inbound
     and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
-    and (
-      strings.icontains(body.links, "mafalda.css")
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "mafalda.css")
     )
     and any(body.links,
       strings.icontains(ml.link_analysis(.).final_dom.raw, "dd072dbe-f468-4569-a1a2-8812203f5bf5")
@@ -45,6 +45,6 @@ source: |
       not profile.by_sender().solicited
       or (
         profile.by_sender().any_messages_malicious_or_spam
-        and not profile.by_sender().any_false_positives
+        and not profile.by_sender().any_messages_benign
       )
     )

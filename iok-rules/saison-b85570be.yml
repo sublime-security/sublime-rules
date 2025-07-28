@@ -6,12 +6,12 @@ description: 'Detects a SAISON Card phishing kit targeting Japanese users.
 
   Converted from IOK rule - original focuses on website analysis.'
 detection_methods:
-- Content analysis
-- URL analysis
 - Header analysis
-- Natural Language Understanding
 - Sender analysis
-id: deb75a7e-9146-4667-a895-f8c008bd1919
+- URL analysis
+- Content analysis
+- Natural Language Understanding
+id: 63219e4c-7d8f-4dad-9102-f6e1543a6b5e
 name: 'IOK: SAISON Card Phishing Kit b85570be'
 references:
 - https://urlscan.io/result/b85570be-adc3-45f8-83ee-9a4a46737f89
@@ -22,10 +22,10 @@ tactics_and_techniques:
 - 'Impersonation: Brand'
 tags:
 - IOK_Converted
-- IOK_kit
-- IOK_target.saison_card
-- IOK_target_country.japan
-type: rule
+- kit
+- target.saison_card
+- target_country.japan
+type: triage
 source: |
   type.inbound
     and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
@@ -35,8 +35,8 @@ source: |
     and any(body.links,
       strings.icontains(ml.link_analysis(.).final_dom.raw, "type=\"hidden\" name=\"_csrf\" value=\"a9410f4f-e742-47a4-bcb4-78b655267747\"")
     )
-    and (
-      strings.icontains(body.links, "auth.php")
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "auth.php")
     )
     and (
       strings.icontains(subject.subject, "account")
@@ -47,6 +47,6 @@ source: |
       not profile.by_sender().solicited
       or (
         profile.by_sender().any_messages_malicious_or_spam
-        and not profile.by_sender().any_false_positives
+        and not profile.by_sender().any_messages_benign
       )
     )

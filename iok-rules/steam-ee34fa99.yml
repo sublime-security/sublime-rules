@@ -5,12 +5,12 @@ description: "A Steam phishing kit that uses a fake Steam login \nwindow to stea
   \ user credentials and 50/100$ gift \ncards as bait.\n\nConverted from IOK rule\
   \ - original focuses on website analysis."
 detection_methods:
-- Content analysis
-- URL analysis
 - Header analysis
-- Natural Language Understanding
 - Sender analysis
-id: 7c7a3482-72da-4fe3-8b34-d179556df99c
+- URL analysis
+- Content analysis
+- Natural Language Understanding
+id: c7a9490f-5a94-4db4-bede-3b1ffdcc7455
 name: 'IOK: Steam Phishing Kit ee34fa99'
 references:
 - https://urlscan.io/result/ee34fa99-6cf8-4b16-8cf5-e617e238dea0
@@ -20,17 +20,17 @@ tactics_and_techniques:
 - 'Impersonation: Brand'
 tags:
 - IOK_Converted
-- IOK_target.steam
-- IOK_threat_actor_country.russia
-type: rule
+- target.steam
+- threat_actor_country.russia
+type: triage
 source: |
   type.inbound
     and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
-    and (
-      strings.icontains(body.links, "https://s12.gifyu.com/images/")
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "https://s12.gifyu.com/images/")
     )
-    and (
-      strings.icontains(body.links, "metrica.php")
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "metrica.php")
     )
     and any(body.links,
       strings.icontains(ml.link_analysis(.).final_dom.raw, "auronplay")
@@ -41,6 +41,6 @@ source: |
       not profile.by_sender().solicited
       or (
         profile.by_sender().any_messages_malicious_or_spam
-        and not profile.by_sender().any_false_positives
+        and not profile.by_sender().any_messages_benign
       )
     )

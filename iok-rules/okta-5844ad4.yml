@@ -32,12 +32,12 @@ description: "Okta is a Single Sign-On (SSO) provider used by many enterprises a
   \ has been observed targeting multiple companies.\n\nConverted from IOK rule - original\
   \ focuses on website analysis."
 detection_methods:
-- Content analysis
-- URL analysis
 - Header analysis
-- Natural Language Understanding
 - Sender analysis
-id: 9246f58c-e346-494d-affc-3750799b7213
+- URL analysis
+- Content analysis
+- Natural Language Understanding
+id: 40884f75-bea4-4514-9402-0b9ff566a753
 name: 'IOK: Okta ("0ktapus"/"Scatter Swine") phishing kit'
 references:
 - https://blog.group-ib.com/0ktapus
@@ -48,17 +48,17 @@ tactics_and_techniques:
 - 'Impersonation: Brand'
 tags:
 - IOK_Converted
-- IOK_kit
-- IOK_target.okta
-type: rule
+- kit
+- target.okta
+type: triage
 source: |
   type.inbound
     and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
-    and (
-      strings.icontains(body.links, "_nuxt/5844ad4.js")
-      and strings.icontains(body.links, "_nuxt/8dd50ed.js")
-      and strings.icontains(body.links, "_nuxt/30ce58a.js")
-      and strings.icontains(body.links, "_nuxt/90a4226.js")
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "_nuxt/5844ad4.js")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "_nuxt/8dd50ed.js")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "_nuxt/30ce58a.js")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "_nuxt/90a4226.js")
     )
     and (
       strings.icontains(subject.subject, "account")
@@ -69,6 +69,6 @@ source: |
       not profile.by_sender().solicited
       or (
         profile.by_sender().any_messages_malicious_or_spam
-        and not profile.by_sender().any_false_positives
+        and not profile.by_sender().any_messages_benign
       )
     )

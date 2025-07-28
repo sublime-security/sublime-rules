@@ -8,12 +8,12 @@ description: 'Detects Steam phishing pages that obtain their template
 
   Converted from IOK rule - original focuses on website analysis.'
 detection_methods:
-- Content analysis
-- URL analysis
 - Header analysis
-- Natural Language Understanding
 - Sender analysis
-id: 8679f31a-a528-425e-90a0-af28cf291275
+- URL analysis
+- Content analysis
+- Natural Language Understanding
+id: c6351e0c-22c1-4cf0-9b3a-0ea11a688a6f
 name: 'IOK: Steam Phishing Kit 732d40f3'
 references:
 - https://urlscan.io/result/732d40f3-c113-44da-bcd4-5f39ff173e83
@@ -28,14 +28,14 @@ tactics_and_techniques:
 - 'Impersonation: Brand'
 tags:
 - IOK_Converted
-- IOK_target.steam
-- IOK_threat_actor_country.russia
-type: rule
+- target.steam
+- threat_actor_country.russia
+type: triage
 source: |
   type.inbound
     and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
-    and (
-      strings.icontains(body.links, "/api/getsiteconfig/")
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "/api/getsiteconfig/")
     )
     and any(body.links,
       strings.icontains(ml.link_analysis(.).final_dom.raw, "<iframe id=\"iframe\" title=\"main\" name=\"site\" style=\"height: 0px; width: 0px; border: 0px; outline: none; z-index: 1000;\"></iframe>")
@@ -49,6 +49,6 @@ source: |
       not profile.by_sender().solicited
       or (
         profile.by_sender().any_messages_malicious_or_spam
-        and not profile.by_sender().any_false_positives
+        and not profile.by_sender().any_messages_benign
       )
     )

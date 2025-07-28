@@ -9,12 +9,12 @@ description: 'Detects a phishing kit targeting Instagram. Talks to "hizliresim.c
 
   Converted from IOK rule - original focuses on website analysis.'
 detection_methods:
-- Content analysis
-- URL analysis
 - Header analysis
-- Natural Language Understanding
 - Sender analysis
-id: a870905d-be8f-4651-a70d-4f402593c3de
+- URL analysis
+- Content analysis
+- Natural Language Understanding
+id: 95db4061-82b9-4589-a4a8-db761bb592d6
 name: 'IOK: Instagram Phishing Kit Ag0sOJ'
 references:
 - https://urlscan.io/result/73dcc5cc-f6a2-4ed6-a924-bfad336eb83c/
@@ -25,18 +25,18 @@ tactics_and_techniques:
 - 'Impersonation: Brand'
 tags:
 - IOK_Converted
-- IOK_kit
-- IOK_target.instagram
-type: rule
+- kit
+- target.instagram
+type: triage
 source: |
   type.inbound
     and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
-    and (
-      strings.icontains(body.links, "bootstrap.min.css")
-      and strings.icontains(body.links, "material-design-iconic-font.min.css")
-      and strings.icontains(body.links, "util.css")
-      and strings.icontains(body.links, "main.css")
-      and strings.icontains(body.links, "all.css")
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "bootstrap.min.css")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "material-design-iconic-font.min.css")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "util.css")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "main.css")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "all.css")
     )
     and any(body.links,
       strings.icontains(ml.link_analysis(.).final_dom.raw, "img src=\"images/logo.svg\" width=\"80\"")
@@ -53,6 +53,6 @@ source: |
       not profile.by_sender().solicited
       or (
         profile.by_sender().any_messages_malicious_or_spam
-        and not profile.by_sender().any_false_positives
+        and not profile.by_sender().any_messages_benign
       )
     )

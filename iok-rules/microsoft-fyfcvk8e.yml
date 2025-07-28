@@ -10,12 +10,12 @@ description: 'Detects a Microsoft phishing kit with a hardcoded MFA phone number
 
   Converted from IOK rule - original focuses on website analysis.'
 detection_methods:
-- Content analysis
-- URL analysis
 - Header analysis
-- Natural Language Understanding
 - Sender analysis
-id: 2b2cade4-4edd-45e2-8e13-c9f11c881bfc
+- URL analysis
+- Content analysis
+- Natural Language Understanding
+id: 9ecfdd7b-656f-4069-9b95-0018dc7d2b07
 name: 'IOK: Microsoft Phishing Kit fyfcvk8e'
 references:
 - https://urlscan.io/result/0f35c05b-73e0-4397-9e7e-9e3edb508d16
@@ -27,9 +27,9 @@ tactics_and_techniques:
 - 'Impersonation: Brand'
 tags:
 - IOK_Converted
-- IOK_kit
-- IOK_target.microsoft
-type: rule
+- kit
+- target.microsoft
+type: triage
 source: |
   type.inbound
     and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
@@ -39,10 +39,10 @@ source: |
     and any(body.links,
       strings.icontains(ml.link_analysis(.).final_dom.raw, "THIS WORKS AS A SIGNA TURE CHANGE FOR DETECED BROWSER")
     )
-    and (
-      strings.icontains(body.links, "sc.php")
-      and strings.icontains(body.links, "jquery-3.1.1.min.js")
-      and strings.icontains(body.links, "crypto-js.min.js")
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "sc.php")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "jquery-3.1.1.min.js")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "crypto-js.min.js")
     )
     and (
       strings.icontains(subject.subject, "microsoft")
@@ -53,6 +53,6 @@ source: |
       not profile.by_sender().solicited
       or (
         profile.by_sender().any_messages_malicious_or_spam
-        and not profile.by_sender().any_false_positives
+        and not profile.by_sender().any_messages_benign
       )
     )

@@ -10,11 +10,11 @@ description: 'Detects a phishing kit impersonating the Massachusetts Unemploymen
 
   Converted from IOK rule - original focuses on website analysis.'
 detection_methods:
-- Content analysis
-- Sender analysis
 - Header analysis
 - URL analysis
-id: 48e04db0-a5af-4157-a06c-527a0a23b771
+- Content analysis
+- Sender analysis
+id: 51528089-438c-43a7-bfea-4c6c68ee1f29
 name: 'IOK: Massachusetts UI Online Application 5hGwWB'
 references:
 - https://uionline.detma.org/Claimant/Core/Login.ASPX
@@ -28,16 +28,16 @@ tactics_and_techniques:
 - 'Impersonation: Brand'
 tags:
 - IOK_Converted
-- IOK_kit
-- IOK_target.massachusetts_ui_online_application
-- IOK_target_country.usa
-type: rule
+- kit
+- target.massachusetts_ui_online_application
+- target_country.usa
+type: triage
 source: |
   type.inbound
     and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
-    and (
-      strings.icontains(body.links, "ControlLibrary.css")
-      and strings.icontains(body.links, "ui.css")
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "ControlLibrary.css")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "ui.css")
     )
     and any(body.links,
       strings.icontains(ml.link_analysis(.).final_dom.raw, "link rel=\"shortcut icon\" type=\"image/x-icon\" href=\"https://uionline.detma.org/favicon.ico\"")
@@ -57,6 +57,6 @@ source: |
       not profile.by_sender().solicited
       or (
         profile.by_sender().any_messages_malicious_or_spam
-        and not profile.by_sender().any_false_positives
+        and not profile.by_sender().any_messages_benign
       )
     )

@@ -12,12 +12,12 @@ description: 'Detect phishing sites that contain two distinctive
 
   Converted from IOK rule - original focuses on website analysis.'
 detection_methods:
-- Content analysis
-- URL analysis
 - Header analysis
-- Natural Language Understanding
 - Sender analysis
-id: 4edd1069-6457-478e-9a6f-2c2252a6918b
+- URL analysis
+- Content analysis
+- Natural Language Understanding
+id: e0213abe-0ad7-4e4a-a216-247cbef9cfb9
 name: 'IOK: Chenlun Phishing Kit 88426540'
 references:
 - https://urlscan.io/result/88426540-8f66-4fe2-b8f2-526e7025ace7
@@ -30,16 +30,19 @@ tactics_and_techniques:
 - 'Impersonation: Brand'
 tags:
 - IOK_Converted
-- IOK_kit
-- IOK_threat_actor_country.china
-- IOK_threat_actor.chenlun
-- IOK_target_country.global
-type: rule
+- kit
+- threat_actor_country.china
+- threat_actor.chenlun
+- target_country.global
+type: triage
 source: |
   type.inbound
     and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
-    and (
-      strings.icontains(body.links, "ResourceRedConfig.js")
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "ResourceRedConfig.js")
+    )
+    and any(body.links,
+      ml.link_analysis(.).credphish.disposition == "phishing"
     )
     and (
       strings.icontains(subject.subject, "account")
@@ -50,6 +53,6 @@ source: |
       not profile.by_sender().solicited
       or (
         profile.by_sender().any_messages_malicious_or_spam
-        and not profile.by_sender().any_false_positives
+        and not profile.by_sender().any_messages_benign
       )
     )

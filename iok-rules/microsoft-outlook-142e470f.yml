@@ -10,12 +10,12 @@ description: 'Detects a phishing kit targeting Microsoft Outlook. Users are bein
 
   Converted from IOK rule - original focuses on website analysis.'
 detection_methods:
-- Content analysis
-- URL analysis
 - Header analysis
-- Natural Language Understanding
 - Sender analysis
-id: 1cee2e4b-55f0-4a03-8f70-920adc44585b
+- URL analysis
+- Content analysis
+- Natural Language Understanding
+id: 35a63c53-3d8f-4fcd-a65b-bfcf2c908692
 name: 'IOK: Microsoft Outlook Phishing Kit 142e470f'
 references:
 - https://urlscan.io/result/142e470f-9579-4190-a4a0-9cae5f61df9f/
@@ -25,10 +25,10 @@ tactics_and_techniques:
 - 'Impersonation: Brand'
 tags:
 - IOK_Converted
-- IOK_kit
-- IOK_target.microsoft
-- IOK_target.microsoft_outlook
-type: rule
+- kit
+- target.microsoft
+- target.microsoft_outlook
+type: triage
 source: |
   type.inbound
     and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
@@ -36,9 +36,9 @@ source: |
       strings.icontains(ml.link_analysis(.).final_dom.raw, "<input id=\"clave\"")
       and strings.icontains(ml.link_analysis(.).final_dom.raw, "<div style=\"position:relative; top:0; margin-right:auto;margin-left:auto; z-index:99999\">")
     )
-    and (
-      strings.icontains(body.links, "imagen.jpg")
-      and strings.icontains(body.links, "forma.css")
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "imagen.jpg")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "forma.css")
     )
     and (
       strings.icontains(subject.subject, "microsoft")
@@ -49,6 +49,6 @@ source: |
       not profile.by_sender().solicited
       or (
         profile.by_sender().any_messages_malicious_or_spam
-        and not profile.by_sender().any_false_positives
+        and not profile.by_sender().any_messages_benign
       )
     )

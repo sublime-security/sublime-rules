@@ -6,11 +6,11 @@ description: "Detects the crypto drainer named 'hardteam' that uses \nthe domain
   \ file \n`drainer_v4.js`\n\nConverted from IOK rule - original focuses on website\
   \ analysis."
 detection_methods:
-- Content analysis
-- Sender analysis
 - Header analysis
 - URL analysis
-id: e7badc37-e292-412c-abf3-32045fb4cc77
+- Content analysis
+- Sender analysis
+id: 13d628ba-2768-483d-abb5-c710635aff9e
 name: 'IOK: hardteam Crypto Drainer f42d93a4'
 references:
 - https://urlscan.io/result/c7dfc420-17d4-4adf-a64b-093d471f1ab8
@@ -20,18 +20,18 @@ tactics_and_techniques:
 - Investment scam
 tags:
 - IOK_Converted
-- IOK_cryptocurrency
-- IOK_cryptocurrency.ethereum
-- IOK_crypto_drainer.hardteam
-type: rule
+- cryptocurrency
+- cryptocurrency.ethereum
+- crypto_drainer.hardteam
+type: triage
 source: |
   type.inbound
     and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
-    and (
-      strings.icontains(body.links, "drainer_v4.js")
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "drainer_v4.js")
     )
-    and (
-      strings.icontains(body.links, "hardteam.site")
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "hardteam.site")
     )
     and any(body.links,
       strings.icontains(ml.link_analysis(.).final_dom.raw, "metamask_spammer()")
@@ -45,6 +45,6 @@ source: |
       not profile.by_sender().solicited
       or (
         profile.by_sender().any_messages_malicious_or_spam
-        and not profile.by_sender().any_false_positives
+        and not profile.by_sender().any_messages_benign
       )
     )

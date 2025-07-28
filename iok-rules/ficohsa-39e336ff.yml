@@ -13,12 +13,12 @@ description: 'Detects a phishing page that targets Honduran users
 
   Converted from IOK rule - original focuses on website analysis.'
 detection_methods:
-- Content analysis
-- URL analysis
 - Header analysis
-- Natural Language Understanding
 - Sender analysis
-id: 01198c98-eb59-42f8-a304-3a927b9ba254
+- URL analysis
+- Content analysis
+- Natural Language Understanding
+id: b64fea02-de43-47b1-8a0e-56c0bfb21d53
 name: 'IOK: Ficohsa Phishing Kit 39e336ff'
 references:
 - https://urlscan.io/result/39e336ff-781b-4633-bd06-d0e94977316c
@@ -28,17 +28,17 @@ tactics_and_techniques:
 - 'Impersonation: Brand'
 tags:
 - IOK_Converted
-- IOK_target.ficohsa
-- IOK_target_country.honduras
-type: rule
+- target.ficohsa
+- target_country.honduras
+type: triage
 source: |
   type.inbound
     and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
-    and (
-      strings.icontains(body.links, "13f6ebd6-3a21-4455-8ac2-f131aaf35295")
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "13f6ebd6-3a21-4455-8ac2-f131aaf35295")
     )
-    and (
-      strings.icontains(body.links, "styles.b1d6cdcc40a888de1051.bundle.css")
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "styles.b1d6cdcc40a888de1051.bundle.css")
     )
     and (
       strings.icontains(subject.subject, "account")
@@ -49,6 +49,6 @@ source: |
       not profile.by_sender().solicited
       or (
         profile.by_sender().any_messages_malicious_or_spam
-        and not profile.by_sender().any_false_positives
+        and not profile.by_sender().any_messages_benign
       )
     )

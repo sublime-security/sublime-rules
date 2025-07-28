@@ -6,12 +6,12 @@ description: 'Detects a Rakuten phishing kit targeting Japanese users.
 
   Converted from IOK rule - original focuses on website analysis.'
 detection_methods:
-- Content analysis
-- URL analysis
 - Header analysis
-- Natural Language Understanding
 - Sender analysis
-id: be07571c-baf9-43ce-b9e6-d5a5698bae7d
+- URL analysis
+- Content analysis
+- Natural Language Understanding
+id: aa4caef1-9b04-44c7-8e3a-4852173cf941
 name: 'IOK: Rakuten Phishing Kit 1f160470'
 references:
 - https://urlscan.io/result/1f160470-9cc5-4ba3-b5a1-1f24a9bc113c
@@ -21,10 +21,10 @@ tactics_and_techniques:
 - 'Impersonation: Brand'
 tags:
 - IOK_Converted
-- IOK_kit
-- IOK_target.rakuten
-- IOK_target_country.japan
-type: rule
+- kit
+- target.rakuten
+- target_country.japan
+type: triage
 source: |
   type.inbound
     and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
@@ -33,6 +33,9 @@ source: |
     )
     and any(body.links,
       strings.icontains(ml.link_analysis(.).final_dom.raw, "<input type=\"hidden\" name=\"rat\" id=\"ratAccountId\" value=\"429\">")
+    )
+    and any(body.links,
+      ml.link_analysis(.).credphish.disposition == "phishing"
     )
     and (
       strings.icontains(subject.subject, "account")
@@ -43,6 +46,6 @@ source: |
       not profile.by_sender().solicited
       or (
         profile.by_sender().any_messages_malicious_or_spam
-        and not profile.by_sender().any_false_positives
+        and not profile.by_sender().any_messages_benign
       )
     )

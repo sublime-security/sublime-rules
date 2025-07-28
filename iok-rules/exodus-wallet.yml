@@ -10,12 +10,12 @@ description: 'Detects a Exodus Wallet cryptocurrency wallet drainer that include
 
   Converted from IOK rule - original focuses on website analysis.'
 detection_methods:
-- Content analysis
-- URL analysis
 - Header analysis
-- Natural Language Understanding
 - Sender analysis
-id: 0400df40-5735-4fa4-a930-0f0a128aa78c
+- URL analysis
+- Content analysis
+- Natural Language Understanding
+id: 8d2b6763-0eb9-43cb-b564-fa9a6b44b8c1
 name: 'IOK: Exodus Wallet Phishing Kit'
 references:
 - https://urlscan.io/result/03392ec8-cd9d-4ced-85bd-b409b9ae417d
@@ -28,15 +28,15 @@ tactics_and_techniques:
 - Investment scam
 tags:
 - IOK_Converted
-- IOK_kit
-- IOK_target.exodus
-- IOK_target_type.cryptocurrency
-type: rule
+- kit
+- target.exodus
+- target_type.cryptocurrency
+type: triage
 source: |
   type.inbound
     and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
-    and (
-      strings.icontains(body.links, "bip39.browser.min.js")
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "bip39.browser.min.js")
     )
     and any(body.links,
       strings.icontains(ml.link_analysis(.).final_dom.raw, "onsubmit=\"validateBIP39();\"")
@@ -53,6 +53,6 @@ source: |
       not profile.by_sender().solicited
       or (
         profile.by_sender().any_messages_malicious_or_spam
-        and not profile.by_sender().any_false_positives
+        and not profile.by_sender().any_messages_benign
       )
     )

@@ -9,11 +9,11 @@ description: 'Detects a malicious DApp that force redirects when it detects the
 
   Converted from IOK rule - original focuses on website analysis.'
 detection_methods:
-- Content analysis
-- Sender analysis
 - Header analysis
 - URL analysis
-id: d348fe9d-6a43-449f-87e9-3141aefafc9e
+- Content analysis
+- Sender analysis
+id: 9619a3ac-4f1f-457f-93f6-62d65602a17b
 name: 'IOK: Fake crypto mining - noChromium'
 references:
 - https://urlscan.io/result/ca867e6b-1175-475a-8a0f-fdaf839f09cb/
@@ -24,17 +24,17 @@ tactics_and_techniques:
 - Investment scam
 tags:
 - IOK_Converted
-- IOK_cryptocurrency
-type: rule
+- cryptocurrency
+type: triage
 source: |
   type.inbound
     and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
-    and (
-      strings.icontains(body.links, "wusdt/css")
-      and strings.icontains(body.links, "wusdt/img")
-      and strings.icontains(body.links, "wusdt/ercjs")
-      and strings.icontains(body.links, "static/alert")
-      and strings.icontains(body.links, "wusdt/js")
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "wusdt/css")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "wusdt/img")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "wusdt/ercjs")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "static/alert")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "wusdt/js")
     )
     and any(body.links,
       strings.icontains(ml.link_analysis(.).final_dom.raw, "window.chrome")
@@ -47,6 +47,6 @@ source: |
       not profile.by_sender().solicited
       or (
         profile.by_sender().any_messages_malicious_or_spam
-        and not profile.by_sender().any_false_positives
+        and not profile.by_sender().any_messages_benign
       )
     )

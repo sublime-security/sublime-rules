@@ -3,12 +3,12 @@ attack_types:
 description: "Detects a phishing kit developed by \na threat actor under the alias\
   \ of 'm3dular'.\n\nConverted from IOK rule - original focuses on website analysis."
 detection_methods:
-- Content analysis
-- URL analysis
 - Header analysis
-- Natural Language Understanding
 - Sender analysis
-id: 46819310-341f-49b7-9088-bf15546a75eb
+- URL analysis
+- Content analysis
+- Natural Language Understanding
+id: 24c964c0-59c4-457c-8c90-d46856d6c2fc
 name: 'IOK: m3dular Phishing Kit ea8f67e'
 references:
 - https://urlscan.io/result/ea8f67e9-d22b-4f14-b8f8-7f44a019100d
@@ -19,16 +19,16 @@ tactics_and_techniques:
 - 'Impersonation: Brand'
 tags:
 - IOK_Converted
-- IOK_kit
-- IOK_threat_actor.m3dular
-type: rule
+- kit
+- threat_actor.m3dular
+type: triage
 source: |
   type.inbound
     and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
-    and (
-      strings.icontains(body.links, "m3d.js")
-      and strings.icontains(body.links, "m3cache")
-      and strings.icontains(body.links, "mx.png")
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "m3d.js")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "m3cache")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "mx.png")
     )
     and (
       strings.icontains(subject.subject, "account")
@@ -39,6 +39,6 @@ source: |
       not profile.by_sender().solicited
       or (
         profile.by_sender().any_messages_malicious_or_spam
-        and not profile.by_sender().any_false_positives
+        and not profile.by_sender().any_messages_benign
       )
     )

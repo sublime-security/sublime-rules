@@ -7,12 +7,12 @@ description: 'Detects sites that mimic the payment process of the PagoPA platfor
 
   Converted from IOK rule - original focuses on website analysis.'
 detection_methods:
-- Content analysis
-- URL analysis
 - Header analysis
-- Natural Language Understanding
 - Sender analysis
-id: 1d444ffa-23d5-4101-9012-d35eed0b3aaf
+- URL analysis
+- Content analysis
+- Natural Language Understanding
+id: 1fac27f1-c64c-40a7-aa60-7e9dad39d71d
 name: 'IOK: PagoPA Phishing Kit 197bb96bc'
 references:
 - https://cert-agid.gov.it/wp-content/uploads/2025/03/phishing_pagoPA.json
@@ -21,20 +21,20 @@ tactics_and_techniques:
 - 'Impersonation: Brand'
 tags:
 - IOK_Converted
-- IOK_kit
-- IOK_target_country.italy
-- IOK_target.pagopa
-type: rule
+- kit
+- target_country.italy
+- target.pagopa
+type: triage
 source: |
   type.inbound
     and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
-    and (
-      strings.icontains(body.links, "choose.php")
-      or strings.icontains(body.links, "loader.php")
-      or strings.icontains(body.links, "keyb.png")
-      or strings.icontains(body.links, "fin.php")
-      or strings.icontains(body.links, "informations.php")
-      or strings.icontains(body.links, "recap.php")
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "choose.php")
+      or strings.icontains(ml.link_analysis(.).final_dom.raw, "loader.php")
+      or strings.icontains(ml.link_analysis(.).final_dom.raw, "keyb.png")
+      or strings.icontains(ml.link_analysis(.).final_dom.raw, "fin.php")
+      or strings.icontains(ml.link_analysis(.).final_dom.raw, "informations.php")
+      or strings.icontains(ml.link_analysis(.).final_dom.raw, "recap.php")
     )
     and (
       strings.icontains(subject.subject, "account")
@@ -45,6 +45,6 @@ source: |
       not profile.by_sender().solicited
       or (
         profile.by_sender().any_messages_malicious_or_spam
-        and not profile.by_sender().any_false_positives
+        and not profile.by_sender().any_messages_benign
       )
     )

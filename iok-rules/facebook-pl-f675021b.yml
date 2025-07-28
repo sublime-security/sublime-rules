@@ -6,12 +6,12 @@ description: 'Detects a Facebook phishing kit targeting Polish users.
 
   Converted from IOK rule - original focuses on website analysis.'
 detection_methods:
-- Content analysis
-- URL analysis
 - Header analysis
-- Natural Language Understanding
 - Sender analysis
-id: 9f7f4aed-7c4e-4020-bdbf-0d5d45ca6d99
+- URL analysis
+- Content analysis
+- Natural Language Understanding
+id: 0cc7ed82-c873-4bd4-a366-aa66fa233d63
 name: 'IOK: Facebook Phishing Kit f675021b'
 references:
 - https://urlscan.io/result/f675021b-9b3d-4729-885d-796c2b42433d
@@ -22,18 +22,18 @@ tactics_and_techniques:
 - 'Impersonation: Brand'
 tags:
 - IOK_Converted
-- IOK_kit
-- IOK_target.facebook
-- IOK_target_country.poland
-type: rule
+- kit
+- target.facebook
+- target_country.poland
+type: triage
 source: |
   type.inbound
     and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
-    and (
-      strings.icontains(body.links, "/img/logo-fb.png")
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "/img/logo-fb.png")
     )
-    and (
-      strings.icontains(body.links, "authorize.php")
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "authorize.php")
     )
     and any(body.links,
       strings.icontains(ml.link_analysis(.).final_dom.raw, "/savetofile.php")
@@ -47,6 +47,6 @@ source: |
       not profile.by_sender().solicited
       or (
         profile.by_sender().any_messages_malicious_or_spam
-        and not profile.by_sender().any_false_positives
+        and not profile.by_sender().any_messages_benign
       )
     )

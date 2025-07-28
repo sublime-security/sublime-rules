@@ -6,26 +6,26 @@ description: 'An older version of the Okta phishing kit [described here](https:/
 
   Converted from IOK rule - original focuses on website analysis.'
 detection_methods:
-- Content analysis
-- Sender analysis
 - Header analysis
 - URL analysis
-id: 2e8de0db-1220-4525-aec0-7bbd20824048
+- Content analysis
+- Sender analysis
+id: 9ea37c9a-91cf-4a6b-be31-a524bd5e0592
 name: 'IOK: Camouflaged Okta kit (old)'
 severity: high
 tactics_and_techniques:
 - 'Impersonation: Brand'
 tags:
 - IOK_Converted
-- IOK_kit
-- IOK_target.okta
-type: rule
+- kit
+- target.okta
+type: triage
 source: |
   type.inbound
     and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
-    and (
-      strings.icontains(body.links, "_nuxt/6a6c442.js")
-      and strings.icontains(body.links, "_nuxt/d795c50.js")
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "_nuxt/6a6c442.js")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "_nuxt/d795c50.js")
     )
     and (
       strings.icontains(subject.subject, "account")
@@ -36,6 +36,6 @@ source: |
       not profile.by_sender().solicited
       or (
         profile.by_sender().any_messages_malicious_or_spam
-        and not profile.by_sender().any_false_positives
+        and not profile.by_sender().any_messages_benign
       )
     )

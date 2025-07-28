@@ -7,12 +7,12 @@ description: 'Detects a Royal Mail phishing kit claiming that there are "issues 
 
   Converted from IOK rule - original focuses on website analysis.'
 detection_methods:
-- Content analysis
-- URL analysis
 - Header analysis
-- Natural Language Understanding
 - Sender analysis
-id: b88fe00e-e59b-405a-af0b-c22c2ede539f
+- URL analysis
+- Content analysis
+- Natural Language Understanding
+id: 249a49b1-c13b-47d7-9a33-1881919800d3
 name: 'IOK: Royal Mail Phishing Kit cd74ee99'
 references:
 - https://urlscan.io/result/739b68d2-fd6b-460c-b9b3-7256b3c3cd07
@@ -21,15 +21,15 @@ tactics_and_techniques:
 - 'Impersonation: Brand'
 tags:
 - IOK_Converted
-- IOK_kit
-- IOK_target.royal-mail
-- IOK_target_country.uk
-type: rule
+- kit
+- target.royal-mail
+- target_country.uk
+type: triage
 source: |
   type.inbound
     and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
-    and (
-      strings.icontains(body.links, "app.cd74ee99.css")
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "app.cd74ee99.css")
     )
     and (
       strings.icontains(subject.subject, "account")
@@ -40,6 +40,6 @@ source: |
       not profile.by_sender().solicited
       or (
         profile.by_sender().any_messages_malicious_or_spam
-        and not profile.by_sender().any_false_positives
+        and not profile.by_sender().any_messages_benign
       )
     )

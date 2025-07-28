@@ -7,12 +7,12 @@ description: 'Detects a Royal Mail phishing kit claiming that "We''ve received a
 
   Converted from IOK rule - original focuses on website analysis.'
 detection_methods:
-- Content analysis
-- URL analysis
 - Header analysis
-- Natural Language Understanding
 - Sender analysis
-id: adda928f-b22f-4f0d-8fdb-d6e0db0b6ce7
+- URL analysis
+- Content analysis
+- Natural Language Understanding
+id: 573a162d-3b85-40ea-ac37-df9f386bf197
 name: 'IOK: Royal Mail Phishing Kit GbyBld'
 references:
 - https://urlscan.io/result/3069b2d5-95b6-4ac1-9fe4-8511e633db41
@@ -21,15 +21,15 @@ tactics_and_techniques:
 - 'Impersonation: Brand'
 tags:
 - IOK_Converted
-- IOK_kit
-- IOK_target.royal-mail
-- IOK_target_country.uk
-type: rule
+- kit
+- target.royal-mail
+- target_country.uk
+type: triage
 source: |
   type.inbound
     and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
-    and (
-      strings.icontains(body.links, "css_GbyBld2YVfGaoHcw3eZJtGlhAxDTBpV3xkP06qLMwBI.css")
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "css_GbyBld2YVfGaoHcw3eZJtGlhAxDTBpV3xkP06qLMwBI.css")
     )
     and any(body.links,
       strings.icontains(ml.link_analysis(.).final_dom.raw, "A total of <b>£2.99</b> is required to proceed the shipment towards your address.")
@@ -43,6 +43,6 @@ source: |
       not profile.by_sender().solicited
       or (
         profile.by_sender().any_messages_malicious_or_spam
-        and not profile.by_sender().any_false_positives
+        and not profile.by_sender().any_messages_benign
       )
     )

@@ -8,11 +8,11 @@ description: 'Detects a Solana cryptocurrency wallet drainer that fakes the numb
 
   Converted from IOK rule - original focuses on website analysis.'
 detection_methods:
-- Content analysis
-- Sender analysis
 - Header analysis
 - URL analysis
-id: fe7ebb71-f5fe-4f39-8e48-e7d5633e754e
+- Content analysis
+- Sender analysis
+id: cd6de1bc-2f0b-4845-b977-8da90a417ba0
 name: 'IOK: Solana cryptocurrency wallet drainer - tokenup'
 references:
 - https://urlscan.io/search/#filename%3A%22tokenup.js%22
@@ -24,17 +24,17 @@ tactics_and_techniques:
 - Investment scam
 tags:
 - IOK_Converted
-- IOK_cryptocurrency
-- IOK_cryptocurrency.solana
-type: rule
+- cryptocurrency
+- cryptocurrency.solana
+type: triage
 source: |
   type.inbound
     and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
-    and (
-      strings.icontains(body.links, "tokenup.js")
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "tokenup.js")
     )
-    and (
-      strings.icontains(body.links, "settings.js")
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "settings.js")
     )
     and any(body.links,
       strings.icontains(ml.link_analysis(.).final_dom.raw, "tokennumber")
@@ -50,6 +50,6 @@ source: |
       not profile.by_sender().solicited
       or (
         profile.by_sender().any_messages_malicious_or_spam
-        and not profile.by_sender().any_false_positives
+        and not profile.by_sender().any_messages_benign
       )
     )

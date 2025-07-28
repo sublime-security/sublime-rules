@@ -8,12 +8,12 @@ description: 'Detects the landing page of this specific
 
   Converted from IOK rule - original focuses on website analysis.'
 detection_methods:
-- Content analysis
-- URL analysis
 - Header analysis
-- Natural Language Understanding
 - Sender analysis
-id: 60035460-2c02-419d-8874-9e51059e6128
+- URL analysis
+- Content analysis
+- Natural Language Understanding
+id: bd09ab06-7585-4b0b-9ce0-6074ad87bac9
 name: 'IOK: Facebook Phishing Kit 54b8f7e Landing Page'
 references:
 - https://urlscan.io/result/54b8f7ec-22f8-416f-b253-213d28262587
@@ -23,9 +23,9 @@ tactics_and_techniques:
 - 'Impersonation: Brand'
 tags:
 - IOK_Converted
-- IOK_page_type.landing
-- IOK_target.facebook
-type: rule
+- page_type.landing
+- target.facebook
+type: triage
 source: |
   type.inbound
     and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
@@ -33,8 +33,8 @@ source: |
       strings.icontains(ml.link_analysis(.).final_dom.raw, "Please Confirm Your Identity")
       and strings.icontains(ml.link_analysis(.).final_dom.raw, "Recent activity may have affected your account's security, so we've locked it. we'll walk you through a few steps to confirm your identity and help you access your account.")
     )
-    and (
-      strings.icontains(body.links, "okee.png")
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "okee.png")
     )
     and strings.icontains(subject.subject, "facebook")
     and sender.email.domain.domain != "facebook.com"
@@ -42,6 +42,6 @@ source: |
       not profile.by_sender().solicited
       or (
         profile.by_sender().any_messages_malicious_or_spam
-        and not profile.by_sender().any_false_positives
+        and not profile.by_sender().any_messages_benign
       )
     )

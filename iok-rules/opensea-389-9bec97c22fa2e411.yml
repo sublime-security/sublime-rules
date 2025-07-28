@@ -8,12 +8,12 @@ description: 'Detects OpenSea wallet drainers - mystery box scam. Often hosted o
 
   Converted from IOK rule - original focuses on website analysis.'
 detection_methods:
-- Content analysis
-- URL analysis
 - Header analysis
-- Natural Language Understanding
 - Sender analysis
-id: 07f45d40-8332-43a1-9e09-c373761dd951
+- URL analysis
+- Content analysis
+- Natural Language Understanding
+id: a11e2c97-c3de-4b03-a110-ea4d216641c7
 name: 'IOK: OpenSea Phishing 389-9bec97c22fa2e411'
 references:
 - https://urlscan.io/result/03383a08-4618-4a92-9bff-99bd8b2be9f2/
@@ -25,12 +25,15 @@ tactics_and_techniques:
 - Investment scam
 tags:
 - IOK_Converted
-- IOK_target.opensea
-- IOK_cryptocurrency
-type: rule
+- target.opensea
+- cryptocurrency
+type: triage
 source: |
   type.inbound
     and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
+    and any(body.links,
+      ml.link_analysis(.).credphish.disposition == "phishing"
+    )
     and any(body.links,
       strings.icontains(ml.link_analysis(.).final_dom.raw, "/389-9bec97c22fa2e411.gif")
     )
@@ -43,6 +46,6 @@ source: |
       not profile.by_sender().solicited
       or (
         profile.by_sender().any_messages_malicious_or_spam
-        and not profile.by_sender().any_false_positives
+        and not profile.by_sender().any_messages_benign
       )
     )

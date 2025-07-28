@@ -7,11 +7,11 @@ description: "Detects websites that target Roblox players by \npretending to off
   \ completing \nsurveys.\n\nConverted from IOK rule - original focuses on website\
   \ analysis."
 detection_methods:
-- Content analysis
-- Sender analysis
 - Header analysis
 - URL analysis
-id: 0fe3f1e1-5419-437d-a13c-a176ebd6e03e
+- Content analysis
+- Sender analysis
+id: 210e13ea-062a-4364-b37d-1fe1fb730a37
 name: 'IOK: Roblox Survey Scam 9170a30d'
 references:
 - https://urlscan.io/result/9170a30d-f431-4645-9bf6-767e604ea175/
@@ -25,17 +25,20 @@ tactics_and_techniques:
 - Social engineering
 tags:
 - IOK_Converted
-- IOK_kit
-- IOK_target.roblox
-type: rule
+- kit
+- target.roblox
+type: triage
 source: |
   type.inbound
     and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
     and any(body.links,
       strings.icontains(ml.link_analysis(.).final_dom.raw, "searching for amjad ...")
     )
-    and (
-      strings.icontains(body.links, "/public/external/check.php")
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "/public/external/check.php")
+    )
+    and any(body.links,
+      ml.link_analysis(.).credphish.disposition == "phishing"
     )
     and (
       strings.icontains(subject.subject, "account")
@@ -46,6 +49,6 @@ source: |
       not profile.by_sender().solicited
       or (
         profile.by_sender().any_messages_malicious_or_spam
-        and not profile.by_sender().any_false_positives
+        and not profile.by_sender().any_messages_benign
       )
     )

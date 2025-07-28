@@ -6,12 +6,12 @@ description: 'Detects a SMBC phishing kit targeting Japanese users.
 
   Converted from IOK rule - original focuses on website analysis.'
 detection_methods:
-- Content analysis
-- URL analysis
 - Header analysis
-- Natural Language Understanding
 - Sender analysis
-id: 5803f6bb-162c-4a3b-945b-860b7508ef4f
+- URL analysis
+- Content analysis
+- Natural Language Understanding
+id: c800f486-cdd5-44e8-9f5f-db52ee1cf912
 name: 'IOK: SMBC Phishing Kit 10ddf87'
 references:
 - https://urlscan.io/result/10ddf87d-8081-4148-8a8d-cc73a9ec6bde
@@ -22,10 +22,10 @@ tactics_and_techniques:
 - 'Impersonation: Brand'
 tags:
 - IOK_Converted
-- IOK_kit
-- IOK_target_country.japan
-- IOK_target.smbc
-type: rule
+- kit
+- target_country.japan
+- target.smbc
+type: triage
 source: |
   type.inbound
     and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
@@ -33,8 +33,8 @@ source: |
       strings.icontains(ml.link_analysis(.).final_dom.raw, "name=\"_TOKEN\"")
       or strings.icontains(ml.link_analysis(.).final_dom.raw, "value=\"224727341138306\"")
     )
-    and (
-      strings.icontains(body.links, "sanjin/client/index.html")
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "sanjin/client/index.html")
     )
     and (
       strings.icontains(subject.subject, "account")
@@ -45,6 +45,6 @@ source: |
       not profile.by_sender().solicited
       or (
         profile.by_sender().any_messages_malicious_or_spam
-        and not profile.by_sender().any_false_positives
+        and not profile.by_sender().any_messages_benign
       )
     )
