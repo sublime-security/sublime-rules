@@ -4,30 +4,46 @@ type: "rule"
 severity: "medium"
 source: |
   type.inbound
+  and length(attachments) == 0
   and (
     (
-      length(body.current_thread.text) < 2500
+      length(body.current_thread.text) < 2000
       and 3 of (
         regex.icontains(body.current_thread.text, "process.{0,10} payment"),
+        regex.icontains(body.current_thread.text,
+                        "account.{0,10}(balance|status|information)"
+        ),
+        regex.icontains(body.current_thread.text,
+                        "(outstanding|unpaid|overdue).{0,10}invoices?"
+        ),
+        regex.icontains(body.current_thread.text,
+                        "(pending|open).{0,10}invoices?"
+        ),
+        strings.icontains(body.current_thread.text, "kindly confirm"),
         strings.icontains(body.current_thread.text, "confim if they match"),
         strings.icontains(body.current_thread.text, "on system"),
         strings.icontains(body.current_thread.text, "current statement"),
         strings.icontains(body.current_thread.text, "obtain a copy"),
+        strings.icontains(body.current_thread.text, "send all"),
         strings.icontains(body.current_thread.text, "send your documentation"),
-        regex.icontains(body.current_thread.text, "invoices|credits|rebates"),
         regex.icontains(body.current_thread.text, "(past due|current) invoices")
       )
     )
     or (
       0 < length(body.previous_threads) <= 5
       and any(body.previous_threads,
-              length(.text) < 2500
+              length(.text) < 2000
               and 3 of (
                 regex.icontains(.text, "process.{0,10} payment"),
+                regex.icontains(.text, "account.{0,10}(balance|status|information)"),
+                regex.icontains(.text, "(outstanding|unpaid|overdue).{0,10}invoices?"),
+                regex.icontains(.text, "(pending|open).{0,10}invoices?"),
                 strings.icontains(.text, "confirm if they match"),
+                strings.icontains(.text, "kindly confirm"),
                 strings.icontains(.text, "on system"),
                 strings.icontains(.text, "current statement"),
                 strings.icontains(.text, "obtain a copy"),
+                strings.icontains(.text, "send all"),
                 strings.icontains(.text, "send your documentation"),
                 regex.icontains(.text, "invoices|credits|rebates"),
                 regex.icontains(.text, "(past due|current) invoices")
@@ -35,7 +51,14 @@ source: |
       )
     )
   )
-  and headers.auth_summary.dmarc.pass is null
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and not headers.auth_summary.dmarc.pass
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
 
 attack_types:
   - "BEC/Fraud"
