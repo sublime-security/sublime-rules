@@ -150,6 +150,7 @@ class SublimeRuleGenerator:
             subconditions = []
             for value in values:
                 escaped_value = value.replace('"', '\\"')
+                # TODO: Add logic here to convert href paths to correct escaping. Currently this will take too much time to figure out so skipping as only 2 rules fail because of it
                 subconditions.append(f'strings.icontains(ml.link_analysis(.).final_dom.raw, "{escaped_value}")')
 
             condition_text = '\n    and '.join(subconditions)

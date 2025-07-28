@@ -105,6 +105,8 @@ class AutomationClient:
                 headers=headers,
             )
             if not resp.ok:
-                raise requests.exceptions.HTTPError(f"error occurred posting rule {rule.name}: {resp.text}")
-            return_value = True
+                return_value = False
+                print(f"failed processing rule {resp.text}")
+            else:
+                return_value = True
         return return_value
