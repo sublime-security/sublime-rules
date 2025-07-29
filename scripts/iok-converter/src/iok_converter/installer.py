@@ -29,6 +29,7 @@ class AutomationRule:
     description: str
     source: str
     tags: list[str]
+    severity: str
     type: str = "triage"
     auto_review_auto_share: bool = False
     active: bool = True
@@ -44,6 +45,7 @@ class AutomationRule:
             "type": self.type,
             "auto_review_auto_share": self.auto_review_auto_share,
             "active": self.active,
+            "severity": self.severity,
             "triage_abuse_reports": self.triage_abuse_reports,
             "triage_flagged_messages": self.triage_flagged_messages
         }
@@ -84,7 +86,8 @@ class AutomationClient:
                 name=data.get("name"),
                 description=data.get("description"),
                 source=data.get("source"),
-                tags=data.get("tags", [])
+                tags=data.get("tags", []),
+                severity=data.get("severity", "")
             )
         return None
 

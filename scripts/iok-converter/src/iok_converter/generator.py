@@ -77,16 +77,6 @@ class SublimeRuleGenerator:
         if brand_conditions:
             conditions.extend(brand_conditions)
 
-        # Add standard sender filtering
-        sender_filter = """(
-    not profile.by_sender().solicited
-    or (
-      profile.by_sender().any_messages_malicious_or_spam
-      and not profile.by_sender().any_messages_benign
-    )
-  )"""
-        conditions.append(sender_filter)
-
         return '\n  and '.join(conditions)
 
     def _convert_pattern_to_mql(self, pattern: Dict[str, Any]) -> Optional[str]:
