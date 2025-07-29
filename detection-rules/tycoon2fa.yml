@@ -1,0 +1,151 @@
+name: "Tycoon 2FA Detection"
+references:
+- https://file.notion.so/f/f/bc10ea31-6184-49d9-85d8-0af2129cd2cf/b1a0be2b-676b-453b-8b56-63585d4239fe/Sekoia_io___Global_analysis_of_Adversary_in_the_Middle_phishing_threats.pdf?table=block&id=22b04655-fc9d-8036-beb9-f478248e8c70&spaceId=bc10ea31-6184-49d9-85d8-0af2129cd2cf&expirationTimestamp=1753774507364&signature=9PfAllqJUNAn5gEhvnz-pDxLx_zONwqLoBp6oPXXDr4&downloadName=Sekoia_io___Global_analysis_of_Adversary_in_the_Middle_phishing_threats.pdf
+type: "query"
+source:
+  type.inbound
+   and any(body.links,
+      strings.icontains(
+        ml.link_analysis(.).final_dom.raw, regex.contains(., '<title>.*?200B.*?</title>')
+      )
+  )
+
+name: "Tycoon 2FA Phishing-as-a-Service Detection"
+description: |
+  Detects potential Tycoon 2FA (Storm-1747) phishing attempts targeting Microsoft 365 and Google accounts.
+  This PhaaS has been active since August 2023 and uses sophisticated AitM techniques with anti-bot pages.
+  
+type: "rule"
+severity: "high"
+confidence: "high"
+authors:
+  - "Security Team"
+references:
+  - "https://www.sekoia.io/en/tycoon2fa-an-in-depth-analysis-of-the-latest-version-of-the-aitm-phishing-kit/"
+  
+source: |
+  type.inbound
+  
+  // Check for suspicious domain patterns used by Tycoon 2FA
+  and (
+    // Primary domain pattern: [a-z0-9]{2,6}\.[a-z]{5,15}\.(ru|com|es|cc|info|su|vip)
+    regex.match(sender.email.domain.domain, '[a-z0-9]{2,6}\.[a-z]{5,15}')
+    or any(body.links,
+      regex.match(.href_url.domain.domain, '[a-z0-9]{2,6}\.[a-z]{5,15}')
+      and .href_url.domain.tld in~ ("ru", "com", "es", "cc", "info", "su", "vip")
+    )
+  )
+  
+  // Check for specific URL patterns used in autograb
+  and (
+    any(body.links,
+      // Pattern 1: /[a-zA-Z0-9@!]{4,15}/($|*|?em=|)
+      regex.match(.href_url.path, '/[a-zA-Z0-9@!]{4,15}/(\$|\*|\?em=|$)')
+      // Pattern 2: /[a-zA-Z0-9]{0,15}@[a-zA-Z0-9]{0,15}/
+      or regex.match(.href_url.path, '/[a-zA-Z0-9]{0,15}@[a-zA-Z0-9]{0,15}/')
+    )
+    or any(attachments,
+      .file_type in ("html", "htm")
+      and any(file.explode(.),
+        // Check for characteristic JavaScript libraries
+        strings.icontains(.scan.strings.strings, "https://code.jquery.com/jquery-3.6.0.min.js")
+        or strings.icontains(.scan.strings.strings, "https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js")
+        // Check for invisible Unicode character in title
+        or regex.contains(.scan.html.title, '\u200B')
+        // Check for Microsoft OAuth App ID
+        or strings.icontains(.scan.strings.strings, "4765445b-32c6-49b0-83e6-1d93765276ca")
+        // Check for references to crypto-js AES encryption
+        or (
+          strings.icontains(.scan.strings.strings, "crypto-js")
+          and strings.icontains(.scan.strings.strings, "AES")
+          and strings.icontains(.scan.strings.strings, "base64")
+        )
+      )
+    )
+  )
+  
+  // Additional checks for anti-bot page indicators
+  and (
+    any(body.links,
+      strings.icontains(.display_text, "captcha")
+      or strings.icontains(.display_text, "cloudflare")
+      or strings.icontains(.display_text, "turnstile")
+      or strings.icontains(.display_text, "hcaptcha")
+      or strings.icontains(.display_text, "recaptcha")
+    )
+    or any(attachments,
+      .file_type in ("html", "htm")
+      and any(file.explode(.),
+        regex.icontains(.scan.html.raw, "(captcha|cloudflare.*turnstile|hcaptcha|recaptcha)")
+      )
+    )
+  )
+  
+  // Check for Microsoft 365 or Google targeting
+  and (
+    strings.ilike(subject.subject, "*microsoft*")
+    or strings.ilike(subject.subject, "*office*")
+    or strings.ilike(subject.subject, "*365*")
+    or strings.ilike(subject.subject, "*google*")
+    or strings.ilike(subject.subject, "*gmail*")
+    or any(body.links,
+      strings.icontains(.display_text, "microsoft")
+      or strings.icontains(.display_text, "office")
+      or strings.icontains(.display_text, "365")
+      or strings.icontains(.display_text, "google")
+    )
+  )
+  
+  // Exclude legitimate Microsoft and Google domains
+  and not (
+    sender.email.domain.root_domain in~ (
+      "microsoft.com",
+      "microsoftonline.com",
+      "office.com",
+      "office365.com",
+      "google.com",
+      "googleapis.com"
+    )
+    or all(body.links, 
+      .href_url.domain.root_domain in~ (
+        "microsoft.com",
+        "microsoftonline.com",
+        "office.com",
+        "office365.com",
+        "google.com",
+        "googleapis.com"
+      )
+    )
+  )
+  
+  // Check for known associated ASNs
+  and (
+    any(body.links,
+      .href_url.domain.resolved_asn_number in (9009, 29802)
+    )
+    or sender.email.domain.resolved_asn_number in (9009, 29802)
+  )
+
+attack_types:
+  - "Credential Phishing"
+  - "Adversary in the Middle"
+  
+tactics_and_techniques:
+  - "Initial Access"
+  - "T1566.001 - Spearphishing Attachment"
+  - "T1566.002 - Spearphishing Link"
+  - "T1557 - Adversary-in-the-Middle"
+  
+detection_methods:
+  - "URL Analysis"
+  - "Domain Analysis"
+  - "Content Analysis"
+  - "HTML Analysis"
+  
+tags:
+  - "Tycoon 2FA"
+  - "Storm-1747"
+  - "PhaaS"
+  - "AitM"
+  - "Microsoft 365"
+  - "Google"
