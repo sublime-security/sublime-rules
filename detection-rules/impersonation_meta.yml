@@ -11,20 +11,21 @@ source: |
     // sender display name is a strong enough indicator
     // that it can be used without any other impersonation logic
     (
-      strings.ilike(sender.display_name,
-                    '*facebook ads*',
-                    '*facebook business*',
-                    '*meta support*',
-                    '*meta business*',
-                    '*meta for business*',
-                    '*meta policy*',
-                    '*page ads support*',
-                    'Instagram Not*',
-                    'Instagram Policies*',
-                    'Instagram Report*',
-                    'Instagram Helpdesk*',
-                    'Instagram Support*',
-                    '*Ads Team'
+      regex.icontains(sender.display_name,
+                    'facebook ?ads',
+                    'facebook ?business',
+                    'meta ?account',
+                    'meta ?support',
+                    'meta ?business',
+                    'meta ?for ?business',
+                    'meta ?policy',
+                    'page ?ads ?support',
+                    'Instagram ?Not',
+                    'Instagram ?Policies',
+                    'Instagram ?Report',
+                    'Instagram ?Helpdesk',
+                    'Instagram ?Support',
+                    'Ads ?Team'
       )
       or strings.ilevenshtein(sender.display_name, 'facebook ads') <= 2
       or strings.ilevenshtein(sender.display_name, 'facebook business') <= 2
@@ -51,7 +52,7 @@ source: |
           regex.icontains(sender.display_name,
                           '\bf[\p{Mn}\p{Cf}]*a[\p{Mn}\p{Cf}]*c[\p{Mn}\p{Cf}]*e[\p{Mn}\p{Cf}]*b[\p{Mn}\p{Cf}]*o[\p{Mn}\p{Cf}]*o[\p{Mn}\p{Cf}]*k[\p{Mn}\p{Cf}]*\b',
                           '\bm[\p{Mn}\p{Cf}]*e[\p{Mn}\p{Cf}]*t[\p{Mn}\p{Cf}]*a[\p{Mn}\p{Cf}]*\b',
-                          '\bm[\p{Mn}\p{Cf}]*e[\p{Mn}\p{Cf}]*t[\p{Mn}\p{Cf}]*a[\p{Mn}\p{Cf}]*.*support\b',
+                          '\bm[\p{Mn}\p{Cf}]*e[\p{Mn}\p{Cf}]*t[\p{Mn}\p{Cf}]*a[\p{Mn}\p{Cf}]*.*support',
                           '\binstagr(am)?\b'
           )
           // negate metageek.com
@@ -70,6 +71,8 @@ source: |
                .name in ("cred_theft", "callback_scam", "steal_pii")
                and .confidence in ("medium", "high")
         )
+       or regex.icontains(body.plain.raw, "(violation|infringe|copyright)")
+       or any(body.links, .href_url.domain.root_domain == "rebrand.ly")
       )
     )
     // salesforce sender combined with logo detection and nlu is enough
@@ -156,26 +159,7 @@ source: |
   )
   // negate metaenterprise links
   and not any(headers.reply_to, .email.email == "noreply@facebookmail.com")
-  and (
-    (
-      profile.by_sender().prevalence != "common"
-      and not profile.by_sender().solicited
-    )
-    or sender.email.domain.domain in $replyto_service_domains
-    or (
-      profile.by_sender().any_messages_malicious_or_spam
-      and not profile.by_sender().any_messages_benign
-    )
-    // if saleforce is being abused, sender profiles aren't very useful
-    or sender.email.email in (
-      "noreply@salesforce.com",
-      "support@salesforce.com",
-      "no-reply@salesforce.com"
-    )
-    // sent via Google group
-    or any(headers.hops, any(.fields, .name == "X-Google-Group-Id"))
-  )
-  
+
   // negate highly trusted sender domains unless they fail DMARC authentication
   and (
     (
