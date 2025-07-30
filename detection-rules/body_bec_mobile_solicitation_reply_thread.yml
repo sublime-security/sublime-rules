@@ -6,13 +6,26 @@ source: |
   type.inbound
   and 0 < length(body.previous_threads) < 3
   and length(attachments) == 0
-
   // Check previous_threads for mobile solicitation patterns
-  and any(body.previous_threads, 
-          length(.text) < 500
-          and regex.icontains(.text, '(mobile|contact|current).{0,10}(phone|number|#|\bno)|whatsapp|\bcell|personalcell')
+  and any(body.previous_threads,
+          (
+            length(.text) < 500
+            // ignore disclaimers in body length calculation
+            or (
+              any(map(filter(ml.nlu_classifier(.text).entities,
+                             .name == "disclaimer"
+                      ),
+                      .text
+                  ),
+                  (length(..text) - length(.)) < 500
+              )
+            )
+          )
+          and regex.icontains(.text,
+                              '(mobile|contact|current).{0,10}(phone|number|#|\bno)|whatsapp|\bcell|personalcell'
+          )
   )
-
+  
   // NLU analysis on previous_threads content
   and (
     any(body.previous_threads,
@@ -24,19 +37,18 @@ source: |
       // confidence can be low on very short bodies
       any(body.previous_threads, length(.text) < 550)
       and (
-        any(body.previous_threads, 
+        any(body.previous_threads,
             any(ml.nlu_classifier(.text).intents, .name == "bec")
         )
         or any(ml.nlu_classifier(sender.display_name).intents, .name == "bec")
         or any(body.previous_threads,
-              any(ml.nlu_classifier(.text).entities,
-                  strings.icontains(.text, "kindly")
-              )
+               any(ml.nlu_classifier(.text).entities,
+                   strings.icontains(.text, "kindly")
+               )
         )
       )
     )
   )
-
   // Sender analysis
   and (
     not profile.by_sender().solicited
@@ -51,13 +63,10 @@ source: |
     )
     or sender.email.domain.root_domain not in $high_trust_sender_root_domains
   )
-
   // Ensure this is likely a hijacked thread (sender doesn't match thread participants)
   and (
     length(headers.references) > 0
-    or any(headers.hops,
-          any(.fields, strings.ilike(.name, "In-Reply-To"))
-    )
+    or any(headers.hops, any(.fields, strings.ilike(.name, "In-Reply-To")))
   )
 
 attack_types:
