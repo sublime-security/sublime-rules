@@ -5,14 +5,13 @@ severity: "medium"
 source: |
   type.inbound
   and any(body.links,
-          // R2 buckets with pub-{32hex}.r2.dev pattern
-          regex.icontains(.href_url.url, 'https://pub-[a-f0-9]{32}\.r2\.dev')
-          // generic r2.dev domains
-          or strings.icontains(.href_url.domain.root_domain, "r2.dev")
-          // Cloudflare Pages
-          or strings.icontains(.href_url.domain.root_domain, "pages.dev")
-          // Cloudflare Workers
-          or strings.icontains(.href_url.domain.root_domain, "workers.dev")
+          // Check root domain first 
+          .href_url.domain.root_domain in ("r2.dev", "pages.dev", "workers.dev")
+          // Check the specific pub-{hex}.r2.dev subdomain pattern only for r2.dev
+          or (
+              .href_url.domain.root_domain == "r2.dev"
+              and regex.icontains(.href_url.domain.subdomain, '^pub-[a-f0-9]{32}$')
+          )
   )
   // negate emails with unsubscribe links
   and not any(body.links,
