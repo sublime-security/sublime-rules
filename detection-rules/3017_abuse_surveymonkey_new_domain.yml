@@ -1,0 +1,41 @@
+name: "Service abuse: SurveyMonkey survey from newly registered domain"
+description: "This Attack Surface Reduction (ASR) rule matches on SurveyMonkey Surveys with recently registered reply-to domains."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  
+  // Legitimate SurveyMonkey sending infratructure
+  and sender.email.email == "member@surveymonkeyuser.com"
+  and headers.auth_summary.spf.pass
+  and headers.auth_summary.dmarc.pass
+  
+  and any(headers.reply_to, network.whois(.email.domain).days_old < 30)
+  // 
+  // This rule makes use of a beta feature and is subject to change without notice
+  // using the beta feature in custom rules is not suggested until it has been formally released
+  // 
+   
+  // reply-to email address has never been sent an email by the org
+  and not beta.profile.by_reply_to().solicited
+  
+  // do not match if the reply_to address has been observed as a reply_to address
+  // of a message that has been classified as benign
+  and not beta.profile.by_reply_to().any_messages_benign
+
+tags:
+ - "Attack surface reduction"
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Evasion"
+  - "Free file host"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Header analysis"
+  - "Sender analysis"
+id: "44b0a51e-3c15-5d1a-8b3a-b452db635b9b"
+og_id: "50a85fa7-c582-5644-b043-28c240d48603"
+testing_pr: 3017
+testing_sha: d3c6de5ee7f18e45470765f71f4630c63bc2cfbb
