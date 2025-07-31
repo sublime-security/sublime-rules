@@ -43,10 +43,10 @@ source: |
     )
   )
   and not any(attachments,
-            any(file.parse_eml(.).attachments,
-                .content_type == "message/delivery-status"
-            )
-      )
+              any(file.parse_eml(.).attachments,
+                  .content_type == "message/delivery-status"
+              )
+  )
   // bounce-back negations
   and not (
     any(attachments,
@@ -62,19 +62,31 @@ source: |
     )
     and any(attachments, .content_type == "message/rfc822")
   )
+  // unsolicited or fails authentation
   and (
-    (not headers.auth_summary.dmarc.pass or not headers.auth_summary.spf.pass)
-    and (
-      not profile.by_sender_email().solicited
-      or (
-        profile.by_sender().any_messages_malicious_or_spam
-        and not profile.by_sender().any_messages_benign
-      )
-      or (
-        not headers.auth_summary.dmarc.pass or not headers.auth_summary.spf.pass
-      )
+    (
+      profile.by_sender_email().prevalence in ("new", "outlier")
+      and not profile.by_sender_email().solicited
+    )
+    or (
+      profile.by_sender_email().any_messages_malicious_or_spam
+      and not profile.by_sender_email().any_messages_benign
+    )
+    or (
+      sender.email.domain.domain in $org_domains
+      and not coalesce(headers.auth_summary.dmarc.pass, false)
     )
   )
+  
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and not coalesce(headers.auth_summary.dmarc.pass, false)
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+
 tags:
   - "Attack surface reduction"
 attack_types:
@@ -91,4 +103,4 @@ detection_methods:
 id: "76ba65a2-190a-572b-aab0-585d4700b591"
 og_id: "af32ff2f-1aa8-5a54-bc50-93648f17cfcd"
 testing_pr: 3002
-testing_sha: 4dd4acf146bf0e03fc9fcb9953e23b0c3d7059d0
+testing_sha: 209f99f50746de5e0f027907acead99e8febf350
