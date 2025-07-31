@@ -6,13 +6,18 @@ source: |
   type.inbound
   and length(body.links) < 10
   and any(beta.ml_topic(body.current_thread.text).topics,
-          .name in ("Travel and Transportation", "Customer Service and Support")
-          and .confidence == "high"
+          .name in (
+            "Travel and Transportation",
+            "Customer Service and Support",
+            "Security and Authentication"
+          )
+          and .confidence != "low"
   )
   and (
     any(ml.nlu_classifier(body.current_thread.text).entities,
         .name == "org" and .text == "Booking.com"
         or strings.icontains(body.current_thread.text, ' booking.com ')
+        or strings.icontains(sender.display_name, "booking.com")
     )
   )
   and (
@@ -22,12 +27,26 @@ source: |
     or any(body.links,
            strings.ilike(.display_text,
                          "*review*",
+                         "*response*",
                          "*complaint*",
                          "*contact*",
                          "*accommodation*"
            )
            or .display_url.domain.root_domain == "booking.com" and .mismatched
            or network.whois(.href_url.domain).days_old < 30
+           or strings.icontains(.href_url.path, "/redir")
+    )
+    // check for text strings that betray intent
+    or strings.icontains(body.current_thread.text, "book a room", )
+    or strings.ilike(body.current_thread.text, "* availab*", )
+    // two seperate HTML elements impersonating the logo
+    or (
+      any(html.xpath(body.html, '//*[text()[normalize-space()]]').nodes,
+          .display_text =~ "Booking"
+      )
+      and any(html.xpath(body.html, '//*[text()[normalize-space()]]').nodes,
+              .display_text =~ ".com"
+      )
     )
   )
   and sender.email.domain.root_domain not in~ ('booking.com')
@@ -35,7 +54,7 @@ source: |
     not profile.by_sender().solicited
     or (
       profile.by_sender().any_messages_malicious_or_spam
-      and not profile.by_sender().any_false_positives
+      and not profile.by_sender().any_messages_benign
     )
   )
 
