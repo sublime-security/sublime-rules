@@ -4,7 +4,19 @@ type: "rule"
 severity: "medium"
 source: |
   type.inbound
-  and length(body.current_thread.text) < 1500
+  and (
+    length(body.current_thread.text) < 1500
+    // body length without disclaimer is shorter than 1500 characters
+    or (
+      any(map(filter(ml.nlu_classifier(body.current_thread.text).entities,
+                     .name == "disclaimer"
+              ),
+              .text
+          ),
+          (length(body.current_thread.text) - length(.)) < 1500
+      )
+    )
+  )
   and (
     3 of (
       strings.icontains(body.current_thread.text, "Number of Images:"),
@@ -39,49 +51,54 @@ source: |
       )
     )
   )
-  and length(filter(attachments, .file_type == "pdf")) == 1
-  and any(attachments,
-          .file_type == "pdf"
-          and (
-            any(file.explode(.),
-                (
-                  strings.ilike(.scan.ocr.raw,
-                                "*scan date*",
-                                "*was sent from*",
-                                "*of pages*",
-                                "*verif*document*",
-                                "*scanned file*"
-                  )
-                  or any(ml.nlu_classifier(.scan.ocr.raw).intents,
-                         .name == "cred_theft"
-                  )
-                  or any(ml.logo_detect(..).brands,
-                         .name in ("DocuSign", "Microsoft")
-                  )
+  and (
+    (
+      length(filter(attachments, .file_type in ("pdf"))) == 1
+      and any(attachments,
+              .file_type == "pdf"
+              and (
+                any(file.explode(.),
+                    (
+                      strings.ilike(.scan.ocr.raw,
+                                    "*scan date*",
+                                    "*was sent from*",
+                                    "*of pages*",
+                                    "*verif*document*",
+                                    "*scanned file*"
+                      )
+                      or any(ml.nlu_classifier(.scan.ocr.raw).intents,
+                             .name == "cred_theft"
+                      )
+                      or any(ml.logo_detect(..).brands,
+                             .name in ("DocuSign", "Microsoft")
+                      )
+                    )
+                    and length(.scan.url.urls) == 1
                 )
-                and length(.scan.url.urls) == 1
-            )
-            // encrypted pdf
-            or any(file.explode(.),
-                   any(.scan.exiftool.fields, .key == "Encryption")
-                   or (
-                     .scan.entropy.entropy > 7
-                     and any(.scan.strings.strings,
-                             strings.icontains(., "/Encrypt")
-                     )
-                   )
-            )
-          )
+                // encrypted pdf
+                or any(file.explode(.),
+                       any(.scan.exiftool.fields, .key == "Encryption")
+                       or (
+                         .scan.entropy.entropy > 7
+                         and any(.scan.strings.strings,
+                                 strings.icontains(., "/Encrypt")
+                         )
+                       )
+                )
+              )
+      )
+    )
+    or length(filter(attachments, .file_type in ("doc", "docx"))) == 1
   )
   and sender.email.domain.domain not in~ $org_domains
   and (
     not profile.by_sender().solicited
     or (
       profile.by_sender().any_messages_malicious_or_spam
-      and not profile.by_sender().any_false_positives
+      and not profile.by_sender().any_messages_benign
     )
   )
-  and not profile.by_sender().any_false_positives
+  and not profile.by_sender().any_messages_benign
 
 attack_types:
   - "Credential Phishing"
