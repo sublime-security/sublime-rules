@@ -1,0 +1,129 @@
+name: IOK Rules PR CI
+
+on:
+  push:
+    branches: [ "main" ]
+    paths:
+      - 'iok-rules/**'
+  pull_request_target:
+    branches: [ "**" ]
+  workflow_dispatch: {}
+  issue_comment:
+    types: [ created ]
+  merge_group: {}
+
+concurrency:
+  # For pull_request_target workflows we want to use head_ref -- the branch triggering the workflow. Otherwise,
+  # use ref, which is the branch for a push event or workflow trigger. And for an issue comment just give up grouping.
+  group: ${{ github.event_name == 'pull_request_target' && github.head_ref || (github.event_name == 'issue_comment' && github.run_id || github.ref) }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request_target' }}
+
+jobs:
+  tests:
+    name: Run IOK Rules Validation
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      issues: read
+      pull-requests: read
+      checks: write
+    if: github.event_name != 'issue_comment'
+
+    steps:
+      - name: Set up yq
+        uses: mikefarah/yq@8bf425b4d1344db7cd469a8d10a390876e0c77fd  # v4.45.1
+
+      - name: Get PR branch
+        if: github.event_name == 'issue_comment'
+        uses: alessbell/pull-request-comment-branch@ef3408c9757d05f89cb525036383033a313758a0  # v2.1.0
+        id: comment_branch
+
+      - name: Get Refs
+        id: get_head_ref
+        run: |
+          # Accurate for push events, merge queues, and workflow dispatch.
+          head_ref="${{ github.ref }}"
+          repo="${{ github.repository }}"
+
+          if [[ "${{ github.event_name }}" == 'pull_request_target' ]]; then
+            head_ref="${{ github.head_ref }}"
+            repo="${{ github.event.pull_request.head.repo.full_name }}"
+          elif [[ "${{ github.event_name }}" == 'issue_comment' ]]; then
+            # Rely on comment_branch to figure out the head and base
+            head_ref="${{ steps.comment_branch.outputs.head_ref }}"
+            repo="${{ steps.comment_branch.outputs.head_owner }}/${{ steps.comment_branch.outputs.head_repo }}"
+          fi
+          
+          echo "##[set-output name=head_ref;]$head_ref"
+          echo "##[set-output name=repo;]$repo"
+
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+        with:
+          repository: ${{ steps.get_head_ref.outputs.repo }}
+          ref: ${{ steps.get_head_ref.outputs.head_ref }}
+          fetch-depth: 0
+
+      - name: Validate Branch vs. Trigerring SHA
+        run: |
+          # If this is from a pull request validate that what we checked out is the same as the PR head.
+          # If not we'll just fail -- the workflow will be cancelled momentarily.
+          if [[ "${{ github.event_name }}" == 'pull_request_target' ]]; then
+            if [[ "${{ github.event.pull_request.head.sha }}" != "$(git rev-parse HEAD)" ]]; then
+              echo "Workflow is out of date with branch, cancelling"
+              exit 1
+            fi
+          fi
+
+      - name: Get Refs
+        id: get_base_ref
+        run: |
+          run_all=""
+          base_ref=""
+
+          if [[ "${{ github.event_name }}" == 'pull_request_target' ]]; then
+            # Detect changes based on whatever we're merging into.
+            base_ref="${{ github.base_ref }}"
+          elif [[ "${{ github.event_name }}" == 'push' || "${{ github.event_name }}" == 'merge_group' ]]; then
+            # Detect changes based on the previous commit
+            base_ref="$(git rev-parse HEAD^)"
+          elif [[ "${{ github.event_name }}" == 'workflow_dispatch' ]]; then
+            # Run on a target, so run for all rules.
+            run_all="true"
+          elif [[ "${{ github.event_name }}" == 'issue_comment' ]]; then
+            # Rely on comment_branch to figure out  base
+            base_ref="${{ steps.comment_branch.outputs.base_ref }}"
+          fi
+          
+          echo "##[set-output name=run_all;]$run_all"
+          echo "##[set-output name=base_ref;]$base_ref"
+
+      - uses: actions/setup-python@42375524e23c412d93fb67b49958b491fce71c38  # v5.4.0
+        with:
+          python-version: '3.10'
+
+      - name: Validate IOK Rules
+        if: github.event_name != 'issue_comment'
+        run: |
+          echo '{"rules_or_queries": [' > bulk_validate_request.json
+          
+          file_count=$(ls -1 iok-rules/**/*.yml | wc -l)
+          counter=0
+  
+          for f in iok-rules/**/*.yml
+          do
+            counter=$((counter + 1))
+            yq -o=json eval 'del(.type)' "$f" >> bulk_validate_request.json
+            if [[ $counter -ne $file_count ]]; then
+              echo "," >> bulk_validate_request.json
+            fi
+          done
+
+          echo "]}" >> bulk_validate_request.json
+          http_code=$(curl -H "Content-Type: application/json" -X POST -d @bulk_validate_request.json -o response.txt -w "%{http_code}" --silent https://play.sublime.security/v1/rules/bulk_validate)
+          echo '' >> response.txt
+          cat response.txt
+          if [[ "$http_code" != "200" ]]; then
+            echo "Unexpected response $http_code"
+            exit 1
+          fi
