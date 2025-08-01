@@ -1,0 +1,36 @@
+name: "Link: PDF display text to free file host from unknown sender"
+description: "Detects messages containing a single link with PDF-named display text that redirects to a free file hosting service, sent from unknown or free email providers without previous message threads."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  // the display_text ends in .pdf and goes to a free file host
+  and any(body.links,
+          strings.iends_with(.display_text, '.pdf')
+          and .href_url.domain.domain in $free_file_hosts
+  )
+  // there is only a single link to the free file host
+  and length(filter(body.links, .href_url.domain.domain in $free_file_hosts)) == 1
+  // the sender is not well known, or is from free mail
+  and (
+    sender.email.domain.root_domain not in $tranco_1m
+    or sender.email.domain.root_domain in $free_email_providers
+    or sender.email.domain.root_domain == "onmicrosoft.com"
+  )
+  // the message does not contain previous threads
+  and length(body.previous_threads) == 0 
+
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Free file host"
+  - "Free email provider"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Sender analysis"
+  - "URL analysis"
+id: "9f5a2a0c-2b99-5b2a-a24f-47988425ced4"
+og_id: "b010740b-a462-5dcd-acf9-877783a84534"
+testing_pr: 3038
+testing_sha: a04c9c50aa45ea9c7552e64b64b93a2ff55f36f8
