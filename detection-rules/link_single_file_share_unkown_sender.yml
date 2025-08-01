@@ -1,0 +1,43 @@
+name: "Link: Single file sharing link with minimal content from unknown sender"
+description: "Detects messages containing a single link to a free file hosting service with minimal body text from senders with limited history or recent contact patterns. The rule identifies potential malicious file sharing by analyzing link density, content brevity, and sender trust signals."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and strings.icount(body.current_thread.text, "\n") < 10
+  // there are few links
+  and length(body.current_thread.links) < 10
+  // contains a link to free_file_host
+  and any(body.current_thread.links,
+          .href_url.domain.domain in $free_file_hosts
+  )
+  // is the only link to limewire
+  and length(filter(body.current_thread.links,
+                    .href_url.domain.domain in $free_file_hosts
+             )
+  ) == 1
+  and length(body.previous_threads) == 0
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and not headers.auth_summary.dmarc.pass
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+  and (
+    profile.by_sender_email().days_known < 30
+    or profile.by_sender_email().days_since.last_contact > 60
+  )
+tags:
+ - "Attack surface reduction"
+attack_types:
+  - "Malware/Ransomware"
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Free file host"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Sender analysis"
+  - "URL analysis"
