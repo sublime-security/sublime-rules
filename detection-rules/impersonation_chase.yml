@@ -20,7 +20,13 @@ source: |
     or strings.ilevenshtein(sender.display_name, 'chase card services') <= 2
     or strings.ilevenshtein(sender.display_name, 'united mileageplus') <= 2
     or (
-      strings.ilevenshtein(sender.display_name, 'echase') <= 1
+      (
+        strings.ilevenshtein(sender.display_name, 'echase') <= 1
+        or (
+          strings.icontains(sender.display_name, "bank")
+          and strings.icontains(subject.base, "chase bank")
+        )
+      )
       // Negate Chase sender display name if cred theft, callback phishing, and a Chase logo isn't detected
       and not (
         strings.icontains(sender.display_name, 'chase')
@@ -37,7 +43,9 @@ source: |
         )
       )
     )
-    or strings.icontains(body.current_thread.text, 'Chase Privacy Operations')
+    or regex.icontains(body.current_thread.text,
+                        '(Chase|J\.?\s?P\.?\sMorgan)\s(Privacy|Treasury)\sOperations|(Privacy|Treasury)\sOperations\s(Chase|J\.?\s?P\.?\sMorgan)'
+    )
   )
   and not (
     sender.display_name is not null and sender.display_name in~ ("chaser", "case")
@@ -47,7 +55,7 @@ source: |
     profile.by_sender().prevalence in ("new", "outlier")
     or (
       profile.by_sender().any_messages_malicious_or_spam
-      and not profile.by_sender().any_false_positives
+      and not profile.by_sender().any_messages_benign
     )
   )
 
