@@ -49,24 +49,25 @@ source: |
                        "[MḾṀṂⱮМḿṁṃᵯⱮ𝐌𝑀][iíìîïīĭĩįıɪɨᵢⁱ𝐢𝑖][rŕŗřȑȓɾᵣⁿʳ𝐫𝑟][cćĉċčçƈȼ𝐜𝑐][oóòôõöøōŏőɵₒᵒº𝐨𝑜][sśŝšșşʂᵴˢˢ𝐬𝑠][oóòôõöøōŏőɵₒᵒº𝐨𝑜][fḟƒᵮᶠ𝐟𝑓][tťțţᵵₜᵗᵗ𝐭𝑡]" // [sic]
     )
   )
-  and (
-    sender.email.domain.root_domain not in~ (
-      'microsoft.com',
-      'microsoftstoreemail.com',
-      'microsoftsupport.com',
-      'office.com',
-      'teams-events.com',
-      'qualtrics-research.com',
-      'skype.com',
-      'azureadnotifications.us',
-      'microsoftonline.us',
-      'mail.microsoft',
-      'office365.com'
+  and sender.email.domain.root_domain not in~ (
+    'microsoft.com',
+    'microsoftstoreemail.com',
+    'microsoftsupport.com',
+    'office.com',
+    'teams-events.com',
+    'qualtrics-research.com',
+    'skype.com',
+    'azureadnotifications.us',
+    'microsoftonline.us',
+    'mail.microsoft',
+    'office365.com'
+  )
+  and not (
+    sender.email.domain.domain in~ (
+      'microsoft.regsvc.com',
+      'microsoft.onmicrosoft.com'
     )
-    or (
-      sender.email.domain.domain not in~ ('microsoft.regsvc.com')
-      and headers.auth_summary.dmarc.pass
-    )
+    and headers.auth_summary.dmarc.pass
   )
   and (
     profile.by_sender().prevalence in ("new", "outlier")
@@ -75,7 +76,7 @@ source: |
       and not profile.by_sender().any_messages_benign
     )
   )
-
+  
   // negate legitimate Office 365 bouncebacks
   and not (
     all(attachments,
@@ -87,7 +88,7 @@ source: |
     )
     and strings.contains(subject.subject, 'Undeliverable:')
   )
-
+  
   // negate other legitimate MS notifications
   and not (
     length(body.links) > 0
@@ -112,15 +113,16 @@ source: |
   )
   // not a newsletter or advertisement
   and not any(beta.ml_topic(body.current_thread.text).topics,
-        .name in ("Newsletters and Digests")
-        and .confidence == "high"
-        and (
-          any(body.links,
-              strings.icontains(.display_text, "unsubscribe")
-              and (strings.icontains(.href_url.path, "unsubscribe"))
-          )
-        )
+              .name in ("Newsletters and Digests")
+              and .confidence == "high"
+              and (
+                any(body.links,
+                    strings.icontains(.display_text, "unsubscribe")
+                    and (strings.icontains(.href_url.path, "unsubscribe"))
+                )
+              )
   )
+
 attack_types:
   - "Credential Phishing"
 tactics_and_techniques:
