@@ -34,11 +34,11 @@ source: |
     or 3 of (
       // malware terms
       regex.icontains(strings.replace_confusables(body.current_thread.text),
-                      "((spy|mal)ware|t[rŗ]ojan|remote control|infiltrat(ed|ion))"
+                      "((spy|mal)ware|t[rŗ]ojan|remote ([aḁ]ccess|control)|infiltrat(ed|ion))"
       ),
       // actions recorded
       regex.icontains(strings.replace_confusables(body.current_thread.text),
-                      "po[rŗ]n|adult (web)?site|webcam|mastu[rŗ]bating|je[rŗ]king off|pleasu[rŗ]ing you[rŗ]self|getting off"
+                      "po[rŗ]n|adult (web)?site|webcam|mastu[rŗ]bating|je[rŗ]king off|pleasu[rŗ]ing you[rŗ]self|getting off|explicit"
       ),
       regex.icontains(strings.replace_confusables(body.current_thread.text),
                       "pe[rŗ]ve[rŗ]t|pe[rŗ]ve[rŗ]sion|mastu[rŗ]bat"
@@ -54,7 +54,7 @@ source: |
       ),
       // a threat from the actor
       regex.icontains(strings.replace_confusables(body.current_thread.text),
-                      'sen[dt]\s*(?:\w+\s*){0,2}\s*to\s*(?:\w+\s*){0,3}\s*.{0,10}(contacts|media|family|friends)'
+                      'sen[dt]|forward\s*(?:\w+\s*){0,2}\s*to\s*(?:\w+\s*){0,3}\s*.{0,10}(contacts|media|family|friends|coworkers)'
       ),
       // bitcoin language (excluding newsletters)
       (
@@ -95,7 +95,7 @@ source: |
     not profile.by_sender().solicited
     or (
       profile.by_sender().any_messages_malicious_or_spam
-      and not profile.by_sender().any_false_positives
+      and not profile.by_sender().any_messages_benign
     )
     or any(headers.hops, any(.fields, .name == "X-Google-Group-Id"))
   
@@ -117,6 +117,15 @@ source: |
     )
   )
   and length(body.current_thread.text) < 6000
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and not headers.auth_summary.dmarc.pass
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+  
 attack_types:
   - "Extortion"
 tactics_and_techniques:
