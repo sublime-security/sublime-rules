@@ -1,0 +1,47 @@
+attack_types:
+- Credential Phishing
+- Brand Impersonation
+description: 'Detects a phishing kit targeting Microsoft Outlook. Users are being
+  tricked into entering their Microsoft credentials into a fake form. This kit targets
+  Spanish speaking users.
+
+  Found as a result of this kit being deployed on Replit.
+
+
+  Converted from IOK rule - original focuses on website analysis.'
+detection_methods:
+- URL analysis
+- Sender analysis
+- Content analysis
+- Natural Language Understanding
+- Header analysis
+id: 7a0071fb-1cfe-4165-86fe-2e4c83fc2167
+name: 'IOK: Microsoft Outlook Phishing Kit 142e470f'
+references:
+- https://urlscan.io/result/142e470f-9579-4190-a4a0-9cae5f61df9f/
+- https://urlscan.io/result/2e3b1290-d3d0-4cb1-ae45-8b7c3b5a5023/
+severity: high
+tactics_and_techniques:
+- 'Impersonation: Brand'
+tags:
+- IOK_Converted
+- kit
+- target.microsoft
+- target.microsoft_outlook
+type: triage
+source: |
+  type.inbound
+    and any(triage.flagged_rules, any(.detection_methods, ..name == "URL analysis"))
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "<input id=\"clave\"")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "<div style=\"position:relative; top:0; margin-right:auto;margin-left:auto; z-index:99999\">")
+    )
+    and any(body.links,
+      strings.icontains(ml.link_analysis(.).final_dom.raw, "imagen.jpg")
+      and strings.icontains(ml.link_analysis(.).final_dom.raw, "forma.css")
+    )
+    and (
+      strings.icontains(subject.subject, "microsoft")
+      or strings.icontains(subject.subject, "office")
+    )
+    and sender.email.domain.domain not in ("microsoft.com", "office.com")
