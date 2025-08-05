@@ -1,18 +1,17 @@
-name: "Callback phishing via DocuSign comment"
-description: |
-  This rule inspects messages originating from legitimate DocuSign infrastructure, with a DocuSign logo that match Callback Phishing criteria, in the body, requiring at least one brand name, as well as 3 matching Callback Phishing terms and a phone number. 
+name: "Callback Phishing via Zoom comment"
+description: "Detects callback scams sent through legitimate Zoom infrastructure that impersonate well-known brands like McAfee, Norton, or PayPal. These messages contain purchase or support-related language along with phone numbers, attempting to trick recipients into calling fraudulent support lines."
 type: "rule"
-severity: "high"
+severity: "medium"
 source: |
   type.inbound
   and length(attachments) == 0
   
-  // Legitimate Docusign sending infratructure
-  and sender.email.domain.root_domain == 'docusign.net'
+  // Legitimate Zoom sending infratructure
+  and sender.email.domain.root_domain == 'zoom.us'
   and (headers.auth_summary.spf.pass or headers.auth_summary.dmarc.pass)
   
-  // Docusign Logo 
-  and any(ml.logo_detect(beta.message_screenshot()).brands, .name == "DocuSign")
+  // Zoom Logo 
+  and any(ml.logo_detect(beta.message_screenshot()).brands, .name == "Zoom")
   
   // Callback Phishing
   and regex.icontains(body.current_thread.text,
@@ -39,22 +38,34 @@ source: |
   // phone number regex
   and any([body.current_thread.text, subject.subject],
           regex.icontains(.,
-                        '\+?([ilo0-9]{1}.)?\(?[ilo0-9]{3}?\)?.[ilo0-9]{3}.?[ilo0-9]{4}',
-                        '\+?([ilo0-9]{1,2})?\s?\(?\d{3}\)?[\s\.\-⋅]{0,5}[ilo0-9]{3}[\s\.\-⋅]{0,5}[ilo0-9]{4}'
-        )
+                          '\+?([ilo0-9]{1}.)?\(?[ilo0-9]{3}?\)?.[ilo0-9]{3}.?[ilo0-9]{4}',
+                          '\+?([ilo0-9]{1,2})?\s?\(?\d{3}\)?[\s\.\-⋅]{0,5}[ilo0-9]{3}[\s\.\-⋅]{0,5}[ilo0-9]{4}'
+          )
   )
+  // negation for legitimate AI generated meeting summaries from Zoom 
+  and not (
+    (
+      sender.display_name == "Meeting Summary with AI Companion"
+      and sender.email.email == "no-reply@zoom.us"
+      and headers.auth_summary.dmarc.pass
+    )
+    or (
+      strings.icontains(subject.subject, "Meeting assets")
+      and strings.icontains(body.current_thread.text, "Meeting summary")
+      and sender.email.email == "no-reply@zoom.us"
+      and headers.auth_summary.dmarc.pass
+    )
+  )
+
 attack_types:
   - "Callback Phishing"
 tactics_and_techniques:
-  - "Evasion"
-  - "Impersonation: Brand"
   - "Out of band pivot"
   - "Social engineering"
+  - "Impersonation: Brand"
 detection_methods:
-  - "Content analysis"
   - "Computer Vision"
+  - "Content analysis"
   - "Header analysis"
   - "Sender analysis"
-  - "URL analysis"
-  
-id: "48aec918-d1bb-511e-8eba-8c34a663f28c"
+id: "8ec30881-ef03-5490-af8d-8a2b9c0e6142"
