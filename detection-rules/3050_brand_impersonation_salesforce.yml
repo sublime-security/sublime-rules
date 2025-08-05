@@ -12,11 +12,12 @@ source: |
   )
   and not (
     (
-      // legitimate salesforce domains
+      // legitimate domains
       sender.email.domain.root_domain in (
         "salesforce.com",
         "salesforceventures.com",
-        "tangocard.com" //https://www.tangocard.com/salesforce-partnership
+        "tangocard.com", //https://www.tangocard.com/salesforce-partnership
+        "elevatesalesforce.com" // unrelated but name in domain 
       )
       and headers.auth_summary.dmarc.pass
     )
@@ -31,15 +32,10 @@ source: |
     // email from own domain with salesforce notification
     or (
       sender.email.domain.root_domain in $org_domains
-      and headers.auth_summary.dmarc.pass
+      and not headers.auth_summary.dmarc.pass
     )
   )
-  and (
-    not (
-      coalesce(headers.auth_summary.dmarc.pass, false)
-      and not profile.by_sender().solicited
-    )
-  )
+  and not profile.by_sender().solicited
   and not any(body.links, .href_url.domain.root_domain == "salesforce.com")
   // negate highly trusted sender domains unless they fail DMARC authentication
   and (
@@ -48,8 +44,7 @@ source: |
       and not headers.auth_summary.dmarc.pass
     )
     or sender.email.domain.root_domain not in $high_trust_sender_root_domains
-  )
-  
+  ) 
 
 attack_types:
   - "Credential Phishing"
@@ -64,4 +59,4 @@ detection_methods:
 id: "c5f0e666-81f0-5d17-a470-12ab75113631"
 og_id: "736dfb87-1f99-5cdb-aefc-392257376f3d"
 testing_pr: 3050
-testing_sha: 036043c2825d5b375dc3917cddf13913200cdb52
+testing_sha: ff724dc18f69435fa4f8de270bafd0bf9fad3f2b
