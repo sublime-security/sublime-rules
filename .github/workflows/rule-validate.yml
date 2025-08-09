@@ -110,12 +110,23 @@ jobs:
       - name: Validate Rules
         if: github.event_name != 'issue_comment'
         run: |
+          # we must exclude iok-rules as they use `triage` in their rules
+          # and will fail validation
           echo '{"rules_or_queries": [' > bulk_validate_request.json
           
-          file_count=$(ls -1 {*-rules/*.yml,insights/**/*.yml} | wc -l)
+          file_count=$(ls -1 {detection-rules/*.yml,discovery-rules/*.yml,insights/**/*.yml} | wc -l)
           counter=0
   
-          for f in *-rules/*.yml
+          for f in detection-rules/*.yml
+          do
+            counter=$((counter + 1))
+            yq -o=json eval 'del(.type)' "$f" >> bulk_validate_request.json
+            if [[ $counter -ne $file_count ]]; then
+              echo "," >> bulk_validate_request.json
+            fi
+          done
+
+          for f in discovery-rules/*.yml
           do
             counter=$((counter + 1))
             yq -o=json eval 'del(.type)' "$f" >> bulk_validate_request.json
