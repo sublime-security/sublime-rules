@@ -5,17 +5,18 @@ rule WinRAR_CVE_2025_8088 {
           reference_1 = "https://www.welivesecurity.com/en/eset-research/update-winrar-tools-now-romcom-and-others-exploiting-zero-day-vulnerability/"
           reference_2 = "https://www.rarlab.com/technote.htm" 
 
-      strings:
+     strings:
           // RAR5 signature
           $rar5 = { 52 61 72 21 1A 07 01 00 }
 
-          // Service header (HeadType=3) with STM name
-          $stm_service_header = { 03 [5-100] 03 53 54 4D }
+          // STM service header + SERVICE_DATA record type 7
+          $stm_with_service_data = { 03 [5-100] 03 53 54 4D [5-50] 07 }
 
-          // ADS traversal patterns in service records
+          // ADS traversal patterns
           $ads_traversal1 = /:[\\\/]\.+[\\\/](\.\.[\\\/]){3,}/
           $ads_traversal2 = /:[\\\/](\.\.[\\\/]){4,}/
           $ads_env_var = /:%[A-Z_]+%[\\\/]/
+
 
       condition:
           // Must be a RAR5 archive
