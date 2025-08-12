@@ -9,7 +9,7 @@ rule WinRAR_CVE_2025_8088 {
           // RAR5 signature
           $rar5 = { 52 61 72 21 1A 07 01 00 }
 
-          // Service header (HeadType=3) with STM name - accounting for vint encoding
+          // Service header (HeadType=3) with STM name
           $stm_service_header = { 03 [5-100] 03 53 54 4D }
 
           // ADS traversal patterns in service records
