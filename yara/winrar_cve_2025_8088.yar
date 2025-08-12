@@ -5,7 +5,7 @@ rule WinRAR_CVE_2025_8088 {
           reference_1 = "https://www.welivesecurity.com/en/eset-research/update-winrar-tools-now-romcom-and-others-exploiting-zero-day-vulnerability/"
           reference_2 = "https://www.rarlab.com/technote.htm" 
 
-     strings:
+      strings:
           // RAR5 signature
           $rar5 = { 52 61 72 21 1A 07 01 00 }
 
@@ -17,24 +17,12 @@ rule WinRAR_CVE_2025_8088 {
           $ads_traversal2 = /:[\\\/](\.\.[\\\/]){4,}/
           $ads_env_var = /:%[A-Z_]+%[\\\/]/
 
-
       condition:
-          // Must be a RAR5 archive
           $rar5 at 0 and
-
-          // Require multiple STM service headers (bulk ADS injection indicator)
-          #stm_service_header >= 3 and
-
-          // For each STM service header found in the file
-          for any i in (1..#stm_service_header): (
-              // Check if any ADS traversal pattern occurs within 500 bytes after the STM header
-              // This proximity check ensures the ADS data is actually within the service record
+          #stm_with_service_data >= 3 and
+          for any i in (1..#stm_with_service_data): (
               for any of ($ads_*): (
-                  // $ represents the current ADS pattern being checked
-                  // @stm_service_header[i] is the file offset of the i-th STM header
-                  // The range @stm_service_header[i]..@stm_service_header[i]+500 covers
-                  // the STM header plus the following service record data area
-                  $ in (@stm_service_header[i]..@stm_service_header[i]+500)
+                  $ in (@stm_with_service_data[i]..@stm_with_service_data[i]+200)
               )
           )
   }
