@@ -1,9 +1,9 @@
 rule WinRAR_CVE_2025_8088 {
       meta:
-          description = "RAR5 STM service header ADS traversal (per RAR technical spec)"
-          author = "Security Analysis"
-          reference = "CVE-2025-8088, RAR 5.0 technical specification"
-          date = "2025-08-12"
+          description = "Rule matching CVE-2025-8088 via RAR5 STM service header ADS traversal"
+          author = "Sublime Security"
+          reference_1 = "https://www.welivesecurity.com/en/eset-research/update-winrar-tools-now-romcom-and-others-exploiting-zero-day-vulnerability/"
+          reference_2 = "https://www.rarlab.com/technote.htm#fileextra" 
 
       strings:
           // RAR5 signature
