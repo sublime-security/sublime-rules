@@ -24,9 +24,6 @@ rule WinRAR_CVE_2025_8088 {
           // Require multiple STM service headers (bulk ADS injection indicator)
           #stm_service_header >= 3 and
 
-          // Reasonable file size limit to avoid performance issues
-          filesize < 100MB and
-
           // For each STM service header found in the file
           for any i in (1..#stm_service_header): (
               // Check if any ADS traversal pattern occurs within 500 bytes after the STM header
