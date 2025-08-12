@@ -62,6 +62,13 @@ source: |
     'mail.microsoft',
     'office365.com'
   )
+  and not (
+    sender.email.domain.domain in~ (
+      'microsoft.regsvc.com',
+      'microsoft.onmicrosoft.com'
+    )
+    and headers.auth_summary.dmarc.pass
+  )
   and (
     profile.by_sender().prevalence in ("new", "outlier")
     or (
@@ -69,7 +76,7 @@ source: |
       and not profile.by_sender().any_messages_benign
     )
   )
-
+  
   // negate legitimate Office 365 bouncebacks
   and not (
     all(attachments,
@@ -81,7 +88,7 @@ source: |
     )
     and strings.contains(subject.subject, 'Undeliverable:')
   )
-
+  
   // negate other legitimate MS notifications
   and not (
     length(body.links) > 0
@@ -106,15 +113,16 @@ source: |
   )
   // not a newsletter or advertisement
   and not any(beta.ml_topic(body.current_thread.text).topics,
-        .name in ("Newsletters and Digests")
-        and .confidence == "high"
-        and (
-          any(body.links,
-              strings.icontains(.display_text, "unsubscribe")
-              and (strings.icontains(.href_url.path, "unsubscribe"))
-          )
-        )
+              .name in ("Newsletters and Digests")
+              and .confidence == "high"
+              and (
+                any(body.links,
+                    strings.icontains(.display_text, "unsubscribe")
+                    and (strings.icontains(.href_url.path, "unsubscribe"))
+                )
+              )
   )
+
 attack_types:
   - "Credential Phishing"
 tactics_and_techniques:
