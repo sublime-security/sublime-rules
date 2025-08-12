@@ -9,20 +9,23 @@ rule WinRAR_CVE_2025_8088 {
           // RAR5 signature
           $rar5 = { 52 61 72 21 1A 07 01 00 }
 
-          // STM service header + SERVICE_DATA record type 7
+          // Complete STM service header pattern with SERVICE_DATA record type
+          // 03 = HeadType 3 (SERVICE block)
+          // [5-100] = Header fields (HeadFlags, ExtraSize, DataSize, FileFlags, etc.) - vint encoded
+          // 03 = NameLength 3 (vint encoded)
+          // 53 54 4D = Name "STM" (3 bytes)
+          // [5-50] = Records structure overhead + record size field (vint encoded)
+          // 07 = Record Type 7 (SERVICE_DATA) - this contains the actual ADS data
           $stm_with_service_data = { 03 [5-100] 03 53 54 4D [5-50] 07 }
 
-          // ADS traversal patterns
-          $ads_traversal1 = /:[\\\/]\.+[\\\/](\.\.[\\\/]){3,}/
-          $ads_traversal2 = /:[\\\/](\.\.[\\\/]){4,}/
-          $ads_env_var = /:%[A-Z_]+%[\\\/]/
+          // ADS traversal patterns in the SERVICE_DATA record
+          $ads_traversal1 = /:[\\\/]\.+[\\\/](\.\.[\\\/]){3,}/    // :.\..\..\.. pattern
+          $ads_traversal2 = /:[\\\/](\.\.[\\\/]){4,}/             // :..\..\..\.. pattern
+          $ads_env_var = /:%[A-Z_]+%[\\\/]/                       // :%WINDIR%\ pattern
 
       condition:
+          // Must be a RAR5 archive with multiple STM+SERVICE_DATA patterns and ADS traversal
           $rar5 at 0 and
           #stm_with_service_data >= 3 and
-          for any i in (1..#stm_with_service_data): (
-              for any of ($ads_*): (
-                  $ in (@stm_with_service_data[i]..@stm_with_service_data[i]+200)
-              )
-          )
+          any of ($ads_*)
   }
