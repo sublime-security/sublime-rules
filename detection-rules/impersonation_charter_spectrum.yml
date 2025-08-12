@@ -1,0 +1,28 @@
+name: "Brand impersonation: Charter Spectrum"
+description: "Detects messages impersonating Charter Spectrum by using variations of 'Spectrum' or 'MyCharter' in the display name while not originating from legitimate Charter domains or failing DMARC authentication."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  // Claim to be Charter or Spectrum in the Display Name
+  and regex.icontains(sender.display_name, 'spe[cç]trum', 'My[Cç]harter')
+  // Exclude authorized sending through legitimate sending domains
+  and not (
+      sender.email.domain.root_domain in (
+          "spectrumemails.com", // primary communication domain
+          "spectrum.com", // see some sales prospecting from various spectrum.com subdomains
+          "beagleinsight.com" // survey vendor
+      )
+      and headers.auth_summary.dmarc.pass
+  )
+  // Make sure this is related to Charter -- exclude other use of 'spectrum'
+  and regex.icontains(body.current_thread.text, 'Charter')
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Header analysis"
+  - "Sender analysis"
