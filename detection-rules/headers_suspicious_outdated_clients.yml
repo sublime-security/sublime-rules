@@ -1,0 +1,39 @@
+name: "Headers: Suspicious or outdated mailer versions"
+description: "Detects emails originating from suspicious, outdated, or uncommon mail client versions that are often associated with malicious activity. This includes obsolete versions of Outlook Express, Zimbra, custom mailers, and clients running on penetration testing platforms like Kali Linux."
+type: "rule"
+severity: "low"
+source: |
+  type.inbound
+  and (
+    strings.contains(headers.mailer, "Microsoft Outlook Express 6.00.2900.2180")
+    or strings.contains(headers.mailer,
+                        "Zimbra 10.1.10_GA_4785 (ZimbraWebClient - GC138 (Win)/10.1.10_GA_4785"
+    )
+    or strings.contains(headers.mailer, "Supmailer 42.0.1")
+    or strings.contains(headers.mailer,
+                        "Zimbra 5.0.16_GA_2921.RHEL4 (zclient/5.0.16_GA_2921.RHEL4"
+    )
+    or strings.contains(headers.mailer, "The Bat! (v3–v4…)")
+    or regex.icontains(headers.mailer, '\bkali[^\s]*\b')
+    or strings.contains(headers.mailer, "Foxmail 7.0.1.92[cn]")
+    or strings.contains(headers.mailer, "FoxMail 3.11 Release [cn]")
+  )
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and not headers.auth_summary.dmarc.pass
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+
+attack_types:
+  - "BEC/Fraud"
+  - "Credential Phishing"
+  - "Malware/Ransomware"
+tactics_and_techniques:
+  - "Evasion"
+  - "Spoofing"
+detection_methods:
+  - "Header analysis"
+  - "Sender analysis"
