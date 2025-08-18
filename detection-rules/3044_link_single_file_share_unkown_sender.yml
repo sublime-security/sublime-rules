@@ -4,20 +4,26 @@ type: "rule"
 severity: "high"
 source: |
   type.inbound
-  and length(body.current_thread.text) < 1000
+  and length(body.current_thread.text) < 800
+  and length(body.previous_threads) == 0
   and strings.icount(body.current_thread.text, "\n") < 20
-  // there are few links
-  and length(body.current_thread.links) < 10
-  // contains a link to free_file_host
+  
+  // there are few distinct domains in links
+  and length(distinct(body.current_thread.links, .href_url.domain.root_domain)) < 3
+  
+  // contains a link to free_file_host/self_service_create_platform
   and any(body.current_thread.links,
           .href_url.domain.domain in $free_file_hosts
+          or .href_url.domain.domain in $self_service_creation_platform_domains
+          or .href_url.domain.root_domain in $self_service_creation_platform_domains
   )
-  // is the only link to limewire
+  // only a single link to a free_file_host/self_service_create_platform
   and length(filter(body.current_thread.links,
                     .href_url.domain.domain in $free_file_hosts
+                    or .href_url.domain.domain in $self_service_creation_platform_domains
+                    or .href_url.domain.root_domain in $self_service_creation_platform_domains
              )
   ) == 1
-  and length(body.previous_threads) == 0
   // negate highly trusted sender domains unless they fail DMARC authentication
   and (
     (
@@ -26,10 +32,12 @@ source: |
     )
     or sender.email.domain.root_domain not in $high_trust_sender_root_domains
   )
+  // the sender is new or it hass been awhile since they've contacted the recipient org
   and (
     profile.by_sender_email().prevalence == "new"
     or profile.by_sender_email().days_since.last_contact > 60
   )
+  and not profile.by_sender_email().any_messages_benign
 tags:
  - "Attack surface reduction"
 attack_types:
@@ -45,4 +53,4 @@ detection_methods:
 id: "cf9bb3aa-4dd9-5104-a058-1d4f14c28537"
 og_id: "e560a504-23e3-5371-b71a-a8a694a359a6"
 testing_pr: 3044
-testing_sha: 6f7d78fa84833c4ca9e74b01c0725a5a0f0b247b
+testing_sha: 2dda82b7eacd3c415f930808fe6554489bfd3c3d
