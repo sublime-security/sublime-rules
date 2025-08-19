@@ -7,9 +7,22 @@ source: |
   and length(body.current_thread.text) < 800
   and length(body.previous_threads) == 0
   and strings.icount(body.current_thread.text, "\n") < 20
+  and (
+    // the sender is in the recipients
+    sender.email.email in map(recipients.to, .email.email)
+    or all(recipients.to, .email.domain.valid == false)
+    or (
+      sender.email.domain.domain in $org_domains
+      and not coalesce(headers.auth_summary.dmarc.pass, false)
+    )
+  )
   
   // there are few distinct domains in links
   and length(distinct(body.current_thread.links, .href_url.domain.root_domain)) < 3
+  
+  // the attachments are only images or there are no images
+  // using all ensures it continues to match without any 
+  and all(attachments, .file_type in $file_types_images)
   
   // contains a link to free_file_host/self_service_create_platform
   and any(body.current_thread.links,
@@ -31,11 +44,6 @@ source: |
       and not headers.auth_summary.dmarc.pass
     )
     or sender.email.domain.root_domain not in $high_trust_sender_root_domains
-  )
-  // the sender is new or it hass been awhile since they've contacted the recipient org
-  and (
-    profile.by_sender_email().prevalence == "new"
-    or profile.by_sender_email().days_since.last_contact > 60
   )
   and not profile.by_sender_email().any_messages_benign
 tags:
