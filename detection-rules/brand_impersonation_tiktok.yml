@@ -17,13 +17,21 @@ source: |
         any(ml.logo_detect(beta.message_screenshot()).brands,
             .name == "TikTok" and .confidence == "high"
         )
-        // ignore logo if there are links leading directly to a tiktok profile
+        // ignore logo in newsletters if link leads directly to a tiktok profile
         and not (
           any([body.plain.raw, body.html.raw],
               regex.icontains(.,
                               "<https://www.tiktok.com/@.*>",
                               "<a href=\"https://www.tiktok.com/@.*\".*>"
               )
+          )
+          and any(ml.nlu_classifier(body.current_thread.text).topics,
+                  .name in~ (
+                    "Reminders and Notifications",
+                    "Newsletters and Digests",
+                    "Advertising and Promotions"
+                  )
+                  and .confidence == "high"
           )
         )
       )
