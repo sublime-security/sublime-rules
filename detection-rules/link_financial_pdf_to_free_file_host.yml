@@ -10,28 +10,6 @@ source: |
   // the message does not contain previous threads
   and length(body.previous_threads) == 0
   
-  // the display_text ends in .pdf and goes to a free file host
-  and any(body.links,
-          strings.iends_with(.display_text, '.pdf')
-          and (
-            .href_url.domain.domain in $free_file_hosts
-            or .href_url.domain.root_domain in $free_file_hosts
-            or .href_url.domain.domain in $self_service_creation_platform_domains
-            or .href_url.domain.root_domain in $self_service_creation_platform_domains
-          )
-          // the display text is financial related (remittance, invoice, etc)
-          and (
-            strings.icontains(.display_text, 'payment')
-            or strings.icontains(.display_text, 'remit')
-            or strings.icontains(.display_text, 'receipt')
-            or strings.icontains(.display_text, 'Distribution')
-            or strings.icontains(.display_text, 'payoff')
-            or strings.icontains(.display_text, 'Wire Instructions')
-            or strings.istarts_with(.display_text, 'INV')
-            or strings.istarts_with(.display_text, 'View RFQ')
-          )
-          
-  )
   // no PDF attachemnts
   and length(filter(attachments, .file_type == "pdf")) == 0
   // there is only a single link to the free file host
@@ -44,11 +22,46 @@ source: |
   ) == 1
   // there are few distinct domains in the message
   and length(distinct(body.links, .href_url.domain.root_domain)) <= 3
-  // the sender is not well known, or is from free mail
-  and (
-    sender.email.domain.root_domain not in $tranco_1m
-    or sender.email.domain.root_domain in $free_email_providers
-    or sender.email.domain.root_domain == "onmicrosoft.com"
+  
+  // the display_text ends in .pdf and goes to a free file host
+  and any(body.links,
+          strings.iends_with(.display_text, '.pdf')
+          and (
+            .href_url.domain.domain in $free_file_hosts
+            or .href_url.domain.root_domain in $free_file_hosts
+            or .href_url.domain.domain in $self_service_creation_platform_domains
+            or .href_url.domain.root_domain in $self_service_creation_platform_domains
+          )
+          // the display text is financial related (remittance, invoice, etc)
+          and (
+            strings.icontains(.display_text, 'payment')
+            or strings.icontains(.display_text, 'pay ')
+            or strings.icontains(.display_text, 'remit')
+            or strings.icontains(.display_text, 'receipt')
+            or strings.icontains(.display_text, 'Distribution')
+            or strings.icontains(.display_text, 'payoff')
+            or strings.icontains(.display_text, 'Wire Instructions')
+            or strings.icontains(.display_text, 'ACH ')
+            or strings.icontains(.display_text, 'EFT ')
+            or strings.istarts_with(.display_text, 'INV')
+            or strings.istarts_with(.display_text, 'View RFQ')
+            or strings.istarts_with(.display_text, 'Contract')
+  
+            // the display text is the subject
+            or (.display_text =~ subject.base and length(.display_text) > 0)
+          )
+  
+          // negate links which make use of google icons inside of a bounding box
+          // filter down to the link with the same display text
+          and not any(filter(html.xpath(body.html,
+                                        '//a[img[@src] or .//img[@src]][.//div[contains(@style, "border:1px solid")] or ancestor::div[contains(@style, "border:1px solid")]]'
+                             ).nodes,
+                             // the display text is the link we're inspecting
+                             ..display_text == .display_text
+                      ),
+                      // inside this is a reference to the google icon 
+                      strings.icontains(.raw, 'gstatic.com/docs/doclist/images/')
+          )
   )
 attack_types:
   - "Credential Phishing"
