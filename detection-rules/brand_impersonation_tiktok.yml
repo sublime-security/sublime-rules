@@ -1,12 +1,13 @@
-name: "Brand Impersonation: TikTok"
+name: "Brand impersonation: TikTok"
 description: "Detects messages impersonating TikTok through similar display names or logo detection, combined with security-themed content and authentication failures. Excludes legitimate TikTok communications and trusted senders."
 type: "rule"
 severity: "medium"
 source: |
   type.inbound
   and (
-    // display name contains tiktok
+    // TikTok Brand Detection 
     (
+      // display name contains tiktok
       strings.ilike(strings.replace_confusables(sender.display_name), '*tiktok*')
       // levenshtein distance similar to tiktok
       or strings.ilevenshtein(strings.replace_confusables(sender.display_name),
@@ -16,8 +17,21 @@ source: |
              .name == "TikTok" and .confidence == "high"
       )
     )
+    // OR TikTok verification language
+    or (
+      strings.icontains(body.current_thread.text, "tiktok")
+      and (
+        strings.icontains(body.current_thread.text, "verified badge")
+        or strings.icontains(body.current_thread.text, "verification criteria")
+        or strings.icontains(body.current_thread.text, "activate badge")
+        or strings.icontains(body.current_thread.text, "verification complete")
+        or strings.icontains(body.current_thread.text, "almost verified")
+        or strings.icontains(body.current_thread.text, "review complete")
+      )
+    )
   )
   and (
+    // ML Topic Analysis and Credential Theft Detection
     any(beta.ml_topic(body.current_thread.text).topics,
         .name in (
           "Security and Authentication",
@@ -42,16 +56,21 @@ source: |
            .name == "cred_theft" and .confidence == "high"
     )
   )
-  
-  // and the sender is not in org_domains or from tiktok domains and passes auth
+  // Not from legitimate TikTok or Google domains with DMARC pass
   and not (
     sender.email.domain.root_domain in $org_domains
     or (
-      sender.email.domain.root_domain in ("tiktok.com", "tiktokglobalshop.com", "bytedance.com")
+      sender.email.domain.root_domain in (
+        "tiktok.com",
+        "tiktokglobalshop.com",
+        "bytedance.com",
+        "tiktokacademy.com",
+        "webassessor.com" // used for this https://ads.tiktok.com/business/en-US/academy/tiktok-certification
+      )
       and headers.auth_summary.dmarc.pass
     )
   )
-  // and the sender is not from high trust sender root domains
+  // negate highly trusted sender domains unless they fail DMARC authentication
   and (
     (
       sender.email.domain.root_domain in $high_trust_sender_root_domains

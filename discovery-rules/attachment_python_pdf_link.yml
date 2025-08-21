@@ -1,0 +1,41 @@
+name: "Attachment: Python generated PDF with link"
+description: |
+  The PDF attachment was created with a Python-based script and contains one or more links. These techniques were used by PikaBot, among others.
+authors:
+  - twitter: "affje0x65"
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and any(attachments,
+          .file_extension == "pdf"
+          and any(file.explode(.),
+                  any(.scan.strings.strings,
+                      // create the raw PDF from code with this tools
+                      strings.ilike(.,
+                                    "*ReportLab*",
+                                    "*pypdf*",
+                                    "*pypdf2",
+                                    "*pikepdf*",
+                                    "*PyMuPDF*",
+                                    "*IronPDF*"
+                      )
+                      // create an intermediate format and convert it to PDF
+                      or strings.ilike(., "*pdfkit*", "*xhtml2pdf*", "*pdflatex*")
+                      // image to pdf
+                      or strings.ilike(.,
+                                       "*img2pdf*",
+                                       "*sphinxcontrib-svg2pdfconverter*"
+                      )
+                  )
+          )
+          and any(file.explode(.), length(.scan.url.urls) > 0)
+  )
+tags:
+  - "Attack surface reduction"
+tactics_and_techniques:
+  - "Evasion"
+  - "PDF"
+detection_methods:
+  - "File analysis"
+id: "2fec884d-71f4-58ae-82ce-e3ca5bf65109"
