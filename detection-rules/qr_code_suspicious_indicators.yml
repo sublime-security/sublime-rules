@@ -15,16 +15,27 @@ source: |
     )
     and (
       any(attachments,
-          (.file_type in $file_types_images or .file_extension in $file_extensions_macros or .file_type == "pdf")
-          and any(file.explode(.),
+          (
+            .file_type in $file_types_images
+            or .file_extension in $file_extensions_macros
+            or .file_type == "pdf"
+          )
+          and (
+            any(file.explode(.),
+                (
                   .scan.qr.type is not null
                   and regex.contains(.scan.qr.data, '\.')
-                  and not strings.starts_with (.scan.qr.data,"https://qr.skyqr.co.za/")
-                  and not (strings.icontains(.scan.qr.data, ',') and .scan.qr.type == 'undefined')
+                  and not strings.starts_with(.scan.qr.data,
+                                              "https://qr.skyqr.co.za/"
+                  )
+                  and not (
+                    strings.icontains(.scan.qr.data, ',')
+                    and .scan.qr.type == 'undefined'
+                  )
                   // not a json string
                   and not (
-                      strings.starts_with(.scan.qr.data, '{')
-                      and strings.ends_with(.scan.qr.data, '}')
+                    strings.starts_with(.scan.qr.data, '{')
+                    and strings.ends_with(.scan.qr.data, '}')
                   )
                   // exclude images taken with mobile cameras and screenshots from android
                   and not any(.scan.exiftool.fields,
@@ -40,7 +51,9 @@ source: |
                               and .value == "Apple Computer Inc."
                   )
                   // exclude images from WhatsApp (mobile)
-                  and not regex.match(.file_name, 'WhatsApp Image \d\d\d\d-\d\d-\d\d at.*.jpe?g')
+                  and not regex.match(.file_name,
+                                      'WhatsApp Image \d\d\d\d-\d\d-\d\d at.*.jpe?g'
+                  )
                   and not (
                     (
                       .scan.exiftool.image_height > 3000
@@ -56,14 +69,19 @@ source: |
   
                   // negate QR codes to legit Servicio de Administración Tributaria (SAT) Gov links
                   and not (
-                      .scan.qr.url.domain.root_domain is not null 
-                      and .scan.qr.url.domain.root_domain in ('sat.gob.mx')
+                    .scan.qr.url.domain.root_domain is not null
+                    and .scan.qr.url.domain.root_domain in ('sat.gob.mx')
                   )
                   and not (
-                    .scan.qr.data is not null 
+                    .scan.qr.data is not null
                     and strings.icontains(.scan.qr.data, 'sat.gob.mx')
                   )
-                  
+                )
+                or (
+                  regex.icontains(.scan.ocr.raw, 'scan|camera')
+                  and regex.icontains(.scan.ocr.raw, '\bQR\b|Q\.R\.|barcode')
+                )
+            )
           )
       )
       or (
@@ -87,10 +105,7 @@ source: |
         body.current_thread.text == ""
         and (
           (
-            (
-              length(headers.references) > 0
-              or headers.in_reply_to is null
-            )
+            (length(headers.references) > 0 or headers.in_reply_to is null)
             and not (
               (
                 strings.istarts_with(subject.subject, "RE:")
@@ -148,6 +163,7 @@ source: |
                         "app[li]e.[il]d",
                         "authenticate.*account",
                         "been.*suspend",
+                        "bonus",
                         "clos.*of.*account.*processed",
                         "confirm.your.account",
                         "courier.*able",
@@ -339,7 +355,11 @@ source: |
              )
       )
       or any(attachments,
-             (.file_type in $file_types_images or .file_extension in $file_extensions_macros or .file_type == "pdf")
+             (
+               .file_type in $file_types_images
+               or .file_extension in $file_extensions_macros
+               or .file_type == "pdf"
+             )
              and any(file.explode(.),
                      (
                        .scan.qr.url.domain.tld in $suspicious_tlds
@@ -356,15 +376,17 @@ source: |
   
   // sender profile is new or outlier
   and (
-    (
-      profile.by_sender().prevalence in ("new", "outlier")
-      and not profile.by_sender().solicited
+    profile.by_sender_email().any_messages_malicious_or_spam
+    or (
+      sender.email.domain.domain in $org_domains
+      and not coalesce(headers.auth_summary.dmarc.pass, false)
     )
-    or profile.by_sender().any_messages_malicious_or_spam
+    or (
+      profile.by_sender_email().prevalence in ("new", "outlier")
+      and not profile.by_sender_email().solicited
+    )
   )
-  
-  and not profile.by_sender().any_false_positives
-  
+  and not profile.by_sender_email().any_messages_benign
   // negate highly trusted sender domains unless they fail DMARC authentication
   and (
     (
