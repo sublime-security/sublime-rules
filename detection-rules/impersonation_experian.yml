@@ -9,17 +9,24 @@ source: |
     strings.ilike(sender.display_name, '*experian*')
     or strings.ilevenshtein(sender.display_name, 'experian') <= 1
   )
-  and sender.email.domain.root_domain not in~ ('experian.com')
+  and sender.email.domain.root_domain not in~ (
+    'experian.com',
+    'experianidworks.com',
+    'serasaexperian.com.br',
+    'mpv.com',
+    'experian-ems.com',
+    'experianhealth.com'
+  )
   
   // and not if the sender.display.name contains "via" and dmarc pass from experian.com
   and not (
     (
       headers.auth_summary.dmarc.pass
-      and headers.auth_summary.dmarc.details.from.root_domain == "experian.com"
+      and headers.auth_summary.spf.pass
+      and not 'fail' in~ distinct(map(headers.hops, .authentication_results.dkim))
     )
     and strings.contains(sender.display_name, "via")
   )
-
   // negate highly trusted sender domains unless they fail DMARC authentication
   and (
     (
@@ -28,7 +35,6 @@ source: |
     )
     or sender.email.domain.root_domain not in $high_trust_sender_root_domains
   )
-
   // and no false positives and not solicited
   and (
     not profile.by_sender().any_false_positives
