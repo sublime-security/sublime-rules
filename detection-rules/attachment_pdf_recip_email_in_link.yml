@@ -1,0 +1,66 @@
+name: "Attachment: PDF with recipient email in link"
+description: "Detects PDF attachments that contain the recipient's domain in the filename and include a single link personalized with the recipient's email address, either in the URL directly, encoded in base64, or within a QR code."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  // a single recipient (this is in the link so there can be only one)
+  and length(recipients.to) == 1
+  and all(recipients.to, .email.domain.valid)
+  // a single PDF attachment
+  and length(filter(attachments, .file_type == "pdf")) == 1
+  // in the PDF attachment
+  and any(attachments,
+          .file_type == "pdf"
+          and all(recipients.to,
+                  strings.icontains(..file_name, .email.domain.sld)
+                  // now file.explode the attachment and look for the eamil address in links
+                  and any(file.explode(..),
+                          // there is only a single link
+                          length(
+                                 filter(.scan.url.urls,
+                                        not strings.icontains(.url, 'mailto')
+                                        and not strings.istarts_with(.url, 'email:')
+                                 )
+                          ) == 1
+                          // that link contains the email address
+                          and (
+                            any(
+                                // filter out mailto links
+                                filter(.scan.url.urls,
+                                       not strings.icontains(.url, 'mailto')
+                                       and not strings.istarts_with(.url, 'email:')
+                                ),
+                                // in the URL
+                                strings.icontains(.url, ...email.email)
+                                or any(beta.scan_base64(.url,
+                                                        format="url",
+                                                        ignore_padding=true
+                                       ),
+                                       strings.icontains(., ..url)
+                                )
+                            )
+                            // or in a QR code
+                            or strings.icontains(.scan.qr.url.url, ..email.email)
+                            or any(beta.scan_base64(.scan.qr.url.url,
+                                                    format="url",
+                                                    ignore_padding=true
+                                   ),
+                                   strings.icontains(., ...email.email)
+                            )
+                          )
+                  )
+          )
+  )
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "PDF"
+  - "QR code"
+  - "Encryption"
+  - "Social engineering"
+detection_methods:
+  - "File analysis"
+  - "QR code analysis"
+  - "URL analysis"
+id: "0399d08f-57c6-58cb-87dc-8e58ccd0bc1b"

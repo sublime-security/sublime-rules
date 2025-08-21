@@ -1,4 +1,4 @@
-name: "Brand Impersonation: Zoom"
+name: "Brand impersonation: Zoom"
 description: "Detects messages impersonating Zoom through social footers, webinar links, and suspicious domain pattern matching. The rule looks for specific combinations of social media links, redirects, and content analysis to identify inauthentic Zoom-branded messages not originating from legitimate Zoom domains."
 type: "rule"
 severity: "medium"
@@ -76,7 +76,13 @@ source: |
       )
     )
   )
-
+  // negate auto-generated meeting summaries 
+  and not (
+    strings.icontains(body.current_thread.text, "meeting summary")
+    and strings.icontains(body.current_thread.text,
+                          "AI-generated content may be inaccurate or misleading."
+    )
+  )
   and not (
     (
       strings.istarts_with(subject.subject, "RE:")
@@ -96,7 +102,6 @@ source: |
       or any(headers.hops, any(.fields, strings.ilike(.name, "In-Reply-To")))
     )
   )
-  
   // Not from a legitimate Zoom domain
   and not (
     sender.email.domain.root_domain in (
