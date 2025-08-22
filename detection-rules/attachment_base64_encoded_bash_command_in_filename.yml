@@ -1,0 +1,27 @@
+source: |-
+  type.inbound
+  and length(attachments) > 0
+  and any(attachments,
+          (
+            .file_type in $file_extensions_common_archives
+            or strings.contains(.file_name, "{")
+          )
+          and any(beta.expand_archives(.).files,
+                  strings.contains(.file_name, "{")
+                  and any(beta.scan_base64(.file_name), length(.) > 1)
+          )
+  )
+type: rule
+name: 'Attachment: Base64 encoded bash command in filename'
+authors:
+  - twitter: "vector_sec"
+description: This rule detects a fileless attack technique where a malicious payload
+  is encoded directly into a filename. This technique, used by threats like VShell.
+  The rule is designed to find these malicious filenames both in direct attachments
+  and within archived files (like .zip, .rar, etc.).
+references:
+- https://www.trellix.com/blogs/research/the-silent-fileless-threat-of-vshell/
+tags:
+- Suspicious Attachment
+- Malware
+severity: high
