@@ -1,0 +1,35 @@
+name: "Spoofed Twilio/SendGrid with suspicious link patterns"
+description: "Detects messages impersonating Twilio or SendGrid services using display names while originating from non-legitimate domains. The rule identifies suspicious link patterns including marketing platform URL structures, abnormally long query parameters, display URL spoofing of legitimate services, and social engineering content related to billing updates, API issues, or configuration problems."
+type: "rule"
+severity: "medium"
+source: |
+    type.inbound
+    and (
+      any(body.links,
+        (.href_url.path =~ "/ls/click" or .href_url.path =~ "/wf/open" or strings.contains(.href_url.query_params, "upn="))
+        and .href_url.domain.root_domain not in ("sendgrid.com", "mailchimp.com", "constantcontact.com")
+      )
+      and (
+        sender.display_name in ("Twilio", "SendGrid")
+        and sender.email.domain.root_domain not in ("twilio.com", "sendgrid.com")
+      )
+      and (
+        any(body.links, length(.href_url.query_params) > 150)
+        // Display URL spoofing legitimate services
+        or any(body.links, .display_url.domain.root_domain in ("sendgrid.com", "twilio.com"))
+        // Social engineering content patterns
+        or body.current_thread.text =~ "(?i)(update.*billing|declined|api.*issue|misconfigured.*headers)"
+      )
+    )
+
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Social engineering"
+  - "Lookalike domain"
+detection_methods:
+  - "Content analysis"
+  - "Header analysis"
+  - "Sender analysis"
+  - "URL analysis"
