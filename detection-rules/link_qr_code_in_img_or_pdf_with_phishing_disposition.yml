@@ -18,14 +18,15 @@ source: |
           )
   )
   and (
-    not profile.by_sender().solicited
+    not profile.by_sender_email().solicited
+    or not profile.by_sender_email().any_messages_benign
     or (
-      profile.by_sender().any_messages_malicious_or_spam
-      and not profile.by_sender().any_messages_benign
+      profile.by_sender_email().any_messages_malicious_or_spam
+      and not profile.by_sender_email().any_messages_benign
     )
     or (
       sender.email.domain.domain in $org_domains
-      and not headers.auth_summary.dmarc.pass
+      and not coalesce(headers.auth_summary.dmarc.pass, false)
     )
   )
   
@@ -36,15 +37,6 @@ source: |
       and not headers.auth_summary.dmarc.pass
     )
     or sender.email.domain.root_domain not in $high_trust_sender_root_domains
-  )
-  and (
-      // no messages from this sender email have been marked benign
-      not profile.by_sender_email().any_messages_benign
-      // or it's a spoof of the org_domain
-      or (
-          sender.email.domain.domain in $org_domains
-          and not headers.auth_summary.dmarc.pass
-      )
   )
 attack_types:
   - "Credential Phishing"
