@@ -1,0 +1,38 @@
+name: "Brand impersonation: GoDaddy"
+description: "Detects messages where the sender is impersonating GoDaddy through display name manipulation or lookalike domains, while not being legitimately authenticated from GoDaddy's infrastructure."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and (
+    regex.icontains(sender.display_name, 'godaddy')
+    or strings.ilike(sender.display_name, "*godaddy*")
+    or strings.ilevenshtein(sender.display_name, 'godaddy') <= 1
+    or strings.ilike(sender.email.domain.domain, '*godaddy*')
+  )
+  and not (
+    sender.email.domain.root_domain in ("godaddy.com", "registry.godaddy")
+    and headers.auth_summary.dmarc.pass
+  )
+  and not profile.by_sender().solicited
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and not headers.auth_summary.dmarc.pass
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Social engineering"
+detection_methods:
+  - "Header analysis"
+  - "Sender analysis"
+id: "4f66b43f-6355-5484-bdc9-10b442125360"
+og_id: "4130d555-40fc-5b12-bbf0-60cf5e93c15f"
+testing_pr: 3127
+testing_sha: e35fa84936c6072d57d36bafc9c6b84c7c897c68
