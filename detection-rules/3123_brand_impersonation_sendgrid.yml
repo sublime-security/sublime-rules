@@ -1,0 +1,132 @@
+name: "Brand impersonation: SendGrid"
+description: "Detects inbound messages that impersonate Twilio/SendGrid through display name or domain manipulation, combined with security or authentication-themed content, while failing authentication checks and originating from untrusted sources."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and (
+    // Brand impersonation detection for Twilio/SendGrid
+    (
+      // SendGrid impersonation patterns
+      strings.ilike(strings.replace_confusables(sender.display_name), '*sendgrid*')
+      or strings.ilevenshtein(strings.replace_confusables(sender.display_name), 'sendgrid') <= 1
+      or (
+        strings.ilike(strings.replace_confusables(sender.email.local_part), '*sendgrid*')
+        and (
+          sender.display_name is null
+          or strings.ilike(strings.replace_confusables(subject.subject), '*sendgrid*')
+        )
+      )
+      or any(ml.logo_detect(beta.message_screenshot()).brands,
+           .name == "SendGrid" and .confidence == "high"
+      )
+    )
+    or (
+      // Twilio impersonation patterns
+      strings.ilike(strings.replace_confusables(sender.display_name), '*twilio*')
+      or strings.ilevenshtein(strings.replace_confusables(sender.display_name), 'twilio') <= 1
+      or (
+        strings.ilike(strings.replace_confusables(sender.email.local_part), '*twilio*')
+        and (
+          sender.display_name is null
+          or strings.ilike(strings.replace_confusables(subject.subject), '*twilio*')
+        )
+      )
+    )
+  )
+  and (
+    // Content analysis using ML/NLU
+    any(ml.nlu_classifier(body.current_thread.text).topics,
+        .name in (
+          "Security and Authentication",
+          "Secure Message",
+          "Reminders and Notifications",
+          "Software and App Updates"
+        )
+        and .confidence in ("medium", "high")
+    )
+    or any(ml.nlu_classifier(beta.ocr(beta.message_screenshot()).text).topics,
+           .name in (
+             "Security and Authentication",
+             "Secure Message",
+             "Reminders and Notifications",
+             "Software and App Updates"
+           )
+           and .confidence in ("medium", "high")
+    )
+    or any(ml.nlu_classifier(body.current_thread.text).intents,
+           .name == "cred_theft" and .confidence == "high"
+    )
+    or any(ml.nlu_classifier(beta.ocr(beta.message_screenshot()).text).intents,
+           .name == "cred_theft" and .confidence == "high"
+    )
+    // Infrastructure analysis for behavioral patterns
+    or (
+      any(body.links,
+        (.href_url.path =~ "/ls/click" or .href_url.path =~ "/wf/open" or strings.contains(.href_url.query_params, "upn="))
+        and .href_url.domain.root_domain not in ("sendgrid.com", "twilio.com", "mailchimp.com", "constantcontact.com")
+      )
+      and (
+        any(body.links, length(.href_url.query_params) > 150)
+        or any(body.links, .display_url.domain.root_domain in ("sendgrid.com", "twilio.com"))
+        or body.current_thread.text =~ "(?i)(update.*billing|declined|api.*issue|misconfigured.*headers)"
+      )
+    )
+  )
+  
+  // message was not sent from Twilio/Sendgrid infrastructure
+  and (
+    not (
+      // Look for valid SPF or DKIM pass for Twilio/SendGrid in delivery hops
+      any(headers.hops,
+          // SendGrid authentication checks
+          (
+              strings.ilike(.authentication_results.spf, "*pass*")
+              and strings.ilike(.authentication_results.spf, "*sendgrid.net*")
+          )
+          or (
+              strings.ilike(.authentication_results.dkim, "*pass*")
+              and strings.ilike(.authentication_results.dkim, "*sendgrid.net*")
+          )
+          // Twilio authentication checks
+          or (
+              strings.ilike(.authentication_results.spf, "*pass*")
+              and strings.ilike(.authentication_results.spf, "*twilio.com*")
+          )
+          or (
+              strings.ilike(.authentication_results.dkim, "*pass*")
+              and strings.ilike(.authentication_results.dkim, "*twilio.com*")
+          )
+      )
+      // Envelope sender domain verification
+      or sender.email.domain.domain in ('sendgrid.net', 'sendgrid.com', 'twilio.com')
+    )
+    and sender.email.domain.root_domain not in $org_domains
+  )
+  // Exclude high trust domains with valid auth and solicited senders
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and not headers.auth_summary.dmarc.pass
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+  and not profile.by_sender().solicited
+
+attack_types:
+  - "BEC/Fraud"
+  - "Credential Phishing"
+  - "Spam"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Header analysis"
+  - "Natural Language Understanding"
+  - "Optical Character Recognition"
+  - "Sender analysis"
+id: "926dbf5c-bb72-564d-abc1-18ec8e0cddb7"
+og_id: "d800124f-6aa4-58e1-8fa7-beec4958924f"
+testing_pr: 3123
+testing_sha: 840720c179d7178894d437b54adbafde01a379fb
