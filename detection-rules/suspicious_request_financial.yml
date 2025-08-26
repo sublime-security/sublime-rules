@@ -5,9 +5,9 @@ severity: "high"
 source: |
   type.inbound
   // no attachments
-  and length(attachments) == 0
+  and length(attachments) <= 1
   // direct to recipient
-  and length(recipients.to) == 1
+  and length(recipients.to) <= 2
   // suspicious sender
   and (
     (
@@ -25,9 +25,18 @@ source: |
     regex.icontains(subject.subject,
                     '\b(Aged|Age?ing) (Payables|Receivables|Report)'
     )
-    or regex.icontains(body.current_thread.text,
-                       '\b(Aged|Age?ing) (Payables|Receivables|Report)',
-                       '(updated|recent) (\bAR\b|\b\AP\b|\bAR\b \& \bAP\b|accounts?) (Payables|Receivables|Reports)'
+    or (
+      regex.icontains(body.current_thread.text,
+                      '\b(Aged|Age?ing) (Payables|Receivables|Report)',
+                      '(updated|recent) (\bAR\b|\b\AP\b|\bAR\b \& \bAP\b|accounts?) (Payables|Receivables|Reports)'
+      )
+      or strings.icontains(body.current_thread.text,
+                           "copy of a current statement"
+      )
+      or (
+        strings.icontains(body.current_thread.text, "please send all past due")
+        and strings.icontains(body.current_thread.text, "current invoices")
+      )
     )
   )
   and (
