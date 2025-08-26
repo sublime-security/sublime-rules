@@ -14,6 +14,19 @@ source: |
           and not sender.display_name in~ ('Stripe & Stare', 'Stripe and Stare', 'Stripe Events')
       )
       or strings.replace_confusables(sender.display_name) =~ 'stripe'
+      // fake stripe invoice in attached picture
+      or (
+        any(attachments,
+            .file_type in $file_types_images
+            and any(file.explode(.),
+                    strings.ilike(.scan.ocr.raw, "*stripe*")
+                    and any(ml.nlu_classifier(.scan.ocr.raw).intents,
+                            .name in ("callback_scam")
+                            and .confidence in ("medium", "high")
+                  )
+              )
+          )
+      )
     )
     or (
       // the edit distance is 1 or 2
