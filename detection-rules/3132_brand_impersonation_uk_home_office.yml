@@ -1,0 +1,87 @@
+name: "Brand impersonation: UK government Home Office"
+description: "Detects messages impersonating UK government agencies (Home Office, UK Visas and Immigration, gov.uk) that contain links not leading to legitimate gov.uk domains or show credential theft language, from senders not authenticated as official government domains."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  
+  // UK government agencies in display name or subject with homograph protection
+  and (
+    any([
+          strings.replace_confusables(sender.display_name),
+          strings.replace_confusables(subject.subject)
+        ],
+        strings.ilike(.,
+                      "*uk*visas*",
+                      "*uk home office*",
+                      "*home office*immigration*",
+                      "*home office*visa*",
+                      "*gov.uk*",
+                      "uk*immigration*",
+                      "*sponsorship management*"
+        )
+        // exact match of high confidence
+        or .  in~ ("Home Office")
+    )
+    or strings.ilike(body.current_thread.text,
+                     "*uk visas and immigration*",
+                     "*sponsorship management system*"
+    )
+    or strings.icontains(body.html.raw,
+                         '"https://www.points.homeoffice.gov.uk/gui-sms-jsf/images/'
+    )
+  )
+  
+  //  Not from legitimate UK government domains
+  and not (
+    sender.email.domain.tld == "gov.uk" and headers.auth_summary.dmarc.pass
+  )
+  
+  // 
+  and (
+    // there are links that do not link to "gov.uk"
+    not all(body.links,
+            .href_url.domain.tld == "gov.uk"
+    )
+    // OR credential theft intent detected  
+    or any(ml.nlu_classifier(body.current_thread.text).intents,
+           .name == "cred_theft" and .confidence in ("medium", "high")
+    )
+  )
+  
+  
+  // no previous threads
+  and not (length(headers.references) > 0 or length(body.previous_threads) > 0)
+  // negate a high amount of links or newsletters
+  and not (
+    length(body.links) > 20
+    or any(ml.nlu_classifier(body.html.display_text).topics,
+           .name == "Newsletters and Digests"
+    )
+  )
+  //  High-trust domain exclusion
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and not headers.auth_summary.dmarc.pass
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+
+attack_types:
+  - "BEC/Fraud"
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Social engineering"
+  - "Lookalike domain"
+detection_methods:
+  - "Content analysis"
+  - "Header analysis"
+  - "Natural Language Understanding"
+  - "Sender analysis"
+  - "URL analysis"
+id: "90fd1ec5-f821-5aef-9bd8-f4dd6ab35465"
+og_id: "f35d846a-5a72-56a7-9ee7-14cc8899ddff"
+testing_pr: 3132
+testing_sha: 57a098b8bcf2b3aef8806cde2fddb787034ae0ed
