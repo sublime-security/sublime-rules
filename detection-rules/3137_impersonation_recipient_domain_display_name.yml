@@ -1,0 +1,99 @@
+name: "Display name impersonation using recipient SLD"
+description: |
+  The recipient domain's SLD is used in the sender's display name
+  in order to impersonate the organization. 
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and (
+    // recipient SLD is being impersonated in the display name
+    (
+      // these are usually targeted with just 1 recipient,
+      // but sometimes they CC themselves or have a blank CC
+      length(recipients.to) + length(recipients.cc)
+   + length(recipients.bcc) <= 2
+      and any(recipients.to,
+              length(.email.domain.sld) >= 4
+              and 
+              // ensure that we're checking the org SLD
+              .email.domain.sld in $org_slds
+              and strings.icontains(sender.display_name, .email.domain.sld)
+      )
+    )
+    or (
+      // accounts for BCC'd messages where the recipients are empty
+      // if BCC, sometimes the recipient will be the attacker's email
+      length(recipients.to) + length(recipients.cc)
+   + length(recipients.bcc) <= 2
+      and length(mailbox.email.domain.sld) >= 4
+      and strings.icontains(sender.display_name, mailbox.email.domain.sld)
+    )
+  )
+  and (
+    // at least 1 link or non-image attachment
+    (
+      length(body.links) > 0
+      // these attacks all use compromosed senders, so we look for a domain
+      // that doesn't match the sender's domain to weed out legit messages
+      and any(body.links,
+              .href_url.domain.root_domain != sender.email.domain.root_domain
+      )
+    )
+    or length(filter(attachments, .file_type not in $file_types_images)) > 0
+  )
+  and not (
+    strings.contains(sender.display_name, "on behalf of")
+    and sender.email.domain.root_domain == "microsoftonline.com"
+  )
+  // negate pageproof updates and visit notifications
+  and not (
+      sender.email.email in ("team@pageproof.com", "noreply@visitly.io")
+  )
+  and all(recipients.to,
+          .email.email != sender.email.email
+          and (
+            .email.domain.valid or strings.icontains(.display_name, "undisclosed")
+          )
+  )
+  
+  // negate org domain senders, which can often be misconfigured and fail
+  // authentication, causing them to be type.inbound instead of type.internal.
+  // this is fine because we should catch spoofs in other ways.
+  // also, we use root_domain here to account for subdomains used by internal tools that aren't connected to the tenant.
+  // this should also be safe because domains like onmicrosoft[.]com are tracked as FQDNs in $org_domains, so they won't match
+  and sender.email.domain.root_domain not in $org_domains
+  // negate tenant_domains
+  and not (
+    sender.email.domain.domain in $tenant_domains
+    and headers.auth_summary.dmarc.pass
+  )
+  
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and not headers.auth_summary.dmarc.pass
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+  and (
+    (not profile.by_sender().solicited)
+    or (
+      profile.by_sender().any_messages_malicious_or_spam
+      and not profile.by_sender().any_messages_benign
+    )
+  )
+  and not profile.by_sender().any_messages_benign
+
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Social engineering"
+detection_methods:
+  - "Header analysis"
+  - "Sender analysis"
+id: "a53ac38e-6a8c-58df-8d11-5b2081b2fe00"
+og_id: "81a8ed12-0e26-5998-90ae-03334f358704"
+testing_pr: 3137
+testing_sha: 611da095124fb40c9f78300a7f0f6ea639d49da3
