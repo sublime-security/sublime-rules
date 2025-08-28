@@ -44,9 +44,7 @@ source: |
         or (
           length(recipients.bcc) > 0
           or length(recipients.cc) > 0
-          or any(recipients.to,
-                 strings.ilike(.display_name, "undisclosed?recipients")
-          )
+          or not any(recipients.to, .email.valid)
         )
 
         // Potential fake thread
@@ -62,11 +60,15 @@ source: |
       and sender.email.domain.root_domain not in $high_trust_sender_root_domains
       and sender.email.domain.root_domain not in $org_domains
       and not profile.by_sender_email().solicited
-      and sender.email.local_part not in~ ("noreply", "no-reply", "postmaster")
       and not profile.by_sender().any_messages_benign
       and profile.by_sender().days_known < 3
       and length(body.previous_threads) == 0
-      and not subject.is_forward
-      and not subject.is_reply
+
+      // Negate legitimate replies
+      and not (
+        (subject.is_forward or subject.is_reply)
+        and length(headers.references) > 0
+        and headers.in_reply_to is not null
+      )
     )
   )
