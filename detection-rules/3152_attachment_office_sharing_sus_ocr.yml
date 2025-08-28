@@ -1,0 +1,64 @@
+name: "Attachment: Office file with document sharing and browser instruction lures"
+description: "Detects macro-enabled attachments containing document sharing language (sent, shared, forwarded) combined with browser interaction instructions (copy, right-click) or common email disclaimers. These tactics are often used to trick users into enabling macros or following malicious instructions."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and any(filter(attachments, .file_extension in $file_extensions_macros),
+          // Detection Note: There are multiple regex patterns used in multiple places, it'll be important to keep them in sync
+          any(file.explode(.),
+              // document sharing lure
+              any(.scan.strings.strings,
+                  regex.icontains(.,
+                                  '(?:sent|shared|forwarded|provided|invited)(?:\s+\w+){0,9}\s+(?:document|file|attachment)',
+                  )
+              )
+              // ocr output
+              or regex.icontains(.scan.ocr.raw,
+                                 '(?:sent|shared|forwarded|provided|invited)(?:\s+\w+){0,9}\s+(?:document|file|attachment)',
+              )
+          )
+          // copy/paste browser stuff
+          and (
+            any(file.explode(.),
+                any(.scan.strings.strings,
+                    regex.icontains(.,
+                                    '(?:copy|right.?click)(?:\s+\w+){0,9}browser'
+                    )
+                )
+                // ocr output
+                or regex.icontains(.scan.ocr.raw,
+                                   '(?:copy|right.?click)(?:\s+\w+){0,9}browser'
+                )
+                // common disclaimer within the OCR output, which is not common
+                or strings.icontains(.scan.ocr.raw,
+                                     'The information contained in or attached to this message is intended only for the people to whom it is addressed.'
+                )
+                or strings.icontains(.scan.ocr.raw,
+                                     'If you are not the intended recipient, any use, storage,disclosure or copying of this information is unauthorised and prohibited.'
+                )
+                or strings.icontains(.scan.ocr.raw,
+                                     'This information may be confidential or subject to legal privilege.'
+                )
+                or strings.icontains(.scan.ocr.raw,
+                                     'If you have received this email in error please notify the sender immediately by using the reply facility in your email software and then delete the email from your inbox.'
+                )
+            )
+          )
+  )
+
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Social engineering"
+  - "Evasion"
+detection_methods:
+  - "Archive analysis"
+  - "File analysis"
+  - "Macro analysis"
+  - "Optical Character Recognition"
+  - "Content analysis"
+id: "77d92699-a3b5-57cd-b6af-bff88a8a886d"
+og_id: "b1250a4b-fd4d-5c52-af60-83800eedac10"
+testing_pr: 3152
+testing_sha: 289af62ca00b465754c3602e446b05888f02f421
