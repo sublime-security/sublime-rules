@@ -8,28 +8,42 @@ source: |
     // Brand impersonation detection for Twilio/SendGrid
     (
       // SendGrid impersonation patterns
-      strings.ilike(strings.replace_confusables(sender.display_name), '*sendgrid*')
-      or strings.ilevenshtein(strings.replace_confusables(sender.display_name), 'sendgrid') <= 1
+      strings.ilike(strings.replace_confusables(sender.display_name),
+                    '*sendgrid*'
+      )
+      or strings.ilevenshtein(strings.replace_confusables(sender.display_name),
+                              'sendgrid'
+      ) <= 1
       or (
-        strings.ilike(strings.replace_confusables(sender.email.local_part), '*sendgrid*')
+        strings.ilike(strings.replace_confusables(sender.email.local_part),
+                      '*sendgrid*'
+        )
         and (
           sender.display_name is null
-          or strings.ilike(strings.replace_confusables(subject.subject), '*sendgrid*')
+          or strings.ilike(strings.replace_confusables(subject.subject),
+                           '*sendgrid*'
+          )
         )
       )
       or any(ml.logo_detect(beta.message_screenshot()).brands,
-           .name == "SendGrid" and .confidence == "high"
+             .name == "SendGrid" and .confidence == "high"
       )
     )
     or (
       // Twilio impersonation patterns
       strings.ilike(strings.replace_confusables(sender.display_name), '*twilio*')
-      or strings.ilevenshtein(strings.replace_confusables(sender.display_name), 'twilio') <= 1
+      or strings.ilevenshtein(strings.replace_confusables(sender.display_name),
+                              'twilio'
+      ) <= 1
       or (
-        strings.ilike(strings.replace_confusables(sender.email.local_part), '*twilio*')
+        strings.ilike(strings.replace_confusables(sender.email.local_part),
+                      '*twilio*'
+        )
         and (
           sender.display_name is null
-          or strings.ilike(strings.replace_confusables(subject.subject), '*twilio*')
+          or strings.ilike(strings.replace_confusables(subject.subject),
+                           '*twilio*'
+          )
         )
       )
     )
@@ -63,45 +77,39 @@ source: |
     // Infrastructure analysis for behavioral patterns
     or (
       any(body.links,
-        (.href_url.path =~ "/ls/click" or .href_url.path =~ "/wf/open" or strings.contains(.href_url.query_params, "upn="))
-        and .href_url.domain.root_domain not in ("sendgrid.com", "twilio.com", "mailchimp.com", "constantcontact.com")
+          (
+            .href_url.path =~ "/ls/click"
+            or .href_url.path =~ "/wf/open"
+            or strings.contains(.href_url.query_params, "upn=")
+          )
+          and .href_url.domain.root_domain not in (
+            "sendgrid.com",
+            "twilio.com",
+            "mailchimp.com",
+            "constantcontact.com"
+          )
       )
       and (
         any(body.links, length(.href_url.query_params) > 150)
-        or any(body.links, .display_url.domain.root_domain in ("sendgrid.com", "twilio.com"))
+        or any(body.links,
+               .display_url.domain.root_domain in ("sendgrid.com", "twilio.com")
+        )
         or body.current_thread.text =~ "(?i)(update.*billing|declined|api.*issue|misconfigured.*headers)"
       )
     )
   )
   
-  // message was not sent from Twilio/Sendgrid infrastructure
-  and (
-    not (
-      // Look for valid SPF or DKIM pass for Twilio/SendGrid in delivery hops
-      any(headers.hops,
-          // SendGrid authentication checks
-          (
-              strings.ilike(.authentication_results.spf, "*pass*")
-              and strings.ilike(.authentication_results.spf, "*sendgrid.net*")
-          )
-          or (
-              strings.ilike(.authentication_results.dkim, "*pass*")
-              and strings.ilike(.authentication_results.dkim, "*sendgrid.net*")
-          )
-          // Twilio authentication checks
-          or (
-              strings.ilike(.authentication_results.spf, "*pass*")
-              and strings.ilike(.authentication_results.spf, "*twilio.com*")
-          )
-          or (
-              strings.ilike(.authentication_results.dkim, "*pass*")
-              and strings.ilike(.authentication_results.dkim, "*twilio.com*")
-          )
+  // and the sender is not in org_domains or from sendgrid domains and passes auth
+  and not (
+    sender.email.domain.root_domain in $org_domains
+    or (
+      sender.email.domain.root_domain in (
+        "sendgrid.com",
+        "sendgrid.net",
+        "twilio.com"
       )
-      // Envelope sender domain verification
-      or sender.email.domain.domain in ('sendgrid.net', 'sendgrid.com', 'twilio.com')
+      and headers.auth_summary.dmarc.pass
     )
-    and sender.email.domain.root_domain not in $org_domains
   )
   // Exclude high trust domains with valid auth and solicited senders
   and (
