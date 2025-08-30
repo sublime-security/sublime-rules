@@ -7,7 +7,24 @@ type: "rule"
 severity: "high"
 source: |
   any(body.links, regex.icontains(.href_url.url, ':/\\'))
-  or regex.icontains(body.plain.raw, 'https?:\\\\[^\\s]+')
+  or (
+    regex.icontains(body.plain.raw, 'https?:\\\\[^\\s]+')
+    and (
+      length(filter(body.current_thread.links,
+                    strings.icontains(.href_url.rewrite.original,
+                                      "safelinks.protection.outlook.com"
+                    )
+             )
+      ) == 0
+      or not all(filter(body.current_thread.links,
+                        strings.icontains(.href_url.rewrite.original,
+                                          "safelinks.protection.outlook.com"
+                        )
+                 ),
+                 strings.icontains(body.plain.raw, .href_url.domain.root_domain)
+      )
+    )
+  )
 tags:
  - "Attack surface reduction"
 attack_types:
