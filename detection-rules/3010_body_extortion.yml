@@ -38,7 +38,8 @@ source: |
       ),
       // actions recorded
       regex.icontains(strings.replace_confusables(body.current_thread.text),
-                      "po[rŗ]n|adult (web)?site|webcam|mastu[rŗ]bating|je[rŗ]king off|pleasu[rŗ]ing you[rŗ]self|getting off|clips.{0,20}screenshots|suspicious.{0,20}actions|private.{0,20}information"
+                      "(?:po[rŗ]n|adult (?:web)?site|webcam|mastu[rŗ]bating|je[rŗ]king off|pleasu[rŗ]ing you[rŗ]self|getting off|explicit|clips.{0,20}screenshots|suspicious.{0,20}actions|private.{0,20}information)"
+
       ),
       regex.icontains(strings.replace_confusables(body.current_thread.text),
                       "pe[rŗ]ve[rŗ]t|pe[rŗ]ve[rŗ]sion|mastu[rŗ]bat|vulner"
@@ -54,7 +55,7 @@ source: |
       ),
       // a threat from the actor
       regex.icontains(strings.replace_confusables(body.current_thread.text),
-                      'sen[dt]\s*(?:\w+\s*){0,2}\s*to\s*(?:\w+\s*){0,3}\s*.{0,10}(contacts|media|family|friends)'
+                      '(?:sen[dt]|forward)\s*(?:\w+\s*){0,2}\s*to\s*(?:\w+\s*){0,3}\s*.{0,10}(?:contacts|media|family|friends|coworkers)'
       ),
       // bitcoin language (excluding newsletters)
       (
@@ -83,7 +84,7 @@ source: |
                         '(?:contact the police|(?:bitcoin|\bbtc\b).{0,20}wallet)'
         )
         and regex.icontains(strings.replace_confusables(body.current_thread.text),
-                            '(\b[13][a-km-zA-HJ-NP-Z0-9]{24,34}\b)|\bX[1-9A-HJ-NP-Za-km-z]{33}\b|\b(0x[a-fA-F0-9]{40})\b|\b[LM3][a-km-zA-HJ-NP-Z1-9]{26,33}\b|\b[48][0-9AB][1-9A-HJ-NP-Za-km-z]{93}\b'
+                            '(?:\b[13][a-km-zA-HJ-NP-Z0-9]{24,34}\b)|\bX[1-9A-HJ-NP-Za-km-z]{33}\b|\b(?:0x[a-fA-F0-9]{40})\b|\b[LM3][a-km-zA-HJ-NP-Z1-9]{26,33}\b|\b[48][0-9AB][1-9A-HJ-NP-Za-km-z]{93}\b'
         )
       ),
       regex.icontains(strings.replace_confusables(body.current_thread.text),
@@ -117,6 +118,15 @@ source: |
     )
   )
   and length(body.current_thread.text) < 6000
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and not headers.auth_summary.dmarc.pass
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+
 attack_types:
   - "Extortion"
 tactics_and_techniques:
@@ -130,4 +140,4 @@ detection_methods:
 id: "b5c76d8a-d4e9-5a85-b386-076e9a194288"
 og_id: "265913eb-2ccd-5f77-9a09-f6d8539fd2f6"
 testing_pr: 3010
-testing_sha: 263509cd4bfd4465064c443f6e663eb67bbb6faa
+testing_sha: f4b42a925df8fcc01a936d6b0cefa6f12f8d7932
