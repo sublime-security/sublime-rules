@@ -51,7 +51,7 @@ source: |
                         '(sign(ed?)|view).{0,10}(purchase order)|Request for (a Quot(e|ation)|Proposal)'
         ),
         regex.icontains(body.current_thread.text,
-                        '(please|kindly).{0,30}quot(e|ation)'
+                        '(please|kindly).{0,30}(?:proposal|quot(e|ation))'
         ),
         regex.icontains(subject.subject,
                         '(request for (purchase|quot(e|ation))|\bRFQ\b|\bRFP\b|bid invit(e|ation))'
@@ -61,6 +61,9 @@ source: |
         ),
         any(ml.nlu_classifier(body.current_thread.text).tags,
             .name == "purchase_order" and .confidence == "high"
+        ),
+        any(ml.nlu_classifier(body.current_thread.text).entities,
+            .name == "financial" and regex.imatch(.text, "rfp|rfq")
         )
       )
       // Required: at least one RFQ/RFP keyword pattern
@@ -76,7 +79,7 @@ source: |
                           '(sign(ed?)|view).{0,10}(purchase order)|Request for a Quot(e|ation)'
           ),
           regex.icontains(body.current_thread.text,
-                          '(please|kindly).{0,30}quot(e|ation)'
+                          '(please|kindly).{0,30}(?:proposal|quot(e|ation))'
           ),
           regex.icontains(subject.subject,
                           '(request for (purchase|quot(e|ation))|\bRFQ\b|\bRFP\b|bid invit(e|ation))'
@@ -86,6 +89,9 @@ source: |
           ),
           any(ml.nlu_classifier(body.current_thread.text).tags,
               .name == "purchase_order" and .confidence == "high"
+          ),
+          any(ml.nlu_classifier(body.current_thread.text).entities,
+              .name == "financial" and regex.imatch(.text, "rfp|rfq")
           ),
   
           // Non-keyword indicators
@@ -97,8 +103,8 @@ source: |
                     .name == "urgency"
             )
             and not any(beta.ml_topic(body.current_thread.text).topics,
-                      .name == "Advertising and Promotions"
-                      and .confidence == "high"
+                        .name == "Advertising and Promotions"
+                        and .confidence == "high"
             )
           ),
           (
@@ -119,6 +125,11 @@ source: |
                               )
                        )
             ) < 3
+          ),
+          // mentions an attachment that does not exist
+          (
+            length(attachments) == 0
+            and strings.icontains(body.current_thread.text, "attached")
           )
         )
       )
@@ -149,7 +160,11 @@ source: |
                         ),
                         any(ml.nlu_classifier(.scan.ocr.raw).tags,
                             .name == "purchase_order" and .confidence == "high"
-                        )
+                        ),
+                        any(ml.nlu_classifier(.scan.ocr.raw).entities,
+                            .name == "financial"
+                            and regex.imatch(.text, "rfp|rfq")
+                        ),
                       )
               )
       )
