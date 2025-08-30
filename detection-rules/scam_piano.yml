@@ -1,4 +1,4 @@
-name: "Scam: Piano Giveaway"
+name: "Scam: Piano giveaway"
 description: "This rule is designed to identify and mitigate a specific type of fraudulent activity commonly targeted at educational institutions. This rule operates by analyzing incoming email content for certain characteristics indicative of a scam involving the offer of a free piano, often framed within the context of downsizing or a giveaway."
 type: "rule"
 severity: "medium"
@@ -18,6 +18,8 @@ source: |
         // Piano/Keyboards
         or regex.icontains(body.current_thread.text,
                            '(?:Yamaha|Kawai|Baldwin|Roland|Stei?nway(?: (?:&|and) Sons?)?|\d{4})\s*[^\r\n]{0,50}(?:baby.grand|piano|baby.grand.piano|keyboard)',
+                           // strong indicators for generalized instrument
+                           '(?:piano|keyboard)\s*[^\r\n]{0,50}(?:available|sale|rehome|gift)'
         )
         // Violins & Orchestral 
         or regex.icontains(body.current_thread.text,
@@ -47,7 +49,8 @@ source: |
                          '* generously offering *',
                          '*a loving home*',
                          '*find a new home *',
-                         '*rehome these instruments *'
+                         '*rehome these instruments *',
+                         '* free donation*'
         )
         // generally someone died
         or regex.icontains(body.current_thread.text,
@@ -57,10 +60,16 @@ source: |
         )
         // passion/love for the item
         or strings.ilike(body.current_thread.text,
-                         '* genuinely cherish *',
-                         '* cherished possessions *',
-                         '* passionate instrument *',
-                         '* had a passion for music *'
+                         '* genuinely cherish*',
+                         '* cherished possessions*',
+                         '* passionate instrument*',
+                         '* music lover*',
+                         '* had a passion for music*',
+                         '* appreciates music*',
+                         "* special piece*",
+                         "* a lot of meaning*",
+                         "* profound sentimental*",
+                         '* will cherish*'
         )
       )
       and (
@@ -72,17 +81,20 @@ source: |
                         'delivery only',
                         'moving company'
         )
+        // recipient or someone they know might have an interest
         or strings.ilike(body.current_thread.text,
                          '* if you will take it *',
                          '* or have someone *',
                          '* indicate your interest *',
                          '* to someone you know *',
                          '* know someone who *',
-                         '* someone you know would *'
+                         '* someone you know would *',
+                         '* someone who will *'
         )
         or regex.icontains(body.current_thread.text,
-                           'if you (?:will be|are) interested',
-                           'who (?:will|would) appreciate'
+                           'if you[^\r\n]{0,20}(?:(?:might|will|would) be|are)[^\r\n]{0,20}interested',
+                           '(?:any|some)one[^\r\n]{0,20}(is|will|would|might be)[^\r\n]{0,20}interested',
+                           'who (?:will|would|might) appreciate',
         )
         or (
           // there's an email in the body 
@@ -113,7 +125,7 @@ source: |
       )
     )
     or (
-      any(attachments,
+      any(filter(attachments, .size < 10000),
           (
             // items and brands
             // Guitars
@@ -123,6 +135,8 @@ source: |
             // Piano/Keyboards
             or regex.icontains(file.parse_text(.).text,
                                '(?:Yamaha|Kawai|Baldwin|Roland|Stei?nway(?: (?:&|and) Sons?)?)\s*[^\r\n]{0,50}(?:baby.grand|piano|baby.grand.piano|keyboard)',
+                               // strong indicators for generalized instrument
+                               '(?:piano|keyboard)\s*[^\r\n]{0,50}(?:available|sale|rehome|gift)'
             )
             // Violins & Orchestral 
             or regex.icontains(file.parse_text(.).text,
@@ -160,12 +174,18 @@ source: |
                                'late (?:husband|father|dad|wife|mother|mom)',
                                '(?:husband|father|dad|wife|mother|mom)[^\r\n]{0,50}estate'
             )
-            // passion/love for the item
+            // passion/love for the item/music
             or strings.ilike(file.parse_text(.).text,
-                             '* genuinely cherish *',
-                             '* cherished possessions *',
-                             '* passionate instrument *',
-                             '* had a passion for music *'
+                             '* genuinely cherish*',
+                             '* cherished possessions*',
+                             '* passionate instrument*',
+                             '* music lover*',
+                             '* had a passion for music*',
+                             '* appreciates music*',
+                             "* special piece*",
+                             "* a lot of meaning*",
+                             "* profound sentimental*",
+                             '* will cherish*'
             )
           )
           and (
@@ -181,12 +201,15 @@ source: |
                              '* if you will take it *',
                              '* or have someone *',
                              '* indicate your interest *',
-                             '* to someone you know*',
-                             '* someone you know would *'
+                             '* to someone you know *',
+                             '* know someone who *',
+                             '* someone you know would *',
+                             '* someone who will *'
             )
             or regex.icontains(file.parse_text(.).text,
-                               'if you (?:will be|are) interested',
-                               'who (?:will|would) appreciate'
+                               'if you[^\r\n]{0,20}(?:(?:might|will|would) be|are)[^\r\n]{0,20}interested',
+                               '(?:any|some)one[^\r\n]{0,20}(is|will|would|might be)[^\r\n]{0,20}interested',
+                               'who (?:will|would|might) appreciate',
             )
             or (
               // there's an email in the attachment 
