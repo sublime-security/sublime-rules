@@ -6,7 +6,7 @@ source: |
   type.inbound
   and sender.email.email == "no-reply@classroom.google.com"
   and (
-    // check for a whatsapp invitation in the currend_thread
+    // check for a WhatsApp invitation in the currend_thread
     (
       regex.icontains(body.current_thread.text, '\bWhatsapp:?.[:0-9+ ]{7,20}\b')
       or (
@@ -14,17 +14,23 @@ source: |
         and strings.icontains(body.current_thread.text, "invited")
       )
     )
-    // check for whatsapp invitation within the OCR of an attachment. 
-    or any(file.explode(beta.message_screenshot()),
-      regex.icontains(.scan.ocr.raw,
-        // International format with OCR-friendly character classes
-        '\+?[ilo0-9]{1,3}[\s\.\-⋅]?\(?[ilo0-9]{3}\)?[\s\.\-⋅]{0,3}[ilo0-9]{3}[\s\.\-⋅]{0,3}[ilo0-9]{3,4}',
-        // US format
-        '\(?[ilo0-9]{3}\)?[\s\.\-⋅]{0,3}[ilo0-9]{3}[\s\.\-⋅]{0,3}[ilo0-9]{4}',
-        // WhatsApp-specific format
-        '[Ww]hats[Aa]pp:?[\s]*[+]?[ilo0-9\s\.\-⋅\(\)]{10,18}'
+    // check for WhatsApp invitation within the OCR of an attachment. 
+    or (
+      any(file.explode(beta.message_screenshot()),
+          regex.icontains(.scan.ocr.raw,
+                          // International format with OCR-friendly character classes
+                          '\+?[ilo0-9]{1,3}[\s\.\-⋅]?\(?[ilo0-9]{3}\)?[\s\.\-⋅]{0,3}[ilo0-9]{3}[\s\.\-⋅]{0,3}[ilo0-9]{3,4}',
+                          // US format
+                          '\(?[ilo0-9]{3}\)?[\s\.\-⋅]{0,3}[ilo0-9]{3}[\s\.\-⋅]{0,3}[ilo0-9]{4}',
+          )
+          // and mentions of WhatsApp in the screenshot
+          and (
+            regex.icontains(.scan.ocr.raw, '[Ww]hats[Aa]pp|[Ww]hatsapp')
+            or regex.icontains(.scan.ocr.raw, // WhatsApp-specific format
+                               '[Ww]hats[Aa]pp:?[\s]*[+]?[ilo0-9\s\.\-⋅\(\)]{10,18}'
+            )
+          )
       )
-      or regex.icontains(.scan.ocr.raw, '[Ww]hats[Aa]pp|[Ww]hatsapp')
     )
   )
 
