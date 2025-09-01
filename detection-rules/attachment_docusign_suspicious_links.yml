@@ -56,12 +56,39 @@ source: |
           )
         )
         and not any(file.explode(.),
-                    strings.ilike(.scan.ocr.raw, "*DocuSign Envelope*")
-                    or strings.ilike(.scan.ocr.raw, "*Certificate Of Completion*")
+                    strings.ilike(.scan.ocr.raw,
+                                  "*DocuSigned By*",
+                                  "*DocuSign Envelope ID*",
+                                  "*Certificate Of Completion*",
+                                  "*Adobe Sign*",
+                                  // Additional Adobe Acrobat Sign check
+                                  "*Powered by\nAdobe\nAcrobat Sign*"
+                    )
                     or (
                       .depth == 0
-                      and .scan.exiftool.page_count > 10
-                      and length(.scan.strings.strings) > 8000
+                      and (
+                        (
+                          .scan.exiftool.page_count > 10
+                          and length(.scan.strings.strings) > 8000
+                        )
+                        or (
+                          .scan.exiftool.producer == "Acrobat Sign"
+                          and any(.scan.exiftool.fields,
+                                  .key == "SigningReason"
+                                  and .value == "Certified by Adobe Acrobat Sign"
+                          )
+                        )
+                      )
+                    )
+                    // negate resume related messages
+                    or (
+                      any(ml.nlu_classifier(body.current_thread.text).topics,
+                          .name == "Professional and Career Development"
+                          and .confidence == "high"
+                      )
+                      and any(ml.nlu_classifier(.scan.ocr.raw).intents,
+                              .name == "benign" and .confidence != "low"
+                      )
                     )
         )
     )
@@ -106,27 +133,25 @@ source: |
           )
         )
         and not any(file.explode(beta.message_screenshot()),
-                    (
-                      strings.ilike(.scan.ocr.raw, "*DocuSigned By*")
-                      and not strings.ilike(.scan.ocr.raw,
-                                            "*DocuSign Envelope ID*"
-                      )
-                      and not strings.ilike(.scan.ocr.raw,
-                                            "*Certificate Of Completion*"
-                      )
+                    strings.ilike(.scan.ocr.raw,
+                                  "*DocuSigned By*",
+                                  "*DocuSign Envelope ID*",
+                                  "*Certificate Of Completion*",
+                                  "*Adobe Sign*"
                     )
         )
       )
     )
   )
   and (
-    not profile.by_sender().solicited
+    not profile.by_sender_email().solicited
+    or profile.by_sender_email().prevalence == "new"
     or (
-      profile.by_sender().any_messages_malicious_or_spam
-      and not profile.by_sender().any_false_positives
+      profile.by_sender_email().any_messages_malicious_or_spam
+      and not profile.by_sender_email().any_messages_benign
     )
   )
-  and not profile.by_sender().any_false_positives
+  and not profile.by_sender_email().any_messages_benign
   
   // negate docusign 'via' messages
   and not (
@@ -137,11 +162,14 @@ source: |
     )
     and strings.contains(sender.display_name, "via")
   )
-  
   // negate docusign originated emails
   and not any(headers.hops,
               regex.imatch(.received.server.raw, ".+.docusign.(net|com)")
   )
+  
+  // negate replies to docusign notifications
+  and not any(headers.references, strings.iends_with(., '@camail.docusign.net'))
+
 attack_types:
   - "Credential Phishing"
 tactics_and_techniques:
