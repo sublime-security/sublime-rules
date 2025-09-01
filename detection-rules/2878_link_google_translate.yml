@@ -10,9 +10,32 @@ authors:
 severity: "low"
 source: |
   type.inbound
-  and (
-      any(body.links, ("google_translate_open_redirect") in .href_url.rewrite.encoders
-      or .href_url.url == "translate.goog")
+  and any(body.links,
+      ("google_translate_open_redirect") in .href_url.rewrite.encoders
+      or .href_url.url == "translate.goog"
+  )
+  and not (
+    any(ml.nlu_classifier(body.current_thread.text).topics,
+        .name in (
+          "Newsletters and Digests",
+          "Advertising and Promotions",
+          "Educational and Research",
+          "B2B Cold Outreach",
+          "Health and Wellness",
+          "Professional and Career Development",
+          "Romance",
+          "Sexually Explicit Messages",
+          "Software and App Updates",
+          "Acts of Violence",
+          "Voicemail Call and Missed Call Notifications",
+          "Environmental and Sustainability",
+          "Government Services",
+          "Political Mail",
+          "Emergency Alerts",
+          "Customer Service and Support"
+        )
+        and .confidence == "high"
+    )
   )
   // negate highly trusted sender domains unless they fail DMARC authentication
   and (
@@ -22,7 +45,7 @@ source: |
     )
     or sender.email.domain.root_domain not in $high_trust_sender_root_domains
   )
-
+  and sender.email.domain.root_domain != "govdelivery.com"
   and not profile.by_sender().any_messages_benign
 tags:
   - "Attack surface reduction"
@@ -36,4 +59,4 @@ detection_methods:
 id: "e57a323c-33cd-5b71-97df-09bd92f72259"
 og_id: "6949e115-b806-56ea-8976-420bb9d47e5c"
 testing_pr: 2878
-testing_sha: 450776694dd98d1071c560a16712c5a17a74fa20
+testing_sha: a6efd72861226276363024c36f3e36c5eca4372a
