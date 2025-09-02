@@ -1,0 +1,47 @@
+name: "Brand impersonation: Box file sharing service"
+description: "Detects messages impersonating Box file sharing service by identifying Box logos, collaboration-related language, or Box company address information from senders not associated with the legitimate box.com domain."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and (
+    (
+      any(ml.logo_detect(beta.message_screenshot()).brands, .name == "Box")
+      and any([body.current_thread.text, subject.subject],
+              regex.icontains(.,
+                              'invited you to.{0,10}(?:view|edit|work together|collaborate)',
+                              'items were (?:deleted|added)'
+              )
+      )
+    )
+    // Box address from footer
+    or 2 of (
+      strings.icontains(body.current_thread.text, 'About Box'),
+      strings.icontains(body.current_thread.text, '900 Jefferson Ave'),
+      strings.icontains(body.current_thread.text, 'Redwood City, CA 94063')
+    )
+  )
+  and not sender.email.domain.root_domain == "box.com"
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and not headers.auth_summary.dmarc.pass
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+  
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Social engineering"
+detection_methods:
+  - "Computer Vision"
+  - "Content analysis"
+  - "Header analysis"
+  - "Sender analysis"
+id: "5decd474-53ed-53bc-8626-241f1dd1a9df"
+og_id: "03da310c-e0b3-50cf-89d7-750295578f7a"
+testing_pr: 3161
+testing_sha: d437e791e4dd63ef7a0a5fea196e475db7419ab2
