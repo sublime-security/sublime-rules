@@ -6,16 +6,26 @@ source: |
   type.inbound
   and (
     (
-      any(beta.ml_topic(body.current_thread.text).topics,
+      any(ml.nlu_classifier(body.current_thread.text).topics,
           .name == "Financial Communications" and .confidence != "low"
       )
-      and regex.icontains(body.current_thread.text,
-                          '\bpre-?approved\b'
+      and not any(ml.nlu_classifier(body.current_thread.text).topics,
+                  .name in ("Newsletters and Digests")
       )
+      and not any(ml.nlu_classifier(body.current_thread.text).intents,
+                  .name == "benign" and .confidence == "high"
+      )
+      and regex.icontains(body.current_thread.text, '\bpre-?approved\b')
     )
     or (
-      any(beta.ml_topic(beta.ocr(beta.message_screenshot()).text).topics,
+      any(ml.nlu_classifier(beta.ocr(beta.message_screenshot()).text).topics,
           .name == "Financial Communications" and .confidence != "low"
+      )
+      and not any(ml.nlu_classifier(beta.ocr(beta.message_screenshot()).text).topics,
+                  .name in ("Newsletters and Digests") and .confidence != "low"
+      )
+      and not any(ml.nlu_classifier(beta.ocr(beta.message_screenshot()).text).intents,
+                  .name == "benign" and .confidence == "high"
       )
       and regex.icontains(beta.ocr(beta.message_screenshot()).text,
                           '\bpre-?approved\b'
@@ -50,4 +60,4 @@ detection_methods:
 id: "e16c030b-af00-5e2d-8384-6ca60de1f344"
 og_id: "f6fefa07-1eb6-5573-b57e-a3333a480ac6"
 testing_pr: 2916
-testing_sha: d71b6055127de4c44443c3ba3143e13edba43b7c
+testing_sha: aec17e9cf91693b0d1e24b12cbd2cb5421d0cb6c
