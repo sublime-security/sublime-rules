@@ -7,20 +7,20 @@ source: |
   and (
     // display name contains Shein
     (
-      regex.icontains(strings.replace_confusables(sender.display_name), '\bsh[ie]{2}n\b')
-  
-      // levenshtein distance similar to Shein
-      or strings.ilevenshtein(strings.replace_confusables(sender.display_name),
-                              'shein'
-      ) <= 1
-      or any(ml.logo_detect(beta.message_screenshot()).brands,
-             .name == "Shein" and .confidence == "high"
+      regex.icontains(strings.replace_confusables(sender.display_name),
+                      '\bsh[ie]{2}n\b'
+      )
+      or (
+        length(ml.logo_detect(beta.message_screenshot()).brands) == 1
+        and all(ml.logo_detect(beta.message_screenshot()).brands,
+                .name == "Shein" and .confidence == "high"
+        )
       )
     )
   )
   and (
     (
-      any(beta.ml_topic(body.current_thread.text).topics,
+      any(ml.nlu_classifier(body.current_thread.text).topics,
           .name in (
             "Security and Authentication",
             "Secure Message",
@@ -29,13 +29,13 @@ source: |
           )
           and .confidence in ("medium", "high")
       )
-      and not any(beta.ml_topic(body.current_thread.text).topics,
+      and not any(ml.nlu_classifier(body.current_thread.text).topics,
                   .name in ("Newsletters and Digests", "Entertainment and Sports")
                   and .confidence in ("medium", "high")
       )
     )
     or (
-      any(beta.ml_topic(beta.ocr(beta.message_screenshot()).text).topics,
+      any(ml.nlu_classifier(beta.ocr(beta.message_screenshot()).text).topics,
           .name in (
             "Security and Authentication",
             "Secure Message",
@@ -45,7 +45,7 @@ source: |
           and .confidence in ("medium", "high")
           and beta.ocr(beta.message_screenshot()).text != ""
       )
-      and not any(beta.ml_topic(beta.ocr(beta.message_screenshot()).text).topics,
+      and not any(ml.nlu_classifier(beta.ocr(beta.message_screenshot()).text).topics,
                   .name in ("Newsletters and Digests", "Entertainment and Sports")
                   and .confidence in ("medium", "high")
       )
@@ -62,13 +62,35 @@ source: |
   and not (
     sender.email.domain.root_domain in $org_domains
     or (
-      sender.email.domain.root_domain in ("shein.com", "sheinemail.com", "shein.co.uk", "sheingroup.com", "sheinnotice.com")
-      and headers.auth_summary.dmarc.pass
+      sender.email.domain.root_domain in (
+        "shein.com",
+        "shein.com.mx",
+        "sheinemail.com",
+        "shein.co.uk",
+        "sheingroup.com",
+        "sheinnotice.com",
+        "cash.app"
+      )
+      and (
+        headers.auth_summary.dmarc.pass
+        // for when DMARC fails, but it's still a legit Shein newsletter
+        or (
+          length(body.links) > 10
+          and ratio(body.links,
+                    .href_url.domain.root_domain in (
+                      "shein.com",
+                      "sheinemail.com",
+                      "shein.co.uk",
+                      "sheingroup.com",
+                      "sheinnotice.com"
+                    )
+          ) > 0.6
+        )
+      )
     )
     // parse out original sender domain from Apple Private Relay info
     or (
       sender.email.domain.domain in ("privaterelay.appleid.com", "icloud.com")
-        
       and strings.ilike(sender.email.local_part,
                         '*shein_com*',
                         '*sheinemail_com*'
