@@ -6,16 +6,26 @@ source: |
   type.inbound
   and (
     (
-      any(beta.ml_topic(body.current_thread.text).topics,
+      any(ml.nlu_classifier(body.current_thread.text).topics,
           .name == "Financial Communications" and .confidence != "low"
       )
-      and regex.icontains(body.current_thread.text,
-                          '\bpre-?approved\b'
+      and not any(ml.nlu_classifier(body.current_thread.text).topics,
+                  .name in ("Newsletters and Digests")
       )
+      and not any(ml.nlu_classifier(body.current_thread.text).intents,
+                  .name == "benign" and .confidence == "high"
+      )
+      and regex.icontains(body.current_thread.text, '\bpre-?approved\b')
     )
     or (
-      any(beta.ml_topic(beta.ocr(beta.message_screenshot()).text).topics,
+      any(ml.nlu_classifier(beta.ocr(beta.message_screenshot()).text).topics,
           .name == "Financial Communications" and .confidence != "low"
+      )
+      and not any(ml.nlu_classifier(beta.ocr(beta.message_screenshot()).text).topics,
+                  .name in ("Newsletters and Digests") and .confidence != "low"
+      )
+      and not any(ml.nlu_classifier(beta.ocr(beta.message_screenshot()).text).intents,
+                  .name == "benign" and .confidence == "high"
       )
       and regex.icontains(beta.ocr(beta.message_screenshot()).text,
                           '\bpre-?approved\b'
