@@ -18,7 +18,9 @@ source: |
                           "*received a document*",
                           "*shared a document*",
                           "*shared this document*",
-                          "*shared an item*"
+                          "*shared an item*",
+                          "*received this email because you*",
+                          "*shared a*with you*"
             )
         )
         or any(file.explode(beta.message_screenshot()),
@@ -29,7 +31,9 @@ source: |
                              "*received a document*",
                              "*shared a document*",
                              "*shared this document*",
-                             "*shared an item*"
+                             "*shared an item*",
+                             "*received this email because you*",
+                             "*shared a*with you*"
                )
         )
       )
@@ -43,6 +47,7 @@ source: |
         or any(recipients.to, strings.icontains(subject.subject, .email.domain.sld))
         or strings.ilike(subject.subject, "*Docs*", "*Sheets*", "*Slides*")
         or any(body.links, strings.icontains(.display_text, "open document"))
+        or strings.ilike(sender.display_name, "*Google Drive*")
         or subject.subject is null
         or subject.subject == ""
       )
@@ -124,6 +129,12 @@ source: |
                              )
            )
     )
+    // Google address from footer
+    or 2 of (
+      strings.icontains(body.current_thread.text, 'Google LLC'),
+      strings.icontains(body.current_thread.text, '1600 Amphitheatre Parkway'),
+      strings.icontains(body.current_thread.text, 'Mountain View, CA 94043'),
+    )
   )
   and not all(body.links, .href_url.domain.root_domain in ("google.com"))
   and sender.email.domain.root_domain not in $org_domains
@@ -146,10 +157,10 @@ source: |
     or profile.by_sender_email().prevalence == "new"
     or (
       profile.by_sender().any_messages_malicious_or_spam
-      and not profile.by_sender().any_false_positives
+      and not profile.by_sender().any_messages_benign
     )
   )
-  and not profile.by_sender().any_false_positives
+  and not profile.by_sender().any_messages_benign
 attack_types:
   - "Credential Phishing"
   - "Malware/Ransomware"
