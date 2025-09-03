@@ -1,4 +1,4 @@
-name: "Brand Impersonation: Booking.com"
+name: "Brand impersonation: Booking.com"
 description: "Detects messages purporting to be from Booking.com's support team that contain suspicious credential collection patterns. The sender is not from a legitimate Booking.com domain and shows a history of problematic behavior or lacks prior solicited communication. Additional checks enforce DMARC authentication for trusted domains."
 type: "rule"
 severity: "medium"
@@ -12,6 +12,13 @@ source: |
             "Security and Authentication"
           )
           and .confidence != "low"
+          // handle instances in which ml_topic does not hit
+          or (
+            length(body.links) == 0
+            and length(attachments) == 0
+            and length(body.current_thread.text) < 1000
+            and strings.icontains(sender.display_name, "booking.com")
+          )
   )
   and (
     any(ml.nlu_classifier(body.current_thread.text).entities,
@@ -28,6 +35,7 @@ source: |
            strings.ilike(.display_text,
                          "*review*",
                          "*response*",
+                         "*respond*",
                          "*complaint*",
                          "*contact*",
                          "*accommodation*"
@@ -37,7 +45,7 @@ source: |
            or strings.icontains(.href_url.path, "/redir")
     )
     // check for text strings that betray intent
-    or strings.icontains(body.current_thread.text, "book a room", )
+    or regex.icontains(body.current_thread.text, '(book\sa|open)\srooms', )
     or strings.ilike(body.current_thread.text, "* availab*", )
     // two seperate HTML elements impersonating the logo
     or (
