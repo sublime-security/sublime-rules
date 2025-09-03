@@ -4,34 +4,37 @@ type: "rule"
 severity: "medium"
 source: |
   type.inbound
-  // length of body links is greater than 0
-  and length(body.links) > 0
-
+  // length of body links is greater than 0 and less than 10
+  and 0 < length(body.links) < 10
+  
   // sender is not freemail
   and sender.email.domain.root_domain not in $free_email_providers
-
+  
   // and no body links match the sender's domain
   and all(body.links,
           .href_url.domain.root_domain != sender.email.domain.root_domain
   )
   // .svg found either in the body links or in the body text, or in certain header fields (subject, display name)
   and (
-    any(body.links, strings.ilike(.display_text, "*.svg*"))
-    or (strings.icontains(body.current_thread.text, ".svg"))
-    or any([subject.subject, sender.display_name], strings.icontains(., '.svg'))
+    any(body.links, strings.iends_with(.display_text, ".svg"))
+    or regex.icontains(body.current_thread.text, '\.svg.?[\r\n]')
+    or any([subject.subject, sender.display_name], strings.iends_with(., '.svg'))
   )
   // any body links are in $free_file_hosts
   and any(body.links,
           (
             .href_url.domain.domain in $free_file_hosts
             or .href_url.domain.root_domain in $free_file_hosts
+            or .href_url.domain.domain in $self_service_creation_platform_domains
           )
+            and not .href_url.domain.domain in $tenant_domains
+  
           // remove free_file_hosts used to host images as links
           and not any($file_types_images,
                       strings.iends_with(..href_url.url, strings.concat('.', .))
           )
   )
-  // exclusions for Sharepoint and others
+  // some exclusions for internal emails 
   and not any([
                 "Modify my alert settings",
                 "Requested resource",
@@ -39,8 +42,6 @@ source: |
               ],
               strings.icontains(body.current_thread.text, .)
   )
-  // Exclude long existing threads
-  and length(body.previous_threads) <= 1
 attack_types:
   - "Credential Phishing"
   - "Malware/Ransomware"
