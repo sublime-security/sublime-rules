@@ -68,20 +68,40 @@ source: |
                            and strings.starts_with(.path, '/schemas/xmls/')
                          )
                   ),
-                  // Run link analysis on the filtered URLs to detect phishing
-                  ml.link_analysis(.).credphish.disposition == "phishing"
-                  // confidence is only returned when brands, if it's not there, consider this true
-                  // this ensures if there is a brand, the confidence is high
-                  // and allows matching when there is no confidence
-                  and coalesce(ml.link_analysis(.).credphish.confidence == "high", true)
-                  and not (
-                    ml.link_analysis(.).credphish.brand.name is not null
-                    and ml.link_analysis(.).credphish.brand.name == "GoDaddy"
-                    and strings.icontains(ml.link_analysis(.).final_dom.inner_text,
-                                          'is parked free, courtesy of GoDaddy.com.'
+                  // try to do some work without having to invoke LA first
+                  // go to free subdomains hosts
+                  (
+                    .domain.root_domain in $free_subdomain_hosts
+                    // where there is a subdomain
+                    and .domain.subdomain is not null
+                    and .domain.subdomain != "www"
+                  )
+                  // go to url shortners/ social landing or self service domains
+                  or .domain.root_domain in $url_shorteners
+                  or .domain.root_domain in $social_landing_hosts
+                  or .domain.domain in $url_shorteners
+                  or .domain.domain in $social_landing_hosts
+                  or .domain.domain in $self_service_creation_platform_domains
+                  or .domain.root_domain in $self_service_creation_platform_domains
+                  // newly registered domain
+                  or network.whois(.domain).days_old < 30
+                  or ( // Run link analysis on the filtered URLs to detect phishing
+                    ml.link_analysis(.).credphish.disposition == "phishing"
+                    // confidence is only returned when brands, if it's not there, consider this true
+                    // this ensures if there is a brand, the confidence is high
+                    // and allows matching when there is no confidence
+                    and coalesce(ml.link_analysis(.).credphish.confidence == "high",
+                                 true
                     )
-                    and strings.icontains(ml.link_analysis(.).final_dom.inner_text,
-                                          'Get This Domain'
+                    and not (
+                      ml.link_analysis(.).credphish.brand.name is not null
+                      and ml.link_analysis(.).credphish.brand.name == "GoDaddy"
+                      and strings.icontains(ml.link_analysis(.).final_dom.inner_text,
+                                            'is parked free, courtesy of GoDaddy.com.'
+                      )
+                      and strings.icontains(ml.link_analysis(.).final_dom.inner_text,
+                                            'Get This Domain'
+                      )
                     )
                   )
               )
