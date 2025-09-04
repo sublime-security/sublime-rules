@@ -18,7 +18,7 @@ source: |
   and (
     any(ml.nlu_classifier(subject.subject).tags, .name in ("payment", "invoice"))
     or regex.contains(subject.subject,
-                      '(?:\binv(?:oice|o)\b|in_v|in-voice|pay(?:ment|mnt)|pymt|\brec(?:eipt|pt|iept)\b|rcpt|confirm(?:ation)|cnfrm|cnf|po\b|p\.o\.|purch(?:ase)?-?order|\bord(?:er)?\b|bill(?:ing)|billing-info|transact(?:ion)|txn|trx|\bstmt\b|\bstmnt\b|remit(?:tance)|rmt|remndr|remind|\bdue(?:-date)\b|ovrdue|overdue|\bbal(?:ance)\b|\bpaid(?:-invoice)\b)',
+                      '(?:\binv(?:oice|o)\b|in_v|in-voice|pay(?:ment|mnt)|pymt|\brec(?:eipt|pt|iept)\b|rcpt|confirm(?:ation)|cnfrm|cnf|po\b|p\.o\.|purch(?:ase)?-?order|\bord(?:er)?\b|bill(?:ing)|billing-info|transact(?:ion)|txn|trx|\bstmt\b|\bstmnt\b|remit(?:tance)|rmt|remndr|remind|\bdue(?:-date)\b|ovrdue|overdue|\bbal(?:ance)\b|\bpaid(?:-invoice)\b)|Issued\sSettlements',
                       // suspicious invoice format
                       '\d{6}\b.{10,30}(\d{2}\.){3}pdf'
     )
@@ -33,13 +33,16 @@ source: |
     )
     or any(body.links,
            regex.icontains(.display_text,
-                           '(?:\binv(?:oice|o)\b|in_v|in-voice|pay(?:ment|mnt)|pymt|\brec(?:eipt|pt|iept)\b|rcpt|req(?:uest)|rqst|\brq\b|\bpo\b|p\.o\.|purch(?:ase)?-?order|\bord(?:er)?\b|bill(?:ing)|billing-info|transact(?:ion)|txn|trx|\bstmt\b|\bstmnt\b|remit(?:tance)|rmt|remndr|remind|\bdue(?:-date)\b|ovrdue|overdue|\bbal(?:ance)\b|\bpaid(?:-invoice)\b)'
+                           '(?:\binv(?:oice|o)\b|in_v|in-voice|pay(?:ment|mnt)|pymt|\brec(?:eipt|pt|iept)\b|rcpt|req(?:uest)|rqst|\brq\b|\bpo\b|p\.o\.|purch(?:ase)?-?order|\bord(?:er)?\b|bill(?:ing)|billing-info|transact(?:ion)|txn|trx|\bstmt\b|\bstmnt\b|remit(?:tance)|rmt|remndr|remind|\bdue(?:-date)\b|ovrdue|overdue|\bbal(?:ance)\b|\bpaid(?:-invoice)\b|Issued\sSettlements)'
            )
     )
   )
   // the body references an attachment 
   and (
+    (
     strings.contains(body.current_thread.text, "attach")
+    or strings.icontains(body.current_thread.text, "details below")
+    )
     // negate warning banners warning about the attachment(s)
     and (
       not (
@@ -59,10 +62,13 @@ source: |
     )
   )
   
-  // body text is determined to contain cred_theft language by nlu or contains a request with suspicious keywords
+  // body text is determined to contain cred_theft or financial communications langauge by nlu, or contains a request with suspicious keywords
   and (
     any(ml.nlu_classifier(body.current_thread.text).intents,
         .name == "cred_theft"
+    )
+    or any(ml.nlu_classifier(body.current_thread.text).topics,
+           .name in ("Financial Communications") and .confidence != "low"
     )
     or any(ml.nlu_classifier(body.current_thread.text).entities,
            .name == "request"
