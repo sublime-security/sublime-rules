@@ -1,0 +1,104 @@
+name: "Suspicious invoice reference with missing or image-only attachments"
+description: "This rule flags emails that reference invoices or payments but have suspicious characteristics: attachments are either missing or only images. It also checks for misleading links disguised as attachments and the presence of invoice-related keywords. The rule looks for potential credential theft or unusual requests, making it a strong indicator of phishing attempts."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  
+  // more than 0 but less than 20 links
+  and 0 < length(body.links) < 20
+  
+  // all attachments are images or there are 0 attachments
+  and (
+    length(attachments) > 0 and all(attachments, .file_type in $file_types_images)
+    or length(attachments) == 0
+  )
+  
+  // subject contains payment/invoice language
+  and (
+    any(ml.nlu_classifier(subject.subject).tags, .name in ("payment", "invoice"))
+    or regex.contains(subject.subject,
+                      '(?:\binv(?:oice|o)\b|in_v|in-voice|pay(?:ment|mnt)|pymt|\brec(?:eipt|pt|iept)\b|rcpt|confirm(?:ation)|cnfrm|cnf|po\b|p\.o\.|purch(?:ase)?-?order|\bord(?:er)?\b|bill(?:ing)|billing-info|transact(?:ion)|txn|trx|\bstmt\b|\bstmnt\b|remit(?:tance)|rmt|remndr|remind|\bdue(?:-date)\b|ovrdue|overdue|\bbal(?:ance)\b|\bpaid(?:-invoice)\b)|Issued\sSettlements',
+                      // suspicious invoice format
+                      '\d{6}\b.{10,30}(\d{2}\.){3}pdf'
+    )
+  )
+  
+  // link display text ends in a file extension or contain common payment terms
+  and (
+    any(body.links,
+        regex.imatch(.display_text,
+                     '.*\.(?:doc|docm|docx|dot|dotm|pdf|ppa|ppam|ppsm|ppt|pptm|pptx|wbk|xla|xlam|xlm|xls|xlsb|xlsm|xlsx|xlt|xltm)$'
+        )
+    )
+    or any(body.links,
+           regex.icontains(.display_text,
+                           '(?:\binv(?:oice|o)\b|in_v|in-voice|pay(?:ment|mnt)|pymt|\brec(?:eipt|pt|iept)\b|rcpt|req(?:uest)|rqst|\brq\b|\bpo\b|p\.o\.|purch(?:ase)?-?order|\bord(?:er)?\b|bill(?:ing)|billing-info|transact(?:ion)|txn|trx|\bstmt\b|\bstmnt\b|remit(?:tance)|rmt|remndr|remind|\bdue(?:-date)\b|ovrdue|overdue|\bbal(?:ance)\b|\bpaid(?:-invoice)\b|Issued\sSettlements)'
+           )
+    )
+  )
+  // the body references an attachment 
+  and (
+    (
+    strings.contains(body.current_thread.text, "attach")
+    or strings.icontains(body.current_thread.text, "details below")
+    )
+    // negate warning banners warning about the attachment(s)
+    and (
+      not (
+        (
+          regex.count(body.current_thread.text, "attach") == 1
+          and regex.icontains(body.current_thread.text,
+                              "(caution|warning).{0,30}attach"
+          )
+        )
+        or ( // WeTransfer expiry warning notification
+          sender.email.email == "noreply@wetransfer.com"
+          and any(body.links,
+                  .display_text == "Don't send me these expiry reminders anymore"
+          )
+        )
+      )
+    )
+  )
+  
+  // body text is determined to contain cred_theft or financial communications langauge by nlu, or contains a request with suspicious keywords
+  and (
+    any(ml.nlu_classifier(body.current_thread.text).intents,
+        .name == "cred_theft"
+    )
+    or any(ml.nlu_classifier(body.current_thread.text).topics,
+           .name in ("Financial Communications") and .confidence != "low"
+    )
+    or any(ml.nlu_classifier(body.current_thread.text).entities,
+           .name == "request"
+           and (
+             strings.icontains(.text, "kindly")
+             or strings.icontains(.text, "please see attached")
+           )
+    )
+  )
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and not headers.auth_summary.dmarc.pass
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+  and not profile.by_sender().solicited
+
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Computer Vision"
+  - "File analysis"
+  - "Natural Language Understanding"
+  - "Sender analysis"
+id: "b513d2b7-8cb4-5fd4-82e0-5edbf2075bf5"
+og_id: "466c1680-b9ff-5bd0-baf8-e65cca99d18b"
+testing_pr: 3176
+testing_sha: a45aefe2cf5cb904095658df525fcf9ef72c8717
