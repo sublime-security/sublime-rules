@@ -96,8 +96,10 @@ jobs:
         MODIFIED_COUNT=0
         DELETED_COUNT=0
         UPDATED_PRS=()
+        FILES_TO_COMMIT=()
+        TESTING_SHA_ONLY_COUNT=0
         
-        # Process each file individually
+        # Process each file individually to filter out testing_sha-only changes
         for FILE in $FILES; do
           # Skip non-rule files 
           if [[ ! "$FILE" =~ .*\.yml$ ]]; then
@@ -112,26 +114,79 @@ jobs:
           
           # Handle removed files
           if [[ ! -f "$FILE" ]]; then
-            git add "$FILE"
-            git commit -m "[PR #${PR_NUMBER}] Delete detection rule"
+            FILES_TO_COMMIT+=("$FILE")
             DELETED_COUNT=$((DELETED_COUNT+1))
             continue
           fi
           
-          # Extract rule name
+          # Check if only testing_sha field changed
+          DIFF_OUTPUT=$(git diff "$FILE")
+          TESTING_SHA_ONLY=false
+          
+          # Check if the diff only contains testing_sha changes
+          # Look for lines that are only additions/deletions of testing_sha
+          if echo "$DIFF_OUTPUT" | grep -E '^[+-]' | grep -v '^[+-]{3}' | grep -v '^[+-]testing_sha:' | grep -q .; then
+            # There are other changes besides testing_sha
+            TESTING_SHA_ONLY=false
+          else
+            # Only testing_sha changes found
+            if echo "$DIFF_OUTPUT" | grep -q '^[+-]testing_sha:'; then
+              TESTING_SHA_ONLY=true
+              TESTING_SHA_ONLY_COUNT=$((TESTING_SHA_ONLY_COUNT+1))
+              echo "\tSkipping $FILE: only testing_sha field changed"
+              continue
+            fi
+          fi
+          
+          # File has substantive changes, add to commit list
+          FILES_TO_COMMIT+=("$FILE")
+          
+          # Determine status directly from git
+          GIT_STATUS=$(git status --porcelain "$FILE" | cut -c1-2 | tr -d ' ')
+          if [[ "$GIT_STATUS" == "A" ]]; then
+            ADDED_COUNT=$((ADDED_COUNT+1))
+          elif [[ "$GIT_STATUS" == "M" ]]; then
+            MODIFIED_COUNT=$((MODIFIED_COUNT+1))
+          else
+            MODIFIED_COUNT=$((MODIFIED_COUNT+1))
+          fi
+        done
+        
+        # Report testing_sha-only changes
+        if [[ $TESTING_SHA_ONLY_COUNT -gt 0 ]]; then
+          echo "Found $TESTING_SHA_ONLY_COUNT file(s) with only testing_sha changes - skipping commit for these files"
+        fi
+        
+        # Check if we have any files left to commit
+        if [[ ${#FILES_TO_COMMIT[@]} -eq 0 ]]; then
+          echo "No substantive changes to commit after filtering testing_sha-only changes"
+          exit 0
+        fi
+        
+        # Commit the files that have substantive changes
+        for FILE in "${FILES_TO_COMMIT[@]}"; do
+          # Handle removed files
+          if [[ ! -f "$FILE" ]]; then
+            git add "$FILE"
+            BASENAME=$(basename "$FILE")
+            PR_NUMBER=$(echo "$BASENAME" | grep -o "^[0-9]*")
+            git commit -m "[PR #${PR_NUMBER}] Delete detection rule"
+            continue
+          fi
+          
+          # Extract rule name and commit
           RULE_NAME=$(grep -m 1 "name:" "$FILE" | sed 's/name: //' | sed 's/^"//' | sed 's/"$//' | sed "s/^'//" | sed "s/'$//")
+          BASENAME=$(basename "$FILE")
+          PR_NUMBER=$(echo "$BASENAME" | grep -o "^[0-9]*")
           
           # Determine status directly from git
           GIT_STATUS=$(git status --porcelain "$FILE" | cut -c1-2 | tr -d ' ')
           if [[ "$GIT_STATUS" == "A" ]]; then
             STATUS="added"
-            ADDED_COUNT=$((ADDED_COUNT+1))
           elif [[ "$GIT_STATUS" == "M" ]]; then
             STATUS="modified" 
-            MODIFIED_COUNT=$((MODIFIED_COUNT+1))
           else
             STATUS="changed"
-            MODIFIED_COUNT=$((MODIFIED_COUNT+1))
           fi
           
           # Build commit message
