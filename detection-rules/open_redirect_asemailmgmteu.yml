@@ -4,20 +4,16 @@ type: "rule"
 severity: "medium"
 source: |
   type.inbound
+  and 0 < length(body.links) < 10
   and any(body.links,
           .href_url.domain.root_domain == "asemailmgmteu.com"
           and strings.icontains(.href_url.query_params, 'redirect=')
           // negate use of the redirect by asemailmgmteu.com
-          and not regex.icontains(.href_url.query_params,
-                                  'redirect=[^&]*asemailmgmteu\.com'
+          and not any(.href_url.query_params_decoded["redirect"],
+                      strings.parse_url(.).domain.root_domain == sender.email.domain.root_domain
+                      and not strings.parse_url(.).domain.root_domain == "asemailmgmteu.com"
           )
   )
-  // negate legitimate use of the redirect in newsletters
-  and sender.email.domain.root_domain not in~ (
-      "wizznews.com",
-      "tomtom.com"
-  )
-
   // negate highly trusted sender domains unless they fail DMARC authentication
   and (
     (
