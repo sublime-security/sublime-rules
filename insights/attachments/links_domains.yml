@@ -1,12 +1,30 @@
 name: "Domains in attachments"
 type: "query"
 source: |
-  filter(
-    map(attachments,
-        map(file.explode(.),
-            distinct(map(.scan.url.urls, .domain.domain), .)
-        )
-    ),
-    length(.) > 0
+  filter(map(attachments,
+           map(file.explode(.),
+               distinct(map(filter(.scan.url.urls,
+                                   .domain.root_domain not in $org_domains
+                                   and .domain.root_domain not in (
+                                     "sublimesecurity.com",
+                                     "wps.cn",
+                                     "dublincore.org"
+                                   )
+                                   and .domain.domain not in~ (
+                                     "schemas.openxmlformats.org",
+                                     "schemas.microsoft.com",
+                                     "purl.org",
+                                     "www.w3.org",
+                                     "purl.oclc.org",
+                                     "schemas.apple.com"
+                                   )
+                            ),
+                            .url
+                        ),
+                        .
+               )
+           )
+       ),
+       length(.) > 0
   )
 severity: "informational"
