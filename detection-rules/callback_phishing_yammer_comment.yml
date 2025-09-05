@@ -1,21 +1,18 @@
-name: "Callback phishing via MicrosoftOnline comment"
-description: "Detects callback scam messages originating from legitimate Microsoft infrastructure but containing fraudulent content designed to trick recipients into calling scammer phone numbers. The message includes typical callback phishing language around purchases, payments, subscriptions, or support services along with embedded phone numbers, while passing Microsoft's authentication checks."
+name: "Callback phishing via Yammer comment"
+description: "Detects callback scams sent through Yammer infrastructure containing suspicious payment-related keywords and phone numbers. The rule identifies messages with callback scam language patterns or multiple financial transaction terms combined with phone number patterns in the message body or subject line."
 type: "rule"
 severity: "medium"
 source: |
   type.inbound
-  and length(attachments) == 0
-  
-  // Legitimate MicrosoftOnline sending infratructure
-  and sender.email.domain.root_domain == 'microsoftonline.com'
-  and (headers.auth_summary.spf.pass or headers.auth_summary.dmarc.pass)
+  // message from Yammer sending infratructure
+  and sender.email.domain.root_domain == 'yammer.com'
+  and length(body.current_thread.text) < 2000
   
   // Callback Phishing
   and (
     any(ml.nlu_classifier(body.current_thread.text).intents,
         .name in ("callback_scam")
         and .confidence in ("medium", "high")
-        and length(body.current_thread.text) < 1750
     )
     or 3 of (
       strings.ilike(body.current_thread.text, '*purchase*'),
@@ -41,7 +38,10 @@ source: |
                           '\+?([ilo0-9]{1,2})?\s?\(?\d{3}\)?[\s\.\-⋅]{0,5}[ilo0-9]{3}[\s\.\-⋅]{0,5}[ilo0-9]{4}'
           )
   )
-  
+  // negate benign threads
+  and not any(ml.nlu_classifier(body.current_thread.text).intents,
+            .name == "benign" and .confidence == "high"
+  )
 
 attack_types:
   - "Callback Phishing"
@@ -51,7 +51,6 @@ tactics_and_techniques:
   - "Social engineering"
 detection_methods:
   - "Content analysis"
-  - "Header analysis"
   - "Natural Language Understanding"
-  - "Sender analysis"
-id: "8346c7b9-1b46-50e7-b04e-b32969db8737"
+  - "Header analysis"
+id: "66650e2b-b944-5e5e-89ef-790a941f534a"
