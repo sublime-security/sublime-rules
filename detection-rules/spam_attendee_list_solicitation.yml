@@ -1,4 +1,4 @@
-name: "Spam: Attendee List solicitation"
+name: "Spam: Attendee list solicitation"
 description: "This rule detects messages claiming to have the attendee list from a specific event, they may list various information such as the number of contacts, the demographic and sample contacts. The messages typically offer to send pricing information upon request."
 type: "rule"
 severity: "low"
@@ -6,7 +6,7 @@ source: |
   type.inbound
   and length(body.current_thread.text) < 2000
   and length(body.links) < 5
-  and any(beta.ml_topic(coalesce(body.html.display_text, body.plain.raw)).topics,
+  and any(ml.nlu_classifier(coalesce(body.html.display_text, body.plain.raw)).topics,
           .name in ("Contact List Solicitation", "B2B Cold Outreach")
           and .confidence in ("medium", "high")
   )
@@ -16,11 +16,11 @@ source: |
         any([subject.subject, body.current_thread.text],
             (
               regex.icontains(.,
-                              '(?:Attendee|Buyer|Contact|Decision Maker|Email|Member|Participant|Professional|Registrant|User|Visitor|Store|Grocer)(?:[[:punct:]]*s)?(?:\s\w*){0,9}(?:\blist(?:\b|[^ei])|database)'
+                              '(?:Attendee|Buyer|Contact|Decision Maker|Email|Member|Participant|Professional|Registrant|User|Visitor|Store|Grocer|Lead)(?:[[:punct:]]*s)?(?:\s\w*){0,9}(?:\blist(?:\b|[^ei])|database)'
               )
               and not (
                 regex.icount(.,
-                            '(email|contact)(?:[[:punct:]]*s)?(?:\s\w*){0,9}list'
+                             '(email|contact)(?:[[:punct:]]*s)?(?:\s\w*){0,9}list'
                 ) == 1
                 and regex.icontains(.,
                                     '(?:unsub|remove|safe|delete|leave|update|part of|be added|safe)[[:punct:]]*s?(?:\s\w*){0,9}(mailing|email|my|sender)(?:\s\w*){0,9}list(?:\b|[^ei])',
@@ -29,12 +29,19 @@ source: |
               )
             )
             or regex.icontains(.,
-                              '\b(?:list|database)(?:[[:punct:]]*s)?\b(\s\w*){0,9}(?:Attendee|Buyer|Contact|Decision Maker|Email|Member|Participant|Professional|Registrant|User|Visitor|Store|Grocer)s?'
+                               '\b(?:list|database)(?:[[:punct:]]*s)?\b(\s\w*){0,9}(?:Attendee|Buyer|Contact|Decision Maker|Email|Member|Participant|Professional|Registrant|User|Visitor|Store|Grocer)s?'
             )
         )
       )
-      and regex.icontains(body.current_thread.text,
-                          "(?:interest(s|ed)|accessing|purchas|obtain|acuir|sample|provide.{0,10}samples|counts|pricing)"
+      and (
+        regex.icontains(body.current_thread.text,
+                        "(?:interest(s|ed)|accessing|purchas|obtain|acuir|sample|provide.{0,10}samples|counts|pricing)"
+        )
+        or any(body.previous_threads,
+               regex.icontains(.text,
+                               "(?:interest(s|ed)|accessing|purchas|obtain|acuir|sample|provide.{0,10}samples|counts|pricing)"
+               )
+        )
       )
       and not regex.icontains(body.current_thread.text,
                               "(?:debit card|transaction.{0,20}processed)"
@@ -49,14 +56,12 @@ source: |
         regex.icontains(body.current_thread.text,
                         '(review|drop me a line about) (my|this|it)'
         ),
-        regex.icontains(body.current_thread.text,
-                        'missed it( the)? first time'
-        ),
+        regex.icontains(body.current_thread.text, 'missed it( the)? first time'),
         regex.icontains(body.current_thread.text,
                         '(?:below|previous(ly)?|last|prior|earlier) (message|email|sent)'
         ),
         regex.icontains(body.current_thread.text,
-                          // "the email I sent you earlier"
+                        // "the email I sent you earlier"
                         '(e?mail|message).{0,20}(sent).{0,20}(?:below|previous(ly)?|last|prior|earlier)'
         ),
         regex.icontains(body.current_thread.text,
@@ -68,7 +73,9 @@ source: |
         regex.icontains(body.current_thread.text, '(heard?|circling) back'),
         strings.icontains(body.current_thread.text, 'recently sent'),
         strings.icontains(body.current_thread.text, 'still interested'),
-        regex.icontains(body.current_thread.text, 'did you (get|receive) (it|my (message|e?mail))'),
+        regex.icontains(body.current_thread.text,
+                        'did you (get|receive) (it|my (message|e?mail))'
+        ),
         regex.icontains(body.current_thread.text, '(swift|quick|short) response'),
         regex.icontains(body.current_thread.text, 'kindly.{0,30}.interested'),
       )
@@ -84,11 +91,11 @@ source: |
                   strings.icontains(., "--Original Message--")
                 )
                 or strings.icontains(.,
-                                    strings.concat(sender.display_name,
+                                     strings.concat(sender.display_name,
                                                     " <",
                                                     sender.email.email,
                                                     "> wrote:"
-                                    )
+                                     )
                 )
               )
               // match _after_ the previous thread indciators
@@ -97,8 +104,7 @@ source: |
                                 '(?:from|to|sent|date|cc|subject|wrote):(.|\W)*(?:Attendee|Buyer|Contact|Decision Maker|Email|Member|Participant|Professional|Registrant|User|Visitor|Mailing)(?:[[:punct:]]*s)?(?:\s\w*){0,9}(?:list(?:\b|[^ei])|database)'
                 )
                 or regex.icontains(.,
-                                '(?:from|to|sent|date|cc|subject|wrote):(.|\W)*(?:list(?:\b|[^ei])|database)(?:[[:punct:]]*s)?(\s\w*){0,9}(?:Attendee|Buyer|Contact|Decision Maker|Email|Member|Participant|Professional|Registrant|User|Visitor|Mailing)s?'
-  
+                                   '(?:from|to|sent|date|cc|subject|wrote):(.|\W)*(?:list(?:\b|[^ei])|database)(?:[[:punct:]]*s)?(\s\w*){0,9}(?:Attendee|Buyer|Contact|Decision Maker|Email|Member|Participant|Professional|Registrant|User|Visitor|Mailing)s?'
                 )
                 or (
                   2 of (
@@ -121,6 +127,7 @@ source: |
   )
   and not profile.by_sender().solicited
   and not profile.by_sender().any_messages_benign
+
 tags:
   - "Attack surface reduction"
 attack_types:
