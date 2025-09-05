@@ -14,12 +14,21 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
+            const username = context.payload.pull_request.user.login;
+            console.log(`Checking membership for user: ${username}`);
+            
             const { data: org } = await github.rest.orgs.checkMembershipForUser({
               org: 'sublime-security',
-              username: context.payload.pull_request.user.login
-            }).catch(() => ({ data: null }));
+              username: username
+            }).catch((error) => {
+              console.log(`Error checking membership: ${error.message}`);
+              return { data: null };
+            });
+            
+            console.log(`Membership result:`, org);
             
             if (!org || org.state !== 'active') {
+              console.log('User is external, adding review-needed label');
               await github.rest.issues.addLabels({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
@@ -27,4 +36,6 @@ jobs:
                 labels: ['review-needed']
               });
               console.log('Added review-needed label to external PR');
+            } else {
+              console.log('User is internal, no label added');
             }
