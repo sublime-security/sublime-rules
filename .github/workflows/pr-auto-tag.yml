@@ -15,19 +15,45 @@ jobs:
         with:
           script: |
             const username = context.payload.pull_request.user.login;
-            console.log(`Checking membership for user: ${username}`);
+            console.log(`Checking permissions for user: ${username}`);
             
-            const { data: org } = await github.rest.orgs.checkMembershipForUser({
-              org: 'sublime-security',
-              username: username
-            }).catch((error) => {
-              console.log(`Error checking membership: ${error.message}`);
-              return { data: null };
-            });
+            let isInternal = false;
             
-            console.log(`Membership result:`, org);
+            // Check if user is a collaborator on the repository
+            try {
+              const { data: collab } = await github.rest.repos.getCollaboratorPermissionLevel({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                username: username
+              });
+              
+              console.log(`Repository permission level: ${collab.permission}`);
+              
+              // Users with write, maintain, or admin permissions are considered internal
+              if (['write', 'maintain', 'admin'].includes(collab.permission)) {
+                isInternal = true;
+              }
+            } catch (error) {
+              console.log(`Error checking repository permissions: ${error.message}`);
+            }
             
-            if (!org || org.state !== 'active') {
+            // Fallback: try organization membership (works for public memberships)
+            if (!isInternal) {
+              try {
+                const { data: org } = await github.rest.orgs.checkMembershipForUser({
+                  org: 'sublime-security',
+                  username: username
+                });
+                console.log(`Organization membership result:`, org);
+                if (org && org.state === 'active') {
+                  isInternal = true;
+                }
+              } catch (error) {
+                console.log(`Organization membership check: ${error.message} (expected for private memberships)`);
+              }
+            }
+            
+            if (!isInternal) {
               console.log('User is external, adding review-needed label');
               await github.rest.issues.addLabels({
                 owner: context.repo.owner,
