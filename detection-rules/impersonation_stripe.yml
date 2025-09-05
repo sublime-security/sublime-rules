@@ -11,9 +11,22 @@ source: |
       sender.display_name =~ 'stripe'
       or (
           strings.istarts_with(sender.display_name, 'stripe ')
-          and not sender.display_name in~ ('Stripe & Stare')
+          and not sender.display_name in~ ('Stripe & Stare', 'Stripe and Stare', 'Stripe Events')
       )
       or strings.replace_confusables(sender.display_name) =~ 'stripe'
+      // fake stripe invoice in attached picture
+      or (
+        any(attachments,
+            .file_type in $file_types_images
+            and any(file.explode(.),
+                    strings.ilike(.scan.ocr.raw, "*stripe*")
+                    and any(ml.nlu_classifier(.scan.ocr.raw).intents,
+                            .name in ("callback_scam")
+                            and .confidence in ("medium", "high")
+                  )
+              )
+          )
+      )
     )
     or (
       // the edit distance is 1 or 2
@@ -35,11 +48,13 @@ source: |
         "scribe",
         "straye", // a shoe company?
         "storie", // storiesbystorie.com
+        "stryke", // a cybersecurity and compliance company
         "stryve", // a food/snack company stryve.com
         "shrine", // common word
         "s.ride", // cab/taxi company
         "striim", // ai/data company
-        "striim.com" // same as above
+        "striim.com", // same as above
+        "skribe" // ai/legal company
       )
     )
   )

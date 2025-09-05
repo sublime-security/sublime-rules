@@ -1,4 +1,4 @@
-name: "Brand Impersonation: Fake Fax"
+name: "Brand impersonation: Fake Fax"
 description: |
   Detects messages containing fax-related language and notification elements from senders outside of known legitimate fax service providers.
 references:
@@ -7,11 +7,11 @@ type: "rule"
 severity: "medium"
 source: |
   type.inbound
-
+  
   // not a reply/fwd
   and length(headers.references) == 0 
   and headers.in_reply_to is null
-
+  
   // Subject or sender contains fax
   and (
     any([subject.subject, sender.display_name],
@@ -29,6 +29,9 @@ source: |
       ( // strong notification terms in either the subject or body.current_thread.text
         any([subject.subject, body.current_thread.text],
             strings.icontains(., "New Fax Received")
+            or strings.icontains(., "e-Fax Document")
+            or strings.icontains(., "Fax Status")
+            or strings.icontains(., "Fax ID")
             or strings.icontains(., "New Fax Document")
             or regex.icontains(., "(?:received|have) a (?:new )?fax")
             or regex.icontains(., "to view (th(?:e|is) )?(?:fax|message)")
@@ -61,7 +64,7 @@ source: |
                  strings.icontains(.display_text, "open fax")
                  // review document, view document review and sign document
                  or regex.icontains(.display_text,
-                                    "(?:re)?view (?:(?:&|and) sign )?document"
+                                    "(?:re)?view (?:(?:&|and) sign )?(?:complete )?document"
                  )
                  or strings.icontains(.display_text, "Open document")
           )
@@ -78,11 +81,12 @@ source: |
         and any(attachments,
                 strings.icontains(.file_name, 'fax')
                 or (
-  
                   // or they are used in the body and OCR on them contains fax wording
                   // the image is used in the HTML body
                   .file_type in $file_types_images
-                  and any(regex.extract(.content_id, '^\<(.*)\>$'),
+                  and 
+                  (
+                    any(regex.extract(.content_id, '^\<(.*)\>$'),
                           any(.groups,
                               strings.icontains(body.html.raw,
                                                 strings.concat('src="cid:',
@@ -91,6 +95,8 @@ source: |
                                                 )
                               )
                           )
+                    )
+                    or strings.icontains(body.html.raw, .content_id)
                   )
                   and (
                     // and that image contains fax wording

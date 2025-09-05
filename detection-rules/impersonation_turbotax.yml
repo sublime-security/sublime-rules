@@ -9,11 +9,33 @@ source: |
   type.inbound
   and (
     strings.ilike(sender.display_name, '*turbotax*')
-    or strings.ilevenshtein(sender.display_name, 'turbotax') <= 1
+    or (
+      strings.ilevenshtein(sender.display_name, 'turbotax') <= 1
+      // negates FP for company called TurboTan
+      and not (
+        sender.display_name == "TurboTan"
+        and sender.email.domain.root_domain == "brevosend.com"
+        and headers.auth_summary.spf.pass
+      )
+    )
     or strings.ilike(sender.email.domain.domain, '*turbotax*')
   )
-  and sender.email.domain.root_domain not in~ ('intuit.com', 'turbotax.com', 'intuit.ca')
+  and sender.email.domain.root_domain not in (
+    'intuit.com',
+    'turbotax.com',
+    'intuit.ca',
+    'truist.com' // Truist partners with Intuit to provide discounts
+  )
   and sender.email.email not in $recipient_emails
+  
+  // negates survery service used by TurboTax
+  and not (
+    sender.email.domain.root_domain in ('qemailserver.com')
+    and headers.auth_summary.spf.pass
+    and any(body.links,
+            .href_url.domain.root_domain in ("qualtrics.com", "intuit.com")
+    )
+  )
 attack_types:
   - "Credential Phishing"
 tactics_and_techniques:

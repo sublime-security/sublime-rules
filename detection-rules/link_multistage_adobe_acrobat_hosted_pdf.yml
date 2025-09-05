@@ -1,4 +1,4 @@
-name: "Link: Multistage Landing - Abuse Adobe Acrobat Hosted PDF"
+name: "Link: Multistage landing - Abuse Adobe Acrobat hosted PDF"
 description: "Detects an inbound message containing an Adobe Acrobat link that leads to a single page PDF document with suspicious indicators, including minimal text, brand logos, and document viewer language. The sender is not from Adobe.com and the message is not a reply."
 type: "rule"
 severity: "medium"
@@ -20,35 +20,56 @@ source: |
                  and strings.istarts_with(.href_url.path, '/id/urn:')
           ),
           any(ml.link_analysis(., mode="aggressive").additional_responses,
-              // a low amount of links
-              any(file.explode(.file), 1 <= length(.scan.url.urls) <= 2)
-              // a single page
-              and any(file.explode(.file),
-                      .scan.exiftool.page_count == 1
-                      // occurs when there are exif errors
-                      or .scan.exiftool.page_count is null
-              )
-              // susipicious indicators
-              and (
-                // logo detection of brands for file sharing companies
-                any(ml.logo_detect(.file).brands,
-                    .name in ("DocuSign", "Adobe")
-                    or strings.istarts_with(.name, 'Microsoft')
-                )
-                // look at the OCR of the document as well
-                or (
-                  length(beta.ocr(.file).text) < 750
-                  and (
-                    strings.icontains(beta.ocr(.file).text, 'view document')
-                    or strings.icontains(beta.ocr(.file).text, 'New PDF Document')
-                    or strings.icontains(beta.ocr(.file).text, 'please wait...')
-                    or strings.icontains(beta.ocr(.file).text,
-                                         "display this type of document"
+              (
+                any(file.explode(.file),
+                    any(.scan.exiftool.fields,
+                    // password protected pdf
+                        .key == "Warning"
+                        and strings.icontains(.value, "password protected")
                     )
-                    or strings.icontains(beta.ocr(.file).text, 'PDF viewer')
-                    or regex.icontains(beta.ocr(.file).text, 'e-sign(?:ature)?')
-                    or strings.icontains(beta.ocr(.file).text, 'review and sign')
-                    or strings.icontains(beta.ocr(.file).text, 'shared a document')
+                )
+                // a low amount of links
+                or (
+                  any(file.explode(.file), 1 <= length(.scan.url.urls) <= 2)
+                  // a single page
+                  and any(file.explode(.file),
+                          .scan.exiftool.page_count == 1
+                          // occurs when there are exif errors
+                          or .scan.exiftool.page_count is null
+                  )
+                  // susipicious indicators
+                  and (
+                    // logo detection of brands for file sharing companies
+                    any(ml.logo_detect(.file).brands,
+                        .name in ("DocuSign", "Adobe")
+                        or strings.istarts_with(.name, 'Microsoft')
+                    )
+                    // look at the OCR of the document as well
+                    or (
+                      length(beta.ocr(.file).text) < 750
+                      and (
+                        strings.icontains(beta.ocr(.file).text, 'view document')
+                        or strings.icontains(beta.ocr(.file).text,
+                                             'New PDF Document'
+                        )
+                        or strings.icontains(beta.ocr(.file).text,
+                                             'please wait...'
+                        )
+                        or strings.icontains(beta.ocr(.file).text,
+                                             "display this type of document"
+                        )
+                        or strings.icontains(beta.ocr(.file).text, 'PDF viewer')
+                        or regex.icontains(beta.ocr(.file).text,
+                                           'e-sign(?:ature)?'
+                        )
+                        or strings.icontains(beta.ocr(.file).text,
+                                             'review and sign'
+                        )
+                        or strings.icontains(beta.ocr(.file).text,
+                                             'shared a document'
+                        )
+                      )
+                    )
                   )
                 )
               )
