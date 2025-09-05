@@ -86,17 +86,16 @@ source: |
   // negate highly trusted sender domains unless they fail DMARC authentication
   and (
     (
-      sender.email.domain.root_domain in $high_trust_sender_root_domains
-      and (
-        any(distinct(headers.hops, .authentication_results.dmarc is not null),
-            strings.ilike(.authentication_results.dmarc, "*fail")
-        )
+      (
+        sender.email.domain.root_domain in $high_trust_sender_root_domains
+        and not headers.auth_summary.dmarc.pass
       )
+      or sender.email.domain.root_domain not in $high_trust_sender_root_domains
     )
-    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
-  )
-  and profile.by_sender_email().prevalence in ("new", "outlier", "rare")
-  
+    and profile.by_sender().prevalence in ("new", "outlier", "rare")
+    // salesforce has been abused to send phishing campaigns leveraging monday.com infrastructure abuse 
+    or sender.email.domain.root_domain == "salesforce.com"
+  )  
 
 attack_types:
   - "Credential Phishing"
