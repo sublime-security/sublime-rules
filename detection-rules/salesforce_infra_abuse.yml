@@ -9,19 +9,23 @@ source: |
   // we've seen, the From is a custom domain
   and headers.return_path.domain.root_domain == "salesforce.com"
   and length(attachments) == 0
-  // theare are external links (not org or SF domains)
+  // there are external links (not org or SF domains)
   and length(filter(body.links,
                     .href_url.domain.domain not in $org_domains
                     and .href_url.domain.root_domain not in (
                       "salesforce.com",
                       "force.com",
-                      "site.com" // salesforce CRM 
+                      "site.com", // salesforce CRM
+                      "agentforce.com"
                     )
              )
   ) > 0
   and (
-    any(ml.nlu_classifier(body.current_thread.text).intents,
-        .name == "cred_theft" and .confidence == "high"
+    (
+      any(ml.nlu_classifier(body.current_thread.text).intents,
+          .name == "cred_theft" and .confidence == "high"
+      )
+      and ml.nlu_classifier(body.current_thread.text).language == "english"
     )
     // subject match when cred_theft doesn't match
     // high confidence observed subject intros in the format of "Urgent Thing: ..."
@@ -29,17 +33,20 @@ source: |
                        '^(?:(?:Final|Last)?\s*Warning|(?:Final|Last|Legal|Critical|Content Violation)?\s*(?:Alert|Noti(?:ce|fication))|Appeal Required|Time.Sensitive|Critical.Alert|Important|Copyright Issue)\s*:\s*'
     )
     or any(ml.logo_detect(beta.message_screenshot()).brands,
-           .name in ("Facebook", "Meta", "Instagram", "Threads") and .confidence in ("medium", "high")
+           .name in ("Facebook", "Meta", "Instagram", "Threads")
+           and .confidence in ("medium", "high")
     )
     // any of the links are for newly registered domains
     or any(filter(body.links,
-                      .href_url.domain.domain not in $org_domains
-                      and .href_url.domain.root_domain not in (
-                        "salesforce.com",
-                        "force.com",
-                        "site.com" // salesforce CRM 
-                      )
-               ), network.whois(.href_url.domain).days_old < 30
+                  .href_url.domain.domain not in $org_domains
+                  and .href_url.domain.root_domain not in (
+                    "salesforce.com",
+                    "force.com",
+                    "site.com", // salesforce CRM
+                    "agentforce.com"
+                  )
+           ),
+           network.whois(.href_url.domain).days_old < 30
     )
   )
   and 1 of (
@@ -51,7 +58,8 @@ source: |
                 and .href_url.domain.root_domain not in (
                   "salesforce.com",
                   "force.com",
-                  "site.com"
+                  "site.com",
+                  "agentforce.com"
                 )
               )
               or .href_url.domain.root_domain is null
@@ -72,7 +80,7 @@ source: |
                 )
                 // cloudflare turnstile or phishing warning page
                 or strings.icontains(ml.link_analysis(., mode="aggressive").final_dom.display_text,
-                                "cloudflare"
+                                     "cloudflare"
                 )
         )
     ),
@@ -292,8 +300,21 @@ source: |
       and any(headers.hops,
               any(.fields,
                   .name == "X-SFDC-EmailCategory"
-                  and .value in ("apiMassMail", "networksNewUser", "Not Specified")
+                  and .value in (
+                    "apiMassMail",
+                    "networksNewUser",
+                    "Not Specified"
+                  )
               )
+      )
+      // negate "meta" emails from the mentioned org itself
+      // for example, subject: "a sandbox has been deleted for org ID, a1b2c3"
+      // the org ID will appear in the X-SFDC-LK header
+      and not any(headers.hops,
+                  any(.fields,
+                      .name == "X-SFDC-LK"
+                      and strings.ends_with(subject.subject, .value)
+                  )
       )
     )
     or (
