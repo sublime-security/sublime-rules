@@ -5,16 +5,42 @@ severity: "medium"
 source: |
   type.inbound
   and (
-    sender.display_name =~ "openai"
-    or strings.ilevenshtein(sender.display_name, 'openai') <= 1
-    or any(ml.logo_detect(beta.message_screenshot()).brands,
-           .name == "OpenAI" and .confidence in ("medium", "high")
+    (
+      sender.display_name =~ "openai"
+      or strings.ilevenshtein(sender.display_name, 'openai') <= 1
+      or any(ml.logo_detect(beta.message_screenshot()).brands,
+             .name == "OpenAI" and .confidence in ("medium", "high")
+      )
+    )
+    // copyright footer
+    or (
+      (
+        strings.icontains(body.html.raw, '© 2025 OpenAI, L.L.C.')
+        or strings.icontains(body.plain.raw, '© 2025 OpenAI, L.L.C.')
+      )
+      and (
+        strings.icontains(body.html.raw,
+                          '3180 18th Street, San Francisco, CA 94110'
+        )
+        or strings.icontains(body.plain.raw,
+                             '3180 18th Street, San Francisco, CA 94110'
+        )
+      )
     )
   )
   // Exclude legitimate OpenAI domains
   and sender.email.domain.root_domain not in~ ("openai.com", "chatgpt.com")
-  // negate the genuine domain found in hunts
-  and sender.email.domain.root_domain not in~ ("openli.com", "openai1.discoursemail.com", "crunchbase.com")
+  // negate the genuine domains
+  and sender.email.domain.root_domain not in~ (
+    "openli.com",
+    "openai1.discoursemail.com",
+    "crunchbase.com",
+    "safebase.co",
+    "lucid.co",
+    "astronomer.io",
+    "visitly.io",
+    "rocketmoney.com"
+  )
   // negate highly trusted sender domains unless they fail DMARC authentication
   and (
     (
@@ -24,13 +50,34 @@ source: |
     or sender.email.domain.root_domain not in $high_trust_sender_root_domains
   )
   and (
-    not profile.by_sender().solicited
-    or (
-      profile.by_sender().any_messages_malicious_or_spam
-      and not profile.by_sender().any_messages_benign
+    not any(ml.nlu_classifier(body.current_thread.text).topics,
+            .name in (
+              "Newsletters and Digests",
+              "Advertising and Promotions",
+              "Educational and Research",
+              "B2B Cold Outreach",
+              "Health and Wellness",
+              "Professional and Career Development",
+              "Romance",
+              "Sexually Explicit Messages",
+              "Software and App Updates",
+              "Acts of Violence",
+              "Voicemail Call and Missed Call Notifications",
+              "News and Current Events",
+              "Secure Message",
+              "Legal and Compliance"
+            )
+            and .confidence == "high"
     )
+    or (
+      profile.by_sender().solicited
+      and (
+        not profile.by_sender().any_messages_malicious_or_spam
+        or profile.by_sender().any_messages_benign
+      )
+    )
+    or profile.by_sender().any_messages_benign
   )
-  and not profile.by_sender().any_messages_benign
 
 attack_types:
   - "BEC/Fraud"
@@ -49,4 +96,4 @@ detection_methods:
 id: "f5f0a18f-bd0f-5b47-b383-7df5e25b73b3"
 og_id: "7a470716-a910-566e-9cb0-7a641c0d4b40"
 testing_pr: 2952
-testing_sha: 214d5b08322630fe6946afaec30c342c31c927a2
+testing_sha: 8623516529878bf9034b7495df184afecc2ec130
