@@ -1,0 +1,37 @@
+name: "Brand impersonation: Squarespace"
+description: "Detects impersonation of Squarespace through sender display name or subject line similarity, where the sender is not from legitimate Squarespace domains or fails authentication checks."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and (
+    strings.icontains(sender.display_name, "squarespace")
+    or strings.icontains(subject.subject, "squarespace")
+    or strings.ilevenshtein(sender.display_name, "squarespace") < 2
+  )
+  // and the sender is not in org_domains or from Squarespace domains and passes auth
+  and not (
+    sender.email.domain.root_domain in $org_domains
+    or (
+      sender.email.domain.root_domain in ("squarespace.com", "squarespace.info")
+      and headers.auth_summary.dmarc.pass
+    )
+  )
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and not (
+    sender.email.domain.root_domain in $high_trust_sender_root_domains
+    and coalesce(headers.auth_summary.dmarc.pass, false)
+  )
+
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Social engineering"
+detection_methods:
+  - "Header analysis"
+  - "Sender analysis"
+id: "e6bea2cd-30d4-56c5-9d06-3b8f728bac64"
+og_id: "f806de6f-aad5-52e4-a3a3-6fb97ceab376"
+testing_pr: 3198
+testing_sha: e9e8f0c0348bb259711bfa1b41a67293a733e8d9
