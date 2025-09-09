@@ -4,15 +4,18 @@ type: "rule"
 severity: "medium"
 source: |
   type.inbound
-  and ( 
-    // few links
-    0 < length(body.links) < 20
-    // fewer unique root domain links
-    and length(distinct(body.links, .href_url.domain.root_domain)) < 10
-    // sender domain matches no body domains
-    and all(body.links,
-            .href_url.domain.root_domain != sender.email.domain.root_domain
+  and (
+    (
+      // few links
+      0 < length(body.links) < 20
+      // fewer unique root domain links
+      and length(distinct(body.links, .href_url.domain.root_domain)) < 10
+      // sender domain matches no body domains
+      and all(body.links,
+              .href_url.domain.root_domain != sender.email.domain.root_domain
+      )
     )
+    or beta.scan_qr(beta.message_screenshot()).found
   )
   
   // negate bouncebacks and undeliverables
@@ -231,42 +234,82 @@ source: |
   )
   
   // link can't be scanned due to Cloudflare captcha
-  and any(body.links,
-          (
-            strings.icontains(ml.link_analysis(., mode="aggressive").final_dom.display_text,
-                              "cloudflare"
-            )
-            // includes the turnstile CAPTCHA
-            or (
-              strings.icontains(ml.link_analysis(., mode="aggressive").final_dom.raw,
-                                'https://challenges.cloudflare.com/turnstile/'
-              )
-              // has a short body length indicating the page is gated behind the turnstile instead
-              // of just including the turnstile
-              and length((
-                           ml.link_analysis(., mode="aggressive").final_dom.display_text
-                         )
-              ) < 200
-            )
+  and (
+    any(body.links,
+        (
+          strings.icontains(ml.link_analysis(., mode="aggressive").final_dom.display_text,
+                            "cloudflare"
           )
-          and not (
-            ( // a Cloudflare error page
-              strings.ilike(ml.link_analysis(., mode="aggressive").final_dom.display_text,
-                            "*error code*"
-              )
-              and any(ml.link_analysis(., mode="aggressive").final_dom.links,
-                      strings.icontains(.href_url.query_params,
-                                        "utm_source=errorcode"
-                      )
-              )
-            ) // a cookie warning mentioning Cloudflare
-            or regex.icontains(ml.link_analysis(., mode="aggressive").final_dom.display_text,
-                               "cookie.{0,50}Cloudflare"
+          // includes the turnstile CAPTCHA
+          or (
+            strings.icontains(ml.link_analysis(., mode="aggressive").final_dom.raw,
+                              'https://challenges.cloudflare.com/turnstile/'
             )
-            or ml.link_analysis(., mode="aggressive").effective_url.domain.root_domain in (
-              "marketbeat.com"
-            )
+            // has a short body length indicating the page is gated behind the turnstile instead
+            // of just including the turnstile
+            and length((
+                         ml.link_analysis(., mode="aggressive").final_dom.display_text
+                       )
+            ) < 200
           )
+        )
+        and not (
+          ( // a Cloudflare error page
+            strings.ilike(ml.link_analysis(., mode="aggressive").final_dom.display_text,
+                          "*error code*"
+            )
+            and any(ml.link_analysis(., mode="aggressive").final_dom.links,
+                    strings.icontains(.href_url.query_params,
+                                      "utm_source=errorcode"
+                    )
+            )
+          ) // a cookie warning mentioning Cloudflare
+          or regex.icontains(ml.link_analysis(., mode="aggressive").final_dom.display_text,
+                             "cookie.{0,50}Cloudflare"
+          )
+          or ml.link_analysis(., mode="aggressive").effective_url.domain.root_domain in (
+            "marketbeat.com"
+          )
+        )
+    )
+    or any(beta.scan_qr(beta.message_screenshot()).items,
+           .type == "url"
+           and (
+             strings.icontains(ml.link_analysis(.url, mode="aggressive").final_dom.display_text,
+                               "cloudflare"
+             )
+             // includes the turnstile CAPTCHA
+             or (
+               strings.icontains(ml.link_analysis(.url, mode="aggressive").final_dom.raw,
+                                 'https://challenges.cloudflare.com/turnstile/'
+               )
+               // has a short body length indicating the page is gated behind the turnstile instead
+               // of just including the turnstile
+               and length((
+                            ml.link_analysis(.url, mode="aggressive").final_dom.display_text
+                          )
+               ) < 200
+             )
+           )
+           and not (
+             ( // a Cloudflare error page
+               strings.ilike(ml.link_analysis(.url, mode="aggressive").final_dom.display_text,
+                             "*error code*"
+               )
+               and any(ml.link_analysis(.url, mode="aggressive").final_dom.links,
+                       strings.icontains(.href_url.query_params,
+                                         "utm_source=errorcode"
+                       )
+               )
+             ) // a cookie warning mentioning Cloudflare
+             or regex.icontains(ml.link_analysis(.url, mode="aggressive").final_dom.display_text,
+                                "cookie.{0,50}Cloudflare"
+             )
+             or ml.link_analysis(.url, mode="aggressive").effective_url.domain.root_domain in (
+               "marketbeat.com"
+             )
+           )
+    )
   )
   and (
     not profile.by_sender_email().solicited
