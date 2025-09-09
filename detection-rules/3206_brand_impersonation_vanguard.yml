@@ -1,0 +1,107 @@
+name: "Brand impersonation: Vanguard"
+description: "Detects inbound messages from senders using Vanguard-like display names or domains, excluding legitimate Vanguard domains and authenticated communications. Additional checks ensure the sender is not from trusted organizational domains or high-trust sender domains with proper authentication."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and (
+    // display name contains Vanguard
+    (
+      strings.ilike(strings.replace_confusables(sender.display_name),
+                    '*vanguard*'
+      )
+      // levenshtein distance similar to Vanguard
+      or strings.ilevenshtein(strings.replace_confusables(sender.display_name),
+                              'vanguard'
+      ) <= 1
+      // sender domain contains Vanguard
+      or strings.ilike(strings.replace_confusables(sender.email.domain.domain),
+                       '*vanguard*'
+      )
+    )
+  )
+  and (
+    (
+      any(beta.ml_topic(body.current_thread.text).topics,
+          .name in (
+            "Security and Authentication",
+            "Secure Message",
+            "Financial Communications"
+          )
+          and .confidence == "high"
+      )
+      or any(beta.ml_topic(beta.ocr(beta.message_screenshot()).text).topics,
+             .name in (
+               "Security and Authentication",
+               "Secure Message",
+               "Financial Communications"
+             )
+             and .confidence == "high"
+      )
+    )
+    and (
+      any(ml.nlu_classifier(body.current_thread.text).intents,
+          .name == "cred_theft" and .confidence == "high"
+      )
+      or any(ml.nlu_classifier(beta.ocr(beta.message_screenshot()).text).intents,
+             .name == "cred_theft" and .confidence == "high"
+      )
+    )
+  )
+  
+  // and the sender is not in org_domains or from Vanguard domains and passes auth
+  and not (
+    sender.email.domain.root_domain in $org_domains
+    or (
+      sender.email.domain.root_domain in (
+        "vanguard.com",
+        "vanguardcharitable.org", // philanthropic giving arm
+        "vanguardmexico.com",
+        "vanguardcanada.ca",
+        "vanguard.co.uk",
+        "vanguard.com.au",
+        "vanguard.com.hk",
+        "vanguardinvestor.co.uk",
+        "vanguardretirement-mail.com",
+        "e-vanguard.com",
+        "e-vanguardcharitable.org",
+        "feedback-vanguard.com",
+        "m-vanguard.com",
+        "investordelivery.com",
+        "retsupport.com",
+        "vanguardretirement.com"
+      )
+      and headers.auth_summary.dmarc.pass
+    )
+    or (
+      sender.display_name == "Vanguard Visa Law"
+      and sender.email.domain.root_domain == "docketwise.com"
+    )
+  )
+  // and the sender is not from high trust sender root domains
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and not headers.auth_summary.dmarc.pass
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+  and not profile.by_sender().solicited
+
+attack_types:
+  - "BEC/Fraud"
+  - "Callback Phishing"
+  - "Credential Phishing"
+  - "Extortion"
+  - "Malware/Ransomware"
+  - "Spam"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+detection_methods:
+  - "Natural Language Understanding"
+  - "Header analysis"
+  - "Sender analysis"
+id: "0fcb2d60-8a6b-5eb6-9461-dd95f3726ce2"
+og_id: "3bd048fe-5b3e-5050-b0d6-669653e14d9a"
+testing_pr: 3206
+testing_sha: 07224f3d5c59ecc7cc5b1c2f2ba8a1b68cbe7517
