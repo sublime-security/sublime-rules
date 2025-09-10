@@ -1,0 +1,74 @@
+name: Remediate unwanted messages in an email bomb
+description: Move unwanted messages that have contents associated with email bomb attacks to the spam folder (Google Workspace) or the junk folder (Microsoft 365), including messages such as welcome letters, promotions, as well as spam and graymail for untrusted senders.
+type: "triage_rule"
+triage_email_bomb: true
+default_actions: ["move_to_spam"]
+source: |
+  type.inbound
+  and (
+    // If authentication fails at all during a bomb, we always want to remediate
+    not headers.auth_summary.dmarc.pass
+    or not headers.auth_summary.spf.pass
+
+    // Otherwise, we need to check for content or other heuristics to identify messages
+    // that are noisy within the bomb. To prevent overreach, we ignore cases where this
+    // is already an established sender relationship.
+    or (
+      (
+        // Looks like known spam, welcome, newsletters, etc
+        any(ml.nlu_classifier(body.current_thread.text).topics,
+            .name in (
+              "Advertising and Promotions",
+              "Bounce Back and Delivery Failure Notifications",
+              "Newsletters and Digests",
+              "Educational and Research",
+              "Entertainment and Sports",
+              "Health and Wellness",
+              "News and Current Events",
+              "Professional and Career Development",
+              "Political Mail",
+              "Out of Office and Automatic Replies",
+              "Sexually Explicit Messages",
+              "Social Media and Networking",
+            )
+        )
+
+        // Or it's already likely to be graymail
+        or ml.attack_score().verdict not in (
+          "likely_benign",
+          "unknown",
+          "suspicious"
+        )
+
+        // Undisclosed recipients
+        or (
+          length(recipients.bcc) > 0
+          or length(recipients.cc) > 0
+          or not any(recipients.to, .email.domain.valid)
+        )
+
+        // Potential fake thread
+        or (
+          regex.imatch(subject.subject,
+                       '(\[[^\]]+\]\s?){0,3}(re|fwd?|automat.*)\s?:.*'
+          ) == true
+          and (length(headers.references) == 0 or headers.in_reply_to is null) == true
+        )
+      )
+
+      // And the sender doesn't match any familiarity checks
+      and sender.email.domain.root_domain not in $high_trust_sender_root_domains
+      and sender.email.domain.root_domain not in $org_domains
+      and not profile.by_sender_email().solicited
+      and not profile.by_sender().any_messages_benign
+      and profile.by_sender().days_known < 3
+      and length(body.previous_threads) == 0
+
+      // Negate legitimate replies
+      and not (
+        (subject.is_forward or subject.is_reply)
+        and length(headers.references) > 0
+        and headers.in_reply_to is not null
+      )
+    )
+  )

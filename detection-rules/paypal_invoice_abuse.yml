@@ -1,4 +1,4 @@
-name: "PayPal Invoice Abuse"
+name: "PayPal invoice abuse"
 description: |
   A fraudulent invoice/receipt found in the body of the message sent by exploiting Paypal's invoicing service.
   Callback Phishing is an attempt by an attacker to solicit the victim (recipient) to call a phone number. 
@@ -17,10 +17,10 @@ source: |
     "paypal.com.ar",
     "paypal.co.uk"
   )
-  and any(filter(beta.html_xpath(body.html,
-                                 // all the tables, which don't have descendant tables, after the first image and before a hr with a footerDivider class that appears after the current table.
-                                 // using //text()[normalize-space()] allows us to split each table up by line breaks, so each line can be inspected uniquely 
-                                 '//img[@alt="PayPal"]/following::table[not(descendant::table) and count(following::hr[@class="footerDivider"]) > 0]//text()[normalize-space()]'
+  and any(filter(html.xpath(body.html,
+                            // all the tables, which don't have descendant tables, after the first image and before a hr with a footerDivider class that appears after the current table.
+                            // using //text()[normalize-space()] allows us to split each table up by line breaks, so each line can be inspected uniquely 
+                            '//img[@alt="PayPal"]/following::table[not(descendant::table) and count(following::hr[@class="footerDivider"]) > 0]//text()[normalize-space()]'
                  ).nodes,
                  (
                    // icontains a phone number
@@ -39,9 +39,12 @@ source: |
    regex.icontains(strings.replace_confusables(.display_text),
                    '[ilo0-9]{3}-[ilo0-9]{3}-[ilo0-9]{4}'
                      )
-                     or // (202) 800-1238
-   regex.icontains(strings.replace_confusables(.display_text),
-                   '\([ilo0-9]{3}\)\s[ilo0-9]{3}-[ilo0-9]{4}'
+                     // (202) 800-1238
+                     // (202) -800 -1238
+                     // (202) 800 1238
+                     // (202)-800-1238
+                     or regex.icontains(strings.replace_confusables(.display_text),
+                                        '\([ilo0-9]{3}\)[\s-]+[ilo0-9]{3}[\s-]+[ilo0-9]{4}'
                      )
                      or // (202)-800-1238
    regex.icontains(strings.replace_confusables(.display_text),
@@ -68,12 +71,18 @@ source: |
                  and not strings.icontains(.display_text, '844-896-4937')
                  // pay in 4 number
                  and not strings.icontains(.display_text, '(800) 504-7534')
+                 // debt collection for pay later
+                 and not strings.icontains(.display_text, '877-589-5171')
                  // debt collections for PayPal
                  and not strings.icontains(.display_text, '866-380-1798')
+                 // card activation
+                 and not strings.icontains(.display_text, '800-314-8298')
                  // often the transcation id looks like a phone number and matches the regex
                  and not regex.icontains(.display_text, "Transaction (date|ID)\n")
                  // this segment can include phone numbers, but the wording is not actor controlled and shows up "under the fold" in the templates
-                 and not strings.istarts_with(.display_text, "If you have any questions about this payment, you can")
+                 and not strings.istarts_with(.display_text,
+                                              "If you have any questions about this payment, you can"
+                 )
           ),
           strings.icontains(.display_text, "you did not")
           or strings.icontains(.display_text, "Critical Alert")
@@ -140,7 +149,17 @@ source: |
           or regex.icontains(strings.replace_confusables(.display_text),
                              '(?:call|cᴀʟʟ|reach|contact|get in touch|\binform\b|let us know)'
           )
+          
   )
+  // Handle emails for class action settlement refunds. Not official PayPal communications but a common-enough thing where a small refund is sent from a court-appointed settlement administrator
+     and not (
+            strings.icontains(body.html.display_text, "settlement")
+            and (
+              strings.icontains(body.html.display_text, "court")
+              or strings.icontains(body.html.display_text, "FTC")
+              or strings.icontains(body.html.display_text, "administrator")
+            )
+          )
 attack_types:
   - "BEC/Fraud"
   - "Callback Phishing"

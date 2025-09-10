@@ -1,4 +1,4 @@
-name: "Brand Impersonation: Booking.com"
+name: "Brand impersonation: Booking.com"
 description: "Detects messages purporting to be from Booking.com's support team that contain suspicious credential collection patterns. The sender is not from a legitimate Booking.com domain and shows a history of problematic behavior or lacks prior solicited communication. Additional checks enforce DMARC authentication for trusted domains."
 type: "rule"
 severity: "medium"
@@ -35,6 +35,7 @@ source: |
            strings.ilike(.display_text,
                          "*review*",
                          "*response*",
+                         "*respond*",
                          "*complaint*",
                          "*contact*",
                          "*accommodation*"
@@ -56,7 +57,10 @@ source: |
       )
     )
   )
-  and sender.email.domain.root_domain not in~ ('booking.com')
+  and (
+    sender.email.domain.root_domain not in~ ('booking.com', 'siteminder.com')
+    and headers.auth_summary.dmarc.pass
+  )
   and (
     not profile.by_sender().solicited
     or (

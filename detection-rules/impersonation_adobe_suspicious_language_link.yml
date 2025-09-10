@@ -22,8 +22,8 @@ source: |
       and (
         // leverage topic analysis to pick up on themes
         (
-          length(beta.ml_topic(body.current_thread.text).topics) == 1
-          and all(beta.ml_topic(body.current_thread.text).topics,
+          length(ml.nlu_classifier(body.current_thread.text).topics) == 1
+          and all(ml.nlu_classifier(body.current_thread.text).topics,
                   .name == "File Sharing and Cloud Services"
                   and .confidence != "low"
           )
@@ -31,7 +31,7 @@ source: |
         // keywords if topic anlayis doesn't match
         or strings.icontains(body.current_thread.text, 'review the document')
         or strings.icontains(body.current_thread.text, 'access file')
-  
+        or strings.icontains(body.current_thread.text, 'pending document')
       )
       and length(body.current_thread.text) < 2000
     )
@@ -61,7 +61,8 @@ source: |
                          "open",
                          "*completed document*",
                          "*open agreement*",
-                         "*open document*"
+                         "*open document*",
+                         "*continue*"
            )
            and not strings.ilike(.display_text,
                                  "*view this email*",
@@ -95,6 +96,9 @@ source: |
     )
     or length(headers.references) == 0
   )
+  and not any(ml.nlu_classifier(body.current_thread.text).topics,
+              .name == "Advertising and Promotions" and .confidence == "high"
+  )
   and (
     (
       headers.auth_summary.spf.pass
@@ -105,7 +109,11 @@ source: |
         or profile.by_sender_email().days_since.last_contact > 14
       )
       and not profile.by_sender().any_messages_benign
-      and not sender.email.domain.root_domain in ("adobe-events.com", "frame.io", "workfront.com")
+      and not sender.email.domain.root_domain in (
+        "adobe-events.com",
+        "frame.io",
+        "workfront.com"
+      )
     )
     or not headers.auth_summary.spf.pass
     or headers.auth_summary.spf.pass is null
@@ -120,6 +128,7 @@ source: |
     )
     or sender.email.domain.root_domain not in $high_trust_sender_root_domains
   )
+
 attack_types:
   - "Credential Phishing"
 tactics_and_techniques:

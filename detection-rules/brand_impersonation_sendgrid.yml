@@ -1,20 +1,18 @@
-name: "Brand Impersonation: SendGrid"
-description: "Detects inbound messages that impersonate SendGrid through display name or domain manipulation, combined with security or authentication-themed content, while failing authentication checks and originating from untrusted sources."
+name: "Brand impersonation: SendGrid"
+description: "Detects inbound messages that impersonate Twilio/SendGrid through display name or domain manipulation, combined with security or authentication-themed content, while failing authentication checks and originating from untrusted sources."
 type: "rule"
 severity: "medium"
 source: |
   type.inbound
   and (
-    // display name contains sendgrid
     (
+      // SendGrid impersonation patterns
       strings.ilike(strings.replace_confusables(sender.display_name),
                     '*sendgrid*'
       )
-      // levenshtein distance similar to sendgrid
       or strings.ilevenshtein(strings.replace_confusables(sender.display_name),
                               'sendgrid'
       ) <= 1
-      // no display name, local_part contains sendgrid 
       or (
         strings.ilike(strings.replace_confusables(sender.email.local_part),
                       '*sendgrid*'
@@ -26,13 +24,32 @@ source: |
           )
         )
       )
+      or any(ml.logo_detect(beta.message_screenshot()).brands,
+             .name == "SendGrid" and .confidence == "high"
+      )
     )
-    or any(ml.logo_detect(beta.message_screenshot()).brands,
-         .name == "SendGrid" and .confidence == "high"
+    or (
+      // Twilio impersonation patterns
+      strings.ilike(strings.replace_confusables(sender.display_name), '*twilio*')
+      or strings.ilevenshtein(strings.replace_confusables(sender.display_name),
+                              'twilio'
+      ) <= 1
+      or (
+        strings.ilike(strings.replace_confusables(sender.email.local_part),
+                      '*twilio*'
+        )
+        and (
+          sender.display_name is null
+          or strings.ilike(strings.replace_confusables(subject.subject),
+                           '*twilio*'
+          )
+        )
+      )
     )
   )
   and (
-    any(beta.ml_topic(body.current_thread.text).topics,
+    // Content analysis using ML/NLU
+    any(ml.nlu_classifier(body.current_thread.text).topics,
         .name in (
           "Security and Authentication",
           "Secure Message",
@@ -41,7 +58,7 @@ source: |
         )
         and .confidence in ("medium", "high")
     )
-    or any(beta.ml_topic(beta.ocr(beta.message_screenshot()).text).topics,
+    or any(ml.nlu_classifier(beta.ocr(beta.message_screenshot()).text).topics,
            .name in (
              "Security and Authentication",
              "Secure Message",
@@ -60,13 +77,21 @@ source: |
   
   // and the sender is not in org_domains or from sendgrid domains and passes auth
   and not (
-    sender.email.domain.root_domain in $org_domains
-    or (
-      sender.email.domain.root_domain in ("sendgrid.com", "sendgrid.net")
-      and headers.auth_summary.dmarc.pass
+    (
+      sender.email.domain.root_domain in $org_domains
+      or (
+        sender.email.domain.root_domain in (
+          "sendgrid.com",
+          "sendgrid.net",
+          "twilio.com",
+          "swoogo.com", // events planning software used by Twillio
+          "sendsafely.com" // secure delivery used by Twillio
+        )
+      )
     )
+    and headers.auth_summary.dmarc.pass
   )
-  // and the sender is not from high trust sender root domains
+  // Exclude high trust domains with valid auth and solicited senders
   and (
     (
       sender.email.domain.root_domain in $high_trust_sender_root_domains

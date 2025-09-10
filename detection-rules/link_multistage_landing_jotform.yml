@@ -1,4 +1,4 @@
-name: "Link: Multistage Landing - JotForm Abuse"
+name: "Link: Multistage landing - JotForm abuse"
 description: "Detects a disabled JotForm that contains suspicious elements like secured document messaging, cloned forms, or suspicious action words in form items. Also checks for human verification pages and embedded links to credential collection sites."
 type: "rule"
 severity: "high"
@@ -15,29 +15,36 @@ source: |
           or any(regex.iextract(ml.link_analysis(.).final_dom.raw,
                                 'window\.__appInfo = (?P<appInfo>\{[^\;]+\})\;'
                  ),
-                 strings.icontains(strings.parse_json(.named_groups["appInfo"])["description"],
-                                   'secured document'
-                 )
-                 or strings.icontains(strings.parse_json(.named_groups["appInfo"])["appIconURL"],
-                                   'pfc_clone_'
+                 // the title/description/name contains suspicious keywords
+                 any([
+                       strings.parse_json(.named_groups["appInfo"])["title"],
+                       strings.parse_json(.named_groups["appInfo"])["description"],
+                       strings.parse_json(.named_groups["appInfo"])["name"]
+                     ],
+                     strings.icontains(., 'secured document')
+                     or strings.icontains(., 'Adobe PDF')
                  )
                  or any(strings.parse_json(.named_groups["appInfo"])["items"],
                         // find any links that mention common "action" words
-                        regex.icontains(.["description"],
-                                        '(?:view|click|show|access|download|goto|Validate|Va[il]idar|login|verify|account)'
+                        any([.["description"], .["title"]],
+                            regex.icontains(.,
+                                            '(?:view|click|show|access|download|goto|Validate|Va[il]idar|login|verify|account)'
+                            )
                         )
   
-                        // inspect the linked page within the "title" 
+                        // inspect the linked page within the "buttonValue" or .title contains a link
                         or (
-                          strings.icontains(.["title"], 'http')
-                          and (
-                            ml.link_analysis(strings.parse_url(.["title"])).credphish.disposition == "phishing"
-                            or ml.link_analysis(strings.parse_url(.["title"])).credphish.contains_captcha == true
-                            or strings.istarts_with(ml.link_analysis(strings.parse_url(.["title"]
-                                                                     )
-                                                    ).final_dom.inner_text,
-                                                    'Verify you are human'
-                            )
+                          any([.["buttonValue"], .["title"]],
+                              strings.icontains(., 'http')
+                              and (
+                                ml.link_analysis(strings.parse_url(.)).credphish.disposition == "phishing"
+                                or ml.link_analysis(strings.parse_url(.)).credphish.contains_captcha == true
+                                or strings.istarts_with(ml.link_analysis(strings.parse_url(.
+                                                                         )
+                                                        ).final_dom.inner_text,
+                                                        'Verify you are human'
+                                )
+                              )
                           )
                         )
                  )
