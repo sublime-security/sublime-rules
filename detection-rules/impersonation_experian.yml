@@ -24,11 +24,11 @@ source: |
   and not (
     (
       headers.auth_summary.dmarc.pass
-      and headers.auth_summary.dmarc.details.from.root_domain == "experian.com"
+      and headers.auth_summary.spf.pass
+      and not 'fail' in~ distinct(map(headers.hops, .authentication_results.dkim))
     )
     and strings.contains(sender.display_name, "via")
   )
-
   // negate highly trusted sender domains unless they fail DMARC authentication
   and (
     (
@@ -37,7 +37,6 @@ source: |
     )
     or sender.email.domain.root_domain not in $high_trust_sender_root_domains
   )
-
   // and no false positives and not solicited
   and (
     not profile.by_sender().any_false_positives
