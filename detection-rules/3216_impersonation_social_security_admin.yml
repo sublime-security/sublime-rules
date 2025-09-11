@@ -1,0 +1,49 @@
+name: "Impersonation: Social Security Administration with secure message language"
+description: "Detects messages impersonating the Social Security Administration (SSA) that contain links and use legitimate SSA terminology like 'Secure Message' or 'SSA Statement Viewer', but are sent from non-government domains by unsolicited or suspicious senders."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  // Contains a link
+  and length(body.links) >= 1
+  // Identifies as SSA without catching strings such as "Alyssa"
+  and (
+    regex.contains(sender.display_name, '^SSA\b')
+    or strings.icontains(sender.display_name, "Social Security Administration")
+    or any([sender.display_name, subject.subject],
+           regex.icontains(., 'Social (?:benefits|security)', )
+    )
+  )
+  // Secure messsage wording
+  and (
+    strings.icontains(body.current_thread.text, "Secure Message")
+    or strings.contains(body.current_thread.text, "SSA Statement Viewer")
+    // real SSA phone number
+    or strings.icontains(body.current_thread.text, "1-800-772-1213")
+  )
+  // Not from a .gov domain
+  and not (sender.email.domain.tld == "gov" and headers.auth_summary.dmarc.pass)
+  // not a forward or reply
+  and (headers.in_reply_to is null or length(headers.references) == 0)
+  and (
+    not profile.by_sender().solicited
+    or (
+      profile.by_sender().any_messages_malicious_or_spam
+      and not profile.by_sender().any_messages_benign
+    )
+  )
+
+attack_types:
+  - "BEC/Fraud"
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Sender analysis"
+  - "URL analysis"
+id: "7dc25de1-97b7-5794-8b1f-9456734b44ec"
+og_id: "6196767e-6264-5833-96f3-d1e34424d7b5"
+testing_pr: 3216
+testing_sha: 380f90a596ddc2b8bc661d1e8011137377e2de53
