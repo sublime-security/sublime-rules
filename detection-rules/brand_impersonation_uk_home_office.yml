@@ -12,23 +12,35 @@ source: |
           strings.replace_confusables(subject.subject)
         ],
         strings.ilike(.,
-                      "*uk*visas*",
-                      "*uk home office*",
-                      "*home office*immigration*",
-                      "*home office*visa*",
-                      "*gov.uk*",
-                      "uk*immigration*",
-                      "*sponsorship management*"
+                      "*sponsorship management system*",
+                      "*Sponsor Management System*"
         )
         // exact match of high confidence
-        or .  in~ ("Home Office")
+        or . in~ ("Home Office", "uk home office", "UK Visas and Immigration")
     )
-    or strings.ilike(body.current_thread.text,
-                     "*uk visas and immigration*",
-                     "*sponsorship management system*"
-    )
+    // image is srced from the actual home office URL
     or strings.icontains(body.html.raw,
                          '"https://www.points.homeoffice.gov.uk/gui-sms-jsf/images/'
+    )
+    // observed footers in messages
+    or 2 of (
+      strings.icontains(body.current_thread.text, '© Crown Copyright '),
+      strings.icontains(body.current_thread.text, '© 2025 Home Office'),
+      strings.icontains(body.current_thread.text, '© UK Visas and Immigration'),
+      regex.icontains(body.current_thread.text, ' [||–-—] Home Office'),
+      regex.icontains(body.current_thread.text, ' [|–-—] UK Visas and Immigration'),
+      strings.icontains(body.current_thread.text,
+                        'This is an automated message from UK Visas and Immigration.'
+      ),
+      strings.icontains(body.current_thread.text,
+                        'This is an automated notification from the Home Office'
+      ), 
+      regex.icontains(body.current_thread.text,
+                        'You(?: are|''re) receiving this notification as a registered SMS user'
+      ), 
+      regex.icontains(body.current_thread.text,
+                        'If you are not the designated.{0,50}SMS user'
+      ),
     )
   )
   
@@ -40,15 +52,32 @@ source: |
   // 
   and (
     // there are links that do not link to "gov.uk"
-    not all(body.links,
-            .href_url.domain.tld == "gov.uk"
-    )
+    not all(body.links, .href_url.domain.tld == "gov.uk")
     // OR credential theft intent detected  
     or any(ml.nlu_classifier(body.current_thread.text).intents,
            .name == "cred_theft" and .confidence in ("medium", "high")
     )
-  )
+    // link based indicators
+    or any(body.links,
+           // suspicious display text
+           (
+             .display_text in ("Access SMS", "Login to SMS", "Log in to SMS", "Access UKVI Account")
+             and .href_url.domain.tld != "gov.uk"
+           )
+           // there are mismatched links
+           or (
+             .display_url.domain.tld == "gov.uk"
+             and .href_url.domain.tld != "gov.uk"
+             and .mismatched
+           )
   
+           // the path refers to the uk stuff
+           or (
+             .href_url.domain.tld != "gov.uk"
+             and strings.icontains(.href_url.path, 'gov.uk')
+           )
+    )
+  )
   
   // no previous threads
   and not (length(headers.references) > 0 or length(body.previous_threads) > 0)
