@@ -5,7 +5,40 @@ severity: "medium"
 source: |
   type.inbound
   and 0 < length(body.current_thread.links) < 10
-  and any(body.current_thread.links, regex.icount(.href_url.url, 'http(s)?(%)?[^a-z]') >= 5 and .visible)
+  and any(body.current_thread.links,
+          .visible
+          // no ability to loop query_params_decoded, so create the non-decoded equivlent 
+          and any(regex.extract(.href_url.query_params,
+                                '[?&](?P<name>[^=&]+)(?:=(?P<value>[^&]*))?'
+                  ),
+  
+                  // filter down to query params that start with a url
+                  regex.contains(.named_groups['value'],
+                                 '^(?:https?(?:%253[Aa]|%3[Aa]|:))?(?:%252[Ff]|%2[Ff]|/)(?:%252[Ff]|%2[Ff]|/)'
+                  )
+                  // the number of unique domains in the URL query param is greater or equal to 2
+                  and length(distinct(map(filter(regex.iextract(.named_groups['value'],
+                                                         '(?:https?(?:%253[Aa]|%3[Aa]|:))?(?:%252[Ff]|%2[Ff]|/)(?:%252[Ff]|%2[Ff]|/)(?P<domain>[^/\s&%]+)'
+                                          ),
+                                          // sometimes URLs have // and produce entries we want to skip
+                                          // so ensure it's a valid domain first
+                                          strings.parse_domain(.named_groups['domain']).error is null
+                                          and strings.parse_domain(.named_groups['domain']).valid
+                                          // remove domain that are the same as the sender root domain
+                                          and strings.parse_domain(.named_groups['domain']).root_domain != sender.email.domain.root_domain
+                                      ),
+                                      // return just the root domian
+                                      strings.parse_domain(.named_groups['domain']).root_domain
+                             ), .)
+                  ) >= 3
+  
+                  // there are five or more total URLs in that query param
+                  and regex.count(.named_groups['value'],
+                                  '(?:https?(?:%253[Aa]|%3[Aa]|:))?(?:%252[Ff]|%2[Ff]|/)(?:%252[Ff]|%2[Ff]|/)'
+                  ) >= 3
+          )
+  )
+
 tags:
  - "Attack surface reduction"
 attack_types:
@@ -19,4 +52,4 @@ detection_methods:
 id: "dea82f37-8cfd-5233-9deb-bc436aba8182"
 og_id: "92f9d241-ebd2-53b8-9c67-6f9ec3e263b8"
 testing_pr: 3027
-testing_sha: e460c3468bf1452d7ead1d4c28082a53831cd909
+testing_sha: c54242faa3be72f6990dc70be2dba12603690f97
