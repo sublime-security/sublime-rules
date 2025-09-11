@@ -12,31 +12,43 @@ source: |
           // Detection Note: There are multiple regex patterns used in multiple places, it'll be important to keep them in sync
           any(file.explode(.),
               // document sharing lure
-              any(.scan.strings.strings,
-                  regex.icontains(.,
-                                  '(?:sent|shared|forwarded|provided|invited|received)(?:\s+\w+){0,9}\s+(?:document|file|attachment)',
-                  )
+              (
+                length(.scan.strings.raw, ) < 1000
+                and regex.icontains(.scan.strings.raw,
+                                    '(?:sent|shared|forwarded|provided|invited|received)(?:\s+\w+){0,9}\s+(?:document|file|attachment)',
+                )
               )
+  
               // ocr output
-              or regex.icontains(.scan.ocr.raw,
-                                 '(?:sent|shared|forwarded|provided|invited|received)(?:\s+\w+){0,9}\s+(?:document|file|attachment)',
+              or (
+                length(.scan.ocr.raw) < 1000
+                and regex.icontains(.scan.ocr.raw,
+                                    '(?:sent|shared|forwarded|provided|invited|received)(?:\s+\w+){0,9}\s+(?:document|file|attachment)',
+                )
               )
           )
-          // copy/paste browser stuff
+          // copy/paste stuff or disclaimer text in the OCR output
           and (
             any(file.explode(.),
-                any(.scan.strings.strings,
-                    regex.icontains(.,
-                                    '(?:copy (?:and paste)?|right.?click)(?:\s+\w+\s*){0,9}browser', 
-                                    'click(?:\s+\w+\s*){0,9}(above|below) to'
-
+                (
+                  length(.scan.strings.raw, ) < 1000
+                  and (
+                    regex.icontains(.scan.strings.raw,
+                                    '(?:copy (?:and paste)?|right.?click)(?:\s+\w+\s*){0,9}browser',
+                                    'click.{0,50}(?:above|below) to access'
                     )
-                // ocr output
+                  )
                 )
-                or regex.icontains(.scan.ocr.raw,
-                                   '(?:copy (?:and paste)?|right.?click)(?:\s+\w+\s*){0,9}browser',
-                                   'click(?:\s+\w+\s*){0,9}(above|below) to'
-
+  
+                // ocr output
+                or (
+                  length(.scan.ocr.raw) < 1000
+                  and (
+                    regex.icontains(.scan.ocr.raw,
+                                    '(?:copy (?:and paste)?|right.?click)(?:\s+\w+\s*){0,9}browser',
+                                    'click.{0,50}(?:above|below) to access'
+                    )
+                  )
                 )
                 or 5 of (
                   strings.icontains(.scan.ocr.raw,
@@ -73,6 +85,7 @@ source: |
             )
           )
   )
+
 attack_types:
   - "Credential Phishing"
 tactics_and_techniques:
