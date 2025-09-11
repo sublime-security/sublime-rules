@@ -12,20 +12,22 @@ source: |
     // that it can be used without any other impersonation logic
     (
       regex.icontains(sender.display_name,
-                    'facebook ?ads',
-                    'facebook ?business',
-                    'meta ?account',
-                    'meta ?support',
-                    'meta ?business',
-                    'meta ?for ?business',
-                    'meta ?policy',
-                    'page ?ads ?support',
-                    'Instagram ?Not',
-                    'Instagram ?Policies',
-                    'Instagram ?Report',
-                    'Instagram ?Helpdesk',
-                    'Instagram ?Support',
-                    'Ads ?Team'
+                      'facebook ?ads',
+                      'facebook ?business',
+                      'meta ?account',
+                      'meta ?help',
+                      'meta ?support',
+                      'meta ?business',
+                      'meta ?for ?business',
+                      'meta ?policy',
+                      'page ?ads ?support',
+                      'Instagram ?Not',
+                      'Instagram ?Policies',
+                      'Instagram ?Report',
+                      'Instagram ?Helpdesk',
+                      'Instagram ?Support',
+                      'Ads ?Team',
+                      'Meta & Coursera'
       )
       or strings.ilevenshtein(sender.display_name, 'facebook ads') <= 2
       or strings.ilevenshtein(sender.display_name, 'facebook business') <= 2
@@ -76,8 +78,8 @@ source: |
                .name in ("cred_theft", "callback_scam", "steal_pii")
                and .confidence in ("medium", "high")
         )
-       or regex.icontains(body.plain.raw, "(violation|infringe|copyright)")
-       or any(body.links, .href_url.domain.root_domain == "rebrand.ly")
+        or regex.icontains(body.plain.raw, "(violation|infringe|copyright)")
+        or any(body.links, .href_url.domain.root_domain == "rebrand.ly")
       )
     )
     // salesforce sender combined with logo detection and nlu is enough
@@ -136,8 +138,7 @@ source: |
       // Meta mention
       and (
         any(ml.nlu_classifier(body.current_thread.text).entities,
-            .name == "org"
-            and strings.icontains(.text, 'Community Guidelines')
+            .name == "org" and strings.icontains(.text, 'Community Guidelines')
         )
         or regex.icontains(body.current_thread.text,
                            '(1\s+(Facebook|Meta)?\s*Way|1601\s+Willow\s+Rd?).*Menlo\s+Park.*CA.*94025'
@@ -146,6 +147,10 @@ source: |
       and any(ml.nlu_classifier(body.current_thread.text).entities,
               .name == "urgency"
       )
+    )
+    or (
+      strings.icontains(body.current_thread.text, "Meta Professional Certificate")
+      and strings.icontains(body.current_thread.text, "Meta & Coursera Team")
     )
   )
   and sender.email.domain.root_domain not in~ (
@@ -160,11 +165,13 @@ source: |
     'fbworkmail.com',
     'workplace.com',
     'capterra.com', // they mention "Community Guidelines"
-    'facebookblueprint.com'
+    'facebookblueprint.com',
+    'metaenterprisemail.com',
+    'pigfacebookstore.com.au' // unrelated domain but hitting on facebook 
   )
   // negate metaenterprise links
   and not any(headers.reply_to, .email.email == "noreply@facebookmail.com")
-
+  
   // negate highly trusted sender domains unless they fail DMARC authentication
   and (
     (
