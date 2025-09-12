@@ -17,7 +17,7 @@ source: |
       // ignore disclaimers in body length calculation
       or (
         any(map(filter(ml.nlu_classifier(body.current_thread.text).entities,
-                       .name == "disclaimer"
+                      .name == "disclaimer"
                 ),
                 .text
             ),
@@ -29,52 +29,57 @@ source: |
   and (
     // attached PDF contains a compensation review themed lure with a QR code and suspicious indicators
     any(attachments,
-        any(file.explode(.),
-            (
-              (
+        (
+            // add conditions for pdf attachment
+            regex.icontains(.file_name,
+                  'salary|pay(?:roll)|bonus|comp(?:ensation|liance|\b)|remuneration|disbursement|incentive|merit|vesting'
+            ) or
+            // recipient email SLD in filename
+            any(recipients.to,
+                strings.icontains(..file_name, .email.domain.sld)
+                and .email.domain.valid
+            )
+        ) and
+
+        // add conditions for text and any QR code within the pdf attachment
+        (
+            // conditions for QR code
+            any(file.explode(.),
                 regex.icontains(.scan.ocr.raw, 'scan|camera')
                 and regex.icontains(.scan.ocr.raw, '\bQR\b|Q\.R\.|barcode')
-              )
-              or .scan.qr.type == "url" and .scan.qr.url.domain.valid
+            ) or 
+            any(file.explode(.),
+                .scan.qr.type == "url" and .scan.qr.url.domain.valid
             )
-            // pay-related terms in filename
-            and (
-              (
-                regex.icontains(.file_name,
-                                'salary|pay(?:roll)|bonus|comp(?:ensation|liance|\b)|remuneration|disbursement|incentive|merit|vesting'
+        ) and
+
+        // conditions for text
+        any(file.explode(.),
+            (
+                // review/change terms in file content      
+                regex.icontains(.scan.ocr.raw,
+                    '\b(Remuneration Overview|Updated Compensation (Summary|Schedule|Details)|Access Your Statements?)\b'
                 )
-                // review/change terms in file content
-                or regex.icontains(.scan.ocr.raw,
-                                   '\b(Remuneration Overview|Updated Compensation (Summary|Schedule|Details)|Access Your Statements?)\b'
-                )
-              )
-              or (
+            ) or
+            (
+                // recipient local_part in attachment body
+                any(recipients.to,
+                    strings.contains(..scan.ocr.raw, .email.local_part)
+                ) and
                 (
-                  // recipient email SLD in filename
-                  any(recipients.to,
-                      strings.icontains(..file_name, .email.domain.sld)
-                      and .email.domain.valid
-                  )
-                  // recipient local_part in attachment body
-                  and any(recipients.to,
-                          strings.contains(..scan.ocr.raw, .email.local_part)
-                  )
+                    // NLU cred_theft disposition
+                    any(ml.nlu_classifier(.scan.ocr.raw).intents,
+                        .name == "cred_theft" and .confidence != "low"
+                    )
+                    // suspicious topics
+                    and any(ml.nlu_classifier(.scan.ocr.raw).topics,
+                        .name in (
+                          "Benefit Enrollment",
+                          "Financial Communications"
+                        )
+                        and .confidence != "low"
+                    )
                 )
-                and (
-                  // NLU cred_theft disposition
-                  any(ml.nlu_classifier(.scan.ocr.raw).intents,
-                      .name == "cred_theft" and .confidence != "low"
-                  )
-                  // suspicious topics
-                  and any(beta.ml_topic(.scan.ocr.raw).topics,
-                         .name in (
-                           "Benefit Enrollment",
-                           "Financial Communications"
-                         )
-                         and .confidence != "low"
-                  )
-                )
-              )
             )
         )
     )
@@ -92,7 +97,7 @@ source: |
       and not coalesce(headers.auth_summary.dmarc.pass, false)
     )
   )
-  
+
   // negate highly trusted sender domains unless they fail DMARC authentication
   and (
     (
@@ -101,6 +106,7 @@ source: |
     )
     or sender.email.domain.root_domain not in $high_trust_sender_root_domains
   )
+
 
 attack_types:
   - "Credential Phishing"
