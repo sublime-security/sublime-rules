@@ -83,16 +83,34 @@ source: |
       and any(headers.hops, any(.fields, strings.ilike(.name, "In-Reply-To")))
     )
   )
+  // negate graymail and newsletters with a benign NLU intent
+  and not (
+    any(ml.nlu_classifier(body.current_thread.text).topics,
+        .name in~ (
+          "Advertising and Promotions",
+          "B2B Cold Outreach",
+          "Newsletters and Digests",
+          "Events and Webinars"
+        )
+        and .confidence == "high"
+    )
+    and any(ml.nlu_classifier(body.current_thread.text).intents,
+            .name == "benign" and .confidence == "high"
+    )
+  )
+  
   // negate highly trusted sender domains unless they fail DMARC authentication
   and (
     (
       (
-        sender.email.domain.root_domain in $high_trust_sender_root_domains
-        and not headers.auth_summary.dmarc.pass
+        (
+          sender.email.domain.root_domain in $high_trust_sender_root_domains
+          and not headers.auth_summary.dmarc.pass
+        )
+        or sender.email.domain.root_domain not in $high_trust_sender_root_domains
       )
-      or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+      and profile.by_sender().prevalence in ("new", "outlier", "rare")
     )
-    and profile.by_sender().prevalence in ("new", "outlier", "rare")
     // salesforce has been abused to send phishing campaigns leveraging monday.com infrastructure abuse 
     or sender.email.domain.root_domain == "salesforce.com"
   )  
