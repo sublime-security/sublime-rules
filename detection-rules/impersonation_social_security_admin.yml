@@ -9,13 +9,16 @@ source: |
   and (
     regex.contains(sender.display_name, '^SSA\b')
     or strings.icontains(sender.display_name, "Social Security Administration")
+    or any([sender.display_name, subject.subject],
+           regex.icontains(., 'Social (?:benefits|security)', )
+    )
   )
   
   // Contains a link
   and length(body.links) >= 1
   
   // Not from a .gov domain
-  and not sender.email.domain.tld == ".gov"
+  and not (sender.email.domain.tld == "gov" and headers.auth_summary.dmarc.pass)
   
   // Additional suspicious indicator
   and (
@@ -31,7 +34,9 @@ source: |
            )
     )
   )
-  
+  and not any(ml.nlu_classifier(body.current_thread.text).topics,
+              .name == "Newsletters and Digests" and .confidence == "high"
+  )
   and (
     not profile.by_sender().solicited
     or (
@@ -39,7 +44,6 @@ source: |
       and not profile.by_sender().any_messages_benign
     )
   )
-  
   and not (
     sender.email.domain.root_domain in $high_trust_sender_root_domains
     and coalesce(headers.auth_summary.dmarc.pass, false)
