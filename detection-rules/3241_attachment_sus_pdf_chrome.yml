@@ -1,0 +1,124 @@
+name: "Attachment: Suspicious PDF created with headless browser"
+description: "Detects PDF documents containing a table of contents that were generated using HeadlessChrome, Chromium with Skia/PDF, or QT with empty metadata fields - common characteristics of automated malicious document creation."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and (
+    // directly attached PDF
+    any(filter(attachments, .file_type == "pdf"),
+        (
+          // table of contents detection
+          (
+            any(file.explode(.),
+                strings.contains(.scan.ocr.raw, 'TABLE OF CONTEN')
+            )
+            // the Table of contents can be on another page
+            and any(file.explode(.),
+                    regex.icontains(.scan.ocr.raw,
+                                    '(?:[\r\n]|^)+(?:\s*1\s*(?:\.|:))?\s*Introduction'
+                    )
+                    or strings.icontains(.scan.ocr.raw, 'marked in red')
+            )
+          )
+          // heading of sections within observed documents
+          or (
+            any(file.explode(.),
+                any(.scan.strings.strings,
+                    any([
+                          'Employee Acknowledgement',
+                          'Document Summary',
+                          'appraisal overview',
+                          'accessing full appraisal',
+                        ],
+                        .. =~ .
+                    )
+                )
+            )
+          )
+        )
+        and (
+          (
+            (
+              strings.icontains(beta.parse_exif(.).creator, 'HeadlessChrome')
+              or strings.icontains(beta.parse_exif(.).creator, 'Chromium')
+            )
+            and strings.icontains(beta.parse_exif(.).producer, 'Skia/PDF')
+          )
+          or (
+            any(beta.parse_exif(.).fields,
+                .key == "Creator"
+                and (.value == "" or strings.istarts_with(.value, 'wkhtmltopdf'))
+            )
+            and any(beta.parse_exif(.).fields,
+                    .key == "Title"
+                    and (
+                      .value == ""
+                      // company handbook
+                      or .value in ('Company HandBook')
+                      // apprisial themes
+                      or strings.icontains(.value,
+                                           'Employee Performance Appraisal'
+                      )
+                    )
+            )
+            and strings.istarts_with(beta.parse_exif(.).producer, 'QT ')
+          )
+        )
+    )
+    // or within an attached EML
+    or any(filter(attachments,
+                  .content_type == "message/rfc822" or .file_extension == "eml"
+           ),
+           any(filter(file.parse_eml(.).attachments, .file_type == "pdf"),
+               any(file.explode(.),
+                   strings.contains(.scan.ocr.raw, 'TABLE OF CONTEN')
+               )
+               // the Table of contents can be on another page
+               and any(file.explode(.),
+                       regex.icontains(.scan.ocr.raw,
+                                       '(?:[\r\n]|^)+1\s*(\.|:)\s*Introduction'
+                       )
+               )
+               and (
+                 (
+                   (
+                     strings.icontains(beta.parse_exif(.).creator,
+                                       'HeadlessChrome'
+                     )
+                     or strings.icontains(beta.parse_exif(.).creator, 'Chromium')
+                   )
+                   and strings.icontains(beta.parse_exif(.).producer, 'Skia/PDF')
+                 )
+                 or (
+                   any(beta.parse_exif(.).fields,
+                       .key == "Creator"
+                       and (
+                         .value == ""
+                         or strings.istarts_with(.value, 'wkhtmltopdf')
+                       )
+                   )
+                   and any(beta.parse_exif(.).fields,
+                           .key == "Title"
+                           and (.value == "" or .value in ('Company HandBook'))
+                   )
+                   and strings.istarts_with(beta.parse_exif(.).producer, 'QT ')
+                 )
+               )
+           )
+    )
+  )
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Evasion"
+  - "PDF"
+detection_methods:
+  - "Content analysis"
+  - "Exif analysis"
+  - "File analysis"
+  - "Optical Character Recognition"
+id: "c54e7e5a-493b-58a7-a2e7-01f817eeefbc"
+og_id: "8f3108d7-e224-5bb0-81f4-e4f8506cfed3"
+testing_pr: 3241
+testing_sha: 8c5c440d55d2297f391efb83a0c0c946589a92a9
