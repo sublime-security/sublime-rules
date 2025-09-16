@@ -5,18 +5,21 @@ severity: "high"
 source: |
   type.inbound
   and any(filter(attachments, .file_type == "xlsx"),
+          // get the TitleOfParts (Excel Docs this is Worksheet names)
+          // https://learn.microsoft.com/en-us/openspecs/office_standards/ms-oi29500/de32de14-9573-46f3-9f38-19659e3a8d9a
           any(filter(beta.parse_exif(.).fields, .key == "TitlesOfParts"),
-              any(regex.iextract(.value, '^\[\"(?P<first_value>[^\"]+)\"'),
+              // extract the first sheet name
+              any(regex.iextract(.value, '^\[\"(?P<first_sheet>[^\"]+)\"'),
+                  // check that the first sheet name is observed in the last sheet name with !print_title and comes after a sheet named "Company_Name"
                   strings.ends_with(..value,
                                     strings.concat("Company_Name\",\"",
-                                                   .named_groups["first_value"],
+                                                   .named_groups["first_sheet"],
                                                    '!Print_Titles"]'
                                     )
                   )
               )
           )
   )
-
 attack_types:
   - "Credential Phishing"
 tactics_and_techniques:
