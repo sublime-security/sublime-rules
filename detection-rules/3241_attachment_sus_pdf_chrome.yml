@@ -71,14 +71,35 @@ source: |
                   .content_type == "message/rfc822" or .file_extension == "eml"
            ),
            any(filter(file.parse_eml(.).attachments, .file_type == "pdf"),
-               any(file.explode(.),
-                   strings.contains(.scan.ocr.raw, 'TABLE OF CONTEN')
-               )
-               // the Table of contents can be on another page
-               and any(file.explode(.),
-                       regex.icontains(.scan.ocr.raw,
-                                       '(?:[\r\n]|^)+1\s*(\.|:)\s*Introduction'
+               (
+                 // table of contents detection
+                 (
+                   any(file.explode(.),
+                       strings.contains(.scan.ocr.raw, 'TABLE OF CONTEN')
+                   )
+                   // the Table of contents can be on another page
+                   and any(file.explode(.),
+                           regex.icontains(.scan.ocr.raw,
+                                           '(?:[\r\n]|^)+(?:\s*1\s*(?:\.|:))?\s*Introduction'
+                           )
+                           or strings.icontains(.scan.ocr.raw, 'marked in red')
+                   )
+                 )
+                 // heading of sections within observed documents
+                 or (
+                   any(file.explode(.),
+                       any(.scan.strings.strings,
+                           any([
+                                 'Employee Acknowledgement',
+                                 'Document Summary',
+                                 'appraisal overview',
+                                 'accessing full appraisal',
+                               ],
+                               .. =~ .
+                           )
                        )
+                   )
+                 )
                )
                and (
                  (
@@ -100,7 +121,15 @@ source: |
                    )
                    and any(beta.parse_exif(.).fields,
                            .key == "Title"
-                           and (.value == "" or .value in ('Company HandBook'))
+                           and (
+                             .value == ""
+                             // company handbook
+                             or .value in ('Company HandBook')
+                             // apprisial themes
+                             or strings.icontains(.value,
+                                                  'Employee Performance Appraisal'
+                             )
+                           )
                    )
                    and strings.istarts_with(beta.parse_exif(.).producer, 'QT ')
                  )
@@ -108,6 +137,7 @@ source: |
            )
     )
   )
+
 attack_types:
   - "Credential Phishing"
 tactics_and_techniques:
@@ -121,4 +151,4 @@ detection_methods:
 id: "c54e7e5a-493b-58a7-a2e7-01f817eeefbc"
 og_id: "8f3108d7-e224-5bb0-81f4-e4f8506cfed3"
 testing_pr: 3241
-testing_sha: 8c5c440d55d2297f391efb83a0c0c946589a92a9
+testing_sha: bd8d0e2f3aadb17751986e9d01749d9a496b905d
