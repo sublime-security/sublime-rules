@@ -1,0 +1,27 @@
+name: "Attachment: XLSX file with suspicious print titles metadata"
+description: "Detects XLSX attachments containing EXIF metadata with suspicious TitlesOfParts fields that follow a specific pattern combining 'Company_Name' with extracted values and 'Print_Titles', potentially indicating malicious document preparation."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and any(filter(attachments, .file_type == "xlsx"),
+          any(filter(beta.parse_exif(.).fields, .key == "TitlesOfParts"),
+              any(regex.iextract(.value, '^\[\"(?P<first_value>[^\"]+)\"'),
+                  strings.ends_with(..value,
+                                    strings.concat("Company_Name\",\"",
+                                                   .named_groups["first_value"],
+                                                   '!Print_Titles"]'
+                                    )
+                  )
+              )
+          )
+  )
+
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Evasion"
+  - "Macros"
+detection_methods:
+  - "File analysis"
+  - "Exif analysis"
