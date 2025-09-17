@@ -8,25 +8,18 @@ source: |
   type.inbound
   and sender.email.email == "noreply-zoomevents@zoom.us"
   and headers.auth_summary.spf.pass
-  and headers.auth_summary.dmarc.pass
   
   // extract the actor controlled message from the email body
   and any(html.xpath(body.html,
                      "//div[@class='eb-content css-1l7xmti']//td[@data-dynamic-style-background-color='email.bodyColor.color' and @style='border-radius: 8px; background-color: rgb(255, 255, 255);']"
           ).nodes,
-          any(regex.extract(.display_text, '(?P<body_text>[\s\S]*?)Visit the'),
-              any(ml.nlu_classifier(.named_groups['body_text']).intents,
+          any(html.xpath(.,
+                         "//td[@data-dynamic-style-background-color='email.bodyColor.color']/*[position() < last()]"
+              ).nodes,
+              any(ml.nlu_classifier(..display_text).intents,
                   .name == "cred_theft" and .confidence != "low"
               )
           )
-  )
-  
-  and (
-    any(body.links,
-        .href_url.domain.root_domain in $free_file_hosts
-        or .href_url.domain.root_domain in $free_subdomain_hosts
-        or any(body.links, .href_url.domain.domain == "docs.zoom.us")
-    )
   )
 
 attack_types:
