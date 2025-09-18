@@ -67,9 +67,8 @@ IN_TEST_RULES_LABEL = os.getenv('IN_TEST_RULES_LABEL', 'in-test-rules')
 # flag to skip files containing specific text patterns
 # this is due to test-rules not supporting specific functions
 SKIP_FILES_WITH_TEXT = os.getenv('SKIP_FILES_WITH_TEXT', 'false').lower() == 'true'
-
-# Skip patterns configuration: {pattern: [labels_to_apply]}
-SKIP_PATTERNS = {
+# Skip texts configuration: {text: [labels_to_apply]}
+SKIP_TEXTS = {
     'ml.link_analysis': ['hunting-required', 'test-rules:excluded:link_analysis']
 }
 
@@ -243,27 +242,27 @@ def has_required_action_completed(pr_sha, action_name, required_status):
     print(f"\tNo check matching '{action_name}' found")
     return False
 
-def check_skip_patterns(content, skip_patterns):
+def check_skip_texts(content, skip_texts):
     """
-    Check if file content contains any of the configured skip patterns (case-insensitive).
+    Check if file content contains any of the configured skip texts (case-insensitive).
 
     Args:
         content (str): File content
-        skip_patterns (dict): Dictionary of {pattern: [labels]} to check
+        skip_texts (dict): Dictionary of {text: [labels]} to check
 
     Returns:
-        tuple: (matched_patterns, all_labels) where matched_patterns is a list of 
-               matching patterns and all_labels is a set of all labels to apply
+        tuple: (matched_texts, all_labels) where matched_texts is a list of 
+               matching texts and all_labels is a set of all labels to apply
     """
-    matched_patterns = []
+    matched_texts = []
     all_labels = set()
     
-    for pattern, labels in skip_patterns.items():
-        if pattern.lower() in content.lower():
-            matched_patterns.append(pattern)
+    for text, labels in skip_texts.items():
+        if text.lower() in content.lower():
+            matched_texts.append(text)
             all_labels.update(labels)
     
-    return matched_patterns, all_labels
+    return matched_texts, all_labels
 
 
 def generate_deterministic_uuid(seed_string):
@@ -828,11 +827,11 @@ def handle_pr_rules(mode):
             if process_file:
                 content = get_file_contents(file['contents_url'])
 
-                # Skip files with specific text patterns if flag is set
-                if SKIP_FILES_WITH_TEXT and SKIP_PATTERNS:
-                    matched_patterns, labels_to_apply = check_skip_patterns(content, SKIP_PATTERNS)
-                    if matched_patterns:
-                        print(f"\tSkipping file {file['filename']}: contains patterns {matched_patterns}")
+                # Skip files with specific text if flag is set
+                if SKIP_FILES_WITH_TEXT and SKIP_TEXTS:
+                    matched_texts, labels_to_apply = check_skip_texts(content, SKIP_TEXTS)
+                    if matched_texts:
+                        print(f"\tSkipping file {file['filename']}: contains texts {matched_texts}")
 
                         # Apply all associated labels
                         for label in labels_to_apply:
