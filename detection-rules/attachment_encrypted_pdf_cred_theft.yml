@@ -26,17 +26,16 @@ source: |
     or (
       (
         regex.icontains(body.current_thread.text,
-                        'PDF\s*(?:Access|Unlock|Decrypt)\s*(?:Pass)?code'
+                        'PDF\s*(?:Access|Preview|Unlock|Decrypt)\s*(?:Pass)?code'
         )
-        or ( 
+        or (
           (
             length(body.current_thread.text) <= 10
             or (body.current_thread.text is null)
           )
           and any(body.previous_threads,
                   regex.icontains(.text,
-                                  'PDF\s*(?:Access|Unlock|Decrypt)\s*(?:Pass)?code'
-
+                                  'PDF\s*(?:Access|Preview|Unlock|Decrypt)\s*(?:Pass)?code'
                   )
           )
         )
@@ -50,7 +49,16 @@ source: |
     )
     or (
       profile.by_sender_email().any_messages_malicious_or_spam
-      and not profile.by_sender_email().any_false_positives
+      and not profile.by_sender_email().any_messages_benign
+    )
+    or (
+      profile.by_sender_email().days_since.last_contact > 120
+      and (
+        length(recipients.to) == 0
+        or all(recipients.to,
+               strings.ilike(.display_name, "undisclosed?recipients")
+        )
+      )
     )
   )
   // negate highly trusted sender domains unless they fail DMARC authentication
