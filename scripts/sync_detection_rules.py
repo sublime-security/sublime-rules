@@ -64,13 +64,21 @@ ADD_TEST_RULES_LABEL = os.getenv('ADD_TEST_RULES_LABEL', 'false').lower() == 'tr
 # label to apply to PRs that have rules in test-rules
 IN_TEST_RULES_LABEL = os.getenv('IN_TEST_RULES_LABEL', 'in-test-rules')
 
-# flag to skip files containing specific text
+# flag to skip files containing specific text patterns
 # this is due to test-rules not supporting specific functions
 SKIP_FILES_WITH_TEXT = os.getenv('SKIP_FILES_WITH_TEXT', 'false').lower() == 'true'
-# text to search for in files to skip
-SKIP_TEXT = os.getenv('SKIP_TEXT', 'ml.link_analysis')
-ADD_SKIP_TEXT_LABEL = os.getenv('ADD_SKIP_TEXT_LABEL', 'false').lower() == 'true'
-SKIP_TEXT_LABEL = os.getenv('SKIP_TEXT_LABEL', 'hunting-required')
+
+# Skip patterns configuration: {pattern: [labels_to_apply]}
+SKIP_PATTERNS = {
+    'ml.link_analysis': ['hunting-required', 'test-rules:excluded:link_analysis']
+}
+
+# # flag to enable skipping PRs with too many rules
+SKIP_BULK_PRS = os.getenv('SKIP_BULK_PRS', 'false').lower() == 'true'
+# maximum number of YAML rules allowed in a PR before skipping
+MAX_RULES_PER_PR = int(os.getenv('MAX_RULES_PER_PR', '10'))
+# label to apply to PRs that are skipped due to too many rules
+BULK_PR_LABEL = os.getenv('BULK_PR_LABEL', 'test-rules:excluded:bulk_rules')
 
 # flag to check if required actions have completed
 # we should only include rules which have passed validation
@@ -235,18 +243,27 @@ def has_required_action_completed(pr_sha, action_name, required_status):
     print(f"\tNo check matching '{action_name}' found")
     return False
 
-def contains_skip_text(content, skip_text):
+def check_skip_patterns(content, skip_patterns):
     """
-    Check if file content contains the text to skip.
+    Check if file content contains any of the configured skip patterns (case-insensitive).
 
     Args:
         content (str): File content
-        skip_text (str): Text to search for
+        skip_patterns (dict): Dictionary of {pattern: [labels]} to check
 
     Returns:
-        bool: True if content contains the skip text, False otherwise
+        tuple: (matched_patterns, all_labels) where matched_patterns is a list of 
+               matching patterns and all_labels is a set of all labels to apply
     """
-    return skip_text in content
+    matched_patterns = []
+    all_labels = set()
+    
+    for pattern, labels in skip_patterns.items():
+        if pattern.lower() in content.lower():
+            matched_patterns.append(pattern)
+            all_labels.update(labels)
+    
+    return matched_patterns, all_labels
 
 
 def generate_deterministic_uuid(seed_string):
@@ -440,6 +457,25 @@ def get_files_for_pull_request(pr_number):
     response = requests.get(url, headers=headers)
     response.raise_for_status()
     return response.json()
+
+
+def count_yaml_rules_in_pr(files):
+    """
+    Count the number of YAML rule files in the PR.
+    
+    Args:
+        files (list): List of file objects from GitHub API
+        
+    Returns:
+        int: Number of YAML files in detection-rules directory
+    """
+    yaml_count = 0
+    for file in files:
+        if (file['status'] in ['added', 'modified', 'changed'] and 
+            file['filename'].startswith('detection-rules/') and 
+            file['filename'].endswith('.yml')):
+            yaml_count += 1
+    return yaml_count
 
 
 def get_file_contents(contents_url):
@@ -756,6 +792,19 @@ def handle_pr_rules(mode):
 
         files = get_files_for_pull_request(pr_number)
 
+        # Check if PR has too many rules and should be skipped
+        if SKIP_BULK_PRS:
+            yaml_rule_count = count_yaml_rules_in_pr(files)
+            if yaml_rule_count > MAX_RULES_PER_PR:
+                print(f"\tSkipping PR #{pr_number}: Contains {yaml_rule_count} YAML rules (max allowed: {MAX_RULES_PER_PR})")
+                
+                # Apply label to indicate PR was skipped due to too many rules
+                if not has_label(pr_number, BULK_PR_LABEL):
+                    print(f"\tPR #{pr_number} doesn't have the '{BULK_PR_LABEL}' label. Applying...")
+                    apply_label(pr_number, BULK_PR_LABEL)
+                
+                continue
+
         # Process files in the PR
         for file in files:
             print(f"\tStatus of {file['filename']}: {file['status']}")
@@ -779,13 +828,19 @@ def handle_pr_rules(mode):
             if process_file:
                 content = get_file_contents(file['contents_url'])
 
-                # Skip files with specific text if flag is set
-                if SKIP_FILES_WITH_TEXT and contains_skip_text(content, SKIP_TEXT):
-                    print(f"\tSkipping file {file['filename']}: contains {SKIP_TEXT}")
-                    if ADD_SKIP_TEXT_LABEL and not has_label(pr_number, SKIP_TEXT_LABEL):
-                        print(f"\tPR #{pr_number} doesn't have the '{SKIP_TEXT_LABEL}' label. Applying...")
-                        apply_label(pr_number, SKIP_TEXT_LABEL)
-                    continue
+                # Skip files with specific text patterns if flag is set
+                if SKIP_FILES_WITH_TEXT and SKIP_PATTERNS:
+                    matched_patterns, labels_to_apply = check_skip_patterns(content, SKIP_PATTERNS)
+                    if matched_patterns:
+                        print(f"\tSkipping file {file['filename']}: contains patterns {matched_patterns}")
+
+                        # Apply all associated labels
+                        for label in labels_to_apply:
+                            if not has_label(pr_number, label):
+                                print(f"\tPR #{pr_number} doesn't have the '{label}' label. Applying...")
+                                apply_label(pr_number, label)
+
+                        continue
 
                 # Process file (common for both modes)
                 target_save_filename = f"{pr['number']}_{os.path.basename(file['filename'])}"
