@@ -1,0 +1,89 @@
+name: "Attachment: Encrypted PDF with credential theft body"
+description: "Attached PDF is encrypted, and email body contains credential theft language. Seen in-the-wild impersonating e-fax services."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and any(attachments,
+          .file_type == "pdf"
+          and any(file.explode(.),
+                  any(.scan.exiftool.fields, .key == "Encryption")
+                  or (
+                    .scan.entropy.entropy > 7
+                    and any(.scan.strings.strings,
+                            strings.icontains(., "/Encrypt")
+                    )
+                  )
+          )
+  )
+  and (
+    any(ml.nlu_classifier(body.current_thread.text).intents,
+        .name == "cred_theft" and .confidence in ("medium", "high")
+    )
+    or any(ml.nlu_classifier(beta.ocr(beta.message_screenshot()).text).intents,
+           .name == "cred_theft" and .confidence in ("medium", "high")
+    )
+    or (
+      (
+        regex.icontains(body.current_thread.text,
+                        'PDF\s*(?:Access|Preview|Unlock|Decrypt)\s*(?:Pass)?code'
+        )
+        or (
+          (
+            length(body.current_thread.text) <= 10
+            or (body.current_thread.text is null)
+          )
+          and any(body.previous_threads,
+                  regex.icontains(.text,
+                                  'PDF\s*(?:Access|Preview|Unlock|Decrypt)\s*(?:Pass)?code'
+                  )
+          )
+        )
+      )
+    )
+  )
+  and (
+    (
+      profile.by_sender_email().prevalence in ("new", "outlier")
+      and not profile.by_sender_email().solicited
+    )
+    or (
+      profile.by_sender_email().any_messages_malicious_or_spam
+      and not profile.by_sender_email().any_messages_benign
+    )
+    or (
+      profile.by_sender_email().days_since.last_contact > 120
+      and (
+        length(recipients.to) == 0
+        or all(recipients.to,
+               strings.ilike(.display_name, "undisclosed?recipients")
+        )
+      )
+    )
+  )
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and not headers.auth_summary.dmarc.pass
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Encryption"
+  - "Evasion"
+  - "PDF"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Exif analysis"
+  - "File analysis"
+  - "Natural Language Understanding"
+  - "Sender analysis"
+id: "33df953c-7d37-5501-837b-a2ba856222c7"
+og_id: "c9596c9a-0465-5364-8523-542e6d25a8f7"
+testing_pr: 3252
+testing_sha: 58faa449a9b8e293283c946f11d697d97c6a93fb
