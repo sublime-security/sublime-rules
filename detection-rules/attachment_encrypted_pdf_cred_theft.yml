@@ -51,14 +51,16 @@ source: |
       profile.by_sender_email().any_messages_malicious_or_spam
       and not profile.by_sender_email().any_messages_benign
     )
+    or profile.by_sender_email().days_since.last_contact > 120
     or (
-      profile.by_sender_email().days_since.last_contact > 120
-      and (
-        length(recipients.to) == 0
-        or all(recipients.to,
-               strings.ilike(.display_name, "undisclosed?recipients")
-        )
+      length(recipients.to) == 0
+      or all(recipients.to,
+             strings.ilike(.display_name, "undisclosed?recipients")
       )
+    )
+    or (
+      length(recipients.to) == 1
+      and any(recipients.to, .email.email == sender.email.email)
     )
   )
   // negate highly trusted sender domains unless they fail DMARC authentication
