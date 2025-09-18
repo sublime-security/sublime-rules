@@ -1,0 +1,93 @@
+name: "Suspicious request for financial information"
+description: "Email is from a suspicious sender and contains a request for financial information, such as AR reports."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and length(attachments) <= 1
+  and length(recipients.to) <= 2
+  // suspicious sender
+  and (
+    (
+      length(headers.reply_to) > 0
+      and all(headers.reply_to,
+              .email.domain.root_domain != sender.email.domain.root_domain
+              and .email.domain.root_domain not in $org_domains
+      )
+    )
+    or sender.email.domain.root_domain in $free_email_providers
+    or profile.by_sender().days_known < 3
+  )
+  // specific financial language
+  and (
+    regex.icontains(subject.subject,
+                    '\b(Aged|Age?ing) (Payables|Receivables|Report)',
+                    'reconcill?iation (report|statement).*(issued (settlement|advice)s?)|billing records?'
+    )
+    or (
+      regex.icontains(body.current_thread.text,
+                      '\b(Aged|Age?ing) (Payables|Receivables|Report)',
+                      '(updated|recent) (\bAR\b|\b\AP\b|\bAR\b \& \bAP\b|accounts?) (Payables|Receivables|Reports)',
+                      '(send|forward|provide).*remittance (advice|statements?)'
+      )
+      or strings.icontains(body.current_thread.text,
+                           "copy of a current statement"
+      )
+      or (
+        strings.icontains(body.current_thread.text, "please send all past due")
+        and strings.icontains(body.current_thread.text, "current invoices")
+      )
+    )
+    // suspicious link display text
+    or (
+      any(body.links,
+          regex.icontains(.display_text,
+                          '(Payment|Remittance|Settlement|Transfer) ?Batch',
+          )
+      )
+    )
+    // suspicious sender display name
+    or (
+      regex.icontains(sender.display_name,
+                      'Account(s)? Payable Dep(\.|t\.?|artment)'
+      )
+      // sender email listed as a recipient or recipients undisclosed/null
+      and (
+        sender.email.email in map(recipients.to, .email.email)
+        or (length(recipients.to) == 0 or length(recipients.to) is null)
+      )
+    )
+  )
+  // negate resume related/job inquiry outreach 
+  and not (
+    any(ml.nlu_classifier(body.current_thread.text).topics,
+        .name == "Professional and Career Development" and .confidence == "high"
+    )
+    and any(ml.nlu_classifier(body.current_thread.text).intents,
+            .name == "benign" and .confidence != "low"
+    )
+  )
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and not headers.auth_summary.dmarc.pass
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+  and not profile.by_sender().any_messages_benign
+
+attack_types:
+  - "BEC/Fraud"
+tactics_and_techniques:
+  - "Free email provider"
+  - "Impersonation: Employee"
+  - "Impersonation: VIP"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Header analysis"
+  - "Sender analysis"
+id: "d2e9c816-822f-5e2c-9b65-fafc5e129644"
+og_id: "4ebdaa4d-4db2-56c6-9a6c-220ad49b7681"
+testing_pr: 3259
+testing_sha: c3de4487edc61e635d204c45e2e10ef4a8d07c7c
