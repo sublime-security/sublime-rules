@@ -53,8 +53,12 @@ jobs:
         ORG_NAME: 'sublime-security'
         INCLUDE_PRS_WITH_COMMENT: 'true'
         COMMENT_TRIGGER: '/update-test-rules'
+        # SKIP_FILES pattern and labls are managed within the script
         SKIP_FILES_WITH_TEXT: 'true'
-        SKIP_TEXT: 'ml.link_analysis'
+        # Skip PRs with too many rules
+        SKIP_BULK_PRS: 'true'
+        MAX_RULES_PER_PR: '10'
+        BULK_PR_LABEL: 'test-rules:excluded:bulk_rules'
         # Disable adding tags that aren't useful
         ADD_RULE_STATUS_TAG: 'false'
         ADD_PR_REFERENCE: 'false'
@@ -63,8 +67,6 @@ jobs:
         CREATE_OPEN_PR_TAG: 'false'
         ADD_TEST_RULES_LABEL: 'true'
         IN_TEST_RULES_LABEL: 'in-test-rules'
-        ADD_SKIP_TEXT_LABEL: 'true'
-        SKIP_TEXT_LABEL: 'hunting-required'
 
       run: python scripts/sync_detection_rules.py
 
@@ -120,17 +122,17 @@ jobs:
           fi
           
           # Check if only testing_sha field changed
-          DIFF_OUTPUT=$(git diff "$FILE")
+          DIFF_OUTPUT=$(git diff HEAD -- "$FILE")
           TESTING_SHA_ONLY=false
           
           # Check if the diff only contains testing_sha changes
-          # Look for lines that are only additions/deletions of testing_sha
-          if echo "$DIFF_OUTPUT" | grep -E '^[+-]' | grep -v '^[+-]{3}' | grep -v '^[+-]testing_sha:' | grep -q .; then
+          # Look for lines that are only additions/deletions of testing_sha with hash values
+          if echo "$DIFF_OUTPUT" | grep -E '^[+-]' | grep -v '^[+-]{3}' | grep -v -E '^[+-]testing_sha: [0-9a-f]+$' | grep -q .; then
             # There are other changes besides testing_sha
             TESTING_SHA_ONLY=false
           else
             # Only testing_sha changes found
-            if echo "$DIFF_OUTPUT" | grep -q '^[+-]testing_sha:'; then
+            if echo "$DIFF_OUTPUT" | grep -q -E '^[+-]testing_sha: [0-9a-f]+$'; then
               TESTING_SHA_ONLY=true
               TESTING_SHA_ONLY_COUNT=$((TESTING_SHA_ONLY_COUNT+1))
               echo "\tSkipping $FILE: only testing_sha field changed"

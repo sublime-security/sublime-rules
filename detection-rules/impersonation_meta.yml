@@ -27,7 +27,8 @@ source: |
                       'Instagram ?Helpdesk',
                       'Instagram ?Support',
                       'Ads ?Team',
-                      'Meta & Coursera'
+                      'Meta & Coursera',
+                      'Compliance & Security'
       )
       or strings.ilevenshtein(sender.display_name, 'facebook ads') <= 2
       or strings.ilevenshtein(sender.display_name, 'facebook business') <= 2
@@ -78,7 +79,12 @@ source: |
                .name in ("cred_theft", "callback_scam", "steal_pii")
                and .confidence in ("medium", "high")
         )
-        or regex.icontains(body.plain.raw, "(violation|infringe|copyright)")
+        or (
+          length(body.current_thread.text) < 2000
+          and regex.icontains(body.current_thread.text,
+                              "(?:violation|infringe|copyright)"
+          )
+        )
         or any(body.links, .href_url.domain.root_domain == "rebrand.ly")
       )
     )
@@ -184,6 +190,7 @@ source: |
     or sender.email.domain.root_domain == "salesforce.com"
   )
   and not profile.by_sender().any_messages_benign
+
 attack_types:
   - "Credential Phishing"
 tactics_and_techniques:
