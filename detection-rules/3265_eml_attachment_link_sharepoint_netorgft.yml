@@ -1,0 +1,30 @@
+name: "Attachment: EML with SharePoint files shared from GoDaddy federated tenants"
+description: "Detects EML attachments containing SharePoint links with 'netorg' subdomain patterns, which may indicate suspicious redirection tactics or domain abuse."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and length(filter(attachments,
+                    .file_extension == "eml" or .content_type == "message/rfc822"
+             )
+  ) == 1
+  and any(attachments,
+          any(file.parse_eml(.).body.links,
+              strings.starts_with(.href_url.domain.subdomain, 'netorg')
+              and .href_url.domain.root_domain == "sharepoint.com"
+          )
+  )
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Evasion"
+  - "Impersonation: Brand"
+  - "Social engineering"
+detection_methods:
+  - "File analysis"
+  - "URL analysis"
+  - "Content analysis"
+id: "e1e7f2e3-9181-5051-910d-7ae3d128c22e"
+og_id: "02c1f590-40f0-5db3-a8de-26bc1c1d9fc0"
+testing_pr: 3265
+testing_sha: 50caf283a3b677d7e41419d6827e51c2114bba2c
