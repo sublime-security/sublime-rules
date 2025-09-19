@@ -63,6 +63,8 @@ COMMENT_TRIGGER = os.getenv('COMMENT_TRIGGER', '/update-test-rules')
 ADD_TEST_RULES_LABEL = os.getenv('ADD_TEST_RULES_LABEL', 'false').lower() == 'true'
 # label to apply to PRs that have rules in test-rules
 IN_TEST_RULES_LABEL = os.getenv('IN_TEST_RULES_LABEL', 'in-test-rules')
+# label to apply to PRs that are excluded due to author membership
+AUTHOR_MEMBERSHIP_EXCLUSION_LABEL = os.getenv('AUTHOR_MEMBERSHIP_EXCLUSION_LABEL', 'test-rules:excluded:author_membership')
 
 # flag to skip files containing specific text patterns
 # this is due to test-rules not supporting specific functions
@@ -139,6 +141,31 @@ def apply_label(pr_number, label_name):
         return True
     else:
         print(f"\tFailed to apply label '{label_name}' to PR #{pr_number}: {response.status_code}")
+        return False
+
+def remove_label(pr_number, label_name):
+    """
+    Remove a label from a PR.
+
+    Args:
+        pr_number (int): Pull request number
+        label_name (str): Label name to remove
+
+    Returns:
+        bool: True if label was removed successfully, False otherwise
+    """
+    url = f'https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/issues/{pr_number}/labels/{label_name}'
+    
+    response = requests.delete(url, headers=headers)
+    
+    if response.status_code == 200:
+        print(f"\tRemoved label '{label_name}' from PR #{pr_number}")
+        return True
+    elif response.status_code == 404:
+        print(f"\tLabel '{label_name}' not found on PR #{pr_number}")
+        return True  # Consider it successful if the label wasn't there
+    else:
+        print(f"\tFailed to remove label '{label_name}' from PR #{pr_number}: {response.status_code}")
         return False
 
 def is_user_in_org(username, org_name):
@@ -770,9 +797,20 @@ def handle_pr_rules(mode):
             # only invoke has_trigger_comment when author_in_org is false
             if INCLUDE_PRS_WITH_COMMENT and not author_in_org:
                 has_comment = has_trigger_comment(pr['number'], ORG_NAME, COMMENT_TRIGGER)
+                
+                # If trigger comment was found, remove the exclusion label
+                if has_comment and has_label(pr_number, AUTHOR_MEMBERSHIP_EXCLUSION_LABEL):
+                    print(f"\tPR #{pr_number}: Removing '{AUTHOR_MEMBERSHIP_EXCLUSION_LABEL}' label due to trigger comment")
+                    remove_label(pr_number, AUTHOR_MEMBERSHIP_EXCLUSION_LABEL)
 
                 if not author_in_org and not has_comment:
                     print(f"\tSkipping PR #{pr_number}: Author {pr['user']['login']} is not in {ORG_NAME} and is missing comment trigger")
+                    
+                    # Apply exclusion label if not already present
+                    if not has_label(pr_number, AUTHOR_MEMBERSHIP_EXCLUSION_LABEL):
+                        print(f"\tPR #{pr_number} doesn't have the '{AUTHOR_MEMBERSHIP_EXCLUSION_LABEL}' label. Applying...")
+                        apply_label(pr_number, AUTHOR_MEMBERSHIP_EXCLUSION_LABEL)
+                    
                     process_pr = False
 
         if not process_pr:
