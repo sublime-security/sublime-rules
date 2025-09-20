@@ -4,10 +4,8 @@ type: "rule"
 severity: "high"
 source: |
   type.inbound
-  // no attachments
-  and length(attachments) == 0
-  // direct to recipient
-  and length(recipients.to) == 1
+  and length(attachments) <= 1
+  and length(recipients.to) <= 2
   // suspicious sender
   and (
     (
@@ -23,11 +21,50 @@ source: |
   // specific financial language
   and (
     regex.icontains(subject.subject,
-                    '\b(Aged|Age?ing) (Payables|Receivables|Report)'
+                    '\b(Aged|Age?ing) (Payables|Receivables|Report)',
+                    'reconcill?iation (report|statement).*(issued (settlement|advice)s?)|billing records?'
     )
-    or regex.icontains(body.current_thread.text,
-                       '\b(Aged|Age?ing) (Payables|Receivables|Report)',
-                       '(updated|recent) (\bAR\b|\b\AP\b|\bAR\b \& \bAP\b|accounts?) (Payables|Receivables|Reports)'
+    or (
+      regex.icontains(body.current_thread.text,
+                      '\b(Aged|Age?ing) (Payables|Receivables|Report)',
+                      '(updated|recent) (\bAR\b|\b\AP\b|\bAR\b \& \bAP\b|accounts?) (Payables|Receivables|Reports)',
+                      '(send|forward|provide).*remittance (advice|statements?)'
+      )
+      or strings.icontains(body.current_thread.text,
+                           "copy of a current statement"
+      )
+      or (
+        strings.icontains(body.current_thread.text, "please send all past due")
+        and strings.icontains(body.current_thread.text, "current invoices")
+      )
+    )
+    // suspicious link display text
+    or (
+      any(body.links,
+          regex.icontains(.display_text,
+                          '(Payment|Remittance|Settlement|Transfer) ?Batch',
+          )
+      )
+    )
+    // suspicious sender display name
+    or (
+      regex.icontains(sender.display_name,
+                      'Account(s)? Payable Dep(\.|t\.?|artment)'
+      )
+      // sender email listed as a recipient or recipients undisclosed/null
+      and (
+        sender.email.email in map(recipients.to, .email.email)
+        or (length(recipients.to) == 0 or length(recipients.to) is null)
+      )
+    )
+  )
+  // negate resume related/job inquiry outreach 
+  and not (
+    any(ml.nlu_classifier(body.current_thread.text).topics,
+        .name == "Professional and Career Development" and .confidence == "high"
+    )
+    and any(ml.nlu_classifier(body.current_thread.text).intents,
+            .name == "benign" and .confidence != "low"
     )
   )
   and (
