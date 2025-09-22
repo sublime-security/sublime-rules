@@ -10,19 +10,13 @@ source: |
   and (
     // ML Topic Analysis and Credential Theft Detection
     any(ml.nlu_classifier(body.current_thread.text).topics,
-        .name in (
-          "Security and Authentication",
-          "Secure Message"
-        )
+        .name in ("Security and Authentication", "Secure Message")
         and .confidence == "high"
     )
     or any(ml.nlu_classifier(beta.ocr(beta.message_screenshot()).text).topics,
-           .name in (
-             "Security and Authentication",
-             "Secure Message"
-           )
+           .name in ("Security and Authentication", "Secure Message")
            and .confidence == "high"
-           and beta.ocr(beta.message_screenshot()).text != ""
+           and beta.ocr(file.message_screenshot()).text != ""
     )
     or any(ml.nlu_classifier(body.current_thread.text).intents,
            .name == "cred_theft" and .confidence == "high"
@@ -31,21 +25,24 @@ source: |
            .name == "cred_theft" and .confidence == "high"
     )
   )
-  // Not from legitimate AWS domains with DMARC pass
+  // Not from legitimate AWS domains
+  // there was a DMARC check here, but a lot of users send AWS notifications to groups/mailing lists that breaks DMARC
   and not (
     sender.email.domain.root_domain in $org_domains
-    or (
-      sender.email.domain.root_domain in (
-        "amazon.com",
-        "amazonses.com",
-        "awsevents.com",
-        "aws-experience.com",
-        "marketplace.aws",
-        "aws.com",
-        "amazonaws.cn",
-        "repost.aws"
-      )
-      and headers.auth_summary.dmarc.pass
+    or sender.email.domain.root_domain in (
+      "amazon.com",
+      "amazonaws.com",
+      "amazonses.com",
+      "awsevents.com",
+      "aws-experience.com",
+      "marketplace.aws",
+      "aws.com",
+      "amazonaws.cn",
+      "repost.aws",
+      "awscustomercouncil.com",
+      "airtableemail.com", // used for re:Invent
+      "nmls.org", // "state examination system", realtor software
+      "mktgcampaigns.com" // Elastic + AWS co-marketing emails
     )
   )
   // negate highly trusted sender domains unless they fail DMARC authentication
@@ -57,7 +54,6 @@ source: |
     or sender.email.domain.root_domain not in $high_trust_sender_root_domains
   )
   and not profile.by_sender().solicited
-  
 
 attack_types:
   - "Credential Phishing"
