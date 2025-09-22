@@ -7,8 +7,11 @@ source: |
   and (
     // display name contains Shein
     (
-      regex.icontains(strings.replace_confusables(sender.display_name),
-                      '\bsh[ie]{2}n\b'
+      (
+        regex.icontains(strings.replace_confusables(sender.display_name),
+                        '\bsh[ie]{2}n\b'
+        )
+        and not strings.icontains(sender.display_name, "sheen")
       )
       or (
         length(ml.logo_detect(file.message_screenshot()).brands) == 1
@@ -20,34 +23,28 @@ source: |
   )
   and (
     (
-      any(ml.nlu_classifier(body.current_thread.text).topics,
-          .name in (
-            "Security and Authentication",
-            "Secure Message",
-            "Reminders and Notifications",
-            "Advertising and Promotions" // fake surveys/giveaways have been observed
-          )
-          and .confidence in ("medium", "high")
-      )
-      and not any(ml.nlu_classifier(body.current_thread.text).topics,
-                  .name in ("Newsletters and Digests", "Entertainment and Sports")
-                  and .confidence in ("medium", "high")
+      length(ml.nlu_classifier(body.current_thread.text).topics) > 0
+      and all(ml.nlu_classifier(body.current_thread.text).topics,
+              .name in (
+                "Security and Authentication",
+                "Secure Message",
+                "Reminders and Notifications",
+                "Advertising and Promotions" // fake surveys/giveaways have been observed
+              )
+              and .confidence in ("medium", "high")
       )
     )
     or (
-      any(ml.nlu_classifier(beta.ocr(file.message_screenshot()).text).topics,
-          .name in (
-            "Security and Authentication",
-            "Secure Message",
-            "Reminders and Notifications",
-            "Advertising and Promotions" // fake surveys/giveaways have been observed
-          )
-          and .confidence in ("medium", "high")
-          and beta.ocr(beta.message_screenshot()).text != ""
-      )
-      and not any(ml.nlu_classifier(beta.ocr(file.message_screenshot()).text).topics,
-                  .name in ("Newsletters and Digests", "Entertainment and Sports")
-                  and .confidence in ("medium", "high")
+      length(ml.nlu_classifier(beta.ocr(file.message_screenshot()).text).topics) > 0
+      and all(ml.nlu_classifier(beta.ocr(file.message_screenshot()).text).topics,
+              .name in (
+                "Security and Authentication",
+                "Secure Message",
+                "Reminders and Notifications",
+                "Advertising and Promotions" // fake surveys/giveaways have been observed
+              )
+              and .confidence in ("medium", "high")
+              and beta.ocr(file.message_screenshot()).text != ""
       )
     )
     or any(ml.nlu_classifier(body.current_thread.text).intents,
@@ -61,6 +58,14 @@ source: |
   // and the sender is not in org_domains or from Shein domains and passes auth
   and not (
     sender.email.domain.root_domain in $org_domains
+    or (
+      length(attachments) == 1
+      // this is Shein's return label generator
+      and all(attachments,
+              .file_type == "pdf"
+              and strings.icontains(beta.parse_exif(.).creator, "MondialRelay")
+      )
+    )
     or (
       sender.email.domain.root_domain in (
         "shein.com",
