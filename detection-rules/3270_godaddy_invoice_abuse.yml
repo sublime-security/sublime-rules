@@ -1,0 +1,53 @@
+name: "GoDaddy Payments invoice abuse"
+description: "Detects legitimate GoDaddy Payments invoices that contain suspicious indicators. Observed abused for extortion campaigns."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and length(attachments) == 0
+  and sender.email.domain.domain == "messages.commerce.godaddy.com"
+  
+  and (
+    (
+      any(ml.nlu_classifier(body.current_thread.text).intents,
+          .name in~ ("cred_theft", "extortion") and .confidence == "high"
+      )
+      and any(ml.nlu_classifier(body.current_thread.text).entities,
+              .name == "financial" and .name == "request"
+      )
+    )
+    // manual extortion indicators
+    or (
+      regex.icontains(sender.display_name,
+                      'big(\s|[[:punct:]])?brother|seeing(\s|[[:punct:]])?eye'
+      )
+      or regex.icontains(body.current_thread.text,
+                         'you have been (leaked|compromised|hacked|seen|recorded)|(dirty|little) secrets'
+      )
+    )
+    // emojis in link display text
+    or any(body.links,
+           regex.contains(.display_text,
+                          '[\x{1F300}-\x{1F5FF}\x{1F600}-\x{1F64F}\x{1F680}-\x{1F6FF}\x{1F700}-\x{1F77F}\x{1F780}-\x{1F7FF}\x{1F900}-\x{1F9FF}\x{2600}-\x{26FF}\x{2700}-\x{27BF}\x{2300}-\x{23FF}]'
+           )
+    )
+    // links leading to cloudflare R2 or edge services
+    or any(body.links,
+           .href_url.domain.root_domain in~ ("r2.dev", "pages.dev", "workers.dev")
+    )
+  )
+
+attack_types:
+  - "Extortion"
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Social engineering"
+  - "Evasion"
+detection_methods:
+  - "Natural Language Understanding"
+  - "Sender analysis"
+  - "Content analysis"
+id: "6afa19c4-6ffd-53bb-9eeb-19a5abbfcfdc"
+og_id: "7271069c-c949-5307-8036-ddfc13986d74"
+testing_pr: 3270
+testing_sha: 100603844151e82a1ffdd9bd113b7029a14a5a57
