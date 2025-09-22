@@ -1,0 +1,77 @@
+name: "Attachment: HTML with obfuscation and recipient's email in JavaScript strings"
+description: |
+  Attached HTML file contains JavaScript code with suspicious identifiers like 'atob' or 'decrypt', as well as the recipient's email address embedded within the JavaScript
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and any(attachments,
+          (
+            .file_extension in~ ("html", "htm", "shtml", "dhtml", "xhtml")
+            or (
+              .file_extension is null
+              and .file_type == "unknown"
+              and .content_type == "application/octet-stream"
+            )
+            or .file_extension in~ $file_extensions_common_archives
+            or .file_type == "html"
+            or .content_type == "text/html"
+          )
+          and .size < 1000000
+          and any(file.explode(.),
+                  // suspicious identifiers
+                  any([.scan.strings.strings, .scan.javascript.identifiers],
+                      any(., strings.like(., "*atob*", "*decrypt*"))
+                  )
+          )
+          // Recipients address found in javascript
+          and any(file.explode(.),
+                  (
+                    any(recipients.to,
+                        (
+                          any(..scan.javascript.strings,
+                              strings.icontains(., ..email.email)
+                          )
+                          or any(..scan.strings.strings,
+                                 strings.icontains(., ..email.email)
+                          )
+                        )
+                        and (
+                          .email.domain.valid
+                          or strings.icontains(.display_name, "undisclosed")
+                        )
+                    )
+                  )
+          )
+          // Negating Cisco Secure Email Encryption
+          and not any(file.explode(.),
+                      any(.scan.javascript.strings,
+                          strings.contains(., "Cisco Registered Envelope Service")
+                          or strings.contains(., "https://res.cisco.com:443")
+                      )
+          )
+          // Negating SolarWinds Kiwi Syslog server email reports
+          and not any(file.explode(.),
+                      length(.scan.url.urls) > 0
+                      and all(.scan.url.urls,
+                              strings.contains(.domain.root_domain,
+                                               "kiwisyslog.com"
+                              )
+                      )
+          )
+  )
+
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "HTML smuggling"
+  - "Scripting"
+detection_methods:
+  - "Archive analysis"
+  - "File analysis"
+  - "HTML analysis"
+  - "Javascript analysis"
+id: "091f48e9-1286-53da-a36f-51cb06ef65f2"
+og_id: "1aff486b-527c-597c-9ca9-3be37210fd97"
+testing_pr: 3275
+testing_sha: c72ae7ed5428a5bc70dd5e058e746b83223194e2
