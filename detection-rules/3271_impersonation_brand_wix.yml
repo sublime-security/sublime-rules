@@ -1,0 +1,60 @@
+name: "Brand impersonation: Wix"
+description: "Detects messages impersonating Wix by using similar display names or domain names, while not originating from legitimate WIX domains or failing DMARC authentication from trusted senders."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and (
+    (
+      regex.icontains(sender.display_name, '^WIX\b')
+      or strings.ilike(sender.email.domain.domain, 'WIX')
+    )
+    or (
+      strings.icontains(sender.display_name, 'wix')
+      and regex.icontains(body.current_thread.text,
+                          "Domain Expir(?:ation|y) Not(?:ice|ification)"
+      )
+      and strings.icontains(body.current_thread.text, "will be deactivated")
+    )
+    // Wix address from footer
+    or 2 of (
+      strings.icontains(body.current_thread.text, 'Wix.com'),
+      strings.icontains(body.current_thread.text, '100 Gansevoort St'),
+      strings.icontains(body.current_thread.text, 'New York, NY 10014')
+    )
+  )
+  and not (
+    (
+      sender.email.domain.root_domain in~ (
+        "wix.com",
+        "wixforms.com",
+        "wixemails.com",
+        "wixanswers.com",
+        "wix-groups.com"
+      )
+      and headers.auth_summary.dmarc.pass
+    )
+  )
+  and not profile.by_sender().solicited
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and not headers.auth_summary.dmarc.pass
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Lookalike domain"
+  - "Social engineering"
+detection_methods:
+  - "Header analysis"
+  - "Sender analysis"
+id: "1ada679e-171c-5581-9a4e-4690a7d6ef01"
+og_id: "45e7b99f-94fc-5ae4-b5c9-ebfb59b04fe9"
+testing_pr: 3271
+testing_sha: 06cf5341f7f018ebae551da726f0abc31ea11619
