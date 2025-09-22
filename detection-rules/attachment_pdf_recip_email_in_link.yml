@@ -4,52 +4,77 @@ type: "rule"
 severity: "high"
 source: |
   type.inbound
+  // one or more PDF documents
+  and length(filter(attachments, .file_type == "pdf")) >= 1
   // a single recipient (this is in the link so there can be only one)
   and length(recipients.to) == 1
   and all(recipients.to, .email.domain.valid)
-  // a single PDF attachment
-  and length(filter(attachments, .file_type == "pdf")) == 1
-  // in the PDF attachment
-  and any(attachments,
-          .file_type == "pdf"
-          and all(recipients.to,
-                  strings.icontains(..file_name, .email.domain.sld)
-                  // now file.explode the attachment and look for the eamil address in links
-                  and any(file.explode(..),
-                          // there is only a single link
-                          length(
-                                 filter(.scan.url.urls,
-                                        not strings.icontains(.url, 'mailto')
-                                        and not strings.istarts_with(.url, 'email:')
-                                 )
-                          ) == 1
-                          // that link contains the email address
-                          and (
-                            any(
-                                // filter out mailto links
-                                filter(.scan.url.urls,
-                                       not strings.icontains(.url, 'mailto')
-                                       and not strings.istarts_with(.url, 'email:')
+  and any(filter(attachments, .file_type == "pdf"),
+          // the urls in the PDF
+          (
+            any(filter(file.explode(.), .depth == 0),
+                // a single URL in the PDF
+                length(distinct(filter(.scan.pdf.urls,
+                                       // remove mailto: links
+                                       not strings.istarts_with(.url, 'mailto:')
+                                       and not strings.istarts_with(.url,
+                                                                    'email:'
+                                       )
+                                       // remove links found in exfiltool output
+                                       and not (
+                                         ..scan.exiftool.producer is not null
+                                         and strings.icontains(..scan.exiftool.producer,
+                                                               .domain.domain
+                                         )
+                                       )
+  
+                                       // remove links found in exfiltool output
+                                       and not (
+                                         ..scan.exiftool.creator is not null
+                                         and strings.icontains(..scan.exiftool.creator,
+                                                               .domain.domain
+                                         )
+                                       )
                                 ),
-                                // in the URL
-                                strings.icontains(.url, ...email.email)
-                                or any(beta.scan_base64(.url,
-                                                        format="url",
-                                                        ignore_padding=true
-                                       ),
-                                       strings.icontains(., ..url)
-                                )
+                                .url
+                       )
+                ) == 1
+                // it contains the email address of the recipient
+                and any(recipients.to,
+                        any(..scan.pdf.urls,
+                            not strings.istarts_with(.url, 'mailto:')
+                            and (
+                              strings.icontains(.url, ..email.email)
+                              // or the base64 encoded email
+                              or any(beta.scan_base64(.url,
+                                                      format="url",
+                                                      ignore_padding=true
+                                     ),
+                                     strings.icontains(., ...email.email)
+                              )
                             )
-                            // or in a QR code
-                            or strings.icontains(.scan.qr.url.url, ..email.email)
-                            or any(beta.scan_base64(.scan.qr.url.url,
-                                                    format="url",
-                                                    ignore_padding=true
-                                   ),
-                                   strings.icontains(., ...email.email)
-                            )
+                        )
+                )
+            )
+          // // or there is a QR code
+          or (
+            any(filter(file.explode(.), .depth == 1),
+                .scan.qr.url.domain.valid
+                and any(recipients.to,
+                        // QR code contains the email
+                        (
+                          strings.icontains(..scan.qr.url.url, .email.email)
+                          // QR code contains the base64 endcoded email
+                          or any(beta.scan_base64(..scan.qr.url.url,
+                                                  format="url",
+                                                  ignore_padding=true
+                                 ),
+                                 strings.icontains(., ..email.email)
                           )
-                  )
+                        )
+                )
+            )
+          )
           )
   )
 attack_types:
