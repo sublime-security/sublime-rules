@@ -4,32 +4,57 @@ type: "rule"
 severity: "high"
 source: |
   type.inbound
-  //subject contains "todo list"
+  // subject contains "todo list"
   and (
-    regex.icontains(subject.subject, "T[0o] D[o0] L[I1l]ST")
+    regex.icontains(subject.subject, "T[0o][-\\s]*D[o0][-\\s]*L[I1l]ST")
     or (
       strings.icontains(subject.subject, "todo")
+      and strings.icontains(subject.subject, "list")
+    )
+    or (
+      strings.icontains(subject.subject, "to-do")
       and strings.icontains(subject.subject, "list")
     )
     or (
       strings.icontains(subject.subject, "reminder")
       and strings.icontains(subject.subject, "list")
     )
-  )
-  // utilizing sendgrid infra
-  and strings.icontains(headers.return_path.domain.root_domain, "sendgrid")
-  and (
-    // and sender claims to be task/productivity related but domain doesn't match
-    (
-      regex.icontains(headers.from.display_name, "(task|todo|gtask|reminder)")
-      or regex.icontains(body.current_thread.text,
-                         "(waiting for review|new task.*added|[0-9]+ of [0-9]+ tasks? completed)"
+    // or we can check for todo list content with high cred_theft intent
+    or (
+      regex.icontains(body.current_thread.text,
+                      "T[0o][-\\s]*D[o0][-\\s]*L[I1l]ST"
+      )
+      and strings.icontains(body.current_thread.text, "list")
+      and any(ml.nlu_classifier(body.current_thread.text).intents,
+              .name == "cred_theft" and .confidence == "high"
       )
     )
-    // not from legitimate or internal domains (unless DMARC fails)
-    and not (
-      sender.email.domain.root_domain in $org_domains
-      and headers.auth_summary.dmarc.pass
+    or (
+      strings.icontains(body.current_thread.text, "to-do")
+      and strings.icontains(body.current_thread.text, "list")
+      and any(ml.nlu_classifier(body.current_thread.text).intents,
+              .name == "cred_theft" and .confidence == "high"
+      )
+    )
+  )
+  // utilizing sendgrid infra
+  and (
+    strings.icontains(headers.return_path.domain.root_domain, "sendgrid")
+    or any(headers.domains, strings.icontains(.root_domain, "sendgrid"))
+  )
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and not headers.auth_summary.dmarc.pass
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+  and (
+    not profile.by_sender().solicited
+    or (
+      profile.by_sender().any_messages_malicious_or_spam
+      and not profile.by_sender().any_messages_benign
     )
   )
 
