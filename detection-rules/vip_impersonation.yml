@@ -12,7 +12,13 @@ type: "rule"
 severity: "high"
 source: |
   type.inbound
-  and any($org_vips, strings.istarts_with(sender.display_name, .display_name))
+  and (
+    any($org_vips, .display_name =~ sender.display_name)
+    or (
+      any($org_vips, strings.istarts_with(sender.display_name, .display_name))
+      and profile.by_sender().prevalence == "new"
+    )
+  )
   and (
     // ignore personal <> work emails
     // where the sender and mailbox's display name are the same
@@ -33,8 +39,6 @@ source: |
                 "text/calendar"
               )
   )
-  // negate google suite invites to colaborate
-  and not sender.email.domain.domain == "google.com"
   and (
     (
       profile.by_sender().prevalence in ("new", "outlier")
@@ -53,7 +57,6 @@ source: |
     or sender.email.domain.root_domain not in $org_domains
   )
   and not profile.by_sender().any_messages_benign
-
 
 tags:
   - "Attack surface reduction"
