@@ -10,23 +10,49 @@ source: |
       strings.ilike(strings.replace_confusables(sender.display_name),
                     '*internal revenue service*'
       )
-      or strings.ilike(strings.replace_confusables(sender.display_name),
-                    'IRS*'
-      )
+      or strings.ilike(strings.replace_confusables(sender.display_name), 'IRS*')
     )
     // levenshtein distance similar to IRS
     or strings.ilevenshtein(strings.replace_confusables(sender.display_name),
                             'internal revenue service'
     ) <= 1
+    or (
+      strings.ilike(strings.replace_confusables(subject.base), 'IRS*')
+      and any(ml.nlu_classifier(body.current_thread.text).topics,
+              .name == "Government Services" and .confidence != "low"
+      )
+    )
   )
   and (
-    any(beta.ml_topic(body.current_thread.text).topics,
-        .name in ("Security and Authentication", "Financial Communications")
-        and .confidence in ("high")
+    (
+      any(ml.nlu_classifier(body.current_thread.text).topics,
+          .name in ("Security and Authentication", "Financial Communications")
+          and .confidence == "high"
+      )
+      and not any(ml.nlu_classifier(body.current_thread.text).topics,
+                  .name in (
+                    "Advertising and Promotions",
+                    "Newsletters and Digests",
+                    "Political Mail",
+                    "Events and Webinars"
+                  )
+                  and .confidence != "low"
+      )
     )
-    or any(beta.ml_topic(beta.ocr(file.message_screenshot()).text).topics,
-           .name in ("Security and Authentication", "Financial Communications")
-           and .confidence in ("high")
+    or (
+      any(ml.nlu_classifier(beta.ocr(file.message_screenshot()).text).topics,
+          .name in ("Security and Authentication", "Financial Communications")
+          and .confidence == "high"
+      )
+      and not any(ml.nlu_classifier(beta.ocr(file.message_screenshot()).text).topics,
+                  .name in (
+                    "Advertising and Promotions",
+                    "Newsletters and Digests",
+                    "Political Mail",
+                    "Events and Webinars"
+                  )
+                  and .confidence != "low"
+      )
     )
     or any(ml.nlu_classifier(body.current_thread.text).intents,
            .name == "cred_theft" and .confidence == "high"
