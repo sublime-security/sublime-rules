@@ -1,0 +1,53 @@
+name: "Link: Executable file download with suspicious message content"
+description: "Detects inbound messages containing links to executable files combined with high-confidence security, financial, or credential theft content indicators, while excluding legitimate trusted domains with proper DMARC authentication."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and any(body.links,
+          any($file_extensions_executables,
+              strings.iends_with(..href_url.url, strings.concat(".", .))
+          )
+          and .href_url.path is not null
+          // filter out some executables
+          and not any(["com", "action", "js"], strings.iends_with(..href_url.url, .))
+          // .app links from Google Play
+          and not .href_url.domain.domain == "play.google.com"
+  )
+  
+  and 2 of (
+    any(ml.nlu_classifier(body.current_thread.text).topics,
+        .name in ("Security and Authentication", "Financial Communications")
+        and .confidence == "high"
+    ),
+    any(ml.nlu_classifier(body.current_thread.text).intents,
+        .name == "cred_theft" and .confidence == "high"
+    ),
+    sender.email.domain.tld in $suspicious_tlds
+  )
+  
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and not headers.auth_summary.dmarc.pass
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+
+attack_types:
+  - "Credential Phishing"
+  - "Malware/Ransomware"
+tactics_and_techniques:
+  - "Evasion"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Natural Language Understanding"
+  - "Sender analysis"
+  - "URL analysis"
+  - "Header analysis"
+id: "2a03f3b7-e8e2-5c0b-97f2-f985fee51a9e"
+og_id: "ce9a4926-6e38-5af4-8740-4a141e84958b"
+testing_pr: 3288
+testing_sha: 5a59e26c12db5c0426777fd9830480a2dd71d195
