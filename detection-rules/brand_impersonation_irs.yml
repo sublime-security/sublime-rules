@@ -40,9 +40,17 @@ source: |
       )
     )
     or (
-      any(ml.nlu_classifier(beta.ocr(file.message_screenshot()).text).topics,
-          .name in ("Security and Authentication", "Financial Communications")
-          and .confidence == "high"
+      // OCR length is more than 2x the current_thread length
+      // indicating that the body is mostly an image
+      (
+        (length(beta.ocr(file.message_screenshot()).text) + 0.0) / (
+          length(body.current_thread.text) + 0.0
+        )
+      ) > 2
+      and length(body.previous_threads) == 0
+      and any(ml.nlu_classifier(beta.ocr(file.message_screenshot()).text).topics,
+              .name in ("Security and Authentication", "Financial Communications")
+              and .confidence == "high"
       )
       and not any(ml.nlu_classifier(beta.ocr(file.message_screenshot()).text).topics,
                   .name in (
