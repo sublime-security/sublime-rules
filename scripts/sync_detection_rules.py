@@ -203,6 +203,10 @@ def is_user_in_org(username, org_name):
     url = f'https://api.github.com/orgs/{org_name}/members/{username}'
     try:
         response = github_session.get(url)
+        # 404 is expected when user is not in org, so handle it separately
+        if response.status_code == 404:
+            return False
+        response.raise_for_status()
         return response.status_code == 204
     except Exception as e:
         print(f"Error checking organization membership for {username} in {org_name}: {e}")
