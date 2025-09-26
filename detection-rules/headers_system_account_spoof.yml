@@ -1,0 +1,28 @@
+name: "Headers: System account impersonation with empty sender address"
+description: "Detects messages with an empty sender email address and a display name impersonating system accounts like mailer-daemon, postmaster, or administrator, but lacking legitimate bounce back content as determined by natural language processing."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and sender.email.email == ""
+  and (
+    strings.icontains(sender.display_name, "mailer-daemon")
+    or strings.icontains(sender.display_name, "postmaster")
+    or strings.icontains(sender.display_name, "administrator")
+  )
+  and not any(ml.nlu_classifier(body.current_thread.text).topics,
+              .name == "Bounce Back and Delivery Failure Notifications"
+              and .confidence == "high"
+  )
+  
+attack_types:
+  - "BEC/Fraud"
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Impersonation: Employee"
+  - "Social engineering"
+  - "Spoofing"
+detection_methods:
+  - "Header analysis"
+  - "Sender analysis"
+  - "Natural Language Understanding"
