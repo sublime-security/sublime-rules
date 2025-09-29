@@ -1,0 +1,68 @@
+name: "Brand impersonation: Discord notification"
+description: "Detects inbound messages that impersonate Discord's notification system through display name spoofing, domain lookalikes, or logo usage in attachments. The messages contain typical Discord-style notification language in the subject line while failing authentication checks."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and (
+    strings.ilike(sender.display_name, '*discord*')
+    or strings.ilevenshtein(sender.display_name, 'discord') <= 2
+    or strings.ilike(sender.email.domain.domain, '*discord*')
+    // Discord logo detection in image attachments
+    or any(attachments,
+           .file_type in $file_types_images
+           and any(ml.logo_detect(.).brands,
+                   .name == "Discord" and .confidence != "low"
+           )
+    )
+    // Discord logo detection in message screenshot
+    or any(ml.logo_detect(file.message_screenshot()).brands,
+           .name == "Discord" and .confidence != "low"
+    )
+  )
+  and (
+  strings.icontains(subject.subject, 'you have received a new notification')
+  or regex.icontains(subject.subject,
+                     '(?:(?:new|unread|missed|pending|discord)\s+)?(?:message|notification|alert|activity|call) (?:from|waiting|pending)',
+  )
+    or strings.icontains(subject.subject, 'friend request')
+    or strings.icontains(subject.subject, 'server invitation')
+    or strings.icontains(subject.subject, 'mentioned you')
+    or strings.icontains(subject.subject, 'direct message')
+  )
+  and not (
+    sender.email.domain.root_domain == "discord.com"
+    and headers.auth_summary.dmarc.pass
+  )
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and not headers.auth_summary.dmarc.pass
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+  and (
+    (
+      profile.by_sender().prevalence in ("new", "outlier")
+      and not profile.by_sender().solicited
+    )
+    or (
+      profile.by_sender().any_messages_malicious_or_spam
+      and not profile.by_sender().any_messages_benign
+    )
+  )
+  and not profile.by_sender().any_messages_benign
+
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Social engineering"
+detection_methods:
+  - "Computer Vision"
+  - "Content analysis"
+id: "3f78ffd9-871b-5d4f-a7cc-e8483300cdff"
+og_id: "97007826-84e5-5599-8981-e30fc86c56b3"
+testing_pr: 2847
+testing_sha: 7cd619d61f544e6b4be120ed774811577ece9e10
