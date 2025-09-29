@@ -1,0 +1,61 @@
+name: "Brand impersonation: Robert Half"
+description: "Detects messages impersonating Robert Half, a staffing and recruiting company, by analyzing sender display names, logo detection in message screenshots, and specific company address references in the message body. The rule flags messages from senders not authenticated from legitimate Robert Half domains."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and (
+    strings.icontains(sender.display_name, "Robert Half")
+    or (
+      any(ml.logo_detect(file.message_screenshot()).brands,
+          .name == "Robert Half"
+      )
+      and strings.icontains(sender.display_name, "Robert Half")
+    )
+    or 2 of (
+      strings.icontains(body.current_thread.text, 'Robert Half'),
+      strings.icontains(body.current_thread.text, '2884 Sand Hill Road'),
+      strings.icontains(body.current_thread.text, 'Menlo Park, CA 94025')
+    )
+  )
+  // not a forward or reply
+  and (headers.in_reply_to is null or length(headers.references) == 0)
+  and not any(ml.nlu_classifier(body.current_thread.text).topics,
+              .name in (
+                "Newsletters and Digests",
+                "Voicemail Call and Missed Call Notifications"
+              )
+              and .confidence != "low"
+  )
+  // and the sender is not in org_domains or from Robert Half domains and passes auth
+  and not (
+    sender.email.domain.root_domain in $org_domains
+    or (
+      sender.email.domain.root_domain in (
+        "roberthalf.com",
+        "roberthalf.be",
+        "service-now.com",
+        "protiviti.com",
+        "atlassian.net",
+        "workday.com",
+        "myworkday.com"
+      )
+      and headers.auth_summary.dmarc.pass
+    )
+  )
+
+attack_types:
+  - "BEC/Fraud"
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Social engineering"
+detection_methods:
+  - "Computer Vision"
+  - "Content analysis"
+  - "Header analysis"
+  - "Sender analysis"
+id: "b3d4e101-3160-5676-96e9-741af89233f8"
+og_id: "74f8826c-6bf8-5e7d-8c75-1f06a98921a4"
+testing_pr: 3320
+testing_sha: 504edb39990fd25ffa5bf7cace924e7485dc615d
