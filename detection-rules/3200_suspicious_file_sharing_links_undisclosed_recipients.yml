@@ -1,0 +1,58 @@
+name: "Credential Phishing: Suspicious hyper-linked image with file sharing links to undisclosed recipients"
+description: "Detects messages with suspicious file sharing language in links or images that are sent to undisclosed recipients or self-addressed emails. The rule identifies display text containing terms like 'view document', 'download files', or 'show attached' in links, or when links lack display text but the message screenshot contains similar suspicious file sharing language through OCR analysis."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  // no recipients defined
+  and (
+    length(recipients.to) == 0
+    or (
+      length(recipients.to) > 0
+      and (
+        all(recipients.to,
+            strings.ilike(.display_name, "undisclosed?recipients")
+            or (
+              .email.email == sender.email.email
+              and not sender.email.domain.root_domain in $org_domains
+              and not sender.email.domain.root_domain in $high_trust_sender_root_domains
+              and headers.auth_summary.dmarc.pass
+            )
+        )
+      )
+    )
+  )
+  and length(recipients.cc) == 0
+  and length(recipients.bcc) == 0
+  
+  // sus display text or no display text 
+  and (
+    any(body.links,
+        regex.icontains(.display_text,
+                        "(view|show|download).{0,20}(Doc(ument)?(s)?|files(s)?|attached)"
+        )
+    )
+    or (
+      any(body.links, .display_text is null and .display_url.url is null)
+      and 
+      // suspicious file sharing/doc sharing language in the image
+      regex.icontains(beta.ocr(beta.message_screenshot()).text,
+                      "(view|show|download).{0,20}(Doc(ument)?(s)?|files(s)?|attached)"
+      )
+    )
+  )
+
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Evasion"
+  - "Social engineering"
+detection_methods:
+  - "Header analysis"
+  - "Content analysis"
+  - "Optical Character Recognition"
+  - "Computer Vision"
+id: "8eac68c6-b8c3-5f37-a5f8-cba96836422d"
+og_id: "1cc0e912-0c32-5cf3-ad34-f84917919eea"
+testing_pr: 3200
+testing_sha: 49125dde9a5baf551f91c53d091a130a0ef3ccdb
