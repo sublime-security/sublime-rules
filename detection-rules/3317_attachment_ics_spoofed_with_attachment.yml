@@ -1,0 +1,62 @@
+name: "Attachment: ICS calendar with embedded file from internal sender with SPF failure"
+description: "Detects calendar invitations (ICS files) from internal domains that fail SPF authentication and contain embedded attachments, with single attendee and organizer both from organizational domains."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and sender.email.domain.domain in $org_domains
+  and not coalesce(headers.auth_summary.spf.pass, false)
+  // has an ICS file
+  and any(attachments,
+          .file_extension == "ics" or .content_type == "text/calendar"
+  )
+  // and a single other attachment that isn't an ICS but is embedded in the ICS
+  and length(filter(attachments,
+                    not (
+                      .file_extension == "ics" or .content_type == "text/calendar"
+                    )
+                    and any(filter(attachments,
+                                   .file_extension == "ics"
+                                   or .content_type == "text/calendar"
+                            ),
+                            strings.contains(file.parse_text(.).text,
+                                             ..content_id
+                            )
+                    )
+             )
+  ) == 1
+  // exlode the ics file and look at the VEVENT file
+  and any(filter(attachments,
+                 .file_extension == "ics" or .content_type == "text/calendar"
+          ),
+          any(file.explode(.),
+              // attendees and org are both within org_domains
+              any(.scan.ics.calendars,
+                  any(.components,
+                      .type == "VEVENT"
+                      and length(.attendees) == 1
+                      and all(.attendees,
+                              .mailbox.email.domain.domain in $org_domains
+                      )
+                      and any(.organizers,
+                              .mailbox.email.domain.domain in $org_domains
+                      )
+                      and length(.attachments) > 0
+                  )
+              )
+          )
+  )
+
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Spoofing"
+  - "Evasion"
+detection_methods:
+  - "File analysis"
+  - "Header analysis"
+  - "Sender analysis"
+id: "5471e221-b1c4-575c-b8e9-8e689bddbf6f"
+og_id: "d9ce9db8-0030-50d3-bdd5-aadb97313647"
+testing_pr: 3317
+testing_sha: 2ca1d2986a531e73f440e23e2316f6001c14ad79
