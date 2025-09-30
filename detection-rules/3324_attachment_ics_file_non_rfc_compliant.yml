@@ -1,0 +1,44 @@
+name: "Non-RFC compliant calendar files from unsolicited sender"
+description: "Detects calendar (.ics) files that do not follow RFC standards by lacking required UID identifiers while containing specific calendar components (VTODO, VJOURNAL, VFREEBUSY, or VEVENT). Forged ICS calendar invites can be spoofed to seemingly originate from any sender."
+type: "rule"
+severity: "medium"
+references:
+  - "https://mrd0x.com/spoofing-calendar-invites-using-ics-files/"
+source: |
+  type.inbound
+  and any(attachments,
+          (
+            .file_extension in $file_extensions_common_archives
+            or .file_extension == "ics"
+            or .content_type == "text/calendar"
+          )
+          and any(file.explode(.),
+                  (.file_extension == "ics" or .flavors.mime == "text/calendar")
+                  and any(.scan.ics.calendars,
+                          any(.components,
+                              .uid is null
+                              and .type in (
+                                'VEVENT',
+                                'VJOURNAL',
+                                'VFREEBUSY',
+                                'VTODO'
+                              )
+                          )
+                  )
+          )
+  )
+  and not profile.by_sender_email().any_messages_benign
+tags:
+ - "Attack surface reduction"
+tactics_and_techniques:
+  - "Evasion"
+  - "Social engineering"
+detection_methods:
+  - "Archive analysis"
+  - "Content analysis"
+  - "File analysis"
+  - "Sender analysis"
+id: "ccca3c82-2e75-5379-93c3-820c8b89f694"
+og_id: "9859f100-5fa5-5bb5-9ca6-bce8925afe6d"
+testing_pr: 3324
+testing_sha: 43be0be0c97872dc447402316d17bf59180198f6
