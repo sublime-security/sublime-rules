@@ -1,0 +1,131 @@
+name: "Brand impersonation: DHL"
+description: |
+  Impersonation of the shipping provider DHL.
+references:
+  - "https://www.helpnetsecurity.com/2020/08/21/q2-2020-email-security-trends/"
+  - "https://www.dhl.com/ca-en/home/footer/fraud-awareness.html"
+type: "rule"
+severity: "low"
+source: |
+  type.inbound
+  and (
+    regex.icontains(sender.display_name, '\bDHL\b')
+    or (
+      strings.ilike(sender.email.domain.domain, '*DHL*')
+      and length(sender.email.domain.domain) < 15
+    )
+    or strings.ilike(subject.subject, '*DHL notification*')
+    or regex.contains(subject.subject, '\bD.{0,2}H.{0,2}L.{0,2}\b')
+  )
+  and (
+    any(ml.nlu_classifier(body.current_thread.text).entities, .name == "urgency")
+    or any(ml.nlu_classifier(body.current_thread.text).entities,
+           .name == "org" and .text =~ "DHL"
+    )
+    or any(ml.logo_detect(file.message_screenshot()).brands,
+           .name == "DHL" and .confidence in ("medium", "high")
+    )
+    or regex.icontains(body.current_thread.text, '\bDHL\b')
+    // it contains a QR code
+    or any(file.explode(file.message_screenshot()), .scan.qr.url.url is not null)
+    or (
+      any(file.explode(file.message_screenshot()),
+          strings.ilike(.scan.ocr.raw,
+                        "*package*",
+                        "*parcel*",
+                        "*shipping*",
+                        "*delivery*",
+                        "*track*"
+          )
+      )
+      or strings.ilike(body.current_thread.text,
+                       "*package*",
+                       "*parcel*",
+                       "*shipping*",
+                       "*delivery*",
+                       "*track*"
+      )
+    )
+  )
+  and (
+    (
+      (
+        length(headers.references) > 0
+        or not any(headers.hops,
+                   any(.fields, strings.ilike(.name, "In-Reply-To"))
+        )
+      )
+      and not (
+        (
+          strings.istarts_with(subject.subject, "RE:")
+          or strings.istarts_with(subject.subject, "RES:")
+          or strings.istarts_with(subject.subject, "R:")
+          or strings.istarts_with(subject.subject, "ODG:")
+          or strings.istarts_with(subject.subject, "答复:")
+          or strings.istarts_with(subject.subject, "AW:")
+          or strings.istarts_with(subject.subject, "TR:")
+          or strings.istarts_with(subject.subject, "FWD:")
+          or regex.imatch(subject.subject, '(\[[^\]]+\]\s?){0,3}(re|fwd?)\s?:')
+        )
+      )
+    )
+    or length(headers.references) == 0
+  )
+  and sender.email.domain.root_domain not in~ (
+    'dhl.com',
+    'dhl-news.com',
+    'bdhllp.com',
+    'dhlecommerce.co.uk',
+    'dhlparcel.co.uk',
+    'dhlecs.com',
+    'dhl.co.uk',
+    'dhl.co.tz',
+    'dpdhl.com',
+    'dhl.de',
+    'dhl.fr',
+    'dhl.pl',
+    'dhlexpress.fr', // legit dhl site
+    'dhlending.com',
+    'inmotion.dhl',
+    'dhlparcel.nl',
+    'dhltariff.co.uk',
+    'dhlindia-kyc.com',
+    'dpogroup.com',
+    '4flow-service.com',  // shipping service
+    'leaders-in-logistics.com', // legit sight for leadership webinar events
+    'deutschepost.de', // German postal service
+    'dhlecommerce.nl',
+    'dhl.nl',
+    'adhlawfirm.com', // similar name but unrelated
+    'attendhlth.com', // dhl in domain but unrelated
+    'tdhlaw.com' // dhl in domain but unrelated
+  )
+  and (
+    profile.by_sender().prevalence in ("new", "outlier")
+    or (
+      profile.by_sender().any_messages_malicious_or_spam
+      and not profile.by_sender().any_messages_benign
+    )
+  )
+  
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and not headers.auth_summary.dmarc.pass
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Lookalike domain"
+  - "Social engineering"
+detection_methods:
+  - "Header analysis"
+  - "Sender analysis"
+id: "ba73aede-72e5-5bcb-a7fd-273d4c227a8a"
+og_id: "be4b4ae0-d393-5f8b-b984-5cf4ad7cbeb5"
+testing_pr: 3331
+testing_sha: 93a559449f9d9699d92edebf3e83968f1c884504
