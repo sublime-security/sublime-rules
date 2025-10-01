@@ -1,0 +1,44 @@
+name: "Service abuse: Recruiting with suspicious language patterns from legitimate platforms"
+description: "Detects suspicious recruiting messages from legitimate services like Salesforce, LADesk, or AWS Apps with unusually long sender email addresses and recruiting-specific language patterns that may indicate abuse of trusted platforms for social engineering."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and length(sender.email.email) >= 50
+  and sender.email.domain.root_domain in (
+    "salesforce.com",
+    "ladesk.com",
+    "awsapps.com"
+  )
+  and (
+    any(ml.nlu_classifier(body.current_thread.text).topics,
+        .name in ("B2B Cold Outreach", "Professional and Career Development")
+    )
+    or 2 of (
+      strings.icontains(body.current_thread.text, "profile caught my attention"),
+      strings.icontains(body.current_thread.text, "recruiting top talent"),
+      strings.icontains(body.current_thread.text, "talent acquisition team"),
+      strings.icontains(body.current_thread.text,
+                        "experience seems highly relevant"
+      ),
+      strings.icontains(body.current_thread.text, "expling this opptunity"),
+      strings.icontains(body.current_thread.text, "your professional profile"),
+      strings.icontains(body.current_thread.text, "a pivotal hire"),
+      strings.icontains(body.current_thread.text, "a key hire"),
+      strings.icontains(body.current_thread.text, "schedule a time")
+    )
+  )
+
+attack_types:
+  - "BEC/Fraud"
+tactics_and_techniques:
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Header analysis"
+  - "Natural Language Understanding"
+  - "Sender analysis"
+id: "d67ea949-4044-57ca-a897-b8db8bcf0098"
+og_id: "29e12696-9fab-50a5-bcbc-03c8e382853d"
+testing_pr: 3332
+testing_sha: 4e74cbc8260e66a3ea2f5001293b2e056ce0f020
