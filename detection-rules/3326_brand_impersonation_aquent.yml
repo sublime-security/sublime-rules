@@ -27,10 +27,23 @@ source: |
         "protiviti.com",
         "atlassian.net",
         "workday.com",
-        "myworkday.com"
+        "myworkday.com",
+        "rapdev.io",
+        "immersivelabs.com"
       )
       and headers.auth_summary.dmarc.pass
     )
+  )
+  // not a forward or reply
+  and (headers.in_reply_to is null or length(headers.references) == 0)
+  and not any(ml.nlu_classifier(body.current_thread.text).topics,
+              .name == "Advertising and Promotions" and .confidence != "low"
+  )
+  // negate instances where proofpoint sends a review of a reported message via analyzer 
+  and not (
+    any(headers.domains, .root_domain == "pphosted.com")
+    and headers.auth_summary.spf.pass
+    and headers.auth_summary.dmarc.pass
   )
 
 attack_types:
@@ -46,4 +59,4 @@ detection_methods:
 id: "a23b8a50-bfad-5c49-8f53-13ba8c1402ae"
 og_id: "5074459c-d48e-5ff6-9a08-3da38c2963d9"
 testing_pr: 3326
-testing_sha: 4d31db559a98883eede59b7e8189dbb164458008
+testing_sha: bc716c045028e6f7b1d2dc6e0334986c07857f3d
