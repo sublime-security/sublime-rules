@@ -27,10 +27,23 @@ source: |
         "protiviti.com",
         "atlassian.net",
         "workday.com",
-        "myworkday.com"
+        "myworkday.com",
+        "rapdev.io",
+        "immersivelabs.com"
       )
       and headers.auth_summary.dmarc.pass
     )
+  )
+  // not a forward or reply
+  and (headers.in_reply_to is null or length(headers.references) == 0)
+  and not any(ml.nlu_classifier(body.current_thread.text).topics,
+              .name == "Advertising and Promotions" and .confidence != "low"
+  )
+  // negate instances where proofpoint sends a review of a reported message via analyzer 
+  and not (
+    any(headers.domains, .root_domain == "pphosted.com")
+    and headers.auth_summary.spf.pass
+    and headers.auth_summary.dmarc.pass
   )
 
 attack_types:
