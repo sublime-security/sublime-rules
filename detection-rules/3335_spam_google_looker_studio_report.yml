@@ -1,0 +1,35 @@
+name: "Spam: Sexually explicit Looker Studio report"
+description: "Detects suspicious Looker Studio Reports which containing inappropriate content or suspicious patterns. The rule looks for reports from non-organizational domains that contain emojis or explicit keywords within the report."
+type: "rule"
+severity: "low"
+source: |
+  type.inbound
+  // 
+  //  Warning: This rule contains sexually explicit keywords
+  // 
+  and sender.email.email == "looker-studio-noreply@google.com"
+  // the invite is not from an $org_domain user
+  and all(headers.reply_to,
+          .email.domain.domain not in $org_domains
+          and .email.email not in $recipient_emails
+          and .email.email not in $sender_emails
+  )
+  // the subject or the body contain sexually explicit keywords
+  and any([subject.subject, body.current_thread.text],
+          // this regex should be kept in sync between the Google Group, Google Drive Share, and Looker Studio rules
+          regex.icontains(.,
+                          '(?:sex|horny|cock|fuck|\bass\b|pussy|dick|tits|cum\b|girlfriend|boyfriend|naked|porn|video|webcam|masturbate|orgasm|breasts|penis|vagina|strip|suck|blowjob|hardcore|xxx|nudes?|sexting|cheating|affair|erotic|\blust\b|desire|intimate|explicit|fetish|kinky|seduce|adult\s*(?:\w+\s+){0,2}\s*community|cam shows|local (?:girls?|women|single)|hook.?up|bed partner)'
+          )
+  )
+attack_types:
+  - "Spam"
+tactics_and_techniques:
+  - "Social engineering"
+  - "Free email provider"
+detection_methods:
+  - "Content analysis"
+  - "Sender analysis"
+id: "298cb891-c705-5a3a-9a1c-016869f1dd2c"
+og_id: "f1e649cd-63c0-5df4-86c9-72adc4eef0f0"
+testing_pr: 3335
+testing_sha: 970198abb1dfc03f68375eee0dab1518d942fb6c
