@@ -1,0 +1,33 @@
+name: "Brand impersonation: Evite"
+description: "Detects messages impersonating Evite invitations by looking for invitation language while not originating from legitimate Evite domains."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  // Looking for evite phrasing in all body threads
+  and (
+    strings.icontains(body.current_thread.text, "evite")
+    or (any(body.previous_threads, strings.icontains(.text, "evite")))
+    // Look for alt text in HTML for standardized Evite formatting if string is not avail.
+    or strings.icontains(body.html.raw, 'alt="evite"')
+  )
+  // Phrasing is typically "You're invited"
+  and (
+    strings.icontains(body.current_thread.text, "you're invited")
+    or (any(body.previous_threads, strings.icontains(.text, "you're invited")))
+  )
+  // Legitimate sender will be from evite, negating known non-associated domains
+  and not sender.email.domain.root_domain in ("evite.com")
+
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Sender analysis"
+id: "0d4bc635-4380-557b-b266-f13b3de106ff"
+og_id: "9e867a2b-0175-5d8a-b22f-29bfb3ba6a60"
+testing_pr: 3337
+testing_sha: 627a564f8fab8b46e51286f52e72dd06d20ef928
