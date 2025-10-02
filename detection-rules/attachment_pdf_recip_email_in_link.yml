@@ -10,8 +10,8 @@ source: |
   and length(recipients.to) == 1
   and all(recipients.to, .email.domain.valid)
   and any(filter(attachments, .file_type == "pdf"),
-          // the urls in the PDF
           (
+            // the urls in the PDF
             any(filter(file.explode(.), .depth == 0),
                 // a single URL in the PDF
                 length(distinct(filter(.scan.pdf.urls,
@@ -43,39 +43,39 @@ source: |
                 and any(recipients.to,
                         .email.domain.valid
                         and any(..scan.pdf.urls,
-                            not strings.istarts_with(.url, 'mailto:')
-                            and (
-                              strings.icontains(.url, ..email.email)
-                              // or the base64 encoded email
-                              or any(beta.scan_base64(.url,
-                                                      format="url",
-                                                      ignore_padding=true
-                                     ),
-                                     strings.icontains(., ...email.email)
-                              )
+                                not strings.istarts_with(.url, 'mailto:')
+                                and (
+                                  strings.icontains(.url, ..email.email)
+                                  // or the base64 encoded email
+                                  or any(beta.scan_base64(.url,
+                                                          format="url",
+                                                          ignore_padding=true
+                                         ),
+                                         strings.icontains(., ...email.email)
+                                  )
+                                )
+                        )
+                )
+            )
+            // or there is a QR code
+            or (
+              any(filter(file.explode(.), .depth == 1),
+                  .scan.qr.url.domain.valid
+                  and any(recipients.to,
+                          // QR code contains the email
+                          (
+                            strings.icontains(..scan.qr.url.url, .email.email)
+                            // QR code contains the base64 endcoded email
+                            or any(beta.scan_base64(..scan.qr.url.url,
+                                                    format="url",
+                                                    ignore_padding=true
+                                   ),
+                                   strings.icontains(., ..email.email)
                             )
-                        )
-                )
-            )
-          // // or there is a QR code
-          or (
-            any(filter(file.explode(.), .depth == 1),
-                .scan.qr.url.domain.valid
-                and any(recipients.to,
-                        // QR code contains the email
-                        (
-                          strings.icontains(..scan.qr.url.url, .email.email)
-                          // QR code contains the base64 endcoded email
-                          or any(beta.scan_base64(..scan.qr.url.url,
-                                                  format="url",
-                                                  ignore_padding=true
-                                 ),
-                                 strings.icontains(., ..email.email)
                           )
-                        )
-                )
+                  )
+              )
             )
-          )
           )
   )
 attack_types:
