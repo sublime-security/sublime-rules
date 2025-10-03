@@ -1,11 +1,14 @@
 import base64
 import os
+import sys
 import uuid
 from datetime import datetime, timedelta, timezone
 import re
 from urllib.parse import quote
 
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 # Common configuration
 GITHUB_TOKEN = os.getenv('GITHUB_TOKEN')
@@ -97,10 +100,26 @@ REQUIRED_CHECK_CONCLUSION = os.getenv('REQUIRED_CHECK_CONCLUSION', 'success')
 if not os.path.exists(OUTPUT_FOLDER):
     os.makedirs(OUTPUT_FOLDER)
 
+# Configure requests session with retry strategy for GitHub API
+retry_strategy = Retry(
+    total=3,  # Maximum number of retries
+    backoff_factor=2,  # Exponential backoff factor (wait 2^retry seconds)
+    status_forcelist=[429, 500, 502, 503, 504],  # HTTP status codes to retry on
+    allowed_methods=["HEAD", "GET", "POST", "PUT", "DELETE", "OPTIONS", "TRACE"]
+)
+
+adapter = HTTPAdapter(max_retries=retry_strategy)
+github_session = requests.Session()
+github_session.mount("http://", adapter)
+github_session.mount("https://", adapter)
+
 headers = {
     'Authorization': f'token {GITHUB_TOKEN}',
     'Accept': 'application/vnd.github.v3+json'
 }
+
+# Configure session headers
+github_session.headers.update(headers)
 
 def has_label(pr_number, label_name):
     """
@@ -114,7 +133,7 @@ def has_label(pr_number, label_name):
         bool: True if PR has the label, False otherwise
     """
     url = f'https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/issues/{pr_number}/labels'
-    response = requests.get(url, headers=headers)
+    response = github_session.get(url)
     response.raise_for_status()
     labels = response.json()
     
@@ -134,14 +153,15 @@ def apply_label(pr_number, label_name):
     url = f'https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/issues/{pr_number}/labels'
     payload = {'labels': [label_name]}
     
-    response = requests.post(url, headers=headers, json=payload)
-    
-    if response.status_code == 200:
+    try:
+        response = github_session.post(url, json=payload)
+        response.raise_for_status()
         print(f"\tApplied label '{label_name}' to PR #{pr_number}")
         return True
-    else:
-        print(f"\tFailed to apply label '{label_name}' to PR #{pr_number}: {response.status_code}")
-        return False
+    except Exception as e:
+        print(f"\tFailed to apply label '{label_name}' to PR #{pr_number}: {e}")
+        print("Failed to get valid response after retries. Exiting script.")
+        sys.exit(1)
 
 def remove_label(pr_number, label_name):
     """
@@ -156,17 +176,18 @@ def remove_label(pr_number, label_name):
     """
     url = f'https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/issues/{pr_number}/labels/{label_name}'
     
-    response = requests.delete(url, headers=headers)
-    
-    if response.status_code == 200:
+    try:
+        response = github_session.delete(url)
+        if response.status_code == 404:
+            print(f"\tLabel '{label_name}' not found on PR #{pr_number}")
+            return True  # Consider it successful if the label wasn't there
+        response.raise_for_status()
         print(f"\tRemoved label '{label_name}' from PR #{pr_number}")
         return True
-    elif response.status_code == 404:
-        print(f"\tLabel '{label_name}' not found on PR #{pr_number}")
-        return True  # Consider it successful if the label wasn't there
-    else:
-        print(f"\tFailed to remove label '{label_name}' from PR #{pr_number}: {response.status_code}")
-        return False
+    except Exception as e:
+        print(f"\tFailed to remove label '{label_name}' from PR #{pr_number}: {e}")
+        print("Failed to get valid response after retries. Exiting script.")
+        sys.exit(1)
 
 def is_user_in_org(username, org_name):
     """
@@ -180,8 +201,17 @@ def is_user_in_org(username, org_name):
         bool: True if user is a member, False otherwise
     """
     url = f'https://api.github.com/orgs/{org_name}/members/{username}'
-    response = requests.get(url, headers=headers)
-    return response.status_code == 204
+    try:
+        response = github_session.get(url)
+        # 404 is expected when user is not in org, so handle it separately
+        if response.status_code == 404:
+            return False
+        response.raise_for_status()
+        return response.status_code == 204
+    except Exception as e:
+        print(f"Error checking organization membership for {username} in {org_name}: {e}")
+        print("Failed to get valid response after retries. Exiting script.")
+        sys.exit(1)
 
 
 def has_trigger_comment(pr_number, org_name, trigger_comment):
@@ -197,7 +227,7 @@ def has_trigger_comment(pr_number, org_name, trigger_comment):
         bool: True if a matching comment is found, False otherwise
     """
     url = f'https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/issues/{pr_number}/comments'
-    response = requests.get(url, headers=headers)
+    response = github_session.get(url)
     response.raise_for_status()
     comments = response.json()
 
@@ -234,11 +264,20 @@ def has_required_action_completed(pr_sha, action_name, required_status):
     # Add the required Accept header for the Checks API
     custom_headers['Accept'] = 'application/vnd.github.v3+json'
 
-    response = requests.get(url, headers=custom_headers)
-
-    if response.status_code != 200:
-        print(f"\tError checking action status: {response.status_code}")
-        return False
+    # Temporarily update session headers for this request
+    original_accept = github_session.headers.get('Accept')
+    github_session.headers.update(custom_headers)
+    
+    try:
+        response = github_session.get(url)
+        response.raise_for_status()
+    except Exception as e:
+        print(f"\tError checking action status: {e}")
+        print("Failed to get valid response after retries. Exiting script.")
+        sys.exit(1)
+    finally:
+        # Restore original Accept header
+        github_session.headers['Accept'] = original_accept
 
     check_runs = response.json()
 
@@ -413,7 +452,7 @@ def get_closed_pull_requests():
         url = f'https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/pulls'
         params = {'page': page, 'per_page': per_page, 'state': 'closed', 'sort': 'updated', 'direction': 'desc'}
         print(f"Fetching page {page} of CLOSED Pull Requests")
-        response = requests.get(url, headers=headers, params=params)
+        response = github_session.get(url, params=params)
         response.raise_for_status()
 
         # Extend the list with the pull requests from the current page
@@ -450,7 +489,7 @@ def get_open_pull_requests():
         url = f'https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/pulls'
         params = {'page': page, 'per_page': per_page, 'sort': 'updated', 'direction': 'desc'}
         print(f"Fetching page {page} of Pull Requests")
-        response = requests.get(url, headers=headers, params=params)
+        response = github_session.get(url, params=params)
         response.raise_for_status()
 
         # Extend the list with the pull requests from the current page
@@ -480,7 +519,7 @@ def get_open_pull_requests():
 
 def get_files_for_pull_request(pr_number):
     url = f'https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/pulls/{pr_number}/files'
-    response = requests.get(url, headers=headers)
+    response = github_session.get(url)
     response.raise_for_status()
     return response.json()
 
@@ -505,7 +544,7 @@ def count_yaml_rules_in_pr(files):
 
 
 def get_file_contents(contents_url):
-    response = requests.get(contents_url, headers=headers)
+    response = github_session.get(contents_url)
     response.raise_for_status()
     content = response.json()['content']
     return base64.b64decode(content).decode('utf-8')
