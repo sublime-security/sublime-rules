@@ -12,7 +12,22 @@ type: "rule"
 severity: "high"
 source: |
   type.inbound
-  and any($org_vips, .display_name =~ sender.display_name)
+  and (
+    // the display name matches a name on the orgs vip list
+    any($org_vips, .display_name =~ sender.display_name)
+    // or the display name starts with the name on the orgs vip list
+    or (
+      any($org_vips,
+          strings.istarts_with(sender.display_name, .display_name)
+          // and it is longer than just their name (eg. John Doe CEO)
+          and length(sender.display_name) > length(.display_name)
+      )
+      // and we have confidence it's BEC
+      and any(ml.nlu_classifier(body.current_thread.text).intents,
+              .name == "bec" and .confidence == "high"
+      )
+    )
+  )
   and (
     // ignore personal <> work emails
     // where the sender and mailbox's display name are the same
@@ -21,7 +36,11 @@ source: |
     or sender.display_name != mailbox.display_name
   )
   // bounce-back negations
-  and not strings.like(sender.email.local_part, "*postmaster*", "*mailer-daemon*", "*administrator*")
+  and not strings.like(sender.email.local_part,
+                       "*postmaster*",
+                       "*mailer-daemon*",
+                       "*administrator*"
+  )
   and not any(attachments,
               .content_type in (
                 "message/rfc822",
