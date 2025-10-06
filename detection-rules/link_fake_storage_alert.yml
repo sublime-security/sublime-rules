@@ -68,10 +68,10 @@ source: |
     or strings.icontains(subject.subject, "action required")
     or strings.icontains(subject.subject, "review storage")
   )
-
+  
   // negate customer service requests about storage
   and not any(ml.nlu_classifier(body.current_thread.text).topics,
-      .name == "Customer Service and Support" and .confidence == "high"
+              .name == "Customer Service and Support" and .confidence == "high"
   )
   
   // negate links to loopnet.com - a popular commerical property listing service
@@ -137,6 +137,13 @@ source: |
   and (
     not profile.by_sender().solicited
     or profile.by_sender().any_messages_malicious_or_spam
+  )
+  // negate instances where proofpoint sends a review of a reported message via analyzer 
+  and not (
+    sender.email.email == "analyzer@analyzer.securityeducation.com"
+    and any(headers.domains, .root_domain == "pphosted.com")
+    and headers.auth_summary.spf.pass
+    and headers.auth_summary.dmarc.pass
   )
 attack_types:
   - "Credential Phishing"
