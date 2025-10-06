@@ -1,0 +1,44 @@
+name: "Brand impersonation: AARP"
+description: "Detects messages impersonating AARP by analyzing sender display name and body content for AARP references, address information, or survey-related language from unauthorized senders."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and (
+    strings.icontains(sender.display_name, "AARP")
+    or 2 of (
+      strings.icontains(body.current_thread.text, 'AARP'),
+      strings.icontains(body.current_thread.text, '601 E Street NW'),
+      strings.icontains(body.current_thread.text, 'Washington, DC 20049')
+    )
+    or (
+      strings.icontains(body.current_thread.text, 'AARP')
+      and (
+        regex.icontains(body.current_thread.text, 'quick .{0,10}survey')
+        or strings.icontains(body.current_thread.text, "last attempt")
+      )
+    )
+  )
+  // and the sender is not in org_domains or from AARP domains and passes auth
+  and not (
+    sender.email.domain.root_domain in $org_domains
+    or (
+      sender.email.domain.root_domain in ("aarp.org")
+      and headers.auth_summary.dmarc.pass
+    )
+  )
+
+attack_types:
+  - "BEC/Fraud"
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Header analysis"
+  - "Sender analysis"
+id: "6777f5e6-e5ec-5f36-bd9b-ae1e7813bb8e"
+og_id: "561a7f87-0af7-5f34-8d5d-86bdc0fe213d"
+testing_pr: 3367
+testing_sha: b8a34f7889eea05e6f34dc9f0293713ce8fb7f77
