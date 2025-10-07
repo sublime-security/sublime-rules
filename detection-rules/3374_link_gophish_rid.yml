@@ -1,0 +1,34 @@
+name: "Link: GoPhish default rid value"
+description: "Detects links containing a 7-character alphanumeric 'rid' query parameter, commonly used in tracking and targeting systems for malicious purposes."
+type: "rule"
+severity: "low"
+source: |
+  type.inbound
+  // few body links
+  and length(body.links) < 50
+  and any(body.links,
+          // the rid value present
+          length(.href_url.query_params_decoded["rid"]) == 1
+          // the RID value is 7 bytes
+          and length(.href_url.query_params_decoded["rid"][0]) == 7
+          // contains letters and numbers
+          and regex.imatch(.href_url.query_params_decoded["rid"][0],
+                           '^[a-z0-9]{7}$'
+          )
+          // not just numbers
+          and not regex.imatch(.href_url.query_params_decoded["rid"][0],
+                           '^[0-9]{7}$'
+          )
+  )
+
+attack_types:
+  - "Credential Phishing"
+  - "Malware/Ransomware"
+tactics_and_techniques:
+  - "Evasion"
+detection_methods:
+  - "URL analysis"
+id: "5d7e1718-37ee-5fb4-96f2-8587d1a893bd"
+og_id: "6d2b9c8a-ec51-562c-88f5-58605b1e5a6e"
+testing_pr: 3374
+testing_sha: fe28bca1ca1ace63d4d9ea8d5ab31e149e4656b4
