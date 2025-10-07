@@ -1,0 +1,37 @@
+name: "VIP impersonation: Local part and display name match with authentication failure"
+description: "Detects messages from senders whose local part and display name match a VIP but use a different domain or fail authentication checks, indicating potential impersonation of high-value targets."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and any($org_vips,
+          // the same local part 
+          strings.starts_with(.email,
+                              strings.concat(sender.email.local_part, '@')
+          )
+          // first name and last name 
+          and strings.icontains(sender.display_name, .first_name)
+          and strings.icontains(sender.display_name, .last_name)
+          and (
+            // is not an exact match 
+            sender.email.email != .email // is an exact match but fails auth 
+            or (
+              sender.email.email == .email and not headers.auth_summary.dmarc.pass
+            )
+          )
+  )
+  and not profile.by_sender_email().any_messages_benign
+
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Impersonation: VIP"
+  - "Social engineering"
+  - "Spoofing"
+detection_methods:
+  - "Header analysis"
+  - "Sender analysis"
+id: "d30522bc-2ea8-5429-b00e-25787728a0ac"
+og_id: "8fc9e579-c752-5efe-a3b2-97a08db1b0f3"
+testing_pr: 3373
+testing_sha: 026d72fa1cea09824e0aad9e1adb4647df91fec9
