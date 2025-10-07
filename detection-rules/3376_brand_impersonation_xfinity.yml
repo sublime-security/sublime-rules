@@ -1,0 +1,51 @@
+name: "Brand impersonation: Xfinity and Comcast with suspicious content"
+description: "Detects messages impersonating Xfinity or Comcast through subject lines, display names, or body content that contains credential theft or advance fee fraud indicators, while excluding legitimate communications from verified Comcast domains."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and (
+    (
+      any([subject.base, sender.display_name],
+          strings.icontains(., "Xfinity") or strings.icontains(., "Comcast")
+      )
+      and any(ml.nlu_classifier(body.current_thread.text).intents,
+              .name in ("cred_theft", "advance_fee") and .confidence != "low"
+      )
+    )
+    or 2 of (
+      strings.icontains(body.current_thread.text, 'Comcast'),
+      strings.icontains(body.current_thread.text, 'Xfinity'),
+      strings.icontains(body.current_thread.text, '1701 JFK Boulevard'),
+      strings.icontains(body.current_thread.text, 'Philadelphia, PA 19103')
+    )
+  )
+  and not any(ml.nlu_classifier(body.current_thread.text).topics,
+              .name == "Newsletters and Digests" and .confidence != "low"
+  )
+  and not (
+    sender.email.domain.root_domain in (
+      "xfinity.com",
+      "comcast.net",
+      "comcast.com",
+      "comcastbusiness.com",
+      "square.com"
+    )
+    and headers.auth_summary.dmarc.pass
+  )
+
+attack_types:
+  - "BEC/Fraud"
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Header analysis"
+  - "Natural Language Understanding"
+  - "Sender analysis"
+id: "021068eb-477d-5b01-b330-9ffd066a324d"
+og_id: "1cbaac7e-7678-5eeb-84cd-dd6655738e45"
+testing_pr: 3376
+testing_sha: f549fcff853084de3dc219f28c3a2581c598ac95
