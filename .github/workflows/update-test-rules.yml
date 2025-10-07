@@ -99,11 +99,10 @@ jobs:
         MODIFIED_COUNT=0
         DELETED_COUNT=0
         UPDATED_PRS=()
-        FILES_TO_COMMIT=()
-        TESTING_SHA_ONLY_COUNT=0
         
-        # Process each file individually to filter out testing_sha-only changes
+        # Process each file individually
         for FILE in $FILES; do
+          echo "Processing $FILE"
           # Skip non-rule files 
           if [[ ! "$FILE" =~ .*\.yml$ ]]; then
             continue
@@ -115,82 +114,56 @@ jobs:
           PR_NUMBER=$(echo "$BASENAME" | grep -o "^[0-9]*")
           UPDATED_PRS+=("$PR_NUMBER")
           
+          echo "Processing $BASENAME from $PR_NUMBER for inclusion"
+        
           # Handle removed files
           if [[ ! -f "$FILE" ]]; then
-            FILES_TO_COMMIT+=("$FILE")
+            echo "$BASENAME was deleted, commiting deletion."
             DELETED_COUNT=$((DELETED_COUNT+1))
+            git add "$FILE"
+            git commit -m "[PR #${PR_NUMBER}] Delete detection rule"
             continue
           fi
           
+          # Ensure that new files are tracked (otherwise they won't show up in diff)
+          git add -N "$FILE"
+
           # Check if only testing_sha field changed
           DIFF_OUTPUT=$(git diff HEAD -- "$FILE")
-          TESTING_SHA_ONLY=false
+
+          # Skip files with no changes at all
+          if [[ -z "$DIFF_OUTPUT" ]]; then
+            echo "\tSkipping $FILE: no changes"
+            continue
+          fi
           
           # Check if the diff only contains testing_sha changes
           # Look for lines that are only additions/deletions of testing_sha with hash values
-          if echo "$DIFF_OUTPUT" | grep -E '^[+-]' | grep -v '^[+-]{3}' | grep -v -E '^[+-]testing_sha: [0-9a-f]+$' | grep -q .; then
-            # There are other changes besides testing_sha
-            TESTING_SHA_ONLY=false
-          else
-            # Only testing_sha changes found
-            if echo "$DIFF_OUTPUT" | grep -q -E '^[+-]testing_sha: [0-9a-f]+$'; then
-              TESTING_SHA_ONLY=true
-              TESTING_SHA_ONLY_COUNT=$((TESTING_SHA_ONLY_COUNT+1))
-              echo "\tSkipping $FILE: only testing_sha field changed"
-              continue
-            fi
+          # Handle files that may not have trailing newlines
+          # Filter out hunk headers & file paths so we just have +- lines of changed content.
+          LINES_CHANGES_ONLY=$(echo "$DIFF_OUTPUT" | grep -E '^[+-]' | grep -v -E '^[+-]{3}' | grep -v '^\\ No newline at end of file')
+          NON_TESTING_SHA_CHANGES=$(echo $LINES_CHANGES_ONLY | grep -v -E '^[+-]testing_sha: [0-9a-f]+' || true)
+          if [[ -z "$NON_TESTING_SHA_CHANGES" ]]; then
+            echo "\tSkipping $FILE: only testing_sha field changed. Lines changed:"
+            echo "$LINES_CHANGES_ONLY"
+            continue
           fi
-          
-          # File has substantive changes, add to commit list
-          FILES_TO_COMMIT+=("$FILE")
           
           # Determine status directly from git
           GIT_STATUS=$(git status --porcelain "$FILE" | cut -c1-2 | tr -d ' ')
           if [[ "$GIT_STATUS" == "A" ]]; then
             ADDED_COUNT=$((ADDED_COUNT+1))
+            STATUS="added"
           elif [[ "$GIT_STATUS" == "M" ]]; then
             MODIFIED_COUNT=$((MODIFIED_COUNT+1))
+            STATUS="modified"
           else
             MODIFIED_COUNT=$((MODIFIED_COUNT+1))
-          fi
-        done
-        
-        # Report testing_sha-only changes
-        if [[ $TESTING_SHA_ONLY_COUNT -gt 0 ]]; then
-          echo "Found $TESTING_SHA_ONLY_COUNT file(s) with only testing_sha changes - skipping commit for these files"
-        fi
-        
-        # Check if we have any files left to commit
-        if [[ ${#FILES_TO_COMMIT[@]} -eq 0 ]]; then
-          echo "No substantive changes to commit after filtering testing_sha-only changes"
-          exit 0
-        fi
-        
-        # Commit the files that have substantive changes
-        for FILE in "${FILES_TO_COMMIT[@]}"; do
-          # Handle removed files
-          if [[ ! -f "$FILE" ]]; then
-            git add "$FILE"
-            BASENAME=$(basename "$FILE")
-            PR_NUMBER=$(echo "$BASENAME" | grep -o "^[0-9]*")
-            git commit -m "[PR #${PR_NUMBER}] Delete detection rule"
-            continue
+            STATUS="changed"
           fi
           
           # Extract rule name and commit
           RULE_NAME=$(grep -m 1 "name:" "$FILE" | sed 's/name: //' | sed 's/^"//' | sed 's/"$//' | sed "s/^'//" | sed "s/'$//")
-          BASENAME=$(basename "$FILE")
-          PR_NUMBER=$(echo "$BASENAME" | grep -o "^[0-9]*")
-          
-          # Determine status directly from git
-          GIT_STATUS=$(git status --porcelain "$FILE" | cut -c1-2 | tr -d ' ')
-          if [[ "$GIT_STATUS" == "A" ]]; then
-            STATUS="added"
-          elif [[ "$GIT_STATUS" == "M" ]]; then
-            STATUS="modified" 
-          else
-            STATUS="changed"
-          fi
           
           # Build commit message
           COMMIT_MSG="[PR #${PR_NUMBER}] ${STATUS} rule: ${RULE_NAME}"
