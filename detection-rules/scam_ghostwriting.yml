@@ -6,24 +6,20 @@ source: |
   type.inbound
   and (
     // Ghostwriting and book-related terms in subject
-    (
-      strings.icontains(subject.subject, "book project")
-      or strings.icontains(subject.subject, "ghostwriting")
-      or strings.icontains(subject.subject, "becoming an author")
-      or strings.icontains(subject.subject, "your book")
-      or strings.icontains(subject.subject, "writing project")
-      or strings.icontains(subject.subject, "publish")
-      or strings.icontains(subject.subject, "author")
-    )
-    or 
+    strings.icontains(subject.subject, "book project")
+    or strings.icontains(subject.subject, "ghostwriting")
+    or strings.icontains(subject.subject, "becoming an author")
+    or strings.icontains(subject.subject, "your book")
+    or strings.icontains(subject.subject, "writing project")
+    or strings.icontains(subject.subject, "publish")
+    or strings.icontains(subject.subject, "author")
+  
     // Body contains ghostwriting service offers
-    (
-      strings.icontains(body.current_thread.text, "ghostwriting")
-      or strings.icontains(body.current_thread.text, "ghostwriter")
-      or strings.icontains(body.current_thread.text, "writing firm")
-      or strings.icontains(body.current_thread.text, "book writing")
-      or strings.icontains(body.current_thread.text, "publishing")
-    )
+    or strings.icontains(body.current_thread.text, "ghostwriting")
+    or strings.icontains(body.current_thread.text, "ghostwriter")
+    or strings.icontains(body.current_thread.text, "writing firm")
+    or strings.icontains(body.current_thread.text, "book writing")
+    or strings.icontains(body.current_thread.text, "publishing")
   )
   // Common scam language patterns
   and (
@@ -45,37 +41,29 @@ source: |
     or strings.icontains(body.current_thread.text, "absolutely no obligation")
     or strings.icontains(body.current_thread.text, "writing team")
   )
-  and (
-    not any(ml.nlu_classifier(body.current_thread.text).topics,
-            .name in (
-              "Newsletters and Digests",
-              "Events and Webinars",
-              "Educational and Research",
-              "Financial Communications",
-              "Advertising and Promotions",
-              "Legal and Compliance",
-              "Professional and Career Development"
-            )
-            and .confidence == "high"
+  and not (
+    any(ml.nlu_classifier(body.current_thread.text).topics,
+        .name in (
+          "Newsletters and Digests",
+          "Events and Webinars",
+          "Educational and Research",
+          "Financial Communications",
+          "Advertising and Promotions",
+          "Legal and Compliance",
+          "Professional and Career Development"
+        )
+        and .confidence == "high"
     )
-    // Standard negations
-    and (
-      (
-        sender.email.domain.root_domain in $high_trust_sender_root_domains
-        and not headers.auth_summary.dmarc.pass
-      )
-      or sender.email.domain.root_domain not in $high_trust_sender_root_domains
-    )
-    and (
-      not profile.by_sender().solicited
-      or (
-        profile.by_sender().any_messages_malicious_or_spam
-        and not profile.by_sender().any_messages_benign
-      )
-    )
-    and not profile.by_sender().any_messages_benign
   )
   
+  // Standard negations
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and not headers.auth_summary.dmarc.pass
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
 
 attack_types:
   - "Spam"
