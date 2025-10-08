@@ -9,11 +9,15 @@ source: |
   and (
     regex.contains(sender.display_name, '^SSA\b')
     or strings.icontains(sender.display_name, "Social Security Administration")
+    // there are confusables in the display name
+    or (
+      strings.replace_confusables(sender.display_name) != sender.display_name
+      and strings.contains(strings.replace_confusables(sender.display_name), "SSA")
+    )
     or any([sender.display_name, subject.subject],
            regex.icontains(strings.replace_confusables(.), 'Social (?:benefits|security)', )
     )
   )
-  
   // Contains a link
   and length(body.links) >= 1
   
@@ -36,6 +40,9 @@ source: |
            any(regex.extract(.href_url.path, '\.(?P<ext>[^./?#]+)(?:[?#]|$)'),
                .named_groups["ext"] in $file_extensions_executables
            )
+    )
+    or any(ml.logo_detect(file.message_screenshot()).brands,
+           .name == "SSA" and .confidence == "high"
     )
   )
   and not any(ml.nlu_classifier(body.current_thread.text).topics,

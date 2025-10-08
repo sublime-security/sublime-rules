@@ -1,0 +1,23 @@
+name: "DLP: Canada Credit Card Number"
+description: "Detects messages containing credit card numbers."
+type: "rule"
+severity: "high"
+source: |
+  type.outbound
+  and any(attachments,
+          (
+            .file_extension in~ $file_extensions_common_archives
+            or .file_extension in~ ('.csv', '.txt', '.xlsx', '.xls')
+          )
+          and any(file.explode(.),
+                  regex.contains(.scan.ocr.raw, '\b(?:\d{4}[\s\-]?){3}\d{1,7}\b')
+          )
+  )
+  and (
+    strings.icontains(sender.email.domain.tld, "ca")
+    or strings.icontains(body.current_thread.text, "canada")
+  )
+
+detection_methods:
+  - "File analysis"
+  - "Optical Character Recognition"
