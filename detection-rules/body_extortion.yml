@@ -10,7 +10,7 @@ source: |
   and length(filter(body.links, .display_text is not null)) < 10
   and not (
     ml.nlu_classifier(body.current_thread.text).language == "english"
-    and any(beta.ml_topic(body.html.display_text).topics,
+    and any(ml.nlu_classifier(body.html.display_text).topics,
             .name in (
               "News and Current Events",
               "Newsletters and Digests",
@@ -20,34 +20,33 @@ source: |
     )
   )
   and (
-  (
+    (
       any(ml.nlu_classifier(strings.replace_confusables(body.current_thread.text)).intents,
-          .name == "extortion" and .confidence == "high"
+          (.name == "extortion" and .confidence == "high") 
       )
       and any(ml.nlu_classifier(strings.replace_confusables(body.current_thread.text
                                 )
               ).entities,
-              .name == "financial"
+              .name == "financial" or .name is not null and regex.icontains(.text,  "cybḛ[rŗřṙȑȓɍʀɼɽг]c[rŗřṙȑȓɍʀɼɽг]imina[lĺļľḷḹḽłƖʟḻ]s")
       )
     )
     // manual indicators failsafe
     or 3 of (
       // malware terms
       regex.icontains(strings.replace_confusables(body.current_thread.text),
-                      "(?:(?:spy|mal)ware|t[rŗ]ojan|remote control|infiltrat(?:ed|ion)|backdoor|intruder|(?:your|the).{0,15}(?:device|system|computer|phone).{0,10}(?:became|was|got|is).{0,5}comprom[ḯiïíįī]sed|prov[ḯiïíįī]d[ḯiïíįī]ng.{0,20}full [aảǡą]ccess)"
+                      "(?:(?:spy|[mṁ][aȁ]l)[wŵ][aȁ][rŗ]e|[tŢ][rŗȓ][oố]j[aǻ][nņ]|[rȓ]emote (?:entry|cont[rř]o[lĺ])|infiltrat(?:ed|ion)|backdoor|vi[rṙ]us|intruder|(?:your|the).{0,15}(?:device|system|computer|phone).{0,10}(?:became|was|got|is).{0,5}comprom[ḯiïíįī]sed|prov[ḯiïíįī]d[ḯiïíįī]ng.{0,20}full [aảǡą]ccess)"
       ),
       // actions recorded
       regex.icontains(strings.replace_confusables(body.current_thread.text),
-                      "(?:po[rŗ]n|a[dȡ]ult (?:web)?site|webcam|mastu[rŗ]bating|je[rŗ]king off|pleasu[rŗ]ing you[rŗ]self|getting off|explicit|cl[ḯiïíįī]ps.{0,20}screenshots)"
-  
+                      "(?:p[oộ][rŗ]n|a[dȡ]ult (?:web)?site|webcam|mastu[rŗ]bating|je[rŗ]king off|pleasu[rŗȑ]i[nŋ]g you[rŗṛ]self|getting off|expli[cƈ]it|cl[ḯiïíįī]ps.{0,20}screenshots)"
       ),
       regex.icontains(strings.replace_confusables(body.current_thread.text),
                       "(?:pe[rŗ]ve[rŗ]t|pe[rŗ]ve[rŗ]sion|mastu[rŗ]bat)"
       ),
       // a timeframe to pay
       regex.icontains(strings.replace_confusables(body.current_thread.text),
-                      '[ilo0-9]{2} (?:hou[rŗ]s|uu[rŗ])',
-                      '(?:one|two|th[rŗ]ee|\d) d[aảǡą]ys?'
+                      '[ilo0-9]{2} (?:hou[rŗṝ]s|uu[rŗ])',
+                      '(?:one|tw[oờ]|2|th[rŗ]ee|\d) [dḍ][aảǡą]y[sṣ]?'
       ),
       // a promise from the actor
       regex.icontains(strings.replace_confusables(body.current_thread.text),
@@ -55,12 +54,12 @@ source: |
       ),
       // a threat from the actor
       regex.icontains(strings.replace_confusables(body.current_thread.text),
-                      '(?:\bsen[dt]|forward|expose)\s*(?:[\p{L}\p{N}]+\s*){0,5}\s*to\s*(?:[\p{L}\p{N}]+\s*){0,5}(?:contacts|media|family|friends|coworkers|associates)'
+                      '(?:\bsen[dt]|forward|expose)\s*(?:[\p{L}\p{N}]+\s*){0,5}\s*to\s*(?:[\p{L}\p{N}]+\s*){0,5}(?:contacts|media|family|f[rŗ]iends|coworkers|associates)'
       ),
       // bitcoin language (excluding newsletters)
       (
         regex.icontains(strings.replace_confusables(body.current_thread.text),
-                        'bitc[oöة]+in|\bbtc\b|blockchain'
+                        '[bḆ]it[cĉƈ][oöة]+in|\bbtc\b|blockchain'
         )
         // negate cryptocurrency newsletters
         and not (
@@ -113,11 +112,11 @@ source: |
     any(body.links,
         strings.icontains(.display_text, "unsubscribe")
         and strings.icontains(.href_url.path, "unsubscribe")
-        // newsletters are typically longer than the average extortion script
-        and length(body.current_thread.text) > 2000
     )
+    // newsletters are typically longer than the average extortion script
+    and length(body.current_thread.text) > 2000
   )
-  and length(body.current_thread.text) < 6000
+  and length(body.current_thread.text) < 8000
   // negate highly trusted sender domains unless they fail DMARC authentication
   and (
     (
