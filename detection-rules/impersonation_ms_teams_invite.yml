@@ -5,25 +5,30 @@ severity: "high"
 source: |
   type.inbound
   and strings.icontains(body.current_thread.text, 'Microsoft Teams')
-  and strings.icontains(body.current_thread.text, 'join the meeting now')
-  and strings.contains(body.current_thread.text, 'Meeting ID:')
-  and strings.contains(body.current_thread.text, 'Passcode:')
+  and regex.icontains(body.current_thread.text, 'join .{0,10}meeting')
+  and (
+    strings.contains(body.current_thread.text, 'Meeting ID:')
+    or strings.contains(body.current_thread.text, 'Organizer:')
+    or strings.contains(body.current_thread.text, 'Passcode:')
+  )
   
   // not a reply
   and length(headers.references) == 0
   and headers.in_reply_to is null
   // few links
   and length(body.links) < 10
-
+  
   // no unsubscribe links
   // common in newsletters which link to a webinar style event
   and not any(body.links, strings.icontains(.display_text, "unsub"))
-
+  
   // one of the links contains "join the meeting now"
-  and any(body.links, .display_text =~ "join the meeting now")
+  and any(body.links, regex.icontains(.display_text, "join .{0,10}meeting"))
   
   // the "join the meeting now" link does not go to microsoft
-  and all(filter(body.links, .display_text =~ "join the meeting now"),
+  and all(filter(body.links,
+                 regex.icontains(.display_text, "join .{0,10}meeting")
+          ),
           .href_url.domain.root_domain not in ("microsoft.com", "microsoft.us")
           // rewriters often abstract the link
           and .href_url.domain.root_domain not in $bulk_mailer_url_root_domains
@@ -43,7 +48,7 @@ source: |
     or strings.icontains(body.html.raw, '<span class="conflict-badge">')
     or strings.icontains(body.html.raw, 'class="join-button"')
   )
-
+  
   // negate highly trusted sender domains unless they fail DMARC authentication
   and (
     (
