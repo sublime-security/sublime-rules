@@ -58,4 +58,4 @@ def generate_rule_ids():
 
 
 if __name__ == '__main__':
-    generate_rule_ids()
+    print("gotcha")
