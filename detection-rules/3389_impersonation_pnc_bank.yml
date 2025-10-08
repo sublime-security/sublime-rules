@@ -1,0 +1,53 @@
+name: "Brand impersonation: PNC"
+description: "Impersonation of PNC Financial Services"
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and (
+    regex.icontains(sender.display_name, '\PNC\b')
+    or strings.ilike(sender.email.domain.domain, '*PNC*')
+    or strings.ilike(subject.subject, '*PNC*')
+  )
+  and sender.email.domain.root_domain not in~ ('pnc.com', 'pncbank.com')
+  and sender.email.domain.tld != "pnc"
+  and any(ml.logo_detect(file.message_screenshot()).brands,
+          .name == "PNC" and .confidence in ("medium", "high")
+  )
+  and (
+    profile.by_sender().prevalence in ("new", "outlier")
+    or (
+      profile.by_sender().any_messages_malicious_or_spam
+      and not profile.by_sender().any_messages_benign
+    )
+  )
+  // not forwards/replies
+  and not (
+    (length(headers.references) > 0 or headers.in_reply_to is not null)
+    and (subject.is_forward or subject.is_reply)
+    and length(body.previous_threads) >= 1
+  )
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and not headers.auth_summary.dmarc.pass
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+  
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Lookalike domain"
+  - "Social engineering"
+detection_methods:
+  - "Computer Vision"
+  - "Content analysis"
+  - "Header analysis"
+  - "Sender analysis"
+id: "2af6042d-3433-51ff-83fd-d43876e3393a"
+og_id: "1b5ae4fb-da62-5e6b-a831-d727ce038cde"
+testing_pr: 3389
+testing_sha: ef2e42a797ad6244cd5ba75d1d26d746ed52ce80
