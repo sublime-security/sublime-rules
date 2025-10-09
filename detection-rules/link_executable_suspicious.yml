@@ -4,17 +4,27 @@ type: "rule"
 severity: "high"
 source: |
   type.inbound
+  and length(body.links) < 10
   and any(body.links,
           any($file_extensions_executables,
               strings.iends_with(..href_url.url, strings.concat(".", .))
+              // the display text is not going to reveal the executable extension
+              and not strings.iends_with(..display_text, strings.concat(".", .))
           )
           and .href_url.path is not null
           // filter out some executables
-          and not any(["com", "action", "js"], strings.iends_with(..href_url.url, .))
+          and not any(["com", "action", "js", "app"],
+                      strings.iends_with(..href_url.url, .)
+          )
           // .app links from Google Play
           and not .href_url.domain.domain == "play.google.com"
+          and not .href_url.domain.root_domain in $high_trust_sender_root_domains
   )
-  
+  and not (
+    (subject.is_reply or subject.is_forward)
+    and length(body.previous_threads) > 0
+    and (length(headers.references) > 0 or headers.in_reply_to is not null)
+  )
   and 2 of (
     any(ml.nlu_classifier(body.current_thread.text).topics,
         .name in ("Security and Authentication", "Financial Communications")
