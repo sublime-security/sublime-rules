@@ -80,8 +80,11 @@ jobs:
           base_ref=""
 
           if [[ "${{ github.event_name }}" == 'pull_request_target' ]]; then
-            # Detect changes based on whatever we're merging into.
-            base_ref="${{ github.base_ref }}"
+            # Ensure we have the latest base branch ref for accurate merge-base calculation
+            git fetch origin ${{ github.base_ref }}:refs/remotes/origin/${{ github.base_ref }}
+            # Use the merge base to avoid including changes from target branch
+            # that happened after this PR branch was created.
+            base_ref="$(git merge-base HEAD origin/${{ github.base_ref }})"
           elif [[ "${{ github.event_name }}" == 'push' || "${{ github.event_name }}" == 'merge_group' ]]; then
             # Detect changes based on the previous commit
             base_ref="$(git rev-parse HEAD^)"
@@ -110,38 +113,67 @@ jobs:
       - name: Validate Rules
         if: github.event_name != 'issue_comment'
         run: |
-          echo '{"rules_or_queries": [' > bulk_validate_request.json
-          
-          file_count=$(ls -1 {*-rules/*.yml,insights/**/*.yml} | wc -l)
+          BATCH_SIZE=100
           counter=0
-  
-          for f in *-rules/*.yml
-          do
+          batch_num=0
+
+          # Collect all files
+          all_files=($(ls -1 *-rules/*.yml insights/**/*.yml))
+          total_files=${#all_files[@]}
+
+          echo "Total files to validate: $total_files"
+
+          # Start first batch
+          echo '{"rules_or_queries": [' > bulk_validate_request.json
+
+          for i in "${!all_files[@]}"; do
+            f="${all_files[$i]}"
+
+            # Determine if this is a rule or insight
+            if [[ "$f" == insights/* ]]; then
+              yq -o=json eval 'del(.type) | .source = "length([\n\n" + .source + "\n]) >= 0"' "$f" >> bulk_validate_request.json
+            else
+              yq -o=json eval 'del(.type)' "$f" >> bulk_validate_request.json
+            fi
+
             counter=$((counter + 1))
-            yq -o=json eval 'del(.type)' "$f" >> bulk_validate_request.json
-            if [[ $counter -ne $file_count ]]; then
+
+            # Check if we need to submit this batch
+            should_submit=false
+            if [[ $counter -eq $BATCH_SIZE ]]; then
+              should_submit=true
+            elif [[ $((i + 1)) -eq $total_files ]]; then
+              # Last file
+              should_submit=true
+            else
+              # Not submitting yet, add comma
               echo "," >> bulk_validate_request.json
+            fi
+
+            if [[ "$should_submit" == "true" ]]; then
+              # Close JSON and submit
+              echo "]}" >> bulk_validate_request.json
+
+              batch_num=$((batch_num + 1))
+              echo "Submitting batch $batch_num with $counter files..."
+
+              http_code=$(curl -H "Content-Type: application/json" -X POST -d @bulk_validate_request.json -o response.txt -w "%{http_code}" --silent https://play.sublime.security/v1/rules/bulk_validate)
+              echo '' >> response.txt
+              cat response.txt
+              if [[ "$http_code" != "200" ]]; then
+                echo "Unexpected response $http_code for batch $batch_num"
+                exit 1
+              fi
+
+              # Reset for next batch if there are more files
+              if [[ $((i + 1)) -lt $total_files ]]; then
+                counter=0
+                echo '{"rules_or_queries": [' > bulk_validate_request.json
+              fi
             fi
           done
 
-          for f in insights/**/*.yml
-          do
-            counter=$((counter + 1))
-            yq -o=json eval 'del(.type) | .source = "length([\n\n" + .source + "\n]) >= 0"' "$f" >> bulk_validate_request.json
-          
-            if [[ $counter -ne $file_count ]]; then
-              echo "," >> bulk_validate_request.json
-            fi
-          done
-
-          echo "]}" >> bulk_validate_request.json
-          http_code=$(curl -H "Content-Type: application/json" -X POST -d @bulk_validate_request.json -o response.txt -w "%{http_code}" --silent https://play.sublime.security/v1/rules/bulk_validate)
-          echo '' >> response.txt
-          cat response.txt
-          if [[ "$http_code" != "200" ]]; then
-            echo "Unexpected response $http_code"
-            exit 1
-          fi
+          echo "All batches submitted successfully!"
 
       - name: Verify no .yaml files exist
         if: github.event_name != 'issue_comment'
