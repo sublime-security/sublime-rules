@@ -1,0 +1,75 @@
+name: "Brand Impersonation: Amazon Web Services (AWS)"
+description: "Detects messages impersonating AWS through similar display names combined with security-themed content and authentication failures. Excludes legitimate AWS communications and trusted senders."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and regex.icontains(strings.replace_confusables(sender.display_name),
+                      '\baws\b|amazon web services|\bses\b'
+  )
+  and (
+    // ML Topic Analysis and Credential Theft Detection
+    any(ml.nlu_classifier(body.current_thread.text).topics,
+        .name in ("Security and Authentication", "Secure Message")
+        and .confidence == "high"
+    )
+    or any(ml.nlu_classifier(beta.ocr(beta.message_screenshot()).text).topics,
+           .name in ("Security and Authentication", "Secure Message")
+           and .confidence == "high"
+           and beta.ocr(file.message_screenshot()).text != ""
+    )
+    or any(ml.nlu_classifier(body.current_thread.text).intents,
+           .name == "cred_theft" and .confidence == "high"
+    )
+    or any(ml.nlu_classifier(beta.ocr(beta.message_screenshot()).text).intents,
+           .name == "cred_theft" and .confidence == "high"
+    )
+  )
+  // Not from legitimate AWS domains
+  // there was a DMARC check here, but a lot of users send AWS notifications to groups/mailing lists that breaks DMARC
+  and not (
+    sender.email.domain.root_domain in $org_domains
+    or sender.email.domain.root_domain in (
+      "amazon.com",
+      "amazonaws.com",
+      "amazonses.com",
+      "awsevents.com",
+      "aws-experience.com",
+      "marketplace.aws",
+      "aws.com",
+      "amazonaws.cn",
+      "repost.aws",
+      "awscustomercouncil.com",
+      "airtableemail.com", // used for re:Invent
+      "nmls.org", // "state examination system", realtor software
+      "mktgcampaigns.com", // Elastic + AWS co-marketing emails
+      "awseducate.com",
+      "awsacademy.com"
+    )
+    or sender.email.domain.tld == "local"
+  )
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and not headers.auth_summary.dmarc.pass
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+  and not profile.by_sender().solicited
+
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Header analysis"
+  - "Optical Character Recognition"
+  - "Sender analysis"
+  - "Natural Language Understanding"
+id: "6d11751d-7153-5eda-a491-f307cc91e9f2"
+og_id: "31de94e0-8c93-5408-929f-f448eea91830"
+testing_pr: 2935
+testing_sha: fb388a42570649250ffc72563e9b6089f362aea5
