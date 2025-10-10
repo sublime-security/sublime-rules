@@ -1,0 +1,45 @@
+name: "Vendor impersonation: Thread hijacking with typosquat domain"
+description: "Detects potential thread hijacking where the sender uses a domain similar to known senders, exhibits BEC behavior, and shows signs of compromised thread continuity through domain spoofing or thread manipulation."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and subject.is_reply
+  // sender domain is close to a known existing sender
+  and sender.email.domain.root_domain not in $sender_domains
+  and any($sender_domains,
+          0 < strings.ilevenshtein(., sender.email.domain.root_domain) < 3
+  )
+  and any(ml.nlu_classifier(body.current_thread.text).intents,
+          .name == "bec" and .confidence != "low"
+  )
+  and 1 of (
+    not network.whois(sender.email.domain).found,
+    any(body.previous_threads, strings.icontains(.preamble, sender.display_name)),
+    // previous thread sender is a known previous sender, indicating thread hijacking
+    any(body.previous_threads,
+        any(regex.iextract(.preamble, '<(?P<previous_email>.*)>'),
+            strings.parse_email(.named_groups['previous_email']).email in $sender_emails
+        )
+    ),
+  )
+  and (
+    profile.by_sender_domain().prevalence == "new"
+    or profile.by_sender_domain().days_known < 3
+  )
+
+attack_types:
+  - "BEC/Fraud"
+tactics_and_techniques:
+  - "Lookalike domain"
+  - "Social engineering"
+  - "Spoofing"
+detection_methods:
+  - "Content analysis"
+  - "Natural Language Understanding"
+  - "Sender analysis"
+  - "Whois"
+id: "2919da99-ceae-5d74-98cf-bb853d418415"
+og_id: "9c2f38ed-dfc3-5251-aaf1-3d35cf18369e"
+testing_pr: 3402
+testing_sha: 6cd51e3cbb7a3766d7f93ef9fb6e5dde787bd85e
