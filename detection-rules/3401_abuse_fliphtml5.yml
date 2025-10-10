@@ -1,0 +1,36 @@
+name: "Service abuse: FlipHTML5 with attachment deception and credential theft language"
+description: "Detects messages that reference attachments without including any, contain links to FlipHTML5 services, and exhibit high-confidence credential theft language patterns."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  // messages contain wording to "see attached" but contains no attachments
+  and (
+    regex.icontains(body.current_thread.text,
+                    "attached|see.*attached|find.*attached|please{0,10}attached"
+    )
+    and length(attachments) == 0
+  )
+  // and the link goes to fliphtml5 and contains suspect "click me" language
+  and any(body.links,
+          .href_url.domain.root_domain == "fliphtml5.com"
+  )
+  // and we have confidence its cred theft
+  and any(ml.nlu_classifier(body.current_thread.text).intents,
+          .name == "cred_theft" and .confidence != "low"
+  )
+
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Social engineering"
+  - "Free file host"
+  - "Evasion"
+detection_methods:
+  - "Content analysis"
+  - "Natural Language Understanding"
+  - "URL analysis"
+id: "5c383de1-3a8a-50ab-b5ab-3ebcddeacc73"
+og_id: "02464799-4c4c-58e0-936f-41d8bcd7b276"
+testing_pr: 3401
+testing_sha: 48da69d48d69bafc4dba9c7e738f356921bb03c8
