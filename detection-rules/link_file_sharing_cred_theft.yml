@@ -1,0 +1,42 @@
+name: "Link: File sharing impersonation with BEC or credential theft language"
+description: "Detects messages containing file sharing and cloud services topics combined with BEC or credential theft language, featuring links with document-related display text that lead to low-reputation domains outside the sender's domain and organization."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and any(ml.nlu_classifier(body.current_thread.text).topics,
+          .name == "File Sharing and Cloud Services" and .confidence != "low"
+  )
+  and any(ml.nlu_classifier(body.current_thread.text).intents,
+          .name in ("bec", "cred_theft") and .confidence != "low"
+  )
+  and any(body.links,
+          regex.icontains(.display_text, "document", "download", "view")
+          and .href_url.domain.root_domain != sender.email.domain.root_domain
+          and .href_url.domain.root_domain not in $tranco_1m
+          and .href_url.domain.root_domain not in $org_domains
+          // Exclude legitimate document services
+          and not .href_url.domain.root_domain in $free_file_hosts
+  )
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and not headers.auth_summary.dmarc.pass
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+
+attack_types:
+  - "BEC/Fraud"
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Social engineering"
+  - "Free subdomain host"
+  - "Impersonation: Brand"
+detection_methods:
+  - "Natural Language Understanding"
+  - "URL analysis"
+  - "Sender analysis"
+  - "Header analysis"
+  - "Content analysis"
