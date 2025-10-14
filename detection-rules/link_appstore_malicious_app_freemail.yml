@@ -4,23 +4,13 @@ type: "rule"
 severity: "medium"
 source: |
   type.inbound
-  and any(body.links,
-          .href_url.domain.domain in ('testflight.apple.com')
-          or (
-            .href_url.domain.root_domain == "mimecastprotect.com"
-            and any(.href_url.query_params_decoded['domain'],
-                    . in ("testflight.apple.com")
-            )
+  and any(body.current_thread.links,
+          .href_url.domain.domain in ('apps.apple.com')
+                  and regex.icount(.href_url.path,
+                                   '[/-](?:suite|ads?|manager?|campaigns?)'
+                  ) >= 2
           )
-  )
-  and (
-    sender.email.domain.domain in $free_email_providers
-    or beta.profile.by_reply_to().solicited == false
-    or (
-      beta.profile.by_reply_to().any_messages_malicious_or_spam
-      and not beta.profile.by_reply_to().any_messages_benign
-    )
-  )
+  and sender.email.domain.domain in $free_email_providers
 
 attack_types:
   - "Credential Phishing"
