@@ -4,20 +4,26 @@ type: "rule"
 severity: "medium"
 source: |
   type.inbound
-  // Looking for evite phrasing in all body threads
-  and (
-    strings.icontains(body.current_thread.text, "evite")
-    or (any(body.previous_threads, strings.icontains(.text, "evite")))
-    // Look for alt text in HTML for standardized Evite formatting if string is not avail.
-    or strings.icontains(body.html.raw, 'alt="evite"')
+  and strings.contains(body.html.raw, 'evitecdn.com')
+  and length(filter(html.xpath(body.html, '//img/@src').nodes,
+                    // calling parse_url allows url decoding to help us
+                    strings.parse_url(.raw).domain.root_domain == 'evitecdn.com'
+             )
+  ) >= 2
+  and length(filter(body.links,
+                         .href_url.domain.root_domain == "evite.com"
+                         and regex.contains(.href_url.path, '^/_ct/[a-f0-9]{40}/')
+                  )
+  ) < 3
+  and not (
+    (subject.is_forward or subject.is_reply)
+    and (length(headers.references) != 0 or headers.in_reply_to is not null)
+    and length(body.previous_threads) > 0
   )
-  // Phrasing is typically "You're invited"
-  and (
-    strings.icontains(body.current_thread.text, "you're invited")
-    or (any(body.previous_threads, strings.icontains(.text, "you're invited")))
+  and not (
+    sender.email.domain.root_domain == "evite.com"
+    and headers.auth_summary.dmarc.pass
   )
-  // Legitimate sender will be from evite, negating known non-associated domains
-  and not sender.email.domain.root_domain in ("evite.com")
 
 attack_types:
   - "Credential Phishing"
