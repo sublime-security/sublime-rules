@@ -5,8 +5,16 @@ severity: "high"
 source: |
   type.inbound
   and subject.is_reply
-  // sender domain is close to a known existing sender
   and sender.email.domain.root_domain not in $sender_domains
+  // current sender has not been seen in the thread before
+  and any(body.previous_threads,
+          length(regex.iextract(.preamble, '<(?P<previous_email>\S*)>')) > 0
+  )
+  and all(body.previous_threads,
+          all(regex.iextract(.preamble, '<(?P<previous_email>\S*)>'),
+              strings.parse_email(.named_groups['previous_email']).email != sender.email.email
+          )
+  )
   and any($sender_domains,
           0 < strings.ilevenshtein(., sender.email.domain.root_domain) < 3
   )
@@ -15,13 +23,7 @@ source: |
   )
   and 1 of (
     not network.whois(sender.email.domain).found,
-    any(body.previous_threads, strings.icontains(.preamble, sender.display_name)),
-    // previous thread sender is a known previous sender, indicating thread hijacking
-    any(body.previous_threads,
-        any(regex.iextract(.preamble, '<(?P<previous_email>.*)>'),
-            strings.parse_email(.named_groups['previous_email']).email in $sender_emails
-        )
-    ),
+    any(body.previous_threads, strings.icontains(.preamble, sender.display_name))
   )
   and (
     profile.by_sender_domain().prevalence == "new"
