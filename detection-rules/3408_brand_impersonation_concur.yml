@@ -1,0 +1,49 @@
+name: "Brand impersonation: SAP Concur"
+description: |
+  Detects SAP Concur brand impersonation emails claiming to be expense report
+  notifications or approval requests. Attackers spoof concursolutions.com sender
+  addresses and use Concur branding to trick recipients into clicking malicious
+  links for credential theft.
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and (
+    // Sender display name or domain contains Concur
+    regex.icontains(sender.display_name, '\bconcur\b')
+    or (
+      strings.ilevenshtein(strings.replace_confusables(sender.display_name),
+                           'concur'
+      ) <= 1
+      and not sender.display_name =~ "connor"
+    )
+    or strings.icontains(sender.email.domain.domain, 'concur')
+  )
+  
+  // Not from legitimate Concur domain with valid auth
+  and not (
+    sender.email.domain.root_domain in~ (
+      'concursolutions.com',
+      'concur.com',
+      'sap.com',
+      'concurcdc.cn',
+      'direcaoconcursos.com.br'
+    )
+    and headers.auth_summary.dmarc.pass
+  )
+
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Header analysis"
+  - "Sender analysis"
+  - "URL analysis"
+  - "Machine Learning"
+id: "14785ff4-f4bf-583e-a280-81c0075cdb2e"
+og_id: "b1e6ebd8-3097-5adb-8d9e-c0e51e7baa95"
+testing_pr: 3408
+testing_sha: 0dba221477d615aec909d8d83f350c10dca58508
