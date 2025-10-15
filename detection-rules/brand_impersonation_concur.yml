@@ -11,16 +11,25 @@ source: |
   and (
     // Sender display name or domain contains Concur
     regex.icontains(sender.display_name, '\bconcur\b')
-    or strings.ilevenshtein(strings.replace_confusables(sender.display_name),
-                            'concur'
-    ) <= 2
+    or (
+      strings.ilevenshtein(strings.replace_confusables(sender.display_name),
+                           'concur'
+      ) <= 2
+      and not sender.display_name =~ "connor"
+    )
     or strings.icontains(sender.email.domain.domain, 'concur')
     or strings.ilevenshtein(sender.email.domain.sld, 'concur') <= 2
+  // Or spoofing concursolutions.com but failing auth
   )
-
+  
   // Not from legitimate Concur domain with valid auth
   and not (
-    sender.email.domain.root_domain in~ ('concursolutions.com', 'concur.com', 'sap.com', 'concurcdc.cn')
+    sender.email.domain.root_domain in~ (
+      'concursolutions.com',
+      'concur.com',
+      'sap.com',
+      'concurcdc.cn'
+    )
     and headers.auth_summary.dmarc.pass
   )
 
