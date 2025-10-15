@@ -1,4 +1,4 @@
-name: "Link: File sharing impersonation with BEC or credential theft language"
+name: "Link: File sharing impersonation with suspicious language and sending patterns"
 description: "Detects messages containing file sharing and cloud services topics combined with BEC or credential theft language, featuring links with document-related display text that lead to low-reputation domains outside the sender's domain and organization."
 type: "rule"
 severity: "medium"
@@ -11,13 +11,47 @@ source: |
           .name in ("bec", "cred_theft") and .confidence != "low"
   )
   and any(body.links,
-          regex.icontains(.display_text, "document", "download", "view")
+          regex.icontains(.display_text, "document", "download")
           and .href_url.domain.root_domain != sender.email.domain.root_domain
           and .href_url.domain.root_domain not in $tranco_1m
           and .href_url.domain.root_domain not in $org_domains
           // Exclude legitimate document services
           and not .href_url.domain.root_domain in $free_file_hosts
   )
+  // suspicious sending/recipient pattern
+  and 1 of (
+    (
+      length(recipients.to) == 1
+      and all(recipients.to, .email.email == sender.email.email)
+    ),
+    any(headers.reply_to,
+        .email.domain.domain in $free_email_providers
+        and .email.domain.domain != sender.email.domain.domain
+    ),
+    (
+      length(recipients.to) == 1
+      and length(recipients.cc) == 1
+      and all(recipients.to, all(recipients.cc, .email.email == ..email.email))
+    ),
+    (
+      strings.icontains(headers.return_path.local_part, "+SRS=")
+      or strings.icontains(headers.auth_summary.spf.details.designator, "+SRS=")
+      or any(headers.hops,
+             strings.icontains(.authentication_results.spf_details.designator,
+                               '+SRS='
+             )
+      )
+    ),
+    // No recipients visible
+    (
+      length(recipients.to) == 0
+      or all(recipients.to,
+             .display_name in ("Undisclosed recipients", "undisclosed-recipients")
+      )
+    )
+    and length(recipients.cc) == 0
+  )
+  
   // negate highly trusted sender domains unless they fail DMARC authentication
   and (
     (
