@@ -1,0 +1,55 @@
+name: "Headers: Suspicious routing and encoding indicators"
+description: "Detects messages with multiple suspicious header characteristics including base64-encoded subjects, desktop message IDs, malformed mailer headers, SRS routing indicators, and mismatched sender/reply-to domains."
+type: "rule"
+severity: "low"
+source: |
+  type.inbound
+  and 2 of (
+    // subject decodes into text
+    any(beta.scan_base64(subject.subject, ignore_padding=true),
+        ml.nlu_classifier(.).language is not null
+        and length(ml.nlu_classifier(.).entities) != 0
+    ),
+    strings.contains(headers.message_id, "DESKTOP-"),
+    headers.mailer == "X-Mailer",
+    (
+      strings.icontains(headers.return_path.local_part, "+SRS=")
+      // when the receipient is a group controlled by the final recipient
+      // the return_path header can be overwritten
+      // check the SPF designator for evidence of SRS 
+      or strings.icontains(headers.auth_summary.spf.details.designator, "+SRS=")
+      or any(headers.hops,
+             strings.icontains(.authentication_results.spf_details.designator,
+                               '+SRS='
+             )
+      )
+    ),
+    // mismatched sender, reply-to, and return path
+    (
+      length(headers.reply_to) > 0
+      and all(headers.reply_to,
+              .email.domain.root_domain != sender.email.domain.root_domain
+      )
+      and all(headers.reply_to,
+              .email.domain.root_domain != headers.return_path.domain.root_domain
+      )
+      and sender.email.domain.root_domain != headers.return_path.domain.root_domain
+    )
+  )
+tags:
+ - "Attack surface reduction"
+attack_types:
+  - "BEC/Fraud"
+  - "Credential Phishing"
+  - "Malware/Ransomware"
+tactics_and_techniques:
+  - "Evasion"
+  - "Spoofing"
+detection_methods:
+  - "Header analysis"
+  - "Natural Language Understanding"
+  - "Content analysis"
+id: "0cd998d5-1363-5ccb-8379-a4f4a03db3df"
+og_id: "d3d8d4da-d6c2-5ec0-a4ca-1544bc6ef503"
+testing_pr: 3413
+testing_sha: 2d8d14fb61e04ec772c3eb617d8f8ba952780b2f
