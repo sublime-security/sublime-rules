@@ -34,25 +34,24 @@ source: |
                 regex.icontains(.scan.ocr.raw, 'scan|camera')
                 and regex.icontains(.scan.ocr.raw, '\bQR\b|Q\.R\.|barcode')
             )
+            or any(file.explode(.),
+                   .scan.qr.type is not null
+                   and regex.contains(.scan.qr.data, '\.')
+            )
             or (
-              any(file.explode(.),
-                  (
-                    .scan.qr.type is not null
-                    and regex.contains(.scan.qr.data, '\.')
-                  )
-                  or (
-                    any(file.explode(file.message_screenshot()),
-                        .scan.exiftool.image_height < 2000
-                        and .scan.exiftool.image_width < 2000
-                        and .scan.qr.type is not null
-                        and regex.contains(.scan.qr.data, '\.')
-                    )
-                  )
+              //
+              // This rule makes use of a beta feature and is subject to change without notice
+              // using the beta feature in custom rules is not suggested until it has been formally released
+              //
+              beta.parse_exif(file.message_screenshot()).image_height < 2000
+              and beta.parse_exif(file.message_screenshot()).image_width < 2000
+              and any(beta.scan_qr(file.message_screenshot()).items,
+                      .type is not null
+                      and .url.domain.root_domain == "myclickfunnels.com"
               )
             )
           )
   )
-
   and (
     not profile.by_sender().solicited
     or (
@@ -63,18 +62,17 @@ source: |
   and not profile.by_sender().any_messages_benign
   
   // negate highly trusted sender domains unless they fail DMARC authentication
-    and (
-      (
-        sender.email.domain.root_domain in $high_trust_sender_root_domains
-        and (
-          any(distinct(headers.hops, .authentication_results.dmarc is not null),
-              strings.ilike(.authentication_results.dmarc, "*fail")
-          )
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and (
+        any(distinct(headers.hops, .authentication_results.dmarc is not null),
+            strings.ilike(.authentication_results.dmarc, "*fail")
         )
       )
-      or sender.email.domain.root_domain not in $high_trust_sender_root_domains
     )
-
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
 attack_types:
   - "Credential Phishing"
 tactics_and_techniques:
