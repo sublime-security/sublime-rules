@@ -1,0 +1,73 @@
+name: "Spam: Cryptocurrency airdrop/giveaway"
+description: "Detects messages promoting cryptocurrency airdrops, token claims, or wallet-related rewards."
+type: "rule"
+severity: "low"
+source: |
+  type.inbound
+  and any(ml.nlu_classifier(body.current_thread.text).topics,
+          .name in ("Financial Communications")
+  )
+  and not any(ml.nlu_classifier(body.current_thread.text).topics,
+              .name in (
+                'Newsletters and Digests',
+                'News and Current Events',
+                'Legal and Compliance'
+              )
+  )
+  and not any(ml.nlu_classifier(body.current_thread.text).intents,
+              .name == "benign" and .confidence == "high"
+  )
+  // action word
+  and (
+    strings.ilike(subject.base, '*airdrop*')
+    or strings.like(body.current_thread.text, '*airdrop*')
+    or strings.ilike(subject.base, '*giveaway*')
+    or strings.like(body.current_thread.text, '*giveaway*')
+    or regex.icontains(body.current_thread.text, 'receive \$\d{2,5} worth')
+    or regex.icontains(body.current_thread.text,
+                       'claim your (allocation|airdrop|bonus|share|\$\d{2,5})'
+    )
+    or regex.icontains(body.current_thread.text, 'connect .{0,20} wallet')
+  )
+  and not regex.icontains(body.current_thread.text, '\$\d{2,4} (off|cash)')
+  and (
+    // crypto keyword
+    regex.icontains(body.current_thread.text,
+                    '\bmetamask\b',
+                    '\bethereum\b',
+                    '\bbinance\b',
+                    '\bgemini\b',
+                    '\bwallet\b',
+                    '\bkraken\b',
+                    '\bsolana\b',
+                    '\btrezor\b',
+                    '\bledger\b'
+    )
+    // token name, e.g. $USDT
+    or regex.contains(body.current_thread.text, '\s\$[A-Z]{3,4}\s')
+  )
+  and not (
+    sender.email.domain.root_domain in (
+      "gemini.com",
+      "ledger.com",
+      "binance.com",
+      "trezor.io",
+      "kraken.com",
+      "solana.com",
+      "metamask.com",
+      "ethereum.org",
+      "bloomberg.com"
+    )
+    and headers.auth_summary.dmarc.pass
+  )
+attack_types:
+  - "Spam"
+tactics_and_techniques:
+  - "Social engineering"
+  - "Impersonation: Brand"
+detection_methods:
+  - "Content analysis"
+id: "c0ccb6d9-3a7c-57c7-a9ed-36fba830e327"
+og_id: "80a2e2fd-6ba1-5989-b9c5-d1e515f3dc82"
+testing_pr: 3412
+testing_sha: 521ce9a1f0c4e0bbe3a8428a437b254ccf52f5e8
