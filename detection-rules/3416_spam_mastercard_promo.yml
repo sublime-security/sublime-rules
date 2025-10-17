@@ -1,0 +1,53 @@
+name: "Spam: Mastercard promotional content with image-based body"
+description: "Detects messages promoting untrustworthy Mastercard credit cards that contain both financial communications and promotional content topics, with the message body primarily consisting of image content rather than text. Excludes legitimate payment-related Mastercard communications and applies additional scrutiny to high-trust sender domains that fail DMARC authentication."
+type: "rule"
+severity: "low"
+source: |
+  type.inbound
+  and any(ml.nlu_classifier(beta.ocr(file.message_screenshot()).text).topics,
+          .name == "Financial Communications"
+  )
+  and any(ml.nlu_classifier(beta.ocr(file.message_screenshot()).text).topics,
+          .name == "Advertising and Promotions"
+  )
+  
+  // mastercard mention
+  and strings.icontains(beta.ocr(file.message_screenshot()).text, "mastercard")
+  and not strings.icontains(beta.ocr(file.message_screenshot()).text,
+                            "paying with mastercard"
+  )
+  
+  // body is image
+  and (
+    length(beta.ocr(file.message_screenshot()).text) / length(body.current_thread.text
+    )
+  ) > 10
+  and length(body.previous_threads) == 0
+  
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and not headers.auth_summary.dmarc.pass
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+
+attack_types:
+  - "Credential Phishing"
+  - "Spam"
+tactics_and_techniques:
+  - "Image as content"
+  - "Impersonation: Brand"
+  - "Social engineering"
+detection_methods:
+  - "Computer Vision"
+  - "Content analysis"
+  - "Header analysis"
+  - "Natural Language Understanding"
+  - "Optical Character Recognition"
+  - "Sender analysis"
+id: "e5402e0a-54d4-58da-89d4-13862a5c29dc"
+og_id: "5f2cb559-0db6-5aa0-b8ee-496d688eafa0"
+testing_pr: 3416
+testing_sha: f3bf3bc5e2773630150b9b3bac56e8b2e74335d5
