@@ -70,6 +70,21 @@ source: |
     )
   )
   
+  and not (
+    (
+      length(body.current_thread.text) > 2500
+      or any(headers.hops,
+             any(.fields,
+                 .name == 'List-Unsubscribe-Post'
+                 and .value == 'List-Unsubscribe=One-Click'
+             )
+      )
+    )
+    and any(ml.nlu_classifier(body.current_thread.text).intents,
+            .name == "benign" and .confidence == "high"
+    )
+  )
+  
   // and the sender is not in org_domains or from .gov domains and passes auth
   and not (
     sender.email.domain.root_domain in $org_domains
@@ -89,7 +104,6 @@ source: |
     )
     or sender.email.domain.root_domain not in $high_trust_sender_root_domains
   )
-  and not profile.by_sender().solicited
 
 attack_types:
   - "BEC/Fraud"
