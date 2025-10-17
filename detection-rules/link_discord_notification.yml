@@ -6,7 +6,10 @@ source: |
   type.inbound
   and (
     strings.ilike(sender.display_name, '*discord*')
-    or strings.ilevenshtein(sender.display_name, 'discord') <= 2
+    or (
+      strings.ilevenshtein(sender.display_name, 'discord') <= 2
+      and sender.display_name not in~ ("discogs")
+    )
     or strings.ilike(sender.email.domain.domain, '*discord*')
     // Discord logo detection in image attachments
     or any(attachments,
@@ -21,17 +24,17 @@ source: |
     )
   )
   and (
-  strings.icontains(subject.subject, 'you have received a new notification')
-  or regex.icontains(subject.subject,
-                     '(?:(?:new|unread|missed|pending|discord)\s+)?(?:message|notification|alert|activity|call) (?:from|waiting|pending)',
-  )
+    strings.icontains(subject.subject, 'you have received a new notification')
+    or regex.icontains(subject.subject,
+                       '(?:(?:new|unread|missed|pending|discord)\s+)?(?:message|notification|alert|activity|call) (?:from|waiting|pending)',
+    )
     or strings.icontains(subject.subject, 'friend request')
     or strings.icontains(subject.subject, 'server invitation')
     or strings.icontains(subject.subject, 'mentioned you')
     or strings.icontains(subject.subject, 'direct message')
   )
   and not (
-    sender.email.domain.root_domain == "discord.com"
+    sender.email.domain.root_domain in ("discord.com", "discogs.com")
     and headers.auth_summary.dmarc.pass
   )
   // negate highly trusted sender domains unless they fail DMARC authentication
