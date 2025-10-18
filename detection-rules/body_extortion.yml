@@ -22,12 +22,25 @@ source: |
   and (
     (
       any(ml.nlu_classifier(strings.replace_confusables(body.current_thread.text)).intents,
-          (.name == "extortion" and .confidence == "high") 
+          (.name == "extortion" and .confidence == "high")
       )
-      and any(ml.nlu_classifier(strings.replace_confusables(body.current_thread.text
-                                )
-              ).entities,
-              .name == "financial" or .name is not null and regex.icontains(.text,  "cybḛ[rŗřṙȑȓɍʀɼɽг]c[rŗřṙȑȓɍʀɼɽг]imina[lĺļľḷḹḽłƖʟḻ]s")
+      and (
+        any(ml.nlu_classifier(strings.replace_confusables(body.current_thread.text
+                              )
+            ).entities,
+            .name == "financial"
+            or (
+              .name is not null
+              and regex.icontains(.text,
+                                  "cybḛ[rŗřṙȑȓɍʀɼɽг]c[rŗřṙȑȓɍʀɼɽг]imina[lĺļľḷḹḽłƖʟḻ]s"
+              )
+            )
+        )
+        or any(ml.nlu_classifier(strings.replace_confusables(body.current_thread.text
+                                 )
+               ).topics,
+               .name == "Financial Communications" and .confidence != "low"
+        )
       )
     )
     // manual indicators failsafe
@@ -59,7 +72,7 @@ source: |
       // bitcoin language (excluding newsletters)
       (
         regex.icontains(strings.replace_confusables(body.current_thread.text),
-                        '[bḆ]it[cĉƈ][oöة]+in|\bbtc\b|blockchain'
+                        '[bḆḂ]it[cĉƈ][oöة]+in|\bbtc\b|blockchain'
         )
         // negate cryptocurrency newsletters
         and not (
