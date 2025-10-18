@@ -14,33 +14,47 @@ source: |
       and (
         any(attachments,
             (.file_type in $file_types_images or .file_type == "pdf")
-            and any(file.explode(.),
-                    .scan.qr.type is not null
-                    and .scan.qr.url.domain.domain == "trackingservice.monday.com"
-                    // exclude images taken with mobile cameras and screenshots from android
-                    and not any(.scan.exiftool.fields,
-                                .key == "Model"
-                                or (
-                                  .key == "Software"
-                                  and strings.starts_with(.value, "Android")
-                                )
-                    )
-                    // exclude images taken with mobile cameras and screenshots from Apple
-                    and not any(.scan.exiftool.fields,
-                                .key == "DeviceManufacturer"
-                                and .value == "Apple Computer Inc."
-                    )
+            //
+            // This rule makes use of a beta feature and is subject to change without notice
+            // using the beta feature in custom rules is not suggested until it has been formally released
+            //
+            and any(beta.scan_qr(.).items,
+                    .type is not null
+                    and 'monday_tracker' in .url.rewrite.encoders
+            )
+            //
+            // This rule makes use of a beta feature and is subject to change without notice
+            // using the beta feature in custom rules is not suggested until it has been formally released
+            //
+            // exclude images taken with mobile cameras and screenshots from android
+            and not any(beta.parse_exif(.).fields,
+                        .key == "Model"
+                        or (
+                          .key == "Software"
+                          and strings.starts_with(.value, "Android")
+                        )
+            )
+            // exclude images taken with mobile cameras and screenshots from Apple
+            and not any(beta.parse_exif(.).fields,
+                        .key == "DeviceManufacturer"
+                        and .value == "Apple Computer Inc."
             )
         )
       )
     )
     or (
       length(attachments) == 0
-      and any(file.explode(beta.message_screenshot()),
-              .scan.exiftool.image_height < 2000
-              and .scan.exiftool.image_width < 2000
-              and .scan.qr.type is not null
-              and .scan.qr.url.domain.domain == "trackingservice.monday.com"
+      and (
+        //
+        // This rule makes use of a beta feature and is subject to change without notice
+        // using the beta feature in custom rules is not suggested until it has been formally released
+        //
+        beta.parse_exif(file.message_screenshot()).image_height < 2000
+        and beta.parse_exif(file.message_screenshot()).image_width < 2000
+        and beta.scan_qr(file.message_screenshot()).found
+        and any(beta.scan_qr(file.message_screenshot()).items,
+                .type is not null and 'monday_tracker' in .url.rewrite.encoders
+        )
       )
     )
     or (
@@ -55,7 +69,7 @@ source: |
             )
             and any(file.explode(.),
                     any(.scan.url.urls,
-                        .domain.domain == "trackingservice.monday.com"
+                        'monday_tracker' in .rewrite.encoders
                     )
             )
         )
@@ -113,8 +127,7 @@ source: |
     )
     // salesforce has been abused to send phishing campaigns leveraging monday.com infrastructure abuse 
     or sender.email.domain.root_domain == "salesforce.com"
-  )  
-
+  )
 attack_types:
   - "Credential Phishing"
 tactics_and_techniques:
