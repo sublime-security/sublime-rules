@@ -23,18 +23,28 @@ source: |
       or not any(headers.hops, any(.fields, strings.ilike(.name, "In-Reply-To")))
     )
   )
-  and 3 of (
-    any([subject.subject, body.current_thread.text],
-        regex.icontains(., '(full|part).time')
-    ),
-    strings.ilike(body.current_thread.text, '*job*'),
-    regex.icontains(body.current_thread.text, '\bHR\b'),
-    strings.ilike(body.current_thread.text, '*manager*'),
-    strings.ilike(body.current_thread.text, '*commission*'),
-    strings.ilike(body.current_thread.text, '*hourly*'),
-    strings.ilike(body.current_thread.text, '*prior experience*'),
-    strings.ilike(body.current_thread.text, '*company rep*'),
-    strings.ilike(body.current_thread.text, "100% legal")
+  and (
+    3 of (
+      any([subject.subject, body.current_thread.text],
+          regex.icontains(., '(full|part).time')
+      ),
+      strings.ilike(body.current_thread.text, '*job*'),
+      regex.icontains(body.current_thread.text, '\bHR\b'),
+      strings.ilike(body.current_thread.text, '*manager*'),
+      strings.ilike(body.current_thread.text, '*commission*'),
+      strings.ilike(body.current_thread.text, '*hourly*'),
+      strings.ilike(body.current_thread.text, '*per hour*'),
+      strings.ilike(body.current_thread.text, '*prior experience*'),
+      strings.ilike(body.current_thread.text, '*company rep*'),
+      strings.ilike(body.current_thread.text, "100% legal")
+    )
+    or (
+      length(ml.nlu_classifier(body.current_thread.text).topics) == 1
+      and any(ml.nlu_classifier(body.current_thread.text).topics,
+              .name == "Professional and Career Development"
+              and .confidence == "high"
+      )
+    )
   )
   
   // all attachments are images or there's no attachments
