@@ -1,0 +1,190 @@
+name: "Brand impersonation: DocuSign branded attachment lure with no DocuSign links"
+description: "Detects DocuSign phishing messages with no DocuSign links, a DocuSign logo or verbage within an image or PDF attachment, from an untrusted sender."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and (
+    (
+      0 < length(attachments) <= 8
+      and length(filter(attachments, .file_type in $file_types_images)) > 0
+    )
+    or (
+      length(attachments) > 0
+      and all(attachments,
+              .file_type in $file_types_images
+              or .file_type == 'pdf'
+              or (
+                .file_extension == "ics"
+                or .content_type in ("text/calendar", "application/ics")
+              )
+      )
+    )
+  )
+  and (
+    // if there are links, ensure they are not docusign links
+    (
+      length(body.links) != 0
+      and any(body.links,
+              not strings.ilike(.href_url.domain.root_domain, "docusign.*")
+      )
+    )
+    // sometimes there are no body links and it's all in the PDF attachment
+    or length(body.links) == 0
+  )
+  and (
+    // check the image or pdf attachments for Docusign 
+    any(filter(attachments,
+               .file_type in $file_types_images or .file_type == 'pdf'
+        ),
+        (
+          any(ml.logo_detect(.).brands, .name == "DocuSign")
+          or any(file.explode(.),
+                 strings.ilike(.scan.ocr.raw, "*DocuSign*")
+                 and (
+                   any(ml.nlu_classifier(.scan.ocr.raw).intents,
+                       .name == "cred_theft" and .confidence != "low"
+                   )
+                   or (
+                     regex.icontains(.scan.ocr.raw,
+                                     "((re)?view|access|complete(d)?) document(s)?",
+                                     '[^d][^o][^cd][^ue]sign(?:\b|ature)',
+                                     "important edocs",
+                                     // German (Document (check|check|sign|sent))
+                                     "Dokument (überprüfen|prüfen|unterschreiben|geschickt)",
+                                     // German (important|urgent|immediate)
+                                     "(wichtig|dringend|sofort)"
+                     )
+                     and any(ml.nlu_classifier(.scan.ocr.raw).topics,
+                             .name == "E-Signature"
+                     )
+                     and not strings.count(.scan.ocr.raw, "\n\n\n\n\n\n\n\n\n\n") > 3
+                   )
+                 )
+          )
+        )
+        and not any(file.explode(.),
+                    strings.ilike(.scan.ocr.raw,
+                                  "*DocuSigned By*",
+                                  "*DocuSign Envelope ID*",
+                                  "*Certificate Of Completion*",
+                                  "*Adobe Sign*",
+                                  // Additional Adobe Acrobat Sign check
+                                  "*Powered by\nAdobe\nAcrobat Sign*"
+                    )
+                    or (
+                      .depth == 0
+                      and (
+                        (
+                          .scan.exiftool.page_count > 10
+                          and length(.scan.strings.strings) > 8000
+                        )
+                        or (
+                          .scan.exiftool.producer == "Acrobat Sign"
+                          and any(.scan.exiftool.fields,
+                                  .key == "SigningReason"
+                                  and .value == "Certified by Adobe Acrobat Sign"
+                          )
+                        )
+                      )
+                    )
+                    // negate resume related messages
+                    or (
+                      any(ml.nlu_classifier(body.current_thread.text).topics,
+                          .name == "Professional and Career Development"
+                          and .confidence == "high"
+                      )
+                      and any(ml.nlu_classifier(.scan.ocr.raw).intents,
+                              .name == "benign" and .confidence != "low"
+                      )
+                    )
+        )
+    )
+  
+    // accomidate truncated pngs and GIF files which can cause logodetect/OCR failures
+    or (
+      any(attachments,
+          .file_type =~ "gif"
+          //
+          // This rule makes use of a beta feature and is subject to change without notice
+          // using the beta feature in custom rules is not suggested until it has been formally released
+          //
+          or any(beta.parse_exif(.).fields,
+                 .key == "Warning" and .value == "Truncated PNG image"
+          )
+      )
+      and (
+        any(ml.logo_detect(file.message_screenshot()).brands, .name == "DocuSign")
+        //
+        // This rule makes use of a beta feature and is subject to change without notice
+        // using the beta feature in custom rules is not suggested until it has been formally released
+        //
+        or strings.ilike(beta.ocr(file.message_screenshot()).text, "*DocuSign*")
+      )
+      and (
+        (
+          any(ml.nlu_classifier(beta.ocr(file.message_screenshot()).text).intents,
+              .name == "cred_theft" and .confidence != "low"
+          )
+          or regex.icontains(beta.ocr(file.message_screenshot()).text,
+                             "((re)?view|access|complete(d)?) document(s)?",
+                             "[^d][^o][^c][^u]sign",
+                             "important edocs",
+                             // German (Document (check|check|sign|sent))
+                             "Dokument (überprüfen|prüfen|unterschreiben|geschickt)",
+                             // German (important|urgent|immediate)
+                             "(wichtig|dringend|sofort)"
+          )
+        )
+      )
+      and not strings.ilike(beta.ocr(file.message_screenshot()).text,
+                            "*DocuSigned By*",
+                            "*DocuSign Envelope ID*",
+                            "*Certificate Of Completion*",
+                            "*Adobe Sign*"
+      )
+    )
+  )
+  and (
+    not profile.by_sender_email().solicited
+    or profile.by_sender_email().prevalence == "new"
+    or (
+      profile.by_sender_email().any_messages_malicious_or_spam
+      and not profile.by_sender_email().any_messages_benign
+    )
+  )
+  and not profile.by_sender_email().any_messages_benign
+  
+  // negate docusign 'via' messages
+  and not (
+    any(headers.hops,
+        any(.fields,
+            .name == "X-Api-Host" and strings.ends_with(.value, "docusign.net")
+        )
+    )
+    and strings.contains(sender.display_name, "via")
+  )
+  // negate docusign originated emails
+  and not any(headers.hops,
+              regex.imatch(.received.server.raw, ".+.docusign.(net|com)")
+  )
+  
+  // negate replies to docusign notifications
+  and not any(headers.references, strings.iends_with(., '@camail.docusign.net'))
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Social engineering"
+detection_methods:
+  - "Computer Vision"
+  - "Content analysis"
+  - "Header analysis"
+  - "Natural Language Understanding"
+  - "Optical Character Recognition"
+  - "Sender analysis"
+  - "URL screenshot"
+id: "853b9c0d-0b1e-5b1a-b658-2e6c84f3296e"
+og_id: "814a5694-d626-5bf4-a1ba-a1dbcb625279"
+testing_pr: 3422
+testing_sha: 023d55fa1904955f67ab5b0b3952b97363e9f9cc
