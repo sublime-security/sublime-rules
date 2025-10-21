@@ -1,0 +1,452 @@
+name: "Brand impersonation: Microsoft with low reputation links"
+description: "Detects low reputation links with Microsoft specific indicators in the body."
+type: "rule"
+severity: "medium"
+source: |
+ type.inbound
+ and 0 < length(body.links) < 50
+ // suspicious link 
+ and any(body.links,
+         (
+           .href_url.domain.tld in $suspicious_tlds
+           or .href_url.domain.root_domain not in $tranco_1m
+           or .href_url.domain.domain in $free_file_hosts
+           or .href_url.domain.root_domain in $free_file_hosts
+           or .href_url.domain.root_domain in $free_subdomain_hosts
+           or .href_url.domain.domain in $url_shorteners
+           or .href_url.domain.domain in $social_landing_hosts
+           // account for URL rewrites
+           or (
+             any(.href_url.query_params_decoded["domain"],
+                 strings.parse_domain(.).tld in~ $suspicious_tlds
+                 or strings.parse_domain(.).root_domain not in~ $tranco_1m
+                 or strings.parse_domain(.).domain in~ $free_file_hosts
+                 or strings.parse_domain(.).root_domain in~ $free_file_hosts
+                 or strings.parse_domain(.).root_domain in~ $free_subdomain_hosts
+                 or strings.parse_domain(.).domain in~ $url_shorteners
+                 or strings.parse_domain(.).domain in~ $social_landing_hosts
+             )
+           )
+           or 
+ 
+           // mass mailer link, masks the actual URL
+           .href_url.domain.root_domain in (
+             "hubspotlinks.com",
+             "mandrillapp.com",
+             "sendgrid.net",
+             "rs6.net"
+           )
+ 
+           // Google AMP redirect
+           or (
+             .href_url.domain.sld == "google"
+             and strings.starts_with(.href_url.path, "/amp/")
+           )
+ 
+          // Recipient email address in link
+          or any(body.links,
+                 any(recipients.to,
+                     strings.icontains(..href_url.url, .email.email)
+                     and any(recipients.to, .email.domain.valid)
+                 )
+          )
+          or .href_url.domain.root_domain == "beehiiv.com"
+         )
+ 
+         // exclude sources of potential FPs
+         and (
+           .href_url.domain.root_domain not in (
+             "svc.ms",
+             "sharepoint.com",
+             "1drv.ms",
+             "microsoft.com",
+             "aka.ms",
+             "msftauthimages.net",
+             "office.com",
+             "microsoftproject.com"
+           )
+           or any(body.links, .href_url.domain.domain in $free_file_hosts)
+         )
+         and .href_url.domain.root_domain not in $org_domains
+         and .href_url.domain.valid
+ )
+ 
+ // not a reply
+ and (
+     length(headers.references) == 0
+     or not any(headers.hops, any(.fields, strings.ilike(.name, "In-Reply-To")))
+ )
+ 
+ // Microsoft logo
+ and (
+   any(attachments,
+       .file_type in $file_types_images
+       and any(ml.logo_detect(.).brands, strings.starts_with(.name, "Microsoft"))
+   )
+   or strings.istarts_with(strings.replace_confusables(body.current_thread.text),
+                           "Microsoft "
+   )
+   or (
+     regex.imatch(strings.replace_confusables(body.current_thread.text),
+                  '[\n\s]*[o0O]ff[il1]ce\b.*'
+     )
+     and not regex.icontains(strings.replace_confusables(body.current_thread.text
+                             ),
+                             'office (for lease|rent|sale)'
+     )
+   )
+   or any(ml.logo_detect(file.message_screenshot()).brands,
+          strings.starts_with(.name, "Microsoft")
+   )
+   or (
+     regex.icontains(body.html.raw,
+                     '<table[^>]*>\s*<tbody[^>]*>\s*<tr[^>]*>\s*(<td[^>]*bgcolor="#[0-9A-Fa-f]{6}"[^>]*>\s*&nbsp;\s*</td>\s*){2}\s*</tr>\s*<tr[^>]*>\s*(<td[^>]*bgcolor="#[0-9A-Fa-f]{6}"[^>]*>\s*&nbsp;\s*</td>\s*){2}'
+     )
+     or regex.icontains(body.html.raw,
+                        '<td style="background:\s*rgb\(246,\s*93,\s*53\);\s*height:\d+px;">.*?<td style="background:\s*rgb\(129,\s*187,\s*5\);\s*height:\d+px;">.*?<td style="background:\s*rgb\(4,\s*165,\s*240\);\s*height:\d+px;">.*?<td style="background:\s*rgb\(255,\s*186,\s*7\);\s*height:\d+px;">'
+     )
+     or 4 of (
+       regex.icontains(body.html.raw,
+                       '<td style="width:.\d.px;.height:.\d.px;.background-color:.rgb\(245, 189, 67\);">.{0,10}</td>'
+       ),
+       regex.icontains(body.html.raw,
+                       '<td style="width:.\d.px;.height:.\d.px;.background-color:.rgb\(137, 184, 57\);">.{0,10}</td>'
+       ),
+       regex.icontains(body.html.raw,
+                       '<td style="width:.\d.px;.height:.\d.px;.background-color:.rgb\(217, 83, 51\);">.{0,10}</td>'
+       ),
+       regex.icontains(body.html.raw,
+                       '<td style="width:.\d.px;.height:.\d.px;.background-color:.rgb\(71, 160, 218\);">.{0,10}</td>'
+       )
+     )
+   )
+   or regex.icontains(body.html.raw,
+                      '<table[^>]*>\s*<tbody[^>]*>\s*<tr[^>]*>\s*(<td[^>]*bgcolor="#[0-9A-Fa-f]{6}"[^>]*>\s*&nbsp;\s*</td>\s*){2}\s*</tr>\s*<tr[^>]*>\s*(<td[^>]*bgcolor="#[0-9A-Fa-f]{6}"[^>]*>\s*&nbsp;\s*</td>\s*){2}'
+   )
+   or 3 of (
+     regex.icontains(body.html.raw, '.password-expiration'),
+     regex.icontains(body.html.raw, 'color: #2672ec;'),
+     regex.icontains(body.html.raw, 'M­ic­ro­so­ft')
+   )
+   or 4 of (
+     regex.icontains(body.html.raw, 'rgb\(246,\s?93,\s?53\)'),
+     regex.icontains(body.html.raw, 'rgb\(129,\s?187,\s?5\)'),
+     regex.icontains(body.html.raw, 'rgb\(4,\s?165,\s?240\)'),
+     regex.icontains(body.html.raw, 'rgb\(255,\s?186,\s?7\)'),
+   )
+   or 4 of (
+     regex.icontains(body.html.raw,
+                     '(background-color:|background:|bgcolor=)(.)red'
+     ),
+     regex.icontains(body.html.raw, 'rgb\(19,\s?186,\s?132\)'),
+     regex.icontains(body.html.raw, 'rgb\(4,\s?166,\s?240\)'),
+     regex.icontains(body.html.raw, 'rgb\(255,\s?186,\s?8\)'),
+   )
+   or 4 of (
+     regex.icontains(body.html.raw, 'rgb\(245,\s?189,\s?67\)'),
+     regex.icontains(body.html.raw, 'rgb\(137,\s?184,\s?57\)'),
+     regex.icontains(body.html.raw, 'rgb\(217,\s?83,\s?51\)'),
+     regex.icontains(body.html.raw, 'rgb\(71,\s?160,\s?218\)')
+   )
+   or 4 of (
+     regex.icontains(body.html.raw, 'rgb\(73,\s?161,\s?232\)'),
+     regex.icontains(body.html.raw, 'rgb\(224,\s?92,\s?53\)'),
+     regex.icontains(body.html.raw, 'rgb\(139,\s?183,\s?55\)'),
+     regex.icontains(body.html.raw, 'rgb\(244,\s?188,\s?65\)')
+   )
+   or 4 of (
+     regex.icontains(body.html.raw, 'rgb\(213,\s?56,\s?62\)'),
+     regex.icontains(body.html.raw, 'rgb\(0,\s?114,\s?30\)'),
+     regex.icontains(body.html.raw, 'rgb\(0,\s?110,\s?173\)'),
+     regex.icontains(body.html.raw, 'rgb\(227,\s?209,\s?43\)'),
+   )
+   or 4 of (
+     regex.icontains(body.html.raw, 'rgb\(246,\s?93,\s?53\)'),
+     regex.icontains(body.html.raw, 'rgb\(129,\s?187,\s?5\)'),
+     regex.icontains(body.html.raw, 'rgb\(4,\s?165,\s?240\)'),
+     regex.icontains(body.html.raw, 'rgb\(255,\s?186,\s?7\)')
+   )
+   or 4 of (
+     regex.icontains(body.html.raw, 'rgb\(242,\s?80,\s?34\)'),
+     regex.icontains(body.html.raw, 'rgb\(127,\s?186,\s?0\)'),
+     regex.icontains(body.html.raw, 'rgb\(0,\s?164,\s?239\)'),
+     regex.icontains(body.html.raw, 'rgb\(255,\s?185,\s?0\)'),
+   )
+   or 4 of (
+     regex.icontains(body.html.raw, 'rgb\(243,\s?83,\s?37\)'),
+     regex.icontains(body.html.raw, 'rgb\(129,\s?188,\s?6\)'),
+     regex.icontains(body.html.raw, 'rgb\(5,\s?166,\s?240\)'),
+     regex.icontains(body.html.raw, 'rgb\(255,\s?186,\s?8\)')
+   )
+   or 4 of (
+     regex.icontains(body.html.raw, 'rgb\(243,\s?80,\s?34\)'),
+     regex.icontains(body.html.raw, 'rgb\(128,\s?187,\s?3\)'),
+     regex.icontains(body.html.raw, 'rgb\(3,\s?165,\s?240\)'),
+     regex.icontains(body.html.raw, 'rgb\(255,\s?185,\s?3\)')
+   )
+   or 4 of (
+     regex.icontains(body.html.raw,
+                     '(background-color:|background:|bgcolor=)(.)?(#)?(FF1940|eb5024|F25022|FF1941|red)'
+     ),
+     regex.icontains(body.html.raw,
+                     '(background-color:|background:|bgcolor=)(.)?(#)?(36ba57|3eb55d|7db606|7FBA00|36ba58|green)'
+     ),
+     regex.icontains(body.html.raw,
+                     '(background-color:|background:|bgcolor=)(.)?#(04a1d6|04B5F0|05a1e8|00A4EF|01a4ef|04a5f0)'
+     ),
+     regex.icontains(body.html.raw,
+                     '(background-color:|background:|bgcolor=)(.)?#(FFCA07|f7b408|FFB900|FFCA08|ffb901|ffba07)'
+     ),
+   )
+   or 4 of (
+     regex.icontains(body.html.raw,
+                     '(background-color:|background:|bgcolor=)(.)?#(f65314|f65d35|49a1e8|E74F23|F35325)'
+     ),
+     regex.icontains(body.html.raw,
+                     '(background-color:|background:|bgcolor=)(.)?#(7cbf42|81bb05|e05c35|7AB206|81BC06)'
+     ),
+     regex.icontains(body.html.raw,
+                     '(background-color:|background:|bgcolor=)(.)?#(00a4ef|0078d7|8bb737|04a5f0|059EE4|05A6F0)'
+     ),
+     regex.icontains(body.html.raw,
+                     '(background-color:|background:|bgcolor=)(.)?#(ffb900|ffba07|f4bc41|F2B108|FFBA08)'
+     ),
+   )
+   // fuzzy approach
+   or 4 of (
+     regex.icontains(body.html.raw,
+                     'rgb\((2[1-4][0-9]|250),\s?(7[0-9]|8[0-9]|9[0-3]),\s?(3[0-9]|4[0-9]|5[0-3])\)'
+     ),
+     regex.icontains(body.html.raw,
+                     'rgb\((12[0-9]|13[0-9]),\s?(18[0-9]|190),\s?([0-9]|10)\)'
+     ),
+     regex.icontains(body.html.raw,
+                     'rgb\(([0-9]|1[0-5]),\s?(16[0-5]|166),\s?(23[0-9]|240)\)'
+     ),
+     regex.icontains(body.html.raw,
+                     'rgb\((25[0-5]),\s?(18[5-9]|19[0-9]),\s?([0-9]|10)\)'
+     )
+   )
+ )
+ 
+ // suspicious content
+ and (
+   // current thread is empty, but an image attachment is branded as microsoft.
+   // common in image as content
+   (
+     body.current_thread.text == ""
+     and any(attachments,
+             .file_type in $file_types_images
+             and any(ml.logo_detect(.).brands,
+                     strings.starts_with(.name, "Microsoft")
+             )
+     )
+   )
+   or (
+     strings.ilike(body.plain.raw,
+                   "*password*",
+                   "*document*",
+                   "*voicemail*",
+                   "*cache*",
+                   "*fax*",
+                   "*storage*",
+                   "*quota*",
+                   "*message*"
+     )
+     and strings.ilike(body.plain.raw,
+                       "*terminated*",
+                       "*review*",
+                       "*expire*",
+                       "*click*",
+                       "*view*",
+                       "*exceed*",
+                       "*clear*",
+                       "*only works*",
+                       "*failed*",
+                       "*deleted*",
+                       "*revalidated*",
+                       "*renewal*"
+     )
+   )
+
+   or (
+     any(attachments,
+         .file_type in $file_types_images
+         and any(file.explode(.),
+                 strings.ilike(.scan.ocr.raw,
+                               "*password*",
+                               "*document*",
+                               "*voicemail*",
+                               "*cache*",
+                               "*fax*",
+                               "*storage*",
+                               "*quota*",
+                               "*messages*"
+                 )
+                 and strings.ilike(.scan.ocr.raw,
+                                   "*terminated*",
+                                   "*review*",
+                                   "*expire*",
+                                   "*click*",
+                                   "*view*",
+                                   "*exceed*",
+                                   "*clear*",
+                                   "*only works*",
+                                   "*failed*",
+                                   "*deleted*"
+                 )
+         )
+     )
+   )
+   or (
+     //
+     // This rule makes use of a beta feature and is subject to change without notice
+     // using the beta feature in custom rules is not suggested until it has been formally released
+     //
+     strings.ilike(beta.ocr(file.message_screenshot()).text,
+                   "*password*",
+                   "*document*",
+                   "*voicemail*",
+                   "*cache*",
+                   "*fax*",
+                   "*storage*",
+                   "*quota*",
+                   "*messages*"
+     )
+     and strings.ilike(beta.ocr(file.message_screenshot()).text,
+                       "*terminated*",
+                       "*review*",
+                       "*expire*",
+                       "*click*",
+                       "*view*",
+                       "*exceed*",
+                       "*clear*",
+                       "*only works*",
+                       "*failed*",
+                       "*deleted*",
+                       "*revalidated*",
+                       "*renewal*"
+     )
+   )
+   or (
+     any(ml.nlu_classifier(body.current_thread.text).intents,
+         .name == "cred_theft" and .confidence in~ ("medium", "high")
+     )
+     or any(attachments,
+            .file_type in $file_types_images
+            and any(file.explode(.),
+                    any(ml.nlu_classifier(.scan.ocr.raw).intents,
+                        .name == "cred_theft"
+                        and .confidence in ("medium", "high")
+                    )
+            )
+     )
+   )
+ )
+ and sender.email.domain.root_domain not in (
+   "bing.com",
+   "microsoft.com",
+   "microsoftonline.com",
+   "microsoftproject.com",
+   "microsoftstoreemail.com",
+   "microsoftsupport.com",
+   "microsoft365.com",
+   "office.com",
+   "office365.com",
+   "onedrive.com",
+   "sharepointonline.com",
+   "yammer.com",
+ )
+ 
+ // negate legitimate Office 365 bouncebacks
+ and not (
+     length(attachments) > 0
+     and all(attachments,
+         .content_type in ("message/delivery-status", "message/rfc822")
+     )
+     and (sender.email.local_part in ('postmaster', 'mailer-daemon'))
+ )
+ 
+ // negate Microsoft "welcome to the X group" notifications
+ and not (
+   headers.auth_summary.dmarc.pass
+   and length(attachments) == 6
+   and length(filter(attachments,
+                     strings.istarts_with(.file_name, "GuestWelcomeEmail")
+              )
+   ) == 5
+   and length(filter(body.links,
+                     (
+                       .href_url.domain.domain not in (
+                         "outlook.office365.com",
+                         "aka.ms",
+                         "go.microsoft.com"
+                       )
+                     )
+                     and not .href_url.domain.domain == sender.email.domain.domain
+              )
+   ) == 0
+   and subject.subject == strings.replace_confusables(subject.subject)
+ )
+
+ // negate org domains unless they fail DMARC authentication
+ and (
+   (
+     sender.email.domain.root_domain in $org_domains
+     and (
+       not headers.auth_summary.dmarc.pass
+       // MS quarantine digest emails from an org domain are router "internally" to MS, therefore, there is no authentication information
+       or not (
+         headers.auth_summary.dmarc.pass is null
+         and all(headers.domains,
+                 .root_domain in ("outlook.com", "office365.com")
+         )
+         // typical emails from freemail Outlook accounts are from prod.outlook.com
+         and strings.ends_with(headers.message_id, "protection.outlook.com>")
+       )
+     )
+   )
+   or sender.email.domain.root_domain not in $org_domains
+ )
+ 
+ // negate highly trusted sender domains unless they fail DMARC authentication
+ and (
+   (
+     sender.email.domain.root_domain in $high_trust_sender_root_domains
+     and not headers.auth_summary.dmarc.pass
+   )
+   or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+ )
+ and (
+   not profile.by_sender().solicited
+   or (
+     profile.by_sender().any_messages_malicious_or_spam
+     and not profile.by_sender().any_messages_benign
+   )
+ )
+ and not profile.by_sender().any_messages_benign
+ 
+ // exclude marketing jargon from ms partners
+ and not regex.icontains(body.current_thread.text,
+                         '(schedul(e|ing)|set up).{0,20}(call|meeting|demo|zoom|conversation|time|tool|discussion)|book.{0,10}(meeting|demo|call|slot|time)|connect.{0,12}(with me|phone|email)|my.{0,10}(calendar|cal)|reserve.{0,10}s[pl]ot|break the ice|want to know more?|miss your chance|if you no longer wish|if you no longer want|if you wish to opt out|low-code (development|approach|solution|journey|platform)|(?:invite|virtual).{0,30}(webinar|presentation)'
+ ) 
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Free file host"
+  - "Image as content"
+  - "Impersonation: Brand"
+  - "Social engineering"
+detection_methods:
+  - "Computer Vision"
+  - "Content analysis"
+  - "File analysis"
+  - "Header analysis"
+  - "Natural Language Understanding"
+  - "Optical Character Recognition"
+  - "Sender analysis"
+  - "URL analysis"
+id: "5095cc4d-1c45-5a0c-a28c-eed6f09fd14f"
+og_id: "b59201b6-f253-55a6-9c0a-e1500a32a751"
+testing_pr: 3425
+testing_sha: bc814a1f53e9b9a9367ade77147a069a402b263f
