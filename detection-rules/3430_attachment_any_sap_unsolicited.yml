@@ -1,0 +1,38 @@
+name: "Attachment: Any .sap file (unsolicited)"
+description: "SAP shortcut files can be abused to run unsanctioned code on endpoints. Use if receiving .sap files is not normal behavior in your environment."
+references:
+  - "https://onapsis.com/blog/sap-shortcut-phishing-threat/"
+type: "rule"
+severity: "low"
+source: |
+  type.inbound
+  and any(attachments, .file_extension == "sap")
+  and (
+    not profile.by_sender().solicited
+    or profile.by_sender().any_messages_malicious_or_spam
+  )
+  and not profile.by_sender().any_messages_benign
+  
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and not headers.auth_summary.dmarc.pass
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+tags:
+ - "Attack surface reduction"
+attack_types:
+  - "Malware/Ransomware"
+tactics_and_techniques:
+  - "Evasion"
+  - "Scripting"
+detection_methods:
+  - "File analysis"
+  - "Header analysis"
+  - "Sender analysis"
+id: "ec45494b-6dc9-5ae6-b182-4980b9530a62"
+og_id: "220ed3de-1b01-54a4-898d-6081785e2870"
+testing_pr: 3430
+testing_sha: 8d50ce810fc2aa5ae0665a4d277c07e9e93aecbe
