@@ -8,12 +8,25 @@ source: |
  // suspicious link 
  and any(body.links,
          (
-           .href_url.domain.root_domain not in $tranco_1m
+           .href_url.domain.tld in $suspicious_tlds
+           or .href_url.domain.root_domain not in $tranco_1m
            or .href_url.domain.domain in $free_file_hosts
            or .href_url.domain.root_domain in $free_file_hosts
            or .href_url.domain.root_domain in $free_subdomain_hosts
            or .href_url.domain.domain in $url_shorteners
            or .href_url.domain.domain in $social_landing_hosts
+           // account for URL rewrites
+           or (
+             any(.href_url.query_params_decoded["domain"],
+                 strings.parse_domain(.).tld in~ $suspicious_tlds
+                 or strings.parse_domain(.).root_domain not in~ $tranco_1m
+                 or strings.parse_domain(.).domain in~ $free_file_hosts
+                 or strings.parse_domain(.).root_domain in~ $free_file_hosts
+                 or strings.parse_domain(.).root_domain in~ $free_subdomain_hosts
+                 or strings.parse_domain(.).domain in~ $url_shorteners
+                 or strings.parse_domain(.).domain in~ $social_landing_hosts
+             )
+           )
            or 
  
            // mass mailer link, masks the actual URL
@@ -49,7 +62,6 @@ source: |
              "microsoft.com",
              "aka.ms",
              "msftauthimages.net",
-             "mimecastprotect.com",
              "office.com",
              "microsoftproject.com"
            )
@@ -71,13 +83,16 @@ source: |
        .file_type in $file_types_images
        and any(ml.logo_detect(.).brands, strings.starts_with(.name, "Microsoft"))
    )
-   or strings.istarts_with(strings.replace_confusables(body.current_thread.text), "Microsoft ")
+   or strings.istarts_with(strings.replace_confusables(body.current_thread.text),
+                           "Microsoft "
+   )
    or (
      regex.imatch(strings.replace_confusables(body.current_thread.text),
                   '[\n\s]*[o0O]ff[il1]ce\b.*'
      )
-     and not regex.icontains(strings.replace_confusables(body.current_thread.text),
-                  'office (for lease|rent|sale)'
+     and not regex.icontains(strings.replace_confusables(body.current_thread.text
+                             ),
+                             'office (for lease|rent|sale)'
      )
    )
    or any(ml.logo_detect(file.message_screenshot()).brands,
@@ -253,7 +268,7 @@ source: |
                        "*renewal*"
      )
    )
-  
+
    or (
      any(attachments,
          .file_type in $file_types_images
