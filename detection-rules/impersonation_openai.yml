@@ -9,7 +9,7 @@ source: |
       sender.display_name =~ "openai"
       or strings.ilevenshtein(sender.display_name, 'openai') <= 1
       or any(ml.logo_detect(file.message_screenshot()).brands,
-             .name == "OpenAI" and .confidence in ("medium", "high")
+             .name == "OpenAI" and .confidence in ("low")
       )
     )
     // copyright footer
@@ -28,8 +28,20 @@ source: |
       )
     )
   )
+  and (
+    // Sender reputation checks
+    sender.email.domain.root_domain in $free_email_providers
+    or not headers.auth_summary.dmarc.pass
+    or not headers.auth_summary.spf.pass
+    or network.whois(sender.email.domain).days_old < 30
+  )
+  and sender.email.domain.root_domain not in $alexa_1m
   // Exclude legitimate OpenAI domains
-  and sender.email.domain.root_domain not in~ ("openai.com", "chatgpt.com")
+  and sender.email.domain.root_domain not in~ (
+    "openai.com",
+    "chatgpt.com",
+    "openai.andopen.co"
+  )
   // negate the genuine domains
   and sender.email.domain.root_domain not in~ (
     "openli.com",
@@ -39,7 +51,8 @@ source: |
     "lucid.co",
     "astronomer.io",
     "visitly.io",
-    "rocketmoney.com"
+    "rocketmoney.com",
+    "psm.knowbe4.com"
   )
   // negate highly trusted sender domains unless they fail DMARC authentication
   and (
@@ -69,16 +82,7 @@ source: |
             )
             and .confidence == "high"
     )
-    or (
-      profile.by_sender().solicited
-      and (
-        not profile.by_sender().any_messages_malicious_or_spam
-        or profile.by_sender().any_messages_benign
-      )
-    )
-    or profile.by_sender().any_messages_benign
   )
-
 attack_types:
   - "BEC/Fraud"
   - "Callback Phishing"
