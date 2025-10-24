@@ -7,6 +7,7 @@ source: |
   and (
     0 < length(body.links) < 100
     or 0 < length(filter(attachments, .file_type in $file_types_images)) <= 5
+    or length(filter(attachments, .file_type == "pdf")) == 1
   )
   and (
     strings.icontains(sender.display_name, 'ShareFile')
@@ -34,7 +35,11 @@ source: |
     // any of the attached images contain the same message body wording
     or (
       0 < length(attachments) <= 5
-      and all(attachments, .file_type in $file_types_images)
+      and (
+        all(attachments, .file_type in $file_types_images)
+        // allow for one non-PDF attachment, which has been observed added as an evasion tactic
+        or ratio(attachments, .file_extension in ("pdf")) == 0.5
+      )
       and any(attachments,
               any(file.explode(.),
                   strings.icontains(.scan.ocr.raw, 'ShareFile Attachments')
