@@ -53,8 +53,12 @@ jobs:
         ORG_NAME: 'sublime-security'
         INCLUDE_PRS_WITH_COMMENT: 'true'
         COMMENT_TRIGGER: '/update-test-rules'
+        # SKIP_FILES pattern and labls are managed within the script
         SKIP_FILES_WITH_TEXT: 'true'
-        SKIP_TEXT: 'ml.link_analysis'
+        # Skip PRs with too many rules
+        SKIP_BULK_PRS: 'true'
+        MAX_RULES_PER_PR: '10'
+        BULK_PR_LABEL: 'test-rules:excluded:bulk_rules'
         # Disable adding tags that aren't useful
         ADD_RULE_STATUS_TAG: 'false'
         ADD_PR_REFERENCE: 'false'
@@ -63,8 +67,7 @@ jobs:
         CREATE_OPEN_PR_TAG: 'false'
         ADD_TEST_RULES_LABEL: 'true'
         IN_TEST_RULES_LABEL: 'in-test-rules'
-        ADD_SKIP_TEXT_LABEL: 'true'
-        SKIP_TEXT_LABEL: 'hunting-required'
+        AUTHOR_MEMBERSHIP_EXCLUSION_LABEL: 'test-rules:excluded:author_membership'
 
       run: python scripts/sync_detection_rules.py
 
@@ -99,6 +102,7 @@ jobs:
         
         # Process each file individually
         for FILE in $FILES; do
+          echo "Processing $FILE"
           # Skip non-rule files 
           if [[ ! "$FILE" =~ .*\.yml$ ]]; then
             continue
@@ -110,29 +114,56 @@ jobs:
           PR_NUMBER=$(echo "$BASENAME" | grep -o "^[0-9]*")
           UPDATED_PRS+=("$PR_NUMBER")
           
+          echo "Processing $BASENAME from $PR_NUMBER for inclusion"
+        
           # Handle removed files
           if [[ ! -f "$FILE" ]]; then
+            echo "$BASENAME was deleted, commiting deletion."
+            DELETED_COUNT=$((DELETED_COUNT+1))
             git add "$FILE"
             git commit -m "[PR #${PR_NUMBER}] Delete detection rule"
-            DELETED_COUNT=$((DELETED_COUNT+1))
             continue
           fi
           
-          # Extract rule name
-          RULE_NAME=$(grep -m 1 "name:" "$FILE" | sed 's/name: //' | sed 's/^"//' | sed 's/"$//' | sed "s/^'//" | sed "s/'$//")
+          # Ensure that new files are tracked (otherwise they won't show up in diff)
+          git add -N "$FILE"
+
+          # Check if only testing_sha field changed
+          DIFF_OUTPUT=$(git diff HEAD -- "$FILE")
+
+          # Skip files with no changes at all
+          if [[ -z "$DIFF_OUTPUT" ]]; then
+            echo "\tSkipping $FILE: no changes"
+            continue
+          fi
+          
+          # Check if the diff only contains testing_sha changes
+          # Look for lines that are only additions/deletions of testing_sha with hash values
+          # Handle files that may not have trailing newlines
+          # Filter out hunk headers & file paths so we just have +- lines of changed content.
+          LINES_CHANGES_ONLY=$(echo "$DIFF_OUTPUT" | grep -E '^[+-]' | grep -v -E '^[+-]{3}' | grep -v '^\\ No newline at end of file')
+          NON_TESTING_SHA_CHANGES=$(echo "$LINES_CHANGES_ONLY" | grep -v -E '^[+-]testing_sha: [0-9a-f]+' || true)
+          if [[ -z "$NON_TESTING_SHA_CHANGES" ]]; then
+            echo "\tSkipping $FILE: only testing_sha field changed. Lines changed:"
+            echo "$LINES_CHANGES_ONLY"
+            continue
+          fi
           
           # Determine status directly from git
           GIT_STATUS=$(git status --porcelain "$FILE" | cut -c1-2 | tr -d ' ')
           if [[ "$GIT_STATUS" == "A" ]]; then
-            STATUS="added"
             ADDED_COUNT=$((ADDED_COUNT+1))
+            STATUS="added"
           elif [[ "$GIT_STATUS" == "M" ]]; then
-            STATUS="modified" 
             MODIFIED_COUNT=$((MODIFIED_COUNT+1))
+            STATUS="modified"
           else
-            STATUS="changed"
             MODIFIED_COUNT=$((MODIFIED_COUNT+1))
+            STATUS="changed"
           fi
+          
+          # Extract rule name and commit
+          RULE_NAME=$(grep -m 1 "name:" "$FILE" | sed 's/name: //' | sed 's/^"//' | sed 's/"$//' | sed "s/^'//" | sed "s/'$//")
           
           # Build commit message
           COMMIT_MSG="[PR #${PR_NUMBER}] ${STATUS} rule: ${RULE_NAME}"
