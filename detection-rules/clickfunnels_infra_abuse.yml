@@ -34,11 +34,15 @@ source: |
         )
         or (
           length(attachments) == 0
-          and any(file.explode(beta.message_screenshot()),
-                  .scan.exiftool.image_height < 2000
-                  and .scan.exiftool.image_width < 2000
-                  and .scan.qr.type is not null
-                  and .scan.qr.url.domain.root_domain == "myclickfunnels.com"
+          //
+          // This rule makes use of a beta feature and is subject to change without notice
+          // using the beta feature in custom rules is not suggested until it has been formally released
+          //
+          and beta.parse_exif(file.message_screenshot()).image_height < 2000
+          and beta.parse_exif(file.message_screenshot()).image_width < 2000
+          and any(beta.scan_qr(file.message_screenshot()).items,
+                  .type is not null
+                  and .url.domain.root_domain == "myclickfunnels.com"
           )
         )
       )
@@ -105,7 +109,6 @@ source: |
     or sender.email.domain.root_domain not in $high_trust_sender_root_domains
   )
   and profile.by_sender_email().prevalence in ("new", "outlier", "rare")
-  
 
 attack_types:
   - "Credential Phishing"
