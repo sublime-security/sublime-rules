@@ -1,0 +1,155 @@
+name: "Extortion / sextortion (untrusted sender)"
+description: |
+  Detects extortion and sextortion attempts by analyzing the email body text from an untrusted sender.
+references:
+  - "https://krebsonsecurity.com/2018/07/sextortion-scam-uses-recipients-hacked-passwords/"
+type: "rule"
+severity: "low"
+source: |
+  type.inbound
+  and length(filter(body.links, .display_text is not null)) < 10
+  and not (
+    ml.nlu_classifier(body.current_thread.text).language == "english"
+    and any(ml.nlu_classifier(body.html.display_text).topics,
+            .name in (
+              "News and Current Events",
+              "Newsletters and Digests",
+              "Advertising and Promotions"
+            )
+            and .confidence in ("high", "medium")
+    )
+  )
+  and (
+    (
+      any(ml.nlu_classifier(strings.replace_confusables(body.current_thread.text)).intents,
+          (.name == "extortion" and .confidence == "high")
+      )
+      and (
+        any(ml.nlu_classifier(strings.replace_confusables(body.current_thread.text
+                              )
+            ).entities,
+            .name == "financial"
+            or (
+              .name is not null
+              and regex.icontains(.text,
+                                  "cybḛ[rŗřṙȑȓɍʀɼɽг]c[rŗřṙȑȓɍʀɼɽг]imina[lĺļľḷḹḽłƖʟḻ]s"
+              )
+            )
+        )
+        or any(ml.nlu_classifier(strings.replace_confusables(body.current_thread.text
+                                 )
+               ).topics,
+               .name == "Financial Communications" and .confidence != "low"
+        )
+      )
+    )
+    // manual indicators failsafe
+    or 3 of (
+      // malware terms
+      regex.icontains(strings.replace_confusables(body.current_thread.text),
+                      "(?:(?:spy|[mṁ][aȁ]l)[wŵ][aȁ][rŗ]e|[tŢ][rŗȓ][oố]j[aǻ][nņ]|[rȓ]emote (?:entry|cont[rř]o[lĺ])|infiltrat(?:ed|ion)|backdoor|vi[rṙ]us|intruder|(?:your|the).{0,15}(?:device|system|computer|phone).{0,10}(?:became|was|got|is).{0,5}comprom[ḯiïíįī]sed|prov[ḯiïíįī]d[ḯiïíįī]ng.{0,20}full [aảǡą]ccess)"
+      ),
+      // actions recorded
+      regex.icontains(strings.replace_confusables(body.current_thread.text),
+                      "(?:p[oộ][rŗ]n|a[dȡ]ult (?:web)?site|webcam|mastu[rŗ]bating|je[rŗ]king off|pleasu[rŗȑ]i[nŋ]g you[rŗṛ]self|getting off|expli[cƈ]it|cl[ḯiïíįī]ps.{0,20}screenshots)"
+      ),
+      regex.icontains(strings.replace_confusables(body.current_thread.text),
+                      "(?:pe[rŗ]ve[rŗ]t|pe[rŗ]ve[rŗ]sion|mastu[rŗ]bat)"
+      ),
+      // a timeframe to pay
+      regex.icontains(strings.replace_confusables(body.current_thread.text),
+                      '[ilo0-9]{2} (?:hou[rŗṝ][sṣ]|uu[rŗ])',
+                      '(?:one|tw[oờ]|2|th[rŗ]ee|\d) [dḍ][aảǡą]y[sṣ]?'
+      ),
+      // a promise from the actor
+      regex.icontains(strings.replace_confusables(body.current_thread.text),
+                      '(?:pe[rŗ]manently|will|I''ll) delete|([rŗ]emove|destroy) (?:[\p{L}\p{M}\p{N}]+\s*){0,4} (?:data|ev[ḯiïįīí]dence|v[ḯiïíįī]deos?)'
+      ),
+      // a threat from the actor
+      regex.icontains(strings.replace_confusables(body.current_thread.text),
+                      '(?:\bsen[dt]|forward|expose)\s*(?:[\p{L}\p{N}]+\s*){0,5}\s*to\s*(?:[\p{L}\p{N}]+\s*){0,5}(?:contacts|media|family|f[rŗ]iends|coworkers|associates)'
+      ),
+      // bitcoin language (excluding newsletters)
+      (
+        regex.icontains(strings.replace_confusables(body.current_thread.text),
+                        '[bḆḂ]it[cĉƈ][oöة]+in|\bbtc\b|blockchain'
+        )
+        // negate cryptocurrency newsletters
+        and not (
+          any(body.links,
+              strings.icontains(.display_text, "unsubscribe")
+              and (
+                strings.icontains(.href_url.path, "unsubscribe")
+                // handle mimecast URL rewrites
+                or (
+                  .href_url.domain.root_domain == 'mimecastprotect.com'
+                  and strings.icontains(.href_url.query_params,
+                                        sender.email.domain.root_domain
+                  )
+                )
+              )
+          )
+        )
+      ),
+      (
+        regex.icontains(strings.replace_confusables(body.current_thread.text),
+                        '(?:contact the police|(?:bitcoin|\bbtc\b).{0,20}wallet)'
+        )
+        and regex.icontains(strings.replace_confusables(body.current_thread.text),
+                            '(?:\b[13][a-km-zA-HJ-NP-Z0-9]{24,34}\b)|\bX[1-9A-HJ-NP-Za-km-z]{33}\b|\b(?:0x[a-fA-F0-9]{40})\b|\b[LM3][a-km-zA-HJ-NP-Z1-9]{26,33}\b|\b[48][0-9AB][1-9A-HJ-NP-Za-km-z]{93}\b'
+        )
+      ),
+      regex.icontains(strings.replace_confusables(body.current_thread.text),
+                      'bc1q.{0,50}\b'
+      )
+    )
+  )
+  and (
+    not profile.by_sender().solicited
+    or (
+      profile.by_sender().any_messages_malicious_or_spam
+      and not profile.by_sender().any_messages_benign
+    )
+    or any(headers.hops, any(.fields, .name == "X-Google-Group-Id"))
+  
+    // many extortion emails spoof sender domains and fail sender authentication
+    or (
+      not headers.auth_summary.dmarc.pass
+      or headers.auth_summary.dmarc.pass is null
+      or not headers.auth_summary.spf.pass
+    )
+  )
+  
+  // negate benign newsletters that mention cyber extortion
+  and not (
+    any(body.links,
+        strings.icontains(.display_text, "unsubscribe")
+        and strings.icontains(.href_url.path, "unsubscribe")
+    )
+    // newsletters are typically longer than the average extortion script
+    and length(body.current_thread.text) > 2000
+  )
+  and length(body.current_thread.text) < 8000
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and not headers.auth_summary.dmarc.pass
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+
+attack_types:
+  - "Extortion"
+tactics_and_techniques:
+  - "Social engineering"
+  - "Spoofing"
+detection_methods:
+  - "Content analysis"
+  - "Header analysis"
+  - "Natural Language Understanding"
+  - "Sender analysis"
+id: "4469d8e5-3cb1-50f5-8ac0-bcc6ce5828dd"
+og_id: "265913eb-2ccd-5f77-9a09-f6d8539fd2f6"
+testing_pr: 3436
+testing_sha: 0939c406d01ce2d55ea7f59f3674b2196d642bd8
