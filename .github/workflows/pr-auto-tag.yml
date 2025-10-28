@@ -1,0 +1,39 @@
+name: Auto-tag External PRs
+
+on:
+  pull_request_target:
+    types: [opened, ready_for_review]
+
+jobs:
+  auto-tag:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    steps:
+      - name: Check if PR author is external
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const pr = context.payload.pull_request;
+            const username = pr.user.login;
+            const authorAssociation = pr.author_association;
+            
+            console.log(`PR author: ${username}`);
+            console.log(`Author association: ${authorAssociation}`);
+            
+            // MEMBER, OWNER, and COLLABORATOR are considered internal
+            const internalAssociations = ['MEMBER', 'OWNER', 'COLLABORATOR'];
+            const isInternal = internalAssociations.includes(authorAssociation);
+            
+            if (!isInternal) {
+              console.log('User is external, adding review-needed label');
+              await github.rest.issues.addLabels({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: pr.number,
+                labels: ['review-needed']
+              });
+              console.log('Added review-needed label to external PR');
+            } else {
+              console.log(`User is internal (${authorAssociation}), no label added`);
+            }
