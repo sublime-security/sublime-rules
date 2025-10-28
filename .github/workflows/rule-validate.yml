@@ -4,21 +4,24 @@ on:
   push:
     branches: [ "main", "test-rules" ]
   pull_request_target:
-    branches: [ "**" ]
+    branches:
+      - "main"
+      - 'ci-testing**'
   workflow_dispatch: {}
   issue_comment:
     types: [ created ]
+  merge_group: {}
 
 concurrency:
   # For pull_request_target workflows we want to use head_ref -- the branch triggering the workflow. Otherwise,
-  # use ref, which is the branch for a push event.
-  group: ${{ github.event_name == 'pull_request_target' && github.head_ref || github.ref }}
+  # use ref, which is the branch for a push event or workflow trigger. And for an issue comment just give up grouping.
+  group: ${{ github.event_name == 'pull_request_target' && github.head_ref || (github.event_name == 'issue_comment' && github.run_id || github.ref) }}
   cancel-in-progress: ${{ github.event_name == 'pull_request_target' }}
 
 jobs:
   tests:
     name: Run Rule Validation
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     permissions:
       contents: write
       issues: read
@@ -28,80 +31,190 @@ jobs:
 
     steps:
       - name: Set up yq
-        uses: mikefarah/yq@v4.27.3
+        uses: mikefarah/yq@8bf425b4d1344db7cd469a8d10a390876e0c77fd  # v4.45.1
 
       - name: Get PR branch
         if: github.event_name == 'issue_comment'
-        uses: alessbell/pull-request-comment-branch@v1.1 # Fork of xt0rted/pull-request-comment-branch, see https://github.com/xt0rted/pull-request-comment-branch/issues/322
+        uses: alessbell/pull-request-comment-branch@ef3408c9757d05f89cb525036383033a313758a0  # v2.1.0
         id: comment_branch
 
-      - name: Checkout (from comment)
-        uses: actions/checkout@v3
-        if: github.event_name == 'issue_comment'
-        with:
-          repository: ${{ steps.comment-branch.outputs.head_owner }}/${{ steps.comment-branch.outputs.head_repo }}
-          ref: ${{ steps.comment-branch.outputs.head_ref }}
-          fetch-depth: 0
+      - name: Get Refs
+        id: get_head_ref
+        env:
+          GITHUB_EVENT_PULL_REQUEST_HEAD_REPO_FULL_NAME: ${{ github.event.pull_request.head.repo.full_name }}
+          STEPS_COMMENT_BRANCH_OUTPUTS_HEAD_REF: ${{ steps.comment_branch.outputs.head_ref }}
+          STEPS_COMMENT_BRANCH_OUTPUTS_HEAD_OWNER: ${{ steps.comment_branch.outputs.head_owner }}
+          STEPS_COMMENT_BRANCH_OUTPUTS_HEAD_REPO: ${{ steps.comment_branch.outputs.head_repo }}
+        run: |
+          # Accurate for push events, merge queues, and workflow dispatch.
+          head_ref="${GITHUB_REF}"
+          repo="${GITHUB_REPOSITORY}"
+
+          if [[ "${GITHUB_EVENT_NAME}" == 'pull_request_target' ]]; then
+            head_ref="${GITHUB_HEAD_REF}"
+            repo="${GITHUB_EVENT_PULL_REQUEST_HEAD_REPO_FULL_NAME}"
+          elif [[ "${GITHUB_EVENT_NAME}" == 'issue_comment' ]]; then
+            # Rely on comment_branch to figure out the head and base
+            head_ref="${STEPS_COMMENT_BRANCH_OUTPUTS_HEAD_REF}"
+            repo="${STEPS_COMMENT_BRANCH_OUTPUTS_HEAD_OWNER}/${STEPS_COMMENT_BRANCH_OUTPUTS_HEAD_REPO}"
+          fi
+          
+          echo "##[set-output name=head_ref;]$head_ref"
+          echo "##[set-output name=repo;]$repo"
 
       - name: Checkout
-        uses: actions/checkout@v4
-        if: github.event_name != 'issue_comment'
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
         with:
-          ref: ${{ github.head_ref }}
-          repository: ${{ github.event.pull_request.head.repo.full_name }}
-          depth: 0
+          repository: ${{ steps.get_head_ref.outputs.repo }}
+          ref: ${{ steps.get_head_ref.outputs.head_ref }}
+          fetch-depth: 0
 
-      - uses: actions/setup-python@v4
+      - name: Validate Branch vs. Trigerring SHA
+        env:
+          GITHUB_EVENT_PULL_REQUEST_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          # If this is from a pull request validate that what we checked out is the same as the PR head.
+          # If not we'll just fail -- the workflow will be cancelled momentarily.
+          if [[ "${GITHUB_EVENT_NAME}" == 'pull_request_target' ]]; then
+            if [[ "${GITHUB_EVENT_PULL_REQUEST_HEAD_SHA}" != "$(git rev-parse HEAD)" ]]; then
+              echo "Workflow is out of date with branch, cancelling"
+              exit 1
+            fi
+          fi
+
+      - name: Get Refs
+        id: get_base_ref
+        env:
+          STEPS_COMMENT_BRANCH_OUTPUTS_BASE_REF: ${{ steps.comment_branch.outputs.base_ref }}
+        run: |
+          run_all=""
+          base_ref=""
+
+          if [[ "${GITHUB_EVENT_NAME}" == 'pull_request_target' ]]; then
+            # Ensure we have the latest base branch ref for accurate merge-base calculation
+            git fetch origin "${GITHUB_BASE_REF}:refs/remotes/origin/${GITHUB_BASE_REF}"
+            # Use the merge base to avoid including changes from target branch
+            # that happened after this PR branch was created.
+            base_ref=$(git merge-base HEAD "origin/${GITHUB_BASE_REF}")
+          elif [[ "${GITHUB_EVENT_NAME}" == 'push' || "${GITHUB_EVENT_NAME}" == 'merge_group' ]]; then
+            # Detect changes based on the previous commit
+            base_ref="$(git rev-parse HEAD^)"
+          elif [[ "${GITHUB_EVENT_NAME}" == 'workflow_dispatch' ]]; then
+            # Run on a target, so run for all rules.
+            run_all="true"
+          elif [[ "${GITHUB_EVENT_NAME}" == 'issue_comment' ]]; then
+            # Rely on comment_branch to figure out  base
+            base_ref="${STEPS_COMMENT_BRANCH_OUTPUTS_BASE_REF}"
+          fi
+          
+          echo "##[set-output name=run_all;]$run_all"
+          echo "##[set-output name=base_ref;]$base_ref"
+
+      - uses: actions/setup-python@42375524e23c412d93fb67b49958b491fce71c38  # v5.4.0
         with:
           python-version: '3.10'
 
+      - name: Checkout script from Sublime fork main
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+        with:
+          repository: sublime-security/sublime-rules
+          ref: main
+          path: sublime-rules-main
+
       - name: Add Rule IDs as Needed & Check for Duplicates
+        if: github.event_name != 'issue_comment'
         # Run before testing, just in case this could invalidate the rule itself
         run: |
-          pip install -r scripts/generate-rule-ids/requirements.txt
-          python scripts/generate-rule-ids/main.py
+          pip install -r sublime-rules-main/scripts/generate-rule-ids/requirements.txt
+          python sublime-rules-main/scripts/generate-rule-ids/main.py
+          
+          # Delete path to prevent interference with later steps (such as git add and commit)
+          rm -r sublime-rules-main
 
       - name: Validate Rules
+        if: github.event_name != 'issue_comment'
         run: |
-          for f in *-rules/*.yml
-          do
-            echo "Processing $f"
-            http_code=$(yq -o=json eval 'del(.type)' "$f" | curl -H "Content-Type: application/json" -X POST --data-binary @- -o response.txt -w "%{http_code}" --silent https://playground.sublimesecurity.com/v1/rules/validate)
-            echo '' >> response.txt
-            cat response.txt
-            if [[ "$http_code" != "200" ]]; then
-              echo "Unexpected response $http_code"
-              exit 1
+          BATCH_SIZE=100
+          counter=0
+          batch_num=0
+
+          # Collect all files
+          all_files=($(ls -1 *-rules/*.yml insights/**/*.yml))
+          total_files=${#all_files[@]}
+
+          echo "Total files to validate: $total_files"
+
+          # Start first batch
+          echo '{"rules_or_queries": [' > bulk_validate_request.json
+
+          for i in "${!all_files[@]}"; do
+            f="${all_files[$i]}"
+
+            # Determine if this is a rule or insight
+            if [[ "$f" == insights/* ]]; then
+              yq -o=json eval 'del(.type) | .source = "length([\n\n" + .source + "\n]) >= 0"' "$f" >> bulk_validate_request.json
+            else
+              yq -o=json eval 'del(.type)' "$f" >> bulk_validate_request.json
+            fi
+
+            counter=$((counter + 1))
+
+            # Check if we need to submit this batch
+            should_submit=false
+            if [[ $counter -eq $BATCH_SIZE ]]; then
+              should_submit=true
+            elif [[ $((i + 1)) -eq $total_files ]]; then
+              # Last file
+              should_submit=true
+            else
+              # Not submitting yet, add comma
+              echo "," >> bulk_validate_request.json
+            fi
+
+            if [[ "$should_submit" == "true" ]]; then
+              # Close JSON and submit
+              echo "]}" >> bulk_validate_request.json
+
+              batch_num=$((batch_num + 1))
+              echo "Submitting batch $batch_num with $counter files..."
+
+              http_code=$(curl -H "Content-Type: application/json" -X POST -d @bulk_validate_request.json -o response.txt -w "%{http_code}" --silent https://play.sublime.security/v1/rules/bulk_validate)
+              echo '' >> response.txt
+              cat response.txt
+              if [[ "$http_code" != "200" ]]; then
+                echo "Unexpected response $http_code for batch $batch_num"
+                exit 1
+              fi
+
+              # Reset for next batch if there are more files
+              if [[ $((i + 1)) -lt $total_files ]]; then
+                counter=0
+                echo '{"rules_or_queries": [' > bulk_validate_request.json
+              fi
             fi
           done
 
-      - name: Validate Insights and Signals
-        run: |
-          for f in {insights,signals}/**/*.yml
-          do
-            echo "Processing $f"
-            http_code=$(yq eval 'del(.type) | .source = "length([\n\n" + .source + "\n]) >= 0"' "$f" -o=json | curl -H "Content-Type: application/json" -X POST --data-binary @- -o response.txt -w "%{http_code}" --silent https://playground.sublimesecurity.com/v1/rules/validate)
-            echo '' >> response.txt
-            cat response.txt
-            if [[ "$http_code" != "200" ]]; then
-              echo "Unexpected response $http_code"
-              exit 1
-            fi
-          done
+          echo "All batches submitted successfully!"
 
       - name: Verify no .yaml files exist
+        if: github.event_name != 'issue_comment'
         run: |
           ! /bin/sh -c 'ls **/*.yaml'
 
           
       - name: Verify no .yml files exist in the top directory
+        if: github.event_name != 'issue_comment'
         run: |
           ! /bin/sh -c 'ls *.yml'
 
       - name: Commit & Push Results, if needed
+        if: github.event_name != 'issue_comment'
         id: final_basic_validation
+        env:
+          STEPS_GET_HEAD_REF_OUTPUTS_HEAD_REF: ${{ steps.get_head_ref.outputs.head_ref }}
         run: |
           rm response.txt
+          rm bulk_validate_request.json
 
           if [ -z "$(git status --porcelain)" ]; then
             echo "No files changed, nothing to do"
@@ -110,10 +223,11 @@ jobs:
 
           git config user.name 'ID Generator'
           git config user.email 'hello@sublimesecurity.com'
-          git add **/*.yml
+          git add -- **/*.yml
           git commit -m "Auto add rule ID"
-          git push origin ${{ github.head_ref }}
-
+          # This will only work when running for a pull_request_target, but rather than filter we'll let this expose
+          # any issues.
+          git push origin "${STEPS_GET_HEAD_REF_OUTPUTS_HEAD_REF}"
       - name: Get the head SHA
         id: get_head
         if: ${{ always() }}
@@ -124,11 +238,14 @@ jobs:
       # Various alternatives were explored, but all run into issues when dealing with forks. This sets a "Check" for
       # the latest commit, and we can depend on that as a required check.
       - name: "Create a check run"
+        # this needs to be upgraded to v7 but need to get this working now
+        # actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea  # v7.0.1
         uses: actions/github-script@v6
-        if: github.event_name == 'pull_request_target' && always()
+        if: (github.event_name == 'pull_request_target' || github.event_name == 'merge_group' ) && always()
         env:
-          parameter_url: '${{ github.event.pull_request.html_url }}'
+          run_url: "${{ format('https://github.com/{0}/actions/runs/{1}', steps.get_head_ref.outputs.repo, github.run_id) }}"
           conclusion: "${{ steps.final_basic_validation.outcome == 'success' && 'success' || 'failure' }}"
+          HEAD_SHA: ${{ steps.get_head.outputs.HEAD }}
         with:
           debug: ${{ secrets.ACTIONS_STEP_DEBUG || false }}
           retries: 3
@@ -143,11 +260,11 @@ jobs:
             await github.rest.checks.create({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              head_sha: "${{ steps.get_head.outputs.HEAD }}",
+              head_sha: process.env.HEAD_SHA,
               name: "Rule Tests and ID Updated",
               status: "completed",
               conclusion: process.env.conclusion,
-              details_url: process.env.parameter_url,
+              details_url: process.env.run_url,
               output: {
                 title: "Rule Tests and ID Updated",
                 summary: "Rule Tests and ID Updated",
@@ -157,32 +274,16 @@ jobs:
 
       - name: Get changed detection-rules
         id: changed-files
-        uses: tj-actions/changed-files@v39
+        uses: tj-actions/changed-files@2f7c5bfce28377bc069a65ba478de0a74aa0ca32  # v46.0.1
         with:
           files: "detection-rules/**"
           recover_deleted_files: true
 
-      - name: Get base ref
-        id: get_base_ref
-        run: |
-          if [[ "${{ github.event_name }}" == 'pull_request_target' ]]; then
-            # Detect changes based on whatever we're merging into.
-            echo "##[set-output name=ref;]${{ github.base_ref }}"
-          elif [[ "${{ github.event_name }}" == 'push' ]]; then
-            # Detect changes based on the previous commit
-            echo "##[set-output name=ref;]$(git rev-parse HEAD^)"
-          elif [[ "${{ github.event_name }}" == 'workflow_dispatch' ]]; then
-            # Run on a target, so run for all rules.
-            echo "##[set-output name=run_all;]true"
-          elif [[ "${{ github.event_name }}" == 'issue_comment' ]]; then
-            echo "##[set-output name=ref;]${{ steps.comment-branch.outputs.base_ref }}"
-          fi
-
       - name: Checkout base
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
         if: ${{ steps.get_base_ref.outputs.run_all != 'true' }}
         with:
-          ref: ${{ steps.get_base_ref.outputs.ref }}
+          ref: ${{ steps.get_base_ref.outputs.base_ref }}
           repository: sublime-security/sublime-rules
           depth: 0
           path: sr-main
@@ -201,12 +302,15 @@ jobs:
 
       - name: "Find updated rule IDs"
         id: find_ids
+        env:
+          STEPS_GET_BASE_REF_OUTPUTS_RUN_ALL: ${{ steps.get_base_ref.outputs.run_all }}
+          STEPS_CHANGED_FILES_OUTPUTS_DELETED_FILES: ${{ steps.changed-files.outputs.deleted_files }}
         run: |
           for file in detection-rules/*.yml; do
-            rule_id=$(yq '.id' $file)
+            rule_id=$(yq '.id' "$file")
           
-            if [[ "${{ steps.get_base_ref.outputs.run_all }}" == "true" ]]; then
-              altered_rule_ids=$(echo "$rule_id"" ""$altered_rule_ids")
+            if [[ "${STEPS_GET_BASE_REF_OUTPUTS_RUN_ALL}" == "true" ]]; then
+              altered_rule_ids="${rule_id} ${altered_rule_ids}"
               continue
             fi
           
@@ -216,44 +320,177 @@ jobs:
             # We only need to care when rule source is changed. This will handle renames, tag changes, etc.
             if [[ "$new_source" != "$old_source" ]]; then
               echo "$file ($rule_id) has altered source"
-              altered_rule_ids=$(echo "$rule_id"" ""$altered_rule_ids")
+              altered_rule_ids="${rule_id} ${altered_rule_ids}"
             fi
           done
           
-          for file in ${{ steps.changed-files.outputs.deleted_files }}; do
-            rule_id=$(yq '.id' $file)
+          for file in ${STEPS_CHANGED_FILES_OUTPUTS_DELETED_FILES}; do
+            rule_id=$(yq '.id' "$file")
             echo "$file ($rule_id) was deleted"
-            altered_rule_ids=$(echo "$rule_id"" ""$altered_rule_ids")
+            altered_rule_ids="${rule_id} ${altered_rule_ids}"
           done
           
           echo "Altered Ruled IDs: [$altered_rule_ids]"
-          echo "##[set-output name=rule_ids;]$(echo $altered_rule_ids)"
+          echo "##[set-output name=rule_ids;]${altered_rule_ids}"
           # TODO: This doesn't solve for a modified rule_id. We could merge with any files known on 'main', but changing
           # a rule ID is a separate problem.
 
+      - name: Get PR Number
+        if: github.event_name == 'pull_request_target' || github.event_name == 'issue_comment'
+        id: find_pr_number
+        run: |
+          if [[ "${{ github.event_name }}" == 'pull_request_target' || "${{ github.event_name }}" == 'merge_group' ]]; then
+            result="${{ github.event.number }}"
+          elif [[ "${{ github.event_name }}" == 'issue_comment' ]]; then
+            result="${{ github.event.issue.number }}"
+          fi
+
+          echo "PR $result"
+          echo "##[set-output name=result;]$result"
+
+
+      - name: "Find mql-mimic-exempt Comments"
+        # this needs to be upgraded to v7 but need to get this working now
+        # actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea  # v7.0.1
+        uses: actions/github-script@v6
+        id: find_emls_to_skip
+        if: steps.find_pr_number.outputs.result != ''
+        env:
+          ISSUE_NUMBER: ${{ steps.find_pr_number.outputs.result }}
+        with:
+          debug: ${{ secrets.ACTIONS_STEP_DEBUG || false }}
+          result-encoding: string
+          script: |
+            const opts = github.rest.issues.listComments.endpoint.merge({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: process.env.ISSUE_NUMBER,
+            })
+            const comments = await github.paginate(opts)
+            
+            const seperatorRegex = /[\s:,;\/]+/
+            const exemptRegex = /\/mql-mimic-exempt((?:[\s:,;\/]+#*\d+)+)/gis
+
+            let allEMLsToSkip = []
+            for (const comment of comments) {
+              if (comment.author_association !== "MEMBER") {
+                console.log("Ignoring comment from non-member" + comment.user.login)
+              }
+
+              while ((m = exemptRegex.exec(comment.body)) !== null) {
+                if (m.index === exemptRegex.lastIndex) {
+                  break
+                }
+                  
+                // The result can be accessed through the `m`-variable.
+                m.forEach((match, groupIndex) => {
+                  if (groupIndex != 1) {
+                    return
+                  }
+            
+                  console.log("Found MQL Mimic Exemption EMLs: " + match)
+                  
+                  // First cut out all (optional) #
+                  match = match.replaceAll("#", "")
+                  let emls = match.split(seperatorRegex)
+                  console.log("Split EMLs: " + JSON.stringify(emls))
+                  allEMLsToSkip = allEMLsToSkip.concat(emls.filter((s) => s !== ""))
+                });
+              }
+            }
+            
+            console.log("All EMLs: " + JSON.stringify(allEMLsToSkip))
+            // MQL Mimic will handle duplicates gracefully, no need to handle here.
+            return allEMLsToSkip.join(" ")
+
+      - name: "Find Existing MQL Mimic Test Results"
+        # this needs to be upgraded to v7 but need to get this working now
+        # actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea  # v7.0.1
+        uses: actions/github-script@v6
+        id: find_mql_mimic_results
+        if: ${{ github.event_name != 'merge_group' }}
+        env:
+          sha: '${{ steps.get_head.outputs.HEAD }}'
+        with:
+          debug: ${{ secrets.ACTIONS_STEP_DEBUG || false }}
+          script: |
+            const result = await github.rest.checks.listForRef({
+              check_name: "MQL Mimic Tests",
+              owner: "sublime-security",
+              repo: "sublime-rules",
+              ref: process.env.sha
+            })
+            
+            let existingRuns = result.data.check_runs.map((r) => r.id)
+            console.log(existingRuns)
+            return existingRuns
+
       - name: "Trigger MQL Mimic Tests"
+        if: ${{ github.event_name != 'merge_group' }}
         env:
           trigger_url: '${{ secrets.MQL_MOCK_TRIGGER }}'
-          branch: ${{ github.event_name == 'pull_request_target' && github.head_ref || github.ref }}
-          repo: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.full_name || github.repository }}
+          branch: '${{ steps.get_head_ref.outputs.head_ref }}'
+          repo: '${{ steps.get_head_ref.outputs.repo }}'
           token: '${{ secrets.GITHUB_TOKEN }}'
           sha: '${{ steps.get_head.outputs.HEAD }}'
           only_rule_ids: '${{ steps.find_ids.outputs.rule_ids }}'
+          skip_eml_ids: '${{ steps.find_emls_to_skip.outputs.result }}'
         run: |
-          body='{"branch":"'$branch'","repo":"'$repo'","token":"'$token'","sha":"'$sha'","only_rule_ids":"'$only_rule_ids'"}'
-          echo $body
-          
-          curl -X POST $trigger_url  \
+          body=$(cat <<__EOF__
+          {"branch":"${branch}","repo":"${repo}","token":"${token}","sha":"${sha}","only_rule_ids":"${only_rule_ids}","skip_eml_ids":"${skip_eml_ids}"}
+          __EOF__
+          )
+
+          echo "$body"
+
+          curl -X POST "$trigger_url"  \
             -H 'Content-Type: application/json' \
             -d "$body"
 
       - name: Wait for MQL Mimic check to be completed
-        uses: fountainhead/action-wait-for-check@v1.1.0
-        id: wait-for-build
+        if: ${{ github.event_name != 'merge_group' }}
+        uses: sublime-security/action-wait-for-check@master
         # Wait for results so that the token remains valid while the test suite is executing and posting a check here.
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           checkName: "MQL Mimic Tests"
           ref: ${{ steps.get_head.outputs.HEAD }}
           timeoutSeconds: 3600
+          ignoreIDs: ${{ steps.find_mql_mimic_results.outputs.result }}
 
+      - name: "Create MQL Mimic Check"
+        # this needs to be upgraded to v7 but need to get this working now
+        # actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea  # v7.0.1
+        uses: actions/github-script@v6
+        if: ${{ github.event_name == 'merge_group' }}
+        id: create_check
+        env:
+          run_url: "${{ format('https://github.com/{0}/actions/runs/{1}', steps.get_head_ref.outputs.repo, github.run_id) }}"
+          HEAD_SHA: ${{ steps.get_head.outputs.HEAD }}
+        with:
+          debug: ${{ secrets.ACTIONS_STEP_DEBUG || false }}
+          retries: 3
+          # Default includes 422 which GitHub returns when it doesn't know about the head_sha we set the status for.
+          # This occurs when the previous push succeeds, but the checks/pull request component of GitHub isn't yet aware
+          # of the new commit. This isn't the common case, but it comes up enough to be annoying.
+          retry-exempt-status-codes: 400, 401, 403, 404
+          script: |
+            // any JavaScript code can go here, you can use Node JS APIs too.
+            // Docs: https://docs.github.com/en/rest/checks/runs#create-a-check-run
+            // Rest: https://octokit.github.io/rest.js/v18#checks-create
+            const response = await github.rest.checks.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              head_sha: process.env.HEAD_SHA,
+              name: "MQL Mimic Tests",
+              status: "completed",
+              conclusion: "success",
+              details_url: process.env.run_url,
+              output: {
+                title: "MQL Mimic Tests",
+                summary: "MQL Mimic tests are not run on merge queues",
+                text: "MQL Mimic auto pass",
+              },
+            });
+            
+            return response["data"]["id"]
