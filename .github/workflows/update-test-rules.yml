@@ -1,153 +1,187 @@
-name: Add to test-rules Branch
+name: Update Test Rules
 
 on:
-  issue_comment:
-    types: [created]
-
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch:  # Allow manual triggering
+env:
+    PYTHON_VERSION: "3.13"
 jobs:
-  pre-checks:
-    name: Initial Checks
-    permissions:
-      contents: read
-      issues: read
-      pull-requests: read
-      checks: read
-    runs-on: ubuntu-20.04
-    # https://docs.github.com/en/webhooks-and-events/webhooks/webhook-events-and-payloads#issue_comment
-    if: github.event.issue.pull_request && contains(github.event.comment.body, '/update-test-rules')
-
-    steps:
-      # This isn't our only gating, but it's a convenient first restriction.
-      # The GitHub token can't have expanded permissions like reading private org or team info, so this requires org
-      # members to be public (most of us are).
-      # TheModdingInquisition/actions-team-membership@v1.0 could be used for a team check, but we'd need to create a PAT for it.
-      - name: Check if commentor is organization member
-        id: is_organization_member
-        uses: jamessingleton/is-organization-member@1.0.0
-        with:
-          organization: sublime-security
-          username: ${{ github.event.comment.user.login }}
-          token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Echo organization member
-        run: |
-          echo "[${{ steps.is_organization_member.outputs.result }}]"
-
-      - name: Fail if not organization member
-        if: |
-          steps.is_organization_member.outputs.result != 'true'
-        run: exit 1
-
-      - name: Fail if PR closed
-        if: |
-          github.event.issue.closed_at
-        run: exit 1
-
-      - name: Get PR branch
-        uses: alessbell/pull-request-comment-branch@v1.1 # Fork of xt0rted/pull-request-comment-branch, see https://github.com/xt0rted/pull-request-comment-branch/issues/322
-        id: comment_branch
-
-      - name: Wait for Rule Validation Succeed
-        uses: lewagon/wait-on-check-action@v1.3.1
-        with:
-          ref: ${{ steps.comment_branch.outputs.head_sha }}
-          check-name: 'Rule Tests and ID Updated'
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
-          wait-interval: 10
-
-  add-to-test-branch:
-    name: Add to test-rules Branch
-    needs: pre-checks
+  update-test-rules:
+    runs-on: ubuntu-latest
     permissions:
       contents: write
-      issues: read
-      pull-requests: read
-      checks: read
-    runs-on: ubuntu-20.04
-    environment: test-rules
-    concurrency: test-rules
+      checks: write
+      pull-requests: write
 
     steps:
-      - name: Get PR branch
-        uses: alessbell/pull-request-comment-branch@v1.1 # Fork of xt0rted/pull-request-comment-branch, see https://github.com/xt0rted/pull-request-comment-branch/issues/322
-        id: comment_branch
+    - name: Checkout repository
+      uses: actions/checkout@v4
 
-      - name: Checkout PR branch
-        uses: actions/checkout@v3
-        with:
-          repository: ${{ steps.comment-branch.outputs.head_owner }}/${{ steps.comment-branch.outputs.head_repo }}
-          ref: ${{ steps.comment_branch.outputs.head_ref }}
-          fetch-depth: 0
-          path: source
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
 
-      - name: Install yq
-        uses: mikefarah/yq@v4.33.3
+    - name: Install dependencies
+      run: pip install requests
 
-      - name: Checkout test-rules
-        uses: actions/checkout@v3
-        with:
-          ref: test-rules
-          path: destination
+    - name: Create and switch to test-rules branch
+      run: |
+        git fetch --all
+        if git show-ref --quiet refs/remotes/origin/test-rules; then
+          git checkout test-rules
+          git pull origin test-rules
+        else
+          git checkout -b test-rules
+        fi
 
-      - name: Synchronize Test Rules
-        run: |
-          export pr_num=${{ github.event.issue.number }}
+    - name: Get latest script from main branch
+      run: |
+        # Checkout the scripts directory from main branch without switching branches
+        git checkout origin/main -- scripts/
+        
+        # Unstage the script changes - we only want to commit detection rule changes
+        git reset HEAD scripts/ || true
+
+    - name: Run the script
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        SCRIPT_MODE: 'test-rules'
+        # Configure test-rules specific settings
+        FILTER_BY_ORG_MEMBERSHIP: 'true'
+        ORG_NAME: 'sublime-security'
+        INCLUDE_PRS_WITH_COMMENT: 'true'
+        COMMENT_TRIGGER: '/update-test-rules'
+        # SKIP_FILES pattern and labls are managed within the script
+        SKIP_FILES_WITH_TEXT: 'true'
+        # Skip PRs with too many rules
+        SKIP_BULK_PRS: 'true'
+        MAX_RULES_PER_PR: '10'
+        BULK_PR_LABEL: 'test-rules:excluded:bulk_rules'
+        # Disable adding tags that aren't useful
+        ADD_RULE_STATUS_TAG: 'false'
+        ADD_PR_REFERENCE: 'false'
+        INCLUDE_PR_IN_NAME: 'false'
+        ADD_AUTHOR_TAG: 'false'
+        CREATE_OPEN_PR_TAG: 'false'
+        ADD_TEST_RULES_LABEL: 'true'
+        IN_TEST_RULES_LABEL: 'in-test-rules'
+        AUTHOR_MEMBERSHIP_EXCLUSION_LABEL: 'test-rules:excluded:author_membership'
+
+      run: python scripts/sync_detection_rules.py
+
+    - name: Clean up script changes
+      run: |
+        # Revert any script changes back to test-rules branch version
+        # This keeps the working directory clean
+        # this shouldn't be required, but is a good thing to do anyway
+        git checkout HEAD -- scripts/ || true
+
+    - name: Commit changes
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        git config --global user.name 'github-actions[bot]'
+        git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+        
+        # First check if there are any changes
+        if [[ -z $(git status --porcelain detection-rules) ]]; then
+          echo "No changes to detection rules"
+          exit 0
+        fi
+        
+        # Get list of modified files
+        FILES=$(git status --porcelain detection-rules | awk '{print $2}')
+        
+        # Track stats for the summary
+        ADDED_COUNT=0
+        MODIFIED_COUNT=0
+        DELETED_COUNT=0
+        UPDATED_PRS=()
+        
+        # Process each file individually
+        for FILE in $FILES; do
+          echo "Processing $FILE"
+          # Skip non-rule files 
+          if [[ ! "$FILE" =~ .*\.yml$ ]]; then
+            continue
+          fi
           
-          # Delete any files already referencing this PR. If they're no longer included in the PR this will remove them,
-          # if they're still included we'll add them back below.
-          files=$(ls destination/**/*.yml) || true
-          for file in $files; do
-            file_pr_num=$(yq '.testing_pr' $file)
-            if [[ "$pr_num" = "$file_pr_num" ]]; then
-              rm $file
-            fi
-          done
+          BASENAME=$(basename "$FILE")
           
-          # This workflow is trigerred from an issue comment so we don't automatically have context on what changed in the PR
-          # TODO: We can only retrieve 100 results, we need to add pagination support.
-          curl -L \
-            -o pr_files.json \
-            -H "Accept: application/vnd.github+json" \
-            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}"\
-            -H "X-GitHub-Api-Version: 2022-11-28" \
-            https://api.github.com/repos/sublime-security/sublime-rules/pulls/$pr_num/files?per_page=100
+          # Extract PR number from filename (format: PR_NUMBER_filename.yml)
+          PR_NUMBER=$(echo "$BASENAME" | grep -o "^[0-9]*")
+          UPDATED_PRS+=("$PR_NUMBER")
           
-          # Any files added/changed/modified will be copied to test-rules
-          files_changed=$(jq -r '.[] | select(.status == "added" or .status == "modified" or .status == "changed") | .filename' pr_files.json)
+          echo "Processing $BASENAME from $PR_NUMBER for inclusion"
+        
+          # Handle removed files
+          if [[ ! -f "$FILE" ]]; then
+            echo "$BASENAME was deleted, commiting deletion."
+            DELETED_COUNT=$((DELETED_COUNT+1))
+            git add "$FILE"
+            git commit -m "[PR #${PR_NUMBER}] Delete detection rule"
+            continue
+          fi
           
-          # Used to testing_sha key in the rule. If the PR is updated multiple times without changing all files, we'll
-          # always use the latest sha.
-          export sha=${{ steps.comment_branch.outputs.head_sha }}
+          # Ensure that new files are tracked (otherwise they won't show up in diff)
+          git add -N "$FILE"
+
+          # Check if only testing_sha field changed
+          DIFF_OUTPUT=$(git diff HEAD -- "$FILE")
+
+          # Skip files with no changes at all
+          if [[ -z "$DIFF_OUTPUT" ]]; then
+            echo "\tSkipping $FILE: no changes"
+            continue
+          fi
           
-          # Copy any file that was added/changed/modified to the destination git folder (we could do this with git checkout
-          # but it doesn't seem any simpler). And then add testing metadata.
-          # If multiple PRs modify the same file, only one can be tested. This is solveable, but not something we see often.
-          for file in $files_changed; do
-            # Skip any LA rules. We'll ignore these downstream anyway, but best to keep the branch clean.
-            la_count=$(grep -c 'beta.linkanalysis' source/$file || true)
-            if [[ "$la_count" != '0' ]]; then
-              echo "Ignoring $file because of linkanalysis usage"
-              continue
-            fi
-            
-            cp source/$file destination/$file
-            yq -i '.testing_pr = env(pr_num)' destination/$file
-            yq -i '.testing_sha = env(sha)' destination/$file
-          done
+          # Check if the diff only contains testing_sha changes
+          # Look for lines that are only additions/deletions of testing_sha with hash values
+          # Handle files that may not have trailing newlines
+          # Filter out hunk headers & file paths so we just have +- lines of changed content.
+          LINES_CHANGES_ONLY=$(echo "$DIFF_OUTPUT" | grep -E '^[+-]' | grep -v -E '^[+-]{3}' | grep -v '^\\ No newline at end of file')
+          NON_TESTING_SHA_CHANGES=$(echo "$LINES_CHANGES_ONLY" | grep -v -E '^[+-]testing_sha: [0-9a-f]+' || true)
+          if [[ -z "$NON_TESTING_SHA_CHANGES" ]]; then
+            echo "\tSkipping $FILE: only testing_sha field changed. Lines changed:"
+            echo "$LINES_CHANGES_ONLY"
+            continue
+          fi
           
-          echo "Sync from PR#$pr_num" > message.txt
-          echo "" >> message.txt
-          echo "${{ github.event.issue.title }} by @${{ github.event.issue.user.login }}" >> message.txt
-          echo "${{ github.event.issue.pull_request.html_url }}" >> message.txt
-          echo "Source SHA $sha" >> message.txt
-          echo "Triggered by @${{ github.event.comment.user.login }}" >> message.txt
-          echo "${{ github.event.comment.body }}" | awk '/\/update-test-rules/ {p=1; next} p && NF' >> message.txt
+          # Determine status directly from git
+          GIT_STATUS=$(git status --porcelain "$FILE" | cut -c1-2 | tr -d ' ')
+          if [[ "$GIT_STATUS" == "A" ]]; then
+            ADDED_COUNT=$((ADDED_COUNT+1))
+            STATUS="added"
+          elif [[ "$GIT_STATUS" == "M" ]]; then
+            MODIFIED_COUNT=$((MODIFIED_COUNT+1))
+            STATUS="modified"
+          else
+            MODIFIED_COUNT=$((MODIFIED_COUNT+1))
+            STATUS="changed"
+          fi
           
-          cd destination
-          git add -A
+          # Extract rule name and commit
+          RULE_NAME=$(grep -m 1 "name:" "$FILE" | sed 's/name: //' | sed 's/^"//' | sed 's/"$//' | sed "s/^'//" | sed "s/'$//")
           
-          git config --global user.name 'Sublime Rule Testing Bot'
-          git config --global user.email 'hello@sublimesecurity.com'
+          # Build commit message
+          COMMIT_MSG="[PR #${PR_NUMBER}] ${STATUS} rule: ${RULE_NAME}"
           
-          git commit --allow-empty -F ../message.txt
-          git push origin test-rules
+          # Add file and commit
+          git add "$FILE"
+          git commit -m "$COMMIT_MSG"
+        done
+        
+        # Get unique PR count
+        UNIQUE_PRS=$(printf '%s\n' "${UPDATED_PRS[@]}" | sort -u | wc -l)
+        
+        # Create summary
+        echo "Detection Rules Sync Summary ($(date '+%Y-%m-%d %H:%M:%S'))"
+        echo "- PRs processed: ${UNIQUE_PRS}"
+        echo "- Rules added: ${ADDED_COUNT}"
+        echo "- Rules modified: ${MODIFIED_COUNT}"
+        echo "- Rules deleted: ${DELETED_COUNT}"
+        
+        # Push changes
+        git push
