@@ -4,8 +4,19 @@ type: "rule"
 severity: "medium"
 source: |
   type.inbound
-  and strings.icontains(subject.subject, "action required")
   and sender.email.email == "noreply@business.facebook.com"
+  and (
+      // and the link is recently registered
+    any(body.links, network.whois(.href_url.domain).days_old <= 30)
+    or any(body.links,
+           // if the link is still active, check if it's cred theft
+           any(ml.nlu_classifier(beta.ocr(ml.link_analysis(.).screenshot).text).intents,
+               .name == "cred_theft" and .confidence != "low"
+           )
+    )
+    // or look for the legit Meta footer address
+    or strings.icontains(body.plain.raw, 'Community Support, 1 Meta Way, Menlo Park, CA 94025')
+  )
 tags:
  - "Attack surface reduction"
 attack_types:
