@@ -1,0 +1,72 @@
+name: "Brand impersonation: USPS"
+description: "Impersonation of the United States Postal Service."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and (
+    any(ml.logo_detect(file.message_screenshot()).brands, .name == "USPS")
+    or (
+        strings.ilike(sender.display_name, "USPS")
+      )
+  )
+  and length(body.links) > 0
+  and 2 of (
+    any(body.links,
+        strings.ilike(.display_text,
+                      "*check now*",
+                      "*track*",
+                      "*package*",
+                      '*view your order*'
+        )
+    ),
+    strings.ilike(body.current_thread.text,
+                  "*returned*to*sender*",
+                  "*redelivery*"
+    ),
+    // impersonal greeting
+    any(ml.nlu_classifier(body.current_thread.text).entities,
+        .name == "recipient" and .text =~ "Customer"
+    ),
+    // no links go to usps.com
+    all(body.links, .href_url.domain.root_domain != "usps.com")
+  )
+  and (
+    sender.email.domain.root_domain not in (
+        "usps.com", 
+        "opinions-inmoment.com", // https://faq.usps.com/s/article/USPS-Customer-Experience-Surveys
+        "shipup.co", // third party shipping company
+        "withings.com" // third party shipping company
+    )
+    or (
+      sender.email.domain.root_domain in (
+          "usps.com", 
+          "opinions-inmoment.com" // https://faq.usps.com/s/article/USPS-Customer-Experience-Surveys
+      )
+      and not headers.auth_summary.dmarc.pass
+    )
+  )
+  
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and not headers.auth_summary.dmarc.pass
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Image as content"
+  - "Impersonation: Brand"
+  - "Social engineering"
+detection_methods:
+  - "Computer Vision"
+  - "Content analysis"
+  - "Natural Language Understanding"
+  - "Sender analysis"
+id: "c9ab649e-13a0-50b8-9032-b191498b9388"
+og_id: "28b9130a-d8e0-50af-97c9-c1b8f4c46d68"
+testing_pr: 3445
+testing_sha: cfd70dc1b2a02636ebbafb033b28b741455c9909
