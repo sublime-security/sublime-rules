@@ -1,4 +1,4 @@
-name: "Callback Phishing via Calendar Invite"
+name: "Callback phishing via calendar invite"
 description: "Detects calendar invites containing callback phishing language in the DESCRIPTION of the invite."
 type: "rule"
 severity: "medium"
@@ -8,11 +8,13 @@ source: |
   and all(attachments, .content_type in ("text/calendar", "application/ics"))
   and any(attachments,
           // extract the calendar invite description and use NLU against it
-          any(regex.extract(file.parse_text(.).text,
-                            'DESCRIPTION:((?:(?:\r?\n[ \t][^\r\n]*)|[^\r\n])*?)(?:\r?\n[A-Z-][A-Z0-9-]*[;:])'
-              ),
-              any(.groups,
-                  any(ml.nlu_classifier(.).intents, .name == "callback_scam")
+          any(file.explode(.),
+              any(.scan.ics.calendars,
+                  any(.components,
+                      any(ml.nlu_classifier(.description).intents,
+                          .name == "callback_scam"
+                      )
+                  )
               )
           )
   )
@@ -29,7 +31,6 @@ source: |
     )
     or sender.email.domain.root_domain not in $high_trust_sender_root_domains
   )
-
 attack_types:
   - "Callback Phishing"
 tactics_and_techniques:

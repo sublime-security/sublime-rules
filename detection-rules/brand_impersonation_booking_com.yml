@@ -1,24 +1,33 @@
-name: "Brand Impersonation: Booking.com"
+name: "Brand impersonation: Booking.com"
 description: "Detects messages purporting to be from Booking.com's support team that contain suspicious credential collection patterns. The sender is not from a legitimate Booking.com domain and shows a history of problematic behavior or lacks prior solicited communication. Additional checks enforce DMARC authentication for trusted domains."
 type: "rule"
 severity: "medium"
 source: |
   type.inbound
   and length(body.links) < 10
-  and any(beta.ml_topic(body.current_thread.text).topics,
-          .name in (
-            "Travel and Transportation",
-            "Customer Service and Support",
-            "Security and Authentication"
-          )
-          and .confidence != "low"
+  and (
+    any(ml.nlu_classifier(body.current_thread.text).topics,
+        .name in (
+          "Travel and Transportation",
+          "Customer Service and Support",
+          "Security and Authentication"
+        )
+        and .confidence != "low"
+    )
+    // handle instances in which ml_topic does not hit
+    or (
+      length(body.links) == 0
+      and length(attachments) == 0
+      and length(body.current_thread.text) < 1000
+      and strings.icontains(sender.display_name, "booking.com")
+    )
   )
   and (
     any(ml.nlu_classifier(body.current_thread.text).entities,
         .name == "org" and .text == "Booking.com"
-        or strings.icontains(body.current_thread.text, ' booking.com ')
-        or strings.icontains(sender.display_name, "booking.com")
     )
+    or strings.icontains(body.current_thread.text, ' booking.com ')
+    or strings.icontains(sender.display_name, "booking.com")
   )
   and (
     any(ml.nlu_classifier(body.current_thread.text).intents,
@@ -28,6 +37,7 @@ source: |
            strings.ilike(.display_text,
                          "*review*",
                          "*response*",
+                         "*respond*",
                          "*complaint*",
                          "*contact*",
                          "*accommodation*"
@@ -37,7 +47,7 @@ source: |
            or strings.icontains(.href_url.path, "/redir")
     )
     // check for text strings that betray intent
-    or strings.icontains(body.current_thread.text, "book a room", )
+    or regex.icontains(body.current_thread.text, '(?:book\sa|open)\srooms', )
     or strings.ilike(body.current_thread.text, "* availab*", )
     // two seperate HTML elements impersonating the logo
     or (
@@ -49,12 +59,29 @@ source: |
       )
     )
   )
-  and sender.email.domain.root_domain not in~ ('booking.com')
+  and not (
+    sender.email.domain.root_domain in~ ('booking.com', 'siteminder.com')
+    and headers.auth_summary.dmarc.pass
+  )
   and (
     not profile.by_sender().solicited
     or (
       profile.by_sender().any_messages_malicious_or_spam
       and not profile.by_sender().any_messages_benign
+    )
+  )
+  
+  // negate microsoft quarantine messages
+  and not (
+    any(body.links,
+        (
+          strings.icontains(.display_text, "Review Message")
+          or strings.icontains(.display_text, "Passer en revue le message")
+        )
+        and (
+          .href_url.domain.domain == "security.microsoft.com"
+          and .href_url.path == "/quarantine"
+        )
     )
   )
 

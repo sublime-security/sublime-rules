@@ -51,7 +51,7 @@ source: |
                         '(sign(ed?)|view).{0,10}(purchase order)|Request for (a Quot(e|ation)|Proposal)'
         ),
         regex.icontains(body.current_thread.text,
-                        '(please|kindly).{0,30}quot(e|ation)'
+                        '(please|kindly).{0,30}(?:proposal|quot(e|ation))'
         ),
         regex.icontains(subject.subject,
                         '(request for (purchase|quot(e|ation))|\bRFQ\b|\bRFP\b|bid invit(e|ation))'
@@ -79,7 +79,7 @@ source: |
                           '(sign(ed?)|view).{0,10}(purchase order)|Request for a Quot(e|ation)'
           ),
           regex.icontains(body.current_thread.text,
-                          '(please|kindly).{0,30}quot(e|ation)'
+                          '(please|kindly).{0,30}(?:proposal|quot(e|ation))'
           ),
           regex.icontains(subject.subject,
                           '(request for (purchase|quot(e|ation))|\bRFQ\b|\bRFP\b|bid invit(e|ation))'
@@ -180,10 +180,19 @@ source: |
     or sender.email.domain.root_domain not in $high_trust_sender_root_domains
   )
   and (
-    not profile.by_sender().solicited
-    or profile.by_sender().days_since.last_contact > 30
+    (
+      (
+        not profile.by_sender().solicited
+        or profile.by_sender().days_since.last_contact > 30
+      )
+      and not profile.by_sender().any_messages_benign
+    )
+    // sender address listed as a recipient 
+    or (
+      length(recipients.to) == 1
+      and sender.email.email in map(recipients.to, .email.email)
+    )
   )
-  and not profile.by_sender().any_messages_benign
 attack_types:
   - "BEC/Fraud"
 tactics_and_techniques:

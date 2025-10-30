@@ -30,6 +30,9 @@ source: |
                        ".*reach you.{0,20}Microsoft Teams"
     )
     or strings.ilike(sender.display_name, '*new activity in Teams*')
+    or strings.icontains(strings.replace_confusables(sender.display_name),
+                         'microsoft advertising support'
+    )
     or subject.subject =~ 'Offline Message in Teams'
     or strings.ilike(subject.subject, '*Teams Sent A Message')
     or sender.display_name in~ (
@@ -60,7 +63,15 @@ source: |
     'azureadnotifications.us',
     'microsoftonline.us',
     'mail.microsoft',
-    'office365.com'
+    'office365.com',
+    'microsoftadvertising.com'
+  )
+  and not (
+    sender.email.domain.domain in~ (
+      'microsoft.regsvc.com',
+      'microsoft.onmicrosoft.com'
+    )
+    and headers.auth_summary.dmarc.pass
   )
   and (
     profile.by_sender().prevalence in ("new", "outlier")
@@ -69,7 +80,7 @@ source: |
       and not profile.by_sender().any_messages_benign
     )
   )
-
+  
   // negate legitimate Office 365 bouncebacks
   and not (
     all(attachments,
@@ -79,9 +90,13 @@ source: |
       sender.email.local_part in ('postmaster', 'mailer-daemon')
       or strings.starts_with(sender.email.local_part, 'microsoftexchange')
     )
-    and strings.contains(subject.subject, 'Undeliverable:')
+    and (
+      strings.contains(subject.subject, 'Undeliverable:')
+      or strings.contains(subject.subject, 'Blocked:')
+      or strings.contains(subject.subject, 'Não é possível entregar:')
+    )
   )
-
+  
   // negate other legitimate MS notifications
   and not (
     length(body.links) > 0
@@ -103,6 +118,17 @@ source: |
       and not headers.auth_summary.dmarc.pass
     )
     or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+  // not a newsletter or advertisement
+  and not any(beta.ml_topic(body.current_thread.text).topics,
+              .name in ("Newsletters and Digests")
+              and .confidence == "high"
+              and (
+                any(body.links,
+                    strings.icontains(.display_text, "unsubscribe")
+                    and (strings.icontains(.href_url.path, "unsubscribe"))
+                )
+              )
   )
 
 attack_types:

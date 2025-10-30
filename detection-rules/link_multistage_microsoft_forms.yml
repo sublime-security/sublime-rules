@@ -1,4 +1,4 @@
-name: "Link: Multistage Landing - Microsoft Forms Abuse"
+name: "Link: Multistage landing - Microsoft Forms abuse"
 description: "The detection rule matches on message groups which make use of Microsoft Forms as a landing page. The landing page contains links which are newly registered, use free file or subdomain hosts, URL shorteners or when visited are phishing pages, lead to a captcha or redirect to a top website."
 type: "rule"
 severity: "high"
@@ -104,7 +104,18 @@ source: |
                                   and .href_url.domain.root_domain =~ 'microsoft.com'
                                 )
                                 or .href_url.domain.root_domain =~ sender.email.domain.root_domain
-                                or .href_url.domain.tld == "ms"
+                                or (
+                                  .href_url.domain.tld == "ms"
+                                  // Microsoft does not own the .ms TLD, this checks to ensure it is one of their domains
+                                  and (
+                                    network.whois(.href_url.domain).registrant_company == "Microsoft Corporation"
+                                    or strings.ilike(network.whois(.href_url.domain).registrar_name,
+                                                     "*MarkMonitor*",
+                                                     "*CSC Corporate*",
+                                                     "*com laude*"
+                                    )
+                                  )
+                                )
                               )
                        )
             ) <= 2

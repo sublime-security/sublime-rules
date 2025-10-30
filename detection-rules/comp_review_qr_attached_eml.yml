@@ -1,4 +1,4 @@
-name: "Compensation Review With QR Code in Attached EML"
+name: "Compensation review with QR code in attached EML"
 description: "Detects inbound messages containing compensation-related terms (salary, bonus, merit, etc.) combined with review/change language that include EML attachments containing QR codes or barcodes in scanned documents."
 type: "rule"
 severity: "high"
@@ -8,8 +8,8 @@ source: |
   // the subject contains pay related items
   and (
     strings.icontains(subject.subject, 'salary')
-    or strings.icontains(subject.subject, 'compensation')
-    or regex.icontains(subject.subject, 'comp\b')
+    or regex.icontains(subject.subject, 'comp(?:liance|ensation|\b)')
+    or strings.icontains(subject.subject, 'remuneration')
     or regex.icontains(subject.subject, '\bpay(?:roll|\b)')
     or strings.icontains(subject.subject, 'bonus')
     or strings.icontains(subject.subject, 'incentive')
@@ -27,6 +27,7 @@ source: |
     or strings.icontains(subject.subject, 'feedback')
     or strings.icontains(subject.subject, 'performance')
     or strings.icontains(subject.subject, 'adjustment')
+    or strings.icontains(subject.subject, 'statement')
     or strings.icontains(subject.subject, 'increase')
     or strings.icontains(subject.subject, 'raise')
     or strings.icontains(subject.subject, 'change')
@@ -47,6 +48,13 @@ source: |
               )
           )
   )
+  // negate instances where proofpoint sends a review of a reported message via analyzer 
+  and not (
+    sender.email.email == "analyzer@analyzer.securityeducation.com"
+    and any(headers.domains, .root_domain == "pphosted.com")
+    and headers.auth_summary.spf.pass
+    and headers.auth_summary.dmarc.pass
+  ) 
 attack_types:
   - "Credential Phishing"
 tactics_and_techniques:
