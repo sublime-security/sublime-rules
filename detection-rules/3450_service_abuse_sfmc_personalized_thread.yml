@@ -1,0 +1,48 @@
+name: "Spam: Personalized subject and greetings via Salesforce Marketing Cloud"
+description: "Detects messages sent through Salesforce Marketing Cloud infrastructure that contain a fake previous email thread, where both the current and previous threads start with the same greeting pattern extracted from the subject line."
+type: "rule"
+severity: "low"
+source: |
+  type.inbound
+  // attempt to find SF sending infra 
+  and (
+    headers.domains[0].root_domain == "exacttarget.com"
+    or strings.iends_with(headers.message_id, '.xt.local>')
+    or any(headers.hops,
+           any(.fields,
+               .name =~ "X-SFMC-Stack"
+               or (.name =~ "x-job" and regex.match(.value, '^\d+_\d+$'))
+           )
+    )
+  )
+  // the message contains a fake previous thread
+  and length(body.previous_threads) == 1
+  
+  // extract the name from the subject
+  and any(regex.iextract(subject.base, '(?:^|: )(?P<first_name>[A-Z][a-z]+)$'),
+          // the current thread starts with "Hi <extracted from subject>
+          strings.istarts_with(body.current_thread.text,
+                               strings.concat('Hi ', .named_groups["first_name"])
+          )
+          // the previous thread starts with "Hi <extracted from subject>
+          and any(body.previous_threads,
+                  strings.istarts_with(.text,
+                                       strings.concat('Hi ',
+                                                      ..named_groups["first_name"]
+                                       )
+                  )
+          )
+  )
+  
+
+attack_types:
+  - "Spam"
+tactics_and_techniques:
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Header analysis"
+id: "3db6c3b1-df36-5119-9ef9-3ca55475a12c"
+og_id: "c77f127f-e495-5659-96ec-29aec02070d7"
+testing_pr: 3450
+testing_sha: ce97728d16c22da01a5af286ad22ca2f444be837
