@@ -1,0 +1,40 @@
+name: "Attachment: Any HTML file (untrusted sender)"
+description: |
+  Potential HTML smuggling attacks from new senders.
+  Use if passing HTML files is not normal behavior in your environment.
+  This rule may be expanded to inspect HTML attachments for suspicious code.
+references:
+  - "https://ired.team/offensive-security/defense-evasion/file-smuggling-with-html-and-javascript"
+  - "https://sandbox.sublimesecurity.com?id=106315e9-166a-4e0f-946e-88ff6fd5f9fd"
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and any(attachments,
+          .file_extension in~ ('htm', 'html') or .file_type == "html"
+  )
+  and (
+    (
+      profile.by_sender().prevalence in ("new", "outlier")
+      and not profile.by_sender().solicited
+    )
+    or profile.by_sender().any_messages_malicious_or_spam
+  )
+  and not profile.by_sender().any_messages_benign
+  
+  // negate highly trusted sender domains unless they fail DMARC authentication or DMARC is missing
+  and not (
+    sender.email.domain.root_domain in $high_trust_sender_root_domains
+    and coalesce(headers.auth_summary.dmarc.pass, false)
+  )
+tags:
+  - "Attack surface reduction"
+tactics_and_techniques:
+  - "HTML smuggling"
+detection_methods:
+  - "HTML analysis"
+  - "Sender analysis"
+id: "40e4e9b3-0909-52ad-8d01-753050fa8fc2"
+og_id: "57a8f5c5-c4c4-5268-b452-e381dc64ea42"
+testing_pr: 3451
+testing_sha: ffcecd5e3ad0da9f7aa7028e14b1eb3dd1b03996
