@@ -1,0 +1,158 @@
+name: "Brand impersonation: SendGrid"
+description: "Detects inbound messages that impersonate Twilio/SendGrid through display name or domain manipulation, combined with security or authentication-themed content, while failing authentication checks and originating from untrusted sources."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and (
+    (
+      // SendGrid impersonation patterns
+      strings.ilike(strings.replace_confusables(sender.display_name),
+                    '*sendgrid*'
+      )
+      or strings.ilevenshtein(strings.replace_confusables(sender.display_name),
+                              'sendgrid'
+      ) <= 1
+      or (
+        strings.ilike(strings.replace_confusables(sender.email.local_part),
+                      '*sendgrid*'
+        )
+        and (
+          sender.display_name is null
+          or strings.ilike(strings.replace_confusables(subject.subject),
+                           '*sendgrid*'
+          )
+        )
+      )
+      or any(ml.logo_detect(file.message_screenshot()).brands,
+             .name == "SendGrid" and .confidence == "high"
+      )
+    )
+    or (
+      // Twilio impersonation patterns
+      strings.ilike(strings.replace_confusables(sender.display_name), '*twilio*')
+      or strings.ilevenshtein(strings.replace_confusables(sender.display_name),
+                              'twilio'
+      ) <= 1
+      or (
+        strings.ilike(strings.replace_confusables(sender.email.local_part),
+                      '*twilio*'
+        )
+        and (
+          sender.display_name is null
+          or strings.ilike(strings.replace_confusables(subject.subject),
+                           '*twilio*'
+          )
+        )
+      )
+    )
+    // SendGrid content from non-SendGrid marketing platforms
+    or (
+      sender.email.domain.root_domain in (
+        "selfcast.com",
+        "mailchimp.com",
+        "constantcontact.com",
+        "hubspot.com",
+        "klaviyo.com",
+        "mailgun.com"
+      )
+      and (
+        (
+          (
+            strings.icontains(body.current_thread.text, "sendgrid")
+            or strings.icontains(subject.subject, "sendgrid")
+          )
+          and 3 of (
+            strings.icontains(body.current_thread.text, "webhook"),
+            strings.icontains(body.current_thread.text, "endpoint"),
+            strings.icontains(body.current_thread.text, "api"),
+            strings.icontains(body.current_thread.text, "delivery"),
+            strings.icontains(body.current_thread.text, "event notification")
+          )
+        )
+        and (
+          // Look for SendGrid-related content with non-SendGrid tracking links
+          any(body.links,
+              strings.icontains(.href_url.url, "selfcast.com")
+              or (
+                .display_url.url is not null
+                and strings.icontains(.display_url.url, "sendgrid.com")
+              )
+          )
+        )
+      )
+    )
+  )
+  and (
+    // Content analysis using ML/NLU
+    any(ml.nlu_classifier(body.current_thread.text).topics,
+        .name in (
+          "Security and Authentication",
+          "Secure Message",
+          "Reminders and Notifications",
+          "Software and App Updates",
+          "Customer Service and Support"
+        )
+        and .confidence in ("medium", "high")
+    )
+    or any(ml.nlu_classifier(beta.ocr(file.message_screenshot()).text).topics,
+           .name in (
+             "Security and Authentication",
+             "Secure Message",
+             "Reminders and Notifications",
+             "Software and App Updates",
+             "Customer Service and Support"
+           )
+           and .confidence in ("medium", "high")
+    )
+    or any(ml.nlu_classifier(body.current_thread.text).intents,
+           .name == "cred_theft" and .confidence == "high"
+    )
+    or any(ml.nlu_classifier(beta.ocr(file.message_screenshot()).text).intents,
+           .name == "cred_theft" and .confidence == "high"
+    )
+  )
+  
+  // and the sender is not in org_domains or from sendgrid domains and passes auth
+  and not (
+    (
+      sender.email.domain.root_domain in $org_domains
+      or (
+        sender.email.domain.root_domain in (
+          "sendgrid.com",
+          "sendgrid.net",
+          "twilio.com",
+          "swoogo.com", // events planning software used by Twillio
+          "sendsafely.com" // secure delivery used by Twillio
+        )
+      )
+    )
+    and headers.auth_summary.dmarc.pass
+  )
+  // Exclude high trust domains with valid auth and solicited senders
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and not headers.auth_summary.dmarc.pass
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+  and not profile.by_sender().solicited
+
+attack_types:
+  - "BEC/Fraud"
+  - "Credential Phishing"
+  - "Spam"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Header analysis"
+  - "Natural Language Understanding"
+  - "Optical Character Recognition"
+  - "Sender analysis"
+id: "2d6df5a6-a909-520a-8c0a-561dd120987b"
+og_id: "d800124f-6aa4-58e1-8fa7-beec4958924f"
+testing_pr: 3454
+testing_sha: d12c01e63bb08d835b3fb970eb7c2416c861b739
