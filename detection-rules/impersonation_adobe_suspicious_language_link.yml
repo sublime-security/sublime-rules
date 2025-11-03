@@ -14,7 +14,7 @@ source: |
   )
   and length(body.links) > 0
   and (
-    any(ml.logo_detect(beta.message_screenshot()).brands,
+    any(ml.logo_detect(file.message_screenshot()).brands,
         .name == "Adobe" and .confidence in ("high")
     )
     or (
@@ -31,13 +31,18 @@ source: |
         // keywords if topic anlayis doesn't match
         or strings.icontains(body.current_thread.text, 'review the document')
         or strings.icontains(body.current_thread.text, 'access file')
+        or strings.icontains(body.current_thread.text, 'pending document')
       )
       and length(body.current_thread.text) < 2000
     )
   )
   and (
-    any(file.explode(beta.message_screenshot()),
-        strings.ilike(.scan.ocr.raw,
+    (
+        //
+        // This rule makes use of a beta feature and is subject to change without notice
+        // using the beta feature in custom rules is not suggested until it has been formally released
+        //
+        strings.ilike(beta.ocr(file.message_screenshot()).text,
                       "*review*",
                       "*sign*",
                       "*view*",
@@ -46,7 +51,7 @@ source: |
                       "*open agreement*",
                       "*open document*"
         )
-        and not strings.ilike(.scan.ocr.raw,
+        and not strings.ilike(beta.ocr(file.message_screenshot()).text,
                               "*view this email*",
                               "*view*browser*",
                               "*business review*"
@@ -60,7 +65,8 @@ source: |
                          "open",
                          "*completed document*",
                          "*open agreement*",
-                         "*open document*"
+                         "*open document*",
+                         "*continue*"
            )
            and not strings.ilike(.display_text,
                                  "*view this email*",
@@ -126,7 +132,6 @@ source: |
     )
     or sender.email.domain.root_domain not in $high_trust_sender_root_domains
   )
-
 attack_types:
   - "Credential Phishing"
 tactics_and_techniques:

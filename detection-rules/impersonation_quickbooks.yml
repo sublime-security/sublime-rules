@@ -7,13 +7,14 @@ source: |
   and (
     (
       strings.ilike(sender.display_name, 'quickbook*')
+      or strings.ilike(sender.display_name, 'intuit*')
       or strings.ilevenshtein(sender.display_name, 'quickbooks') <= 1
-      or strings.ilike(sender.email.domain.domain, '*quickbooks*')
+      or strings.ilike(sender.email.domain.domain, '*quickbook*')
     )
     or strings.ilike(body.current_thread.text, "*invoice*")
   )
   and (
-    any(ml.logo_detect(beta.message_screenshot()).brands,
+    any(ml.logo_detect(file.message_screenshot()).brands,
         .name == "Quickbooks" and .confidence in ("medium", "high")
     )
     // contains the address and copyright 
@@ -27,16 +28,17 @@ source: |
     or strings.icontains(body.current_thread.text,
                          'QuickBooks and Intuit are trademarks of Intuit Inc.'
     )
+    or strings.icontains(body.current_thread.text, "QuickBooks Cloud Services")
     // phone number and update language
     or (
       regex.icontains(body.current_thread.text,
                       '\+?([ilo0-9]{1}.)?\(?[ilo0-9]{3}?\)?.[ilo0-9]{3}.?[ilo0-9]{4}',
                       '\+?([ilo0-9]{1,2})?\s?\(?\d{3}\)?[\s\.\-⋅]{0,5}[ilo0-9]{3}[\s\.\-⋅]{0,5}[ilo0-9]{4}'
       )
-      and any(beta.ml_topic(body.current_thread.text).topics,
+      and any(ml.nlu_classifier(body.current_thread.text).topics,
               .name == "Software and App Updates"
       )
-
+  
       // we need to re-check for QB indicators, otherwise we can have "*invoice*"
       // and this block, which is much more than just QB impersonation
       and (
@@ -131,6 +133,7 @@ source: |
     )
     or sender.email.domain.root_domain not in $high_trust_sender_root_domains
   )
+
 attack_types:
   - "Callback Phishing"
   - "Credential Phishing"
