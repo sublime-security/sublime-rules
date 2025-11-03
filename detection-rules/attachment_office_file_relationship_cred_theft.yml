@@ -16,18 +16,35 @@ source: |
             )
           )
           and length(file.oletools(.).relationships) < 500
-          and any(file.oletools(.).relationships,
-                  (
-                    any(ml.nlu_classifier(ml.link_analysis(.target_url).final_dom.display_text
-                        ).intents,
-                        .name == "cred_theft"
-                        and .confidence in ("medium", "high")
-                    )
-                    and .target_url.domain.root_domain not in ("google.com", "goo.gl")
-                   
-                    and ml.link_analysis(.target_url).effective_url.domain.domain != "login.microsoftonline.com"
+          and (
+            any(file.oletools(.).relationships,
+                (
+                  any(ml.nlu_classifier(ml.link_analysis(.target_url).final_dom.display_text
+                      ).intents,
+                      .name == "cred_theft" and .confidence in ("medium", "high")
                   )
-                  or ml.link_analysis(.target_url).credphish.disposition == "phishing"
+                  and .target_url.domain.root_domain not in (
+                    "google.com",
+                    "goo.gl"
+                  )
+                  and ml.link_analysis(.target_url).effective_url.domain.domain != "login.microsoftonline.com"
+                )
+                or ml.link_analysis(.target_url).credphish.disposition == "phishing"
+                or 'cisco' in .target_url.rewrite.encoders
+            )
+            // docx uses anchor to attach email address to the end of a link
+            or (
+              .file_extension == 'docx'
+              and any(filter(file.explode(.), .file_name == 'word/document.xml'),
+                      any(regex.iextract(.scan.strings.raw,
+                                        '<w:hyperlink[^\>]*w:anchor="(?P<email_address>[^\"]+)"'
+                          ),
+                          .named_groups["email_address"] in map(recipients.to,
+                                                                .email.email
+                          )
+                      )
+              )
+            )
           )
   )
   and (
