@@ -5,7 +5,13 @@ severity: "medium"
 source: |
   type.inbound
   and (
-    strings.icontains(sender.display_name, "AARP")
+    (
+      strings.icontains(sender.display_name, "AARP")
+      and any(ml.nlu_classifier(body.current_thread.text).entities,
+              .name in ("request", "financial")
+              and regex.icontains(.text, "(?:gift|win|free)")
+      )
+    )
     or 2 of (
       strings.icontains(body.current_thread.text, 'AARP'),
       strings.icontains(body.current_thread.text, '601 E Street NW'),
@@ -19,11 +25,25 @@ source: |
       )
     )
   )
+  // negate job postings related to AARP and newsletters containing AARP
+  and not any(ml.nlu_classifier(body.current_thread.text).topics,
+              .name in (
+                "Professional and Career Development",
+                "Newsletters and Digests"
+              )
+              and .confidence == "high"
+  )
   // and the sender is not in org_domains or from AARP domains and passes auth
   and not (
     sender.email.domain.root_domain in $org_domains
     or (
-      sender.email.domain.root_domain in ("aarp.org")
+      sender.email.domain.root_domain in (
+        "aarp.org",
+        "proofpointessentials.com",
+        "expedia.com",
+        "eventbrite.com",
+        "zixcorp.com"
+      )
       and headers.auth_summary.dmarc.pass
     )
   )
