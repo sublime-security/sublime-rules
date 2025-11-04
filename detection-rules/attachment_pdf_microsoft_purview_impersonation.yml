@@ -1,0 +1,26 @@
+name: "Attachment: PDF With Microsoft Purview Message Impersonation"
+description: "Detects PDF attachments containing text that impersonates Microsoft Purview secure message notifications, potentially used to trick users into believing they have received legitimate secure communications from Microsoft services."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and any(filter(attachments, .file_extension == 'pdf'),
+          any(filter(file.explode(.), .file_name == 'text'),
+              any(.scan.strings.strings,
+                  any(ml.nlu_classifier(.).topics, .name == 'Secure Message')
+                  and strings.icontains(., "Microsoft Purview Message")
+              )
+          )
+  )
+
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "PDF"
+  - "Social engineering"
+detection_methods:
+  - "Archive analysis"
+  - "File analysis"
+  - "Natural Language Understanding"
+  - "Content analysis"
