@@ -32,7 +32,10 @@ source: |
                       'meta.*inc',
                       'meta ?copyright',
                       'meta ?compliance',
-                      'meta ?pro'
+                      'meta ?pro',
+                      'meta ?certify',
+                      'social.?media.?(master|expert|pro|guru)',
+                      'meta.?(social|skill|ads).?(star|set|expert)'
       )
       or strings.ilevenshtein(sender.display_name, 'facebook ads') <= 2
       or strings.ilevenshtein(sender.display_name, 'facebook business') <= 2
@@ -48,6 +51,7 @@ source: |
           and sender.email.domain.root_domain == 'veza.com'
           and headers.auth_summary.dmarc.pass
         )
+        and not sender.display_name == "Get Support"
       )
       or strings.ilike(sender.email.domain.domain, '*facebook*')
       or strings.ilike(sender.email.local_part,
@@ -142,7 +146,7 @@ source: |
     )
     // we've seen advertising "advice/recommendations"
     or (
-      all(beta.ml_topic(body.current_thread.text).topics,
+      all(ml.nlu_classifier(body.current_thread.text).topics,
           .name in ("Advertising and Promotions", "Reminders and Notifications")
       )
       // Meta mention
@@ -161,6 +165,16 @@ source: |
     or (
       strings.icontains(body.current_thread.text, "Meta Professional Certificate")
       and strings.icontains(body.current_thread.text, "Meta & Coursera Team")
+      // Add link validation
+      and any(body.links, 
+        strings.icontains(.display_text, "coursera")
+        and .href_url.domain.root_domain != "coursera.org"
+      )
+    )
+    or 2 of (
+      strings.icontains(body.current_thread.text, 'Meta'),
+      strings.icontains(body.current_thread.text, '1602 Willow Road'),
+      strings.icontains(body.current_thread.text, 'Menlo Park, CA 91024'),
     )
   )
   and sender.email.domain.root_domain not in~ (
