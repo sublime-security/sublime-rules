@@ -41,10 +41,26 @@ source: |
           or sender.email.local_part not in ("no_reply", "noreply")
         )
     )
-    or any(ml.nlu_classifier(body.current_thread.text).intents,
-           .name in ("callback_scam")
-           and .confidence in ("medium", "high")
-           and 270 < length(body.current_thread.text) < 1750
+    or (
+      any(ml.nlu_classifier(body.current_thread.text).intents,
+          .name in ("callback_scam") and .confidence in ("medium", "high")
+      )
+      and (
+        (
+          270 < length(body.current_thread.text) < 1750
+          or (
+            100 < length(body.current_thread.text) < 1750
+            and strings.ilike(body.current_thread.text,
+                              "*PayPal*",
+                              "*Norton*",
+                              "*GeekSquad*",
+                              "*Ebay*",
+                              "*McAfee*",
+                              "*=1"
+            )
+          )
+        )
+      )
     )
   )
   and not (
@@ -67,6 +83,7 @@ source: |
     )
     or sender.email.domain.root_domain not in $high_trust_sender_root_domains
   )
+
 attack_types:
   - "Callback Phishing"
 tactics_and_techniques:
@@ -81,4 +98,4 @@ detection_methods:
 id: "c36585b7-adc0-5567-858a-969a603641ae"
 og_id: "b93c6f94-c9a3-587a-8eb5-6856754f8222"
 testing_pr: 3478
-testing_sha: 56c2cca866480c720d63f38118503eb59742abb4
+testing_sha: 20bfa83c8deced5f49c9053de2381f360f30c101
