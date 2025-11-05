@@ -1,0 +1,141 @@
+name: "Brand impersonation: Google Workspace alert notification"
+description: "Detects messages impersonating Google Workspace alert notifications that use Google branding elements, workspace-specific terminology, and admin console references, but originate from non-Google domains and contain suspicious links."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  
+  // Sender impersonates Google Workspace alerts but not from Google
+  and (
+    regex.icontains(sender.display_name,
+                    '(?:workspace|google\s*workspace).*(?:alert|notification)'
+    )
+    or regex.icontains(sender.display_name,
+                       '(?:alert|notification).*(?:workspace|google\s*workspace)'
+    )
+    or regex.icontains(sender.email.local_part,
+                       'workspace.*(?:alert|notification)'
+    )
+    or regex.icontains(sender.email.local_part, 'google.*workspace')
+  )
+  and not sender.email.domain.root_domain in~ (
+    'google.com',
+    'google.co.uk',
+    'google.ca'
+  )
+  
+  // Negate legitimate Google alerts forwarded through mailing lists
+  and not (
+    any(headers.hops,
+        any(.fields,
+            (
+              .name == 'X-Original-Sender'
+              and strings.ends_with(.value, '@google.com')
+            )
+            or (
+              .name == 'X-Original-From'
+              and strings.icontains(.value, '@google.com')
+            )
+        )
+    )
+  )
+  
+  // Exclude Google Voice/phone call notifications
+  and not (
+    regex.icontains(subject.subject,
+                    '(?:phone\s*call|voice\s*mail|missed\s*call)'
+    )
+    or regex.icontains(body.current_thread.text, 'Google\s*Voice')
+  )
+  
+  // Exclude forwarded messages
+  and not (
+    regex.icontains(subject.subject, '(?:^|\s)(?:fwd?|forward(?:ed)?)(?:\s|:)')
+    or strings.istarts_with(subject.subject, 'fwd:')
+    or strings.istarts_with(subject.subject, 'fw:')
+  )
+  
+  // Body contains Google Workspace impersonation patterns
+  and (
+    // Alert center call to action with various phishing subjects
+    (
+      regex.icontains(body.current_thread.text, 'alert\s*cent(?:er|re)')
+      and (
+        regex.icontains(subject.subject,
+                        'spike\s+in\s+(?:user[- ]?reported\s+)?spam'
+        )
+        or regex.icontains(subject.subject,
+                           '(?:security|admin|workspace)\s+alert'
+        )
+        or regex.icontains(subject.subject,
+                           'suspicious\s+(?:activity|login|access)'
+        )
+      )
+    )
+    // Reply-to address spoofs Google Workspace alerts
+    or any(headers.reply_to,
+           .email.email == 'google-workspace-alerts-noreply@google.com'
+    )
+    // Google Workspace logo hotlinked from gstatic
+    or (
+      strings.icontains(body.html.raw,
+                        'gstatic.com/apps/signup/resources/google-workspace-lockup.png'
+      )
+      or strings.icontains(body.html.raw,
+                           'gstatic.com/apps/signup/resources/google-workspace-lockup.svg'
+      )
+      or strings.icontains(body.html.raw,
+                           'gstatic.com/apps/signup/resources/google-workspace-lockup.jpg'
+      )
+    )
+    // Google corporate address
+    or (
+      strings.icontains(body.current_thread.text, '1600 Amphitheatre Parkway')
+      and strings.icontains(body.current_thread.text, 'Mountain View, CA')
+    )
+    // Admin recipient messaging patterns
+    or regex.icontains(body.current_thread.text, 'designated\s+admin\s+recipient')
+    or (
+      regex.icontains(body.current_thread.text,
+                      'Google\s+Workspace(?:\s*account)?'
+      )
+      and regex.icontains(body.current_thread.text,
+                          '(?:admin|administrator)\s+(?:console|recipient|account)'
+      )
+    )
+    // Alert details structure common in these phishing attempts
+    or (
+      regex.icontains(body.current_thread.text, 'alert\s+details\s+include')
+      and regex.icontains(body.current_thread.text,
+                          '(?:activity\s+date|total\s+(?:user\s+)?reports|severity)'
+      )
+    )
+  )
+  
+  // Contains links that are not to Google
+  and any(body.links,
+          not .href_url.domain.root_domain in~ (
+            'google.com',
+            'google.co.uk',
+            'google.ca',
+            'gstatic.com',
+            'googleusercontent.com',
+            'sendgrid.net'
+          )
+  )
+
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Social engineering"
+  - "Lookalike domain"
+detection_methods:
+  - "Header analysis"
+  - "Content analysis"
+  - "Sender analysis"
+  - "URL analysis"
+id: "053558a8-ffee-5bd7-a7d6-217f44e571bc"
+og_id: "143ffbc4-15ba-535e-b9d6-ab2e2862abe9"
+testing_pr: 3479
+testing_sha: 51a5b362c2821fba0699092325e04b4044172887
