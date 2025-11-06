@@ -1,0 +1,34 @@
+name: "Brand impersonation: Greenvelope"
+description: "Detects messages impersonating Greenvelope invitations not originating from legitimate Greenvelope domain."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  // Looking for greenvelope phrasing or indicators in HTML
+  and (
+    strings.icontains(body.current_thread.text, "greenvelope.com")
+    // Look for alt text in HTML for standardized greenvelope formatting if string is not avail.
+    or strings.icontains(body.html.raw, 'alt="Greenvelope"')
+    or strings.icontains(body.html.raw,
+                         'https://www.greenvelope.com/viewer/envelope.ashx'
+    )
+  )
+  // Legitimate sender will be from greenvelope, negating known non-associated domains.
+  and not (
+    sender.email.domain.root_domain in ("greenvelope.com")
+    or headers.return_path.domain.root_domain in ("greenvelope.com")
+  )
+  // Capping length to limit FP's
+  and length(body.current_thread.text) < 1500
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Sender analysis"
+id: "07bf6342-6504-5dc2-b2d7-9a84556fd9d5"
+og_id: "9cbbf9b8-a44a-5d86-8caa-3aef898841c1"
+testing_pr: 3487
+testing_sha: 04d521242f8107cda620ba8226ff970d051e2237
