@@ -4,18 +4,16 @@ type: "rule"
 severity: "medium"
 source: |
   type.inbound
-  and any(attachments,
-          .file_type == "pdf"
-          and any(file.explode(.),
-                  any(.scan.exiftool.fields, .key == "Encryption")
-                  or (
-                    .scan.entropy.entropy > 7
-                    and any(.scan.strings.strings,
-                            strings.icontains(., "/Encrypt")
-                    )
-                  )
+  and any(filter(attachments, .file_type == "pdf"),
+          any(file.explode(.),
+              any(.scan.exiftool.fields, .key == "Encryption")
+              or (
+                .scan.entropy.entropy > 7
+                and any(.scan.strings.strings, strings.icontains(., "/Encrypt"))
+              )
           )
-          and not length(file.explode(.)) > 1
+          // Encrypted PDFs do not have child nodes with any data
+          and all(filter(file.explode(.), .depth > 0), .size == 0)
   )
   and (
     any(ml.nlu_classifier(body.current_thread.text).intents,
