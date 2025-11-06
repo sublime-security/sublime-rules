@@ -4,31 +4,40 @@ type: "rule"
 severity: "medium"
 source: |
   type.inbound
-  
   and (
     // Claim to be Charter or Spectrum in the Display Name
     regex.icontains(sender.display_name, 'spe[cç]trum')
     or strings.icontains(sender.display_name, 'MyCharter')
-
+  
     // Claims sent by Charter
-    or strings.icontains(body.current_thread.text, 'This message was sent by Charter Communications.')
-    or regex.icontains(body.current_thread.text, ' © \d{4} Charter.?Communications')
-    
+    or strings.icontains(body.current_thread.text,
+                         'This message was sent by Charter Communications.'
+    )
+    or regex.icontains(body.current_thread.text,
+                       ' © \d{4} Charter.?Communications'
+    )
   )
   // Exclude authorized sending through legitimate sending domains
   and not (
-    sender.email.domain.root_domain in (
-      "spectrumemails.com", // primary communication domain
-      "spectrumtoolbox.com", // used for SpetrumTool Enterprise
-      "beagleinsight.com", // survey vendor
-      "spectrumreach.com", // direct marketing
-      "charter.com", // service alerts
-      "spectrumenterprise.com", // customer surveys
-      "spectrumcustomersurvey.com", // customer feedback surveys
-      "ccsend.com", // they use constant contact
-      "simplifiednetworkmanagement.com", // cold emailing from this domain
-      "tbjobalerts.com", // Job listings for Spectrum
-      "spectruminsiders.com" // legit surveys
+    (
+      sender.email.domain.root_domain in (
+        "spectrumemails.com", // primary communication domain
+        "spectrumtoolbox.com", // used for SpetrumTool Enterprise
+        "beagleinsight.com", // survey vendor
+        "spectrumreach.com", // direct marketing
+        "charter.com", // service alerts
+        "spectrumenterprise.com", // customer surveys
+        "spectrumenterprise.net", // customer surveys
+        "spectrumcustomersurvey.com", // customer feedback surveys
+        "ccsend.com", // they use constant contact
+        "simplifiednetworkmanagement.com", // cold emailing from this domain
+        "tbjobalerts.com", // Job listings for Spectrum
+        "spectruminsiders.com", // legit surveys
+        "spectrumbusinessinsider.com", // legit surveys
+        "joinspectrum.net", // Spectrum reseller
+        "ny1.com", // Spectrum NY1 News channel
+      )
+      or sender.email.domain.domain in ("email.spectrumbusiness.ringcentral.com")
     )
     and headers.auth_summary.dmarc.pass
   )
@@ -43,9 +52,7 @@ source: |
   
   // Make sure this is related to Charter -- exclude other use of 'spectrum'
   // use this section to provide strong indications of the brand we are targetting
-  and (
-     strings.icontains(body.current_thread.text, 'Charter')
-  )
+  and strings.icontains(body.current_thread.text, 'Charter')
   
   // Head off other jobs emails
   and not (
