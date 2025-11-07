@@ -109,7 +109,45 @@ source: |
     )
     or any(attachments,
            .file_type in $file_types_images
-           and any(ml.logo_detect(.).brands, strings.starts_with(.name, "Google"))
+           and (
+             any(ml.logo_detect(.).brands, strings.starts_with(.name, "Google"))
+             or strings.icontains(beta.ocr(.).text,
+                                  strings.concat("You have received this email because ",
+                                                 sender.email.email,
+                                                 " shared a document with you"
+                                  )
+             )
+             or strings.icontains(beta.ocr(.).text,
+                                  strings.concat("You have received this email because ",
+                                                 sender.email.email,
+                                                 " received a file or folder"
+                                  )
+             )
+             or any(recipients.to,
+                    strings.icontains(beta.ocr(..).text,
+                                      strings.concat("You have received this email because ",
+                                                     .email.email,
+                                                     " shared a document with you"
+                                      )
+                    )
+             )
+             or any(recipients.to,
+                    strings.icontains(beta.ocr(..).text,
+                                      strings.concat("You have received this email because ",
+                                                     .email.email,
+                                                     " received a file or folder"
+                                      )
+                    )
+             )
+             or strings.icontains(beta.ocr(.).text,
+                                  strings.concat(sender.display_name,
+                                                 " (",
+                                                 sender.email.email,
+                                                 ") ",
+                                                 "shared"
+                                  )
+             )
+           )
     )
     or strings.icontains(body.current_thread.text,
                          strings.concat("You have received this email because ",
@@ -138,6 +176,14 @@ source: |
                                             " received a file or folder"
                              )
            )
+    )
+    or strings.icontains(body.current_thread.text,
+                         strings.concat(sender.display_name,
+                                        " (",
+                                        sender.email.email,
+                                        ") ",
+                                        "shared"
+                         )
     )
     // Google address from footer
     or 2 of (
