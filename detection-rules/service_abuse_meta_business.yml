@@ -4,9 +4,21 @@ type: "rule"
 severity: "medium"
 source: |
   type.inbound
-  and sender.email.email == "noreply@business.facebook.com"
   and (
-      // and the link is recently registered
+    sender.email.domain.root_domain == "facebook.com"
+    or sender.email.domain.root_domain == "facebookmail.com"
+  )
+  and 3 of (
+    strings.icontains(subject.subject, "Action required"),
+    strings.icontains(subject.subject, "invited to join"),
+    strings.icontains(body.current_thread.text, "You've been invited"),
+    strings.icontains(body.current_thread.text, "You're invited"),
+    strings.icontains(body.current_thread.text,
+                      "not part of or affiliated with Meta"
+    )
+  )
+  and (
+    // and the link is recently registered
     any(body.links, network.whois(.href_url.domain).days_old <= 30)
     or any(body.links,
            // if the link is still active, check if it's cred theft
@@ -15,7 +27,9 @@ source: |
            )
     )
     // or look for the legit Meta footer address
-    or strings.icontains(body.current_thread.text, '1 Meta Way, Menlo Park, CA 94025')
+    or strings.icontains(body.current_thread.text,
+                         '1 Meta Way, Menlo Park, CA 94025'
+    )
   )
 tags:
  - "Attack surface reduction"
