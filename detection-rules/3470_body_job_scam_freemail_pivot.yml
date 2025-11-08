@@ -1,0 +1,80 @@
+name: "BEC/Fraud: Job scam fake thread or plaintext pivot to freemail"
+description: "Detects potential job scams using plaintext or fake threads attempting to pivot to a freemail address from an unsolicited sender."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and any(ml.nlu_classifier(body.current_thread.text).entities,
+          .name in ("greeting", "salutation")
+  )
+  
+  // most likely to occur in plain text
+  and (
+    body.html.raw is null
+    or 
+  
+    // HTML is not null but fake thread
+    (subject.is_reply or subject.is_forward)
+    and (
+      (length(headers.references) == 0 and headers.in_reply_to is null)
+      or not any(headers.hops, any(.fields, strings.ilike(.name, "In-Reply-To")))
+    )
+  )
+  and 3 of (
+    any([subject.subject, body.current_thread.text],
+        regex.icontains(., '(full|part).time')
+    ),
+    strings.ilike(body.current_thread.text, '*job*'),
+    regex.icontains(body.current_thread.text, '\bHR\b'),
+    strings.ilike(body.current_thread.text, '*manager*'),
+    strings.ilike(body.current_thread.text, '*commission*'),
+    strings.ilike(body.current_thread.text, '*hourly*'),
+    strings.ilike(body.current_thread.text, '*prior experience*'),
+    strings.ilike(body.current_thread.text, '*company rep*'),
+    strings.ilike(body.current_thread.text, "100% legal")
+  )
+  
+  // all attachments are images or there's no attachments
+  and (
+    (
+      length(attachments) > 0
+      and all(attachments, .file_type in $file_types_images)
+    )
+    or length(attachments) == 0
+  )
+  
+  // there's an email in the body
+  and regex.contains(body.current_thread.text,
+                     "[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}"
+  )
+  
+  // and it's likely a freemail
+  and any($free_email_providers, strings.icontains(body.current_thread.text, .))
+  
+  // and that email doesn't match the sender domain
+  and (
+    all(body.links, .href_url.domain.root_domain != sender.email.domain.domain)
+    or sender.email.domain.root_domain in $free_email_providers
+  )
+  and (
+    (
+      not profile.by_sender().solicited
+      and not profile.by_sender().any_messages_benign
+    )
+    or profile.by_sender().any_messages_malicious_or_spam
+  )
+  and not profile.by_sender().any_messages_benign
+
+attack_types:
+  - "BEC/Fraud"
+tactics_and_techniques:
+  - "Free email provider"
+  - "Out of band pivot"
+detection_methods:
+  - "Content analysis"
+  - "File analysis"
+  - "Natural Language Understanding"
+id: "a08ce09d-b492-5e4c-84e8-1b4dadb5531c"
+og_id: "ce21c151-90c2-5573-b19e-3dcbcfc0a195"
+testing_pr: 3470
+testing_sha: 29a34151c5996071b29990b56857e3a1cdb712c1
