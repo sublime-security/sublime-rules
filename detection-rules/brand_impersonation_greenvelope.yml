@@ -6,18 +6,46 @@ source: |
   type.inbound
   // Looking for greenvelope phrasing or indicators in HTML
   and (
-    strings.icontains(body.current_thread.text, "greenvelope.com")
+    strings.icontains(body.html.inner_text, "Powered by greenvelope")
+  
     // Look for alt text in HTML for standardized greenvelope formatting if string is not avail.
     or strings.icontains(body.html.raw, 'alt="Greenvelope"')
     or strings.icontains(body.html.raw,
                          'https://www.greenvelope.com/viewer/envelope.ashx'
     )
+    or strings.icontains(body.current_thread.text, '© 2025 Greenvelope, LLC')
+    or strings.icontains(body.current_thread.text,
+                         '8 The Green #8901, Dover, DE 19901'
+    )
   )
+  
+  // no links going to greenvlope cards/"admin" links
+  and length(filter(body.links,
+                    .href_url.domain.root_domain == "greenvelope.com"
+                    and (
+                      // card links
+                      strings.istarts_with(.href_url.path, '/card/')
+                      // user links are links for the person that created the card
+                      or strings.istarts_with(.href_url.path, '/user/')
+                    )
+             )
+  ) == 0
+  
   // Legitimate sender will be from greenvelope, negating known non-associated domains.
   and not (
-    sender.email.domain.root_domain in ("greenvelope.com")
-    or headers.return_path.domain.root_domain in ("greenvelope.com")
+    (
+      sender.email.domain.root_domain in (
+        "greenvelope.com",
+        'greenvelope-email.com'
+      )
+      and headers.auth_summary.spf.pass
+    )
+    or headers.return_path.domain.root_domain in (
+      "greenvelope.com",
+      'greenvelope-email.com'
+    )
   )
+  
   // Capping length to limit FP's
   and length(body.current_thread.text) < 1500
 attack_types:
