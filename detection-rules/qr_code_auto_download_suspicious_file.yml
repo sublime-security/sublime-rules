@@ -7,37 +7,45 @@ type: "rule"
 severity: "high"
 source: |
   type.inbound
-  and any(file.explode(beta.message_screenshot()),
-          any(ml.link_analysis(.scan.qr.url).files_downloaded,
-              any(file.explode(.),
-                  .file_extension in (
-                    "dll",
-                    "exe",
-                    "html",
-                    "lnk",
-                    "js",
-                    "vba",
-                    "vbs",
-                    "vbe",
-                    "bat",
-                    "py",
-                    "ics",
-                    "sh",
-                    "ps1"
-                  )
-                  or strings.ilike(.file_name, "*.exe")
-                  or (
-                    .file_extension not in ("dll", "exe")
-                    and (
-                      .flavors.mime in ("application/x-dosexec")
-                      or any(.flavors.yara, . in ('mz_file'))
-                    )
-                  )
-                  or any(.flavors.yara, . == "macho_file")
+  //
+  // This rule makes use of a beta feature and is subject to change without notice
+  // using the beta feature in custom rules is not suggested until it has been formally released
+  //
+  and beta.scan_qr(file.message_screenshot()).found
+  and any(beta.scan_qr(file.message_screenshot()).items,
+          any(ml.link_analysis(.url).files_downloaded,
+              strings.ilike(.file_name, "*.exe")
+              or .file_extension in (
+                "dll",
+                "exe",
+                "html",
+                "lnk",
+                "js",
+                "vba",
+                "vbs",
+                "vbe",
+                "bat",
+                "py",
+                "ics",
+                "sh",
+                "ps1"
+              )
+              // or call file.explode to get yara/mime types
+              or any(file.explode(.),
+                     // file ext is not dll but is exe mime/yara
+                     (
+                       .file_extension not in ("dll", "exe")
+                       and (
+                         .flavors.mime in ("application/x-dosexec")
+                         or any(.flavors.yara, . in ('mz_file'))
+                       )
+                     )
+                     // or a macho file
+                     or any(.flavors.yara, . == "macho_file")
               )
           )
   )
-
+  
   // negate highly trusted sender domains unless they fail DMARC authentication
   and (
     (
@@ -46,7 +54,6 @@ source: |
     )
     or sender.email.domain.root_domain not in $high_trust_sender_root_domains
   )
-
   and (
     not profile.by_sender().solicited
     or (
