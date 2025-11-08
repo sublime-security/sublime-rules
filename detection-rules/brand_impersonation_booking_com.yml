@@ -70,6 +70,25 @@ source: |
       and not profile.by_sender().any_messages_benign
     )
   )
+  
+  // negate microsoft quarantine messages
+  and not (
+    sender.email.email == "quarantine@messaging.microsoft.com"
+    and (
+      headers.auth_summary.dmarc.pass
+      // no sender auth but MS AuthAs is Internal
+      or (
+        not coalesce(headers.auth_summary.dmarc.pass, false)
+        and any(headers.hops,
+                .index == 0
+                and any(.fields,
+                        .name == "X-MS-Exchange-CrossTenant-AuthAs"
+                        and .value == "Internal"
+                )
+        )
+      )
+    )
+  )
 
 attack_types:
   - "Credential Phishing"
