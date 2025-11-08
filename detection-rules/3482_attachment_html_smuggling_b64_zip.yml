@@ -5,19 +5,26 @@ severity: "medium"
 source: |
   type.inbound
   and any(attachments,
-      (
-        .file_extension in~ ("html", "htm", "shtml", "dhtml")
-        or .file_type == "html"
-      )
-      and (
-        // javascript functions to decode the base64
-        strings.icontains(file.parse_text(.).text, 'atob')
-        or strings.icontains(file.parse_text(.).text, 'fromCharCode')
-        or strings.icontains(file.parse_text(.).text, 'base64')
-      )
-      // Magic bytes for a ZIP/Office File that have been base64 encoded
-      and regex.contains(file.parse_text(.).text, '[\x2C\x3B\x3A\x22\x27\x28\x7B\x5B\s]UEsDB')
+          (
+            .file_extension in~ ("html", "htm", "shtml", "dhtml")
+            or .file_type == "html"
+          )
+          and (
+            // javascript functions to decode the base64
+            strings.icontains(file.parse_text(.).text, 'atob')
+            or strings.icontains(file.parse_text(.).text, 'fromCharCode')
+            or strings.icontains(file.parse_text(.).text, 'base64')
+          )
+          // Magic bytes for a ZIP/Office File that have been base64 encoded
+          and regex.contains(file.parse_text(.).text,
+                             '[\x2C\x3B\x3A\x22\x27\x28\x7B\x5B\s]UEsDB'
+          )
+          // negation of Micro Focus Voltage Secure Messaging
+          and not strings.contains(file.parse_text(.).text,
+                                   "<input type=\"hidden\" name=\"ZFRdata\" value=\"\n-----BEGIN VOLTAGE SECURE BLOCK V3-----\nUEsDBBQAAAAAAAAAAAD"
+          )
   )
+
 tags:
  - "Attack surface reduction"
 attack_types:
@@ -36,4 +43,4 @@ detection_methods:
 id: "9344d8dd-490b-53ae-bc36-fa761576e874"
 og_id: "47e388de-08f8-5261-8571-99dbf73a352d"
 testing_pr: 3482
-testing_sha: 1f75f23aaf36a8548f24929298f441d663eb3312
+testing_sha: ac36737d027776afe97964a262927feb1e7ce190
