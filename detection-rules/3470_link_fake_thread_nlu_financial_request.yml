@@ -1,0 +1,98 @@
+name: "Fake message thread with a suspicious link and engaging language from an unknown sender"
+description: "Detects fake message threads with suspicious links and financial request language"
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and length(body.links) < 10
+  
+  // fake thread check
+  and (subject.is_reply or subject.is_forward)
+  
+  // Check for the Presence of References or In-Reply-To properties
+  and (
+    (length(headers.references) == 0 and headers.in_reply_to is null)
+    or not any(headers.hops, any(.fields, strings.ilike(.name, "In-Reply-To")))
+  )
+  
+  // sender's domain is not in body, and body has > 0 links
+  and length(body.links) > 0
+  and sender.email.domain.root_domain not in $free_email_providers
+  and not any(body.links,
+              .href_url.domain.root_domain == sender.email.domain.root_domain
+  )
+  
+  // unusual sender (email address rarely sends to your organization)
+  and sender.email.email not in $sender_emails
+  
+  // unusual sender domain (domain rarely sends to your organization)
+  and sender.email.domain.domain not in $sender_domains
+  and 4 of (
+    // language attempting to engage
+    (
+      any(ml.nlu_classifier(body.current_thread.text).entities,
+          .name == "request"
+      )
+      and any(ml.nlu_classifier(body.current_thread.text).entities,
+              .name == "financial"
+      )
+    ),
+  
+    // invoicing language
+    any(ml.nlu_classifier(body.current_thread.text).tags, .name == "invoice"),
+  
+    // urgency request
+    any(ml.nlu_classifier(body.current_thread.text).entities, .name == "urgency"),
+  
+    // cred_theft detection
+    any(ml.nlu_classifier(body.current_thread.text).intents,
+        .name == "cred_theft" and .confidence in~ ("medium", "high")
+    ),
+  
+    // commonly abused sender TLD
+    strings.ilike(sender.email.domain.tld, "*.jp"),
+  
+    // headers traverse abused TLD
+    any(headers.domains, strings.ilike(.tld, "*.jp")),
+  
+    // known suspicious pattern in the URL path
+    any(body.links, regex.match(.href_url.path, '\/[a-z]{3}\d[a-z]')),
+  
+    // link display text is in all caps
+    any(body.links, regex.match(.display_text, '[A-Z ]+')),
+  
+    // display name contains an email
+    regex.contains(sender.display_name, '[a-z0-9]+@[a-z]+'),
+  
+    // Sender domain is empty
+    sender.email.domain.domain == "",
+  
+    // sender domain matches no body domains
+    all(body.links,
+        .href_url.domain.root_domain != sender.email.domain.root_domain
+    ),
+  )
+
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and not headers.auth_summary.dmarc.pass
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+  
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Header analysis"
+  - "Natural Language Understanding"
+  - "Sender analysis"
+  - "URL analysis"
+id: "5254761e-b501-5e6e-9034-60575b165846"
+og_id: "8fd0e211-285d-5cbd-9c11-868c0501b526"
+testing_pr: 3470
+testing_sha: 29a34151c5996071b29990b56857e3a1cdb712c1
