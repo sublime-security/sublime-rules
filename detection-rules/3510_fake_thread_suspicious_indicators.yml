@@ -1,0 +1,183 @@
+name: "Fake thread with suspicious indicators"
+description: "Fake thread contains suspicious indicators, which can lead to BEC, credential phishing, and other undesirable outcomes."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  // fake thread check
+  and (
+    (
+      (
+        strings.istarts_with(subject.subject, "RE:")
+        or strings.istarts_with(subject.subject, "FW:")
+        or strings.istarts_with(subject.subject, "FWD:")
+        or regex.imatch(subject.subject,
+                        '(\[[^\]]+\]\s?){0,3}(re|fwd?|automat.*)\s?:.*'
+        )
+      )
+    )
+    // fake thread, but no indication in the subject line
+    // current_thread pulls the recent thread, but the full body contains the fake "original" email
+    or (
+      not (
+        (
+          strings.istarts_with(subject.subject, "RE:")
+          or strings.istarts_with(subject.subject, "R:")
+          or strings.istarts_with(subject.subject, "ODG:")
+          or strings.istarts_with(subject.subject, "答复:")
+          or strings.istarts_with(subject.subject, "AW:")
+          or strings.istarts_with(subject.subject, "TR:")
+          or strings.istarts_with(subject.subject, "FWD:")
+        )
+      )
+      and any([body.current_thread.text, body.html.display_text, body.plain.raw],
+              3 of (
+                strings.icontains(., "from:"),
+                strings.icontains(., "to:"),
+                strings.icontains(., "sent:"),
+                strings.icontains(., "date:"),
+                strings.icontains(., "cc:"),
+                strings.icontains(., "subject:")
+              )
+      )
+      and (
+        length(body.current_thread.text) + 100 < length(body.html.display_text)
+      )
+    )
+  )
+
+  // negating bouncebacks
+  and not any(attachments,
+              .content_type in ("message/delivery-status", "message/rfc822")
+  )
+  // negating Google Calendar invites
+  and (
+    (
+      headers.return_path.domain.domain is not null
+      and headers.return_path.domain.domain != 'calendar-server.bounces.google.com'
+    )
+    or headers.return_path.domain.domain is null
+  )
+  
+  and (
+    length(headers.references) == 0 
+    or headers.in_reply_to is null
+  )
+  
+  // and not solicited
+  and not profile.by_sender().solicited
+  and 4 of (
+    // language attempting to engage
+    (
+      any(ml.nlu_classifier(body.current_thread.text).entities,
+          .name == "request"
+      )
+      and any(ml.nlu_classifier(body.current_thread.text).entities,
+              .name == "financial"
+      )
+    ),
+  
+    // invoicing language
+    (
+      any(ml.nlu_classifier(body.current_thread.text).tags, .name == "invoice")
+      or any(ml.nlu_classifier(body.current_thread.text).entities,
+             .text == "invoice"
+      )
+    ),
+  
+    // urgency request
+    any(ml.nlu_classifier(body.current_thread.text).entities, .name == "urgency"),
+  
+    // cred_theft detection
+    any(ml.nlu_classifier(body.current_thread.text).intents,
+        .name == "cred_theft" and .confidence in~ ("medium", "high")
+    ),
+  
+    // commonly abused sender TLD
+    strings.ilike(sender.email.domain.tld, "*.jp"),
+  
+    // headers traverse abused TLD
+    any(headers.domains, strings.ilike(.tld, "*.jp")),
+  
+    // known suspicious pattern in the URL path
+    any(body.links, regex.match(.href_url.path, '\/[a-z]{3}\d[a-z]')),
+  
+    // link display text is in all caps
+    any(body.links, regex.match(.display_text, '[A-Z ]+')),
+
+    // link display text contains invisible characters (U+200F)
+    any(body.links, regex.contains(.display_text, '‏')),
+  
+    // display name contains an email
+    regex.contains(sender.display_name, '[a-z0-9]+@[a-z]+'),
+  
+    // Sender domain is empty
+    sender.email.domain.domain == "",
+  
+    // sender domain matches no body domains
+    all(body.links,
+        .href_url.domain.root_domain != sender.email.domain.root_domain
+    ),
+  
+    // body contains name of VIP
+    (
+      any($org_vips, strings.icontains(body.html.inner_text, .display_name))
+      or any($org_vips, strings.icontains(body.plain.raw, .display_name))
+    ),
+  
+    // new body domain
+    any(body.links, network.whois(.href_url.domain).days_old < 30),
+  
+    // new sender domain
+    network.whois(sender.email.domain).days_old < 30,
+  
+    // new sender
+    profile.by_sender().days_known < 7,
+  
+    // excessive whitespace
+    (
+      regex.icontains(body.html.raw, '((<br\s*/?>\s*){20,}|\n{20,})')
+      or regex.icontains(body.html.raw, '(<p[^>]*>\s*<br\s*/?>\s*</p>\s*){30,}')
+      or regex.icontains(body.html.raw,
+                         '(<p class=".*?"><span style=".*?"><o:p>&nbsp;</o:p></span></p>\s*){30,}'
+      )
+      or regex.icontains(body.html.raw, '(<p>&nbsp;</p>\s*){7,}')
+      or regex.icontains(body.html.raw, '(<p>&nbsp;</p><br>\s*){7,}')
+      or regex.icontains(body.html.raw, '(<p[^>]*>\s*&nbsp;<br>\s*</p>\s*){5,}')
+      or regex.icontains(body.html.raw, '(<p[^>]*>&nbsp;</p>\s*){7,}')
+    ),
+  
+    // body contains recipient SLD
+    any(recipients.to,
+        strings.icontains(body.current_thread.text, .email.domain.sld)
+    )
+  )
+  
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and not headers.auth_summary.dmarc.pass
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+  and not profile.by_sender().any_messages_benign
+
+tags:
+  - "Attack surface reduction"
+attack_types:
+  - "BEC/Fraud"
+  - "Credential Phishing"
+  - "Spam"
+tactics_and_techniques:
+  - "Evasion"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Header analysis"
+  - "Natural Language Understanding"
+  - "Sender analysis"
+id: "9a0ab178-fda0-532b-964e-c5c491628159"
+og_id: "c2e18a57-1f52-544f-bb6d-a578e286cf89"
+testing_pr: 3510
+testing_sha: 5df069768eebb18d1e80471baa3f9434e5f3be0e
