@@ -1,0 +1,90 @@
+name: "Link: URL scheme obfuscation via split HTML anchors"
+description: |
+  Detects URLs intentionally split across multiple adjacent HTML anchor tags to evade URL analysis and detection systems.
+  This sophisticated evasion technique breaks the URL scheme (http/https) across separate anchor elements,
+  rendering as: <a>h</a><a>ttp://malicious.com</a>
+
+  The technique bypasses many security tools that expect complete, well-formed URLs while displaying a
+  seemingly normal link to end users. This pattern is strongly associated with credential phishing and
+  compromised email accounts.
+
+  References:
+  - Observed in wild credential phishing campaigns (2024-2025)
+  - Evades traditional URL extraction and analysis tools
+  - Often paired with young domains and WHOIS privacy protection
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and length(body.links) >= 2
+
+  // Detection Method 1: Characteristic pattern - very short link + malformed scheme
+  and (
+    (
+      any(body.links,
+          length(.display_text) <= 3
+          and .display_text in ("h", "ht", "htt", "t", "tp", "ttp")
+      )
+      and any(body.links,
+              .display_url.scheme in ("ttp", "ttps", "tp", "tps")
+              or strings.istarts_with(.display_url.url, "ttp://")
+              or strings.istarts_with(.display_url.url, "ttps://")
+              or strings.istarts_with(.href_url.url, "ttp://")
+              // Also catch other malformations
+              or regex.imatch(.display_url.url, '^[ht]{1,3}[tp]{0,2}:')
+      )
+    )
+
+    // Detection Method 2: Adjacent anchor tags in HTML structure
+    or (
+      strings.icontains(body.html.raw, "</a><a")
+      and any(body.links,
+              length(.display_text) <= 3 and strings.icontains(.display_text, "h")
+      )
+    )
+  )
+
+  // Require at least one suspicious indicator
+  and (
+    // Young or unknown domain
+    any(body.links,
+        network.whois(.href_url.domain).days_old < 90
+        or not network.whois(.href_url.domain).found
+    )
+    // Or credential theft intent
+    or any(ml.nlu_classifier(body.current_thread.text).intents,
+          .name == "cred_theft" and .confidence in ("medium", "high")
+    )
+    // Or suspicious sender
+    or (
+      profile.by_sender_email().prevalence in ("new", "outlier")
+      and not profile.by_sender_email().solicited
+    )
+  )
+
+  // Negate legitimate cases
+  and not (
+    sender.email.domain.root_domain in $org_domains
+    and headers.auth_summary.dmarc.pass
+  )
+
+tags:
+  - "Attack surface reduction"
+attack_types:
+  - "Credential Phishing"
+  - "BEC/Fraud"
+tactics_and_techniques:
+  - "Evasion"
+  - "HTML injection"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "HTML analysis"
+  - "Natural Language Understanding"
+  - "Sender analysis"
+  - "URL analysis"
+  - "Whois"
+id: "75de341b-f091-56d0-9bc9-f7d3caec4f1f"
+og_id: "10375948-f8dd-542c-bd58-e258ef82076d"
+testing_pr: 3509
+testing_sha: c44e00cac3bbeb513bce3f857ca2e56bb2555037
