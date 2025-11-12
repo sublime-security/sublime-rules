@@ -4,7 +4,7 @@ type: "rule"
 severity: "high"
 source: |
   type.inbound
-  // all attachments are images or 0 attachments
+  // All attachments are images or 0 attachments
   and (
     (
       length(attachments) > 0
@@ -19,8 +19,10 @@ source: |
     )
     or (
       strings.icontains(body.current_thread.text, "adobe")
+      and not strings.icontains(body.current_thread.text, "adobe marketplace")
+      and not strings.icontains(body.current_thread.text, "adobe analytics")
       and (
-        // leverage topic analysis to pick up on themes
+        // Leverage topic analysis to pick up on themes
         (
           length(ml.nlu_classifier(body.current_thread.text).topics) == 1
           and all(ml.nlu_classifier(body.current_thread.text).topics,
@@ -28,11 +30,11 @@ source: |
                   and .confidence != "low"
           )
         )
-        // keywords if topic anlayis doesn't match
+        // Key phrases if topic anlayis doesn't match
         or strings.icontains(body.current_thread.text, 'review the document')
-        or strings.icontains(body.current_thread.text, 'review and sign')
         or strings.icontains(body.current_thread.text, 'access file')
         or strings.icontains(body.current_thread.text, 'pending document')
+        or any(body.links, strings.ilike(.display_text, 'review and sign'))
       )
       and length(body.current_thread.text) < 2000
     )
@@ -77,6 +79,7 @@ source: |
            )
     )
   )
+  // Negate replies & forwards
   and (
     (
       (
@@ -103,8 +106,14 @@ source: |
     )
     or length(headers.references) == 0
   )
+  // Negate certain common topics
   and not any(ml.nlu_classifier(body.current_thread.text).topics,
-              .name in ("Advertising and Promotions", "Events and Webinars")
+              .name in (
+                "Advertising and Promotions",
+                "Events and Webinars",
+                "Professional and Career Development",
+                "Newsletters and Digests"
+              )
               and .confidence != "low"
   )
   and (
@@ -117,18 +126,26 @@ source: |
         or profile.by_sender_email().days_since.last_contact > 14
       )
       and not profile.by_sender().any_messages_benign
+      // Negate affiliates, sub-products & legitimate domains
       and not sender.email.domain.root_domain in (
         "adobe-events.com",
         "frame.io",
+        "appleid.com",
+        "nudgesecurity.io",
+        "adobesignsandbox.com",
+        "magento.com",
         "workfront.com"
       )
+      // Continued
+      and not any(headers.domains, .root_domain == "zohomail.com")
+      and not strings.iends_with(headers.message_id, 'omniture.com>')
     )
     or not headers.auth_summary.spf.pass
     or headers.auth_summary.spf.pass is null
     or not headers.auth_summary.dmarc.pass
     or headers.auth_summary.dmarc.pass is null
   )
-  // negate highly trusted sender domains unless they fail DMARC authentication
+  // Negate highly trusted sender domains unless they fail DMARC authentication
   and (
     (
       sender.email.domain.root_domain in $high_trust_sender_root_domains
