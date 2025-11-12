@@ -1,0 +1,64 @@
+name: "Service abuse: Random Google Firebase sender address with suspicious content"
+description: "Detects messages from Firebase hosting domains with randomly generated subdomains that contain suspicious indicators such as emojis, spam keywords, unusual link patterns, or freemail registrant information."
+type: "rule"
+severity: "low"
+source: |
+  type.inbound
+  and sender.email.domain.root_domain == "firebaseapp.com"
+  // random Firebase sender domain
+  and regex.imatch(sender.email.domain.domain, '^[a-z0-9]*-[a-z0-9]{5}.firebaseapp\.com')
+  and length(body.links) != 0
+  and 1 of (
+    // has an emoji in the subject or body
+    regex.contains(body.plain.raw,
+                   '[\x{1F300}-\x{1F5FF}\x{1F600}-\x{1F64F}\x{1F680}-\x{1F6FF}\x{1F700}-\x{1F77F}\x{1F780}-\x{1F7FF}\x{1F900}-\x{1F9FF}\x{2600}-\x{26FF}\x{2700}-\x{27BF}\x{2300}-\x{23FF}]'
+    ),
+    regex.contains(subject.subject,
+                   '[\x{1F300}-\x{1F5FF}\x{1F600}-\x{1F64F}\x{1F680}-\x{1F6FF}\x{1F700}-\x{1F77F}\x{1F780}-\x{1F7FF}\x{1F900}-\x{1F9FF}\x{2600}-\x{26FF}\x{2700}-\x{27BF}\x{2300}-\x{23FF}]'
+    ),
+    // spammy keywords
+    strings.ilike(body.current_thread.text, "*rewards*", "*survey*", "*claim*"),
+    // entire body is an image with a link
+    length(body.current_thread.text) == 0
+    and length(body.links) == 1,
+    // HTML body starts with a link
+    strings.istarts_with(body.html.raw, '<a href='),
+    // known spammy HTML elements
+    any(html.xpath(body.html, '//*/@class').nodes,
+        strings.icontains(.raw, 'eb-drag-and-drop-builder')
+    ),
+    // multiple links that are identical
+    length(body.links) > 1
+    and length(distinct(body.links, .href_url.url)) == 1,
+    // body link whois email is a freemail
+    any(body.links,
+        strings.parse_email(network.whois(.href_url.domain).registrant_email).domain.root_domain in $free_email_providers
+        or strings.parse_email(network.whois(.href_url.domain).administrative_email
+        ).domain.root_domain in $free_email_providers
+        or strings.parse_email(network.whois(.href_url.domain).technical_email).domain.root_domain in $free_email_providers
+    ),
+    // freemail reply-to
+    any(headers.reply_to, .email.domain.root_domain in $free_email_providers),
+    // link with display text, but no tracking info (unusual for legitimate marketing)
+    any(body.links, .display_text is not null and .href_url.path is null)
+  )
+tags:
+ - "Attack surface reduction"
+attack_types:
+  - "Spam"
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Free subdomain host"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Header analysis"
+  - "HTML analysis"
+  - "Natural Language Understanding"
+  - "Sender analysis"
+  - "URL analysis"
+  - "Whois"
+id: "31d013e8-784d-5f09-ac91-4b2e6ed4fc1b"
+og_id: "9f8899a9-264c-5d8d-b340-7114695bafb2"
+testing_pr: 3516
+testing_sha: c32cbb7c8f5afb6ba91eaeb84f93210b4eb8938d
