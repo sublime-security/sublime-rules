@@ -1,0 +1,46 @@
+name: "Brand impersonation: Proofpoint secure messaging without legitimate indicators"
+description: "Detects messages impersonating Proofpoint secure messaging services that contain Proofpoint branding text but lack legitimate Proofpoint secure sharing URIs or authentic attachment indicators, suggesting fraudulent use of the brand."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and (
+    // matching proofpoint secure messaging
+    strings.contains(body.current_thread.text,
+                     "Secured by Proofpoint Encryption,"
+    )
+    or regex.icontains(body.current_thread.text,
+                       ('Copyright © 2009-202\d Proofpoint, Inc.')
+    )
+  )
+  // pfpt secure share uri
+  and not (any(body.links, .href_url.path == "/formpostdir/securereader"))
+  and not any(attachments,
+              // pfpt attachment file
+              .file_name == "SecureMessageAtt.html"
+              // mimecast quarantine details
+              or (
+                .content_type == "message/rfc822"
+                and length(file.parse_eml(.).body.links) == 1
+                and any(file.parse_eml(.).body.links,
+                        .display_text == "download it"
+                        and .href_url.domain.root_domain == "mimecast.com"
+                )
+                and strings.ends_with(file.parse_eml(.).headers.message_id, "@localhost>")
+              )
+  )
+
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "File analysis"
+  - "Header analysis"
+  - "URL analysis"
+id: "5dd04c43-8e22-5c1e-9d18-5aeabc7f40b6"
+og_id: "84b72d02-f80c-56d0-9b42-c5f92750ec11"
+testing_pr: 3523
+testing_sha: d6dabe19ea1b7de3d916968bccd2a3002932a91f
