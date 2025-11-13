@@ -40,6 +40,8 @@ source: |
                          "*received this email because you*",
                          "*shared a*with you*"
         )
+        // suspicious subjects
+        or regex.icontains(subject.subject, 'shared \".*\" with you')
       )
       and (
         strings.ilike(subject.subject,
@@ -146,7 +148,14 @@ source: |
       strings.icontains(body.current_thread.text, 'Mountain View, CA 94043'),
     )
   )
-  and not all(body.links, .href_url.domain.root_domain in ("google.com"))
+  and not (
+    all(body.links, .href_url.domain.root_domain in ("google.com"))
+    // flag links leading to Google Sites
+    and not (
+      length(body.links) == 1
+      and any(body.links, .href_url.domain.domain == "sites.google.com")
+    )
+  )
   and sender.email.domain.root_domain not in $org_domains
   and sender.email.domain.root_domain not in ("google.com")
   and not (
