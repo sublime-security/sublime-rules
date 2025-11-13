@@ -1,0 +1,73 @@
+name: "Brand impersonation: Adobe Sign with suspicious indicators"
+description: "Detects messages impersonating Adobe Sign that contain Adobe branding elements but are not sent from legitimate Adobe domains and lack proper Adobe Sign authentication headers."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and (
+    length(body.previous_threads) == 0
+    // not a thread spawned from a legitimate Adobe Sign message
+    or not (
+      length(body.previous_threads) != 0
+      and length(body.previous_threads[length(body.previous_threads) - 1].links) != 0
+      and (
+        all(body.previous_threads[length(body.previous_threads) - 1].links,
+            .href_url.domain.root_domain in (
+              "adobe.com",
+              "adobesign.com",
+              "echosign.com",
+              "adobesignsandbox.com",
+              "mimecastprotect.com"
+            )
+            or .href_url.domain.root_domain in $org_domains
+        )
+        // legit review button
+        or any(body.previous_threads,
+               any(.links,
+                   .display_text == "Review and sign"
+                   and .href_url.domain.root_domain == "adobe.com"
+               )
+        )
+      )
+    )
+  )
+  and (
+    regex.icontains(body.html.raw,
+                    'alt="Adobe Acrobat Sign"',
+                    "adobesign@adobesign.com",
+                    "adobe-sign-logo.{0,20}.png",
+                    'alt="Powered by Adobe Acrobat Sign"'
+    )
+    or any(html.xpath(body.html, "//img/@src").nodes,
+           strings.parse_url(.raw).domain.root_domain == "adobesign.com"
+           and (
+             strings.istarts_with(strings.parse_url(.raw).path, "/cobrand_logo/")
+             or strings.icontains(strings.parse_url(.raw).path, "checkmarkCircle")
+           )
+    )
+  )
+  // negate Adobe Sign messages from custom domains
+  and not any(headers.hops,
+              any(.fields, .name in ("Adobesigneventid", "Agreementid"))
+  )
+  and sender.email.domain.root_domain not in (
+    "adobe.com",
+    "adobesign.com",
+    "adobesignsandbox.com",
+    "echosign.com"
+  )
+
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Header analysis"
+  - "HTML analysis"
+  - "Sender analysis"
+id: "43daaace-9025-5428-b432-ad4cc603705e"
+og_id: "704d143a-7ef2-5601-9e38-e659f0f65c8c"
+testing_pr: 3522
+testing_sha: e1579cc0b7b4af1dafb340dedefb7126aa0c1b0a
