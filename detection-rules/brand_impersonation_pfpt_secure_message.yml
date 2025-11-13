@@ -14,7 +14,19 @@ source: |
     )
   )
   // pfpt secure share uri
-  and not (any(body.links, .href_url.path == "/formpostdir/securereader"))
+  and not (
+    any(body.links,
+        .href_url.path == "/formpostdir/securereader"
+        // negate where the link domain is mimecast, skip cases where  the domain uri parameter
+        //  matches the sender email root domain, otherwise check LA for the pfpt URI
+        or (
+          .href_url.domain.root_domain == "mimecastprotect.com"
+          //and strings.parse_domain(.href_url.query_params_decoded["domain"][0]
+          //).root_domain == sender.email.domain.root_domain
+          and ml.link_analysis(., mode="aggressive").effective_url.path == "/formpostdir/securereader"
+        )
+    )
+  )
   and not any(attachments,
               // pfpt attachment file
               .file_name == "SecureMessageAtt.html"
@@ -26,10 +38,11 @@ source: |
                         .display_text == "download it"
                         and .href_url.domain.root_domain == "mimecast.com"
                 )
-                and strings.ends_with(file.parse_eml(.).headers.message_id, "@localhost>")
+                and strings.ends_with(file.parse_eml(.).headers.message_id,
+                                      "@localhost>"
+                )
               )
   )
-
 attack_types:
   - "Credential Phishing"
 tactics_and_techniques:
