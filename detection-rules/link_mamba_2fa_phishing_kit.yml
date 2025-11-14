@@ -5,6 +5,20 @@ severity: "high"
 source: |
   type.inbound
   and length(body.links) < 10
+  and (
+    any(ml.nlu_classifier(body.current_thread.text).intents,
+        .name == 'cred_theft' and .confidence == 'high'
+    )
+    or (
+      length(recipients.to) == 1
+      and any(recipients.to,
+              strings.icontains(body.current_thread.text, .email.email)
+      )
+      and regex.icontains(body.current_thread.text,
+                          '(invoice|document|docusign|past due)'
+      )
+    )
+  )
   and any(body.links,
           any(ml.link_analysis(., mode="aggressive").redirect_history,
               (
