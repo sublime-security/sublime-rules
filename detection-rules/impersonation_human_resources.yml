@@ -13,7 +13,7 @@ source: |
       length(filter(ml.nlu_classifier(body.current_thread.text).entities,
                     .name == "sender"
              )
-      ) == 1
+      ) < 3
       and any(ml.nlu_classifier(body.current_thread.text).entities,
               .name == "sender"
               and regex.icontains(.text,
@@ -134,15 +134,34 @@ source: |
                    )
            )
     )
+    or regex.icontains(subject.subject,
+                       '\+?([ilo0-9]{1}.)?\(?[ilo0-9]{3}?\)?.[ilo0-9]{3}.?[ilo0-9]{4}',
+                       '\+?([ilo0-9]{1,2})?\s?\(?\d{3}\)?[\s\.\-⋅]{0,5}[ilo0-9]{3}[\s\.\-⋅]{0,5}[ilo0-9]{4}'
+    )
+    or (
+      length(recipients.to) > 10
+      and length(filter(recipients.to,
+                        .email.domain.domain not in $org_domains
+                        and .email.email not in $recipient_emails
+                        and (
+                          .email.domain.valid
+                          or strings.icontains(.display_name, "undisclosed")
+                        )
+                 )
+      ) >= 10
+    )
   )
   // topic negation
-  and not any(beta.ml_topic(body.current_thread.text).topics,
-              .name in (
-                "Newsletters and Digests",
-                "Advertising and Promotions",
-                "Educational and Research",
-              )
-              and .confidence == "high"
+  and not (
+    length(ml.nlu_classifier(body.current_thread.text).topics) == 1
+    and any(ml.nlu_classifier(body.current_thread.text).topics,
+                .name in (
+                  "Newsletters and Digests",
+                  "Advertising and Promotions",
+                  "Educational and Research",
+                )
+                and .confidence == "high"
+    )
   )
   and (
     profile.by_sender_email().prevalence in ("new", "outlier")
