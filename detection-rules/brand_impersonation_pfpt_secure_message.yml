@@ -16,17 +16,16 @@ source: |
   // pfpt secure share uri
   and not (
     any(body.links,
+        // negate the actual dest of the legit "click here" link
         .href_url.path == "/formpostdir/securereader"
-        // negate where the link domain is mimecast, skip cases where  the domain uri parameter
-        //  matches the sender email root domain, otherwise check LA for the pfpt URI
+        // negate where the link domain is mimecast and check LA for the pfpt URI
         or (
           .href_url.domain.root_domain == "mimecastprotect.com"
-          //and strings.parse_domain(.href_url.query_params_decoded["domain"][0]
-          //).root_domain == sender.email.domain.root_domain
           and ml.link_analysis(., mode="aggressive").effective_url.path == "/formpostdir/securereader"
         )
     )
   )
+  // negate actual SecureMessageAtt.html links that ave been quarantined by mimecast
   and not any(attachments,
               // pfpt attachment file
               .file_name == "SecureMessageAtt.html"
