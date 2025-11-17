@@ -4,28 +4,25 @@ type: "rule"
 severity: "medium"
 source: |
   type.inbound
+  // Headers are in the body.plain.raw but not the body.html.raw
   and (
-    // Gmail-specific headers in body
-    strings.icontains(body.plain.raw, "Delivered-To:")
-    or strings.icontains(body.plain.raw, "X-Google-Smtp-Source:")
-    or strings.icontains(body.plain.raw, "ARC-Seal: i=")
-    // Generic SMTP headers that should never appear in body
-    or regex.icontains(body.plain.raw, "Received: by .{10,80} with SMTP id")
-    or regex.icontains(body.plain.raw, "X-Received: by .{10,80} with SMTP id")
+    any([
+          // Gmail-specific headers in body
+          "Delivered-To:",
+          "X-Google-Smtp-Source:",
+          "ARC-Seal: i=",
+          // Generic SMTP headers that should never appear in body
+          "Received: by .{10,80} with SMTP id",
+          "X-Received: by .{10,80} with SMTP id"
+        ],
+        strings.icontains(body.plain.raw, .)
+        and not strings.icontains(body.html.raw, .)
+    )
   )
-  // Increase confidence: duplicate headers (same header appears multiple times)
-  // This is a strong indicator of copy-paste or forwarding manipulation
-  and (
-    length(regex.iextract(body.plain.raw, "(Delivered-To: [^\r\n]+)")) > 1
-    or length(regex.iextract(body.plain.raw, "(X-Google-Smtp-Source: [^\r\n]+)")) > 1
-    or length(regex.iextract(body.plain.raw, "(Received: by [^\r\n]+)")) > 1
-  )
+
   // Negate legitimate forwards where users intentionally include headers
-  and not (
-    strings.istarts_with(subject.subject, "Fwd:")
-    or strings.istarts_with(subject.subject, "Fw:")
-    or strings.icontains(subject.subject, "Forward")
-  )
+  and not subject.is_forward
+
   // Sender is not from org or high trust domains
   and sender.email.domain.root_domain not in $org_domains
   and (
@@ -34,17 +31,6 @@ source: |
       and not headers.auth_summary.dmarc.pass
     )
     or sender.email.domain.root_domain not in $high_trust_sender_root_domains
-  )
-  // Additional suspicious indicator: subject claims delivery/bounce but has weird content
-  and (
-    regex.icontains(subject.subject,
-      "delivery.*notification|delivery.*status|delayed|bounce|undeliverable|failure"
-    )
-    or (
-      // or body is very long with headers embedded (typical of manipulation)
-      length(body.plain.raw) > 1000
-      and regex.icount(body.plain.raw, "Received:") >= 2
-    )
   )
 
 attack_types:
