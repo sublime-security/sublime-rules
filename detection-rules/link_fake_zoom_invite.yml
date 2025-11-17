@@ -25,36 +25,32 @@ source: |
   )
   
   // suspicious link
-  and not body.links[0].href_url.domain.root_domain in (
-    "zoom.us",
-    "zoom.com",
-    "emailprotection.link"
+  and not any(body.links,
+              .href_url.domain.root_domain in (
+                "zoom.us",
+                "zoom.com",
+                "emailprotection.link"
+              )
+              and any(.href_url.query_params_decoded['pwd'], . is not null)
   )
   and (
     any(body.links,
-        .href_url.domain.root_domain not in (
-          "zoom.us",
-          "zoom.com",
-          "emailprotection.link"
-        )
-        and (
-          .href_url.domain.tld in $suspicious_tlds
-          // country code second-level domain
-          or strings.istarts_with(.href_url.domain.tld, "com.")
-          or (
-            (
-              length(ml.link_analysis(.).files_downloaded) > 0
-              // Zoom logo on page
-              or ml.link_analysis(.).credphish.brand.name == "Zoom"
-              // blocked by a Cloudflare CAPTCHA
-              or strings.icontains(ml.link_analysis(.).final_dom.raw,
-                                   'https://challenges.cloudflare.com/turnstile/',
-              )
+        .href_url.domain.tld in $suspicious_tlds
+        // country code second-level domain
+        or strings.istarts_with(.href_url.domain.tld, "com.")
+        or (
+          (
+            length(ml.link_analysis(.).files_downloaded) > 0
+            // Zoom logo on page
+            or ml.link_analysis(.).credphish.brand.name == "Zoom"
+            // blocked by a Cloudflare CAPTCHA
+            or strings.icontains(ml.link_analysis(.).final_dom.raw,
+                                 'https://challenges.cloudflare.com/turnstile/',
             )
-            and ml.link_analysis(.).effective_url.domain.root_domain not in (
-              "zoom.us",
-              "zoom.com"
-            )
+          )
+          and ml.link_analysis(.).effective_url.domain.root_domain not in (
+            "zoom.us",
+            "zoom.com"
           )
         )
     )
@@ -97,7 +93,6 @@ source: |
     )
     and headers.auth_summary.dmarc.pass
   )
-  
 
 attack_types:
   - "Credential Phishing"
