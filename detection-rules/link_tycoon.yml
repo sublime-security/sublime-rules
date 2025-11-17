@@ -21,23 +21,61 @@ source: |
                   .path in ("/cdn-cgi/rum")
           )
   
-          // Tycoon2FA "CAPTCHA"
-          and length(distinct(map(html.xpath(ml.link_analysis(.).final_dom,
+          // begin CAPTCHA options
+          and (
+            // Tycoon2FA grid "CAPTCHA"
+            (
+              length(distinct(map(html.xpath(ml.link_analysis(.).final_dom,
                                              '//*/@class'
                                   ).nodes,
                                   .raw
                               ),
                               .
                      )
-          ) == 5
-          and all(distinct(map(html.xpath(ml.link_analysis(.).final_dom,
+              ) == 5
+              and all(distinct(map(html.xpath(ml.link_analysis(.).final_dom,
+                                              '//*/@class'
+                                   ).nodes,
+                                   .raw
+                               ),
+                               .
+                      ),
+                      . in ("card", "title", "hint", "grid", "dot")
+              )
+            )
+            // Tycoon2FA image selection "CAPTCHA"
+            or (
+              any(distinct(map(html.xpath(ml.link_analysis(.).final_dom,
                                           '//*/@class'
                                ).nodes,
                                .raw
                            ),
                            .
                   ),
-                  . in ("card", "title", "hint", "grid", "dot")
+                  . in (
+                    "captcha-container",
+                    "puzzle-piece drag-hint",
+                    "puzzle-image"
+                  )
+              )
+              or length(filter(ml.link_analysis(.).unique_urls_accessed,
+                               .domain.domain == "images.unsplash.com"
+                        )
+              ) > 2
+              or any(file.explode(ml.link_analysis(.).final_dom),
+                     length(filter(.scan.javascript.identifiers,
+                                   strings.icontains(., "puzzle")
+                            )
+                     ) > 3
+              )
+              or strings.ilike(ml.link_analysis(.).final_dom.raw,
+                               "*Please align the puzzle correctly*",
+                               "*Verified! You may proceed*",
+                               "*✓*",
+                               "*✗*",
+                               "*Human Check*"
+              )
+            )
           )
   )
 
