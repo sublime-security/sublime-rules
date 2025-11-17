@@ -17,24 +17,28 @@ source: |
                           "*invited you to review*",
                           "*received a document*",
                           "*shared a document*",
+                          "*shared a spreadsheet*",
                           "*shared this document*",
                           "*shared an item*",
                           "*received this email because you*",
                           "*shared a*with you*"
             )
         )
-        or any(file.explode(file.message_screenshot()),
-               strings.ilike(.scan.ocr.raw,
-                             "*shared a file with you*",
-                             "*shared with you*",
-                             "*invited you to review*",
-                             "*received a document*",
-                             "*shared a document*",
-                             "*shared this document*",
-                             "*shared an item*",
-                             "*received this email because you*",
-                             "*shared a*with you*"
-               )
+        //
+        // This rule makes use of a beta feature and is subject to change without notice
+        // using the beta feature in custom rules is not suggested until it has been formally released
+        //
+        or strings.ilike(beta.ocr(file.message_screenshot()).text,
+                         "*shared a file with you*",
+                         "*shared with you*",
+                         "*invited you to review*",
+                         "*received a document*",
+                         "*shared a document*",
+                         "*shared a spreadsheet*",
+                         "*shared this document*",
+                         "*shared an item*",
+                         "*received this email because you*",
+                         "*shared a*with you*"
         )
       )
       and (
@@ -44,7 +48,9 @@ source: |
                       "*sign*",
                       "*review*"
         )
-        or any(recipients.to, strings.icontains(subject.subject, .email.domain.sld))
+        or any(recipients.to,
+               strings.icontains(subject.subject, .email.domain.sld)
+        )
         or strings.ilike(subject.subject, "*Docs*", "*Sheets*", "*Slides*")
         or any(body.links, strings.icontains(.display_text, "open document") 
             or strings.iends_with(.display_text, ".pdf")
@@ -98,6 +104,10 @@ source: |
   and (
     any(ml.logo_detect(file.message_screenshot()).brands,
         strings.starts_with(.name, "Google")
+    )
+    // Google Drive share box formatting
+    or strings.icontains(body.html.raw,
+                         '<table style="width:100%; border:1px solid #dadce0; border-radius:6px; border-spacing:0; border-collapse:separate; table-layout:fixed" role="presentation">'
     )
     or any(attachments,
            .file_type in $file_types_images
