@@ -50,6 +50,16 @@ source: |
           (length(body.current_thread.text) - length(.)) < 50
       )
     )
+    // matching nlu_classifier 'bec' to smaller messages less than 500
+    or (
+      any([body.plain.raw, body.html.inner_text],
+          any(ml.nlu_classifier(.).intents,
+              .name == "bec" and .confidence in ("high", "medium")
+          )
+      )
+      and length(body.current_thread.text) < 200
+      and not strings.icontains(body.html.raw, "<div data-smartmail=") // not condition to exclude smaller messages with a legitimate email signature
+    )
   )
   and profile.by_sender().prevalence != "common"
   and not profile.by_sender().solicited
