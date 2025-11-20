@@ -12,10 +12,28 @@ source: |
     // there are confusables in the display name
     or (
       strings.replace_confusables(sender.display_name) != sender.display_name
-      and strings.contains(strings.replace_confusables(sender.display_name), "SSA")
+      and strings.contains(strings.replace_confusables(sender.display_name),
+                           "SSA"
+      )
     )
     or any([sender.display_name, subject.subject],
-           regex.icontains(strings.replace_confusables(.), 'Social (?:benefits|security)', )
+           regex.icontains(strings.replace_confusables(.),
+                           'Social (?:benefits|security)'
+           )
+           // display name or subject references a statement
+           or (
+             (
+               regex.icontains(strings.replace_confusables(.),
+                               '(Digital|(e[[:punct:]]?))\s?Statements?.{0,10}(Generated|Created|Issued|Ready)'
+               )
+               // or the Login.gov SSO service
+               or strings.icontains(strings.replace_confusables(.), "login.gov")
+             )
+             // with SSA impersonation in the body
+             and strings.icontains(body.current_thread.text,
+                                   'Social Security Administration'
+             )
+           )
     )
     // display name or subject references a statement
     or (
@@ -23,6 +41,8 @@ source: |
           regex.icontains(strings.replace_confusables(.),
                           '(Digital|(e[[:punct:]]?))\s?Statements?.{0,10}(Generated|Created|Issued|Ready)'
           )
+          // or the Login.gov SSO service
+          or strings.icontains(strings.replace_confusables(.), "login.gov")
       )
       // with SSA impersonation in the body
       and strings.icontains(body.current_thread.text,
@@ -39,7 +59,8 @@ source: |
   // Additional suspicious indicator
   and (
     any(ml.nlu_classifier(body.current_thread.text).topics,
-        .name == "Secure Message" and .confidence == "high"
+        .name in~ ("Secure Message", "Government Services")
+        and .confidence == "high"
     )
     or strings.icontains(body.current_thread.text, "SSA Statement Viewer")
     or strings.icontains(body.current_thread.text, "Social Security Statement")
