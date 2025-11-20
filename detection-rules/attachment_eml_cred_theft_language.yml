@@ -70,8 +70,20 @@ source: |
       profile.by_sender_email().any_messages_malicious_or_spam
       and not profile.by_sender_email().any_messages_benign
     )
+    // sender address listed as a recipient 
+    or (
+      length(recipients.to) == 1
+      and sender.email.email in map(recipients.to, .email.email)
+    )
   )
   and not profile.by_sender_email().any_messages_benign
+  // negate instances where proofpoint sends a review of a reported message via analyzer 
+  and not (
+    sender.email.email == "analyzer@analyzer.securityeducation.com"
+    and any(headers.domains, .root_domain == "pphosted.com")
+    and headers.auth_summary.spf.pass
+    and headers.auth_summary.dmarc.pass
+  ) 
 attack_types:
   - "Credential Phishing"
 tactics_and_techniques:
