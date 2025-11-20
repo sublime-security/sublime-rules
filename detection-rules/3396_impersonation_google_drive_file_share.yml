@@ -21,7 +21,8 @@ source: |
                           "*shared this document*",
                           "*shared an item*",
                           "*received this email because you*",
-                          "*shared a*with you*"
+                          "*shared a*with you*",
+                          "*automated *mail from google*drive*"
             )
         )
         //
@@ -38,7 +39,8 @@ source: |
                          "*shared this document*",
                          "*shared an item*",
                          "*received this email because you*",
-                         "*shared a*with you*"
+                         "*shared a*with you*",
+                         "*automated *mail from google*drive*"
         )
       )
       and (
@@ -112,7 +114,45 @@ source: |
     )
     or any(attachments,
            .file_type in $file_types_images
-           and any(ml.logo_detect(.).brands, strings.starts_with(.name, "Google"))
+           and (
+             any(ml.logo_detect(.).brands, strings.starts_with(.name, "Google"))
+             or strings.icontains(beta.ocr(.).text,
+                                  strings.concat("You have received this email because ",
+                                                 sender.email.email,
+                                                 " shared a document with you"
+                                  )
+             )
+             or strings.icontains(beta.ocr(.).text,
+                                  strings.concat("You have received this email because ",
+                                                 sender.email.email,
+                                                 " received a file or folder"
+                                  )
+             )
+             or any(recipients.to,
+                    strings.icontains(beta.ocr(..).text,
+                                      strings.concat("You have received this email because ",
+                                                     .email.email,
+                                                     " shared a document with you"
+                                      )
+                    )
+             )
+             or any(recipients.to,
+                    strings.icontains(beta.ocr(..).text,
+                                      strings.concat("You have received this email because ",
+                                                     .email.email,
+                                                     " received a file or folder"
+                                      )
+                    )
+             )
+             or strings.icontains(beta.ocr(.).text,
+                                  strings.concat(sender.display_name,
+                                                 " (",
+                                                 sender.email.email,
+                                                 ") ",
+                                                 "shared"
+                                  )
+             )
+           )
     )
     or strings.icontains(body.current_thread.text,
                          strings.concat("You have received this email because ",
@@ -142,6 +182,14 @@ source: |
                              )
            )
     )
+    or strings.icontains(body.current_thread.text,
+                         strings.concat(sender.display_name,
+                                        " (",
+                                        sender.email.email,
+                                        ") ",
+                                        "shared"
+                         )
+    )
     // Google address from footer
     or 2 of (
       strings.icontains(body.current_thread.text, 'Google LLC'),
@@ -155,6 +203,14 @@ source: |
   and not (
     all(headers.references, strings.ends_with(., '@docs-share.google.com'))
     and headers.return_path.domain.domain == "doclist.bounces.google.com"
+  )
+  // negate first threads that are a legitimate Google Drive share
+  and not (
+    length(body.previous_threads) != 0
+    and length(body.previous_threads[length(body.previous_threads) - 1].links) != 0
+    and all(body.previous_threads[length(body.previous_threads) - 1].links,
+            .href_url.domain.root_domain == "google.com"
+    )
   )
   
   // negate highly trusted sender domains unless they fail DMARC authentication
@@ -188,4 +244,4 @@ tactics_and_techniques:
 id: "051affc3-b5f3-54af-aa50-6338885954df"
 og_id: "b424a941-2623-50f5-a3be-e90130e538d2"
 testing_pr: 3396
-testing_sha: 716101a033009cebf50abedb9ae1df36815dbfca
+testing_sha: a68ad6dbbd82bda6fc473af684edf504b18841ce
