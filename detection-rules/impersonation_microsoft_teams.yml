@@ -17,6 +17,16 @@ source: |
                     .file_extension == "ics" or .content_type == "text/calendar"
              )
       ) == 1
+      and not any(body.links,
+                  .display_text == "Join the meeting now"
+                  and (
+                    .href_url.domain.domain == "teams.microsoft.com"
+                    // account for URL rewrites
+                    or any(.href_url.query_params_decoded["domain"],
+                           strings.parse_domain(.).domain == "teams.microsoft.com"
+                    )
+                  )
+      )
     )
   )
   and any(attachments,
@@ -34,7 +44,7 @@ source: |
             and any(file.explode(.),
                     regex.icontains(.scan.strings.raw,
                                     "trying to reach you.*microsoft teams",
-                                    "microsoft teams.*meeting (recording|event)"
+                                    "microsoft teams.{0,10}meeting.{0,10}(recording|event)"
                     )
             )
           )
