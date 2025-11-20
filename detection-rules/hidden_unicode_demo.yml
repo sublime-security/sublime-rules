@@ -1,0 +1,87 @@
+name: "Hidden unicode character obfuscation with suspicious indicators"
+description: "Detects messages containing excessive hidden Unicode characters (variation selectors, tag characters, and invisible separators) in the subject, body, or attachments combined with suspicious indicators such as large recipient lists, financial/security terminology, or suspicious attachment types. Attackers use these invisible Unicode characters to evade detection while maintaining the appearance of legitimate content."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and (
+    // hidden unicode in subject line
+    regex.count(subject.subject,
+                '[\x{E0000}-\x{E007F}\x{FE00}-\x{FE0F}\x{E0100}-\x{E01EF}\x{2062}\x{2064}]'
+    ) > 10
+  
+    // hidden unicode in body content
+    or regex.count(body.html.display_text,
+                   '[\x{E0000}-\x{E007F}\x{FE00}-\x{FE0F}\x{E0100}-\x{E01EF}\x{2062}\x{2064}]'
+    ) > 10
+    or regex.count(body.plain.raw,
+                   '[\x{E0000}-\x{E007F}\x{FE00}-\x{FE0F}\x{E0100}-\x{E01EF}\x{2062}\x{2064}]'
+    ) > 10
+  
+    // hidden unicode in attachments
+    or any(attachments,
+           any(file.explode(.),
+               // higher count threshold for general files
+               regex.count(.scan.strings.raw,
+                           '[\x{E0000}-\x{E007F}\x{FE00}-\x{FE0F}\x{E0100}-\x{E01EF}\x{2062}\x{2064}]'
+               ) > 20
+  
+               // lower threshold for specific file types prone to abuse like ics and pdf
+               or (
+                 .file_extension in~ (
+                   'ics',
+                   'eml',
+                   'msg',
+                   'txt',
+                   'html',
+                   'htm',
+                   'rtf',
+                   'docx',
+                   'pdf'
+                 )
+                 and regex.icontains(.scan.strings.raw,
+                                     '[\x{E0000}-\x{E007F}\x{FE00}-\x{FE0F}\x{E0100}-\x{E01EF}\x{2062}\x{2064}]{6,}'
+                 )
+               )
+           )
+    )
+  )
+  
+  and (
+    // lengthy recipient list
+    length(recipients.to) > 30
+  
+    // subject line (assuming we can read it) contains suspicious financial/security terms
+    or regex.icontains(subject.subject,
+                       '(wallet|account|restrict|suspend|verif|secur|urgent|action.required)'
+    )
+  
+    // common evasion patterns in subject
+    or (
+      regex.count(subject.subject,
+                  '[\x{E0000}-\x{E007F}\x{FE00}-\x{FE0F}\x{E0100}-\x{E01EF}\x{2062}\x{2064}]'
+      ) > 15
+      and length(subject.subject) < 100
+    )
+  
+    // attachment with suspicious content indicators
+    or any(attachments,
+           .content_type in~ (
+             "message/rfc822",
+             "application/octet-stream",
+             "text/calendar"
+           )
+           and .size > 5000
+    )
+  )
+
+attack_types:
+  - "Credential Phishing"
+  - "Spam"
+tactics_and_techniques:
+  - "Evasion"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "File analysis"
+  - "Header analysis"
