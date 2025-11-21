@@ -1,5 +1,5 @@
-name: "Link: Suspicious domain mixed with legitimate brand links"
-description: "Detects messages with high-confidence credential theft language containing multiple links where legitimate brand domains appear repeatedly alongside a single suspicious, low-reputation domain from senders with authentication failures or low prevalence."
+name: "Link: Credential theft with mixed domain pattern and compromised site indicators"
+description: "Detects messages with high-confidence credential theft language containing multiple links where legitimate brand domains appear repeatedly alongside a single, older, non-reputable domain that may indicate website compromise. The rule identifies patterns where attackers use trusted domains to build credibility while redirecting through compromised sites."
 type: "rule"
 severity: "medium"
 source: |
@@ -18,7 +18,8 @@ source: |
       ) >= 2
   )
   and 
-  // Exactly one domain appears 1x and is not known/trusted
+  // Exactly one domain appears 1x and is not known/trusted, but is older
+  // Likely indicative of website compromise
   length(filter(body.current_thread.links,
                 length(filter(body.current_thread.links,
                               .href_url.domain.root_domain == ..href_url.domain.root_domain
@@ -30,6 +31,7 @@ source: |
                 )
                 and .href_url.domain.root_domain not in ("aka.ms", "zixcorp.com")
                 and .href_url.domain.root_domain not in $tranco_10k
+                and network.whois(.href_url.domain).days_old > 365
          )
   ) == 1
   and (
@@ -46,7 +48,10 @@ source: |
     )
   )
   and (
-    profile.by_sender_email().prevalence != "common"
+    (
+      profile.by_sender_email().prevalence != "common"
+      and not profile.by_sender_email().solicited
+    )
     or not headers.auth_summary.dmarc.pass
   )
 
