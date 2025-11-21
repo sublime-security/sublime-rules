@@ -12,10 +12,14 @@ source: |
     // there are confusables in the display name
     or (
       strings.replace_confusables(sender.display_name) != sender.display_name
-      and strings.contains(strings.replace_confusables(sender.display_name), "SSA")
+      and strings.contains(strings.replace_confusables(sender.display_name),
+                           "SSA"
+      )
     )
     or any([sender.display_name, subject.subject],
-           regex.icontains(strings.replace_confusables(.), 'Social (?:benefits|security)', )
+           regex.icontains(strings.replace_confusables(.),
+                           'Social (?:benefits|security)',
+           )
     )
     // display name or subject references a statement
     or (
@@ -28,6 +32,16 @@ source: |
       and strings.icontains(body.current_thread.text,
                             'Social Security Administration'
       )
+    )
+    or any(html.xpath(body.html, '//title').nodes,
+           (
+             strings.icontains(.inner_text, 'Social Security')
+             and (
+               strings.icontains(.inner_text, 'Statement')
+               or strings.icontains(.inner_text, 'Notification')
+             )
+           )
+           or .inner_text =~ "Social Security Administration"
     )
   )
   // Contains a link
@@ -78,7 +92,6 @@ source: |
     sender.email.domain.root_domain in $high_trust_sender_root_domains
     and coalesce(headers.auth_summary.dmarc.pass, false)
   )
-
 attack_types:
   - "BEC/Fraud"
   - "Credential Phishing"
