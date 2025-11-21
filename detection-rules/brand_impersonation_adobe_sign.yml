@@ -4,37 +4,53 @@ type: "rule"
 severity: "high"
 source: |
   type.inbound
+  and length(filter(attachments, .file_type == "pdf")) == 0
   and (
     length(body.previous_threads) == 0
     // not a thread spawned from a legitimate Adobe Sign message
     or not (
       length(body.previous_threads) != 0
-      and length(body.previous_threads[length(body.previous_threads) - 1].links) != 0
       and (
         all(body.previous_threads[length(body.previous_threads) - 1].links,
             .href_url.domain.root_domain in (
+              "aka.ms",
               "adobe.com",
               "adobesign.com",
               "echosign.com",
               "adobesignsandbox.com",
-              "mimecastprotect.com"
+              "mimecastprotect.com",
+              "mimecast.com"
             )
             or .href_url.domain.root_domain in $org_domains
+            or .href_url.domain.root_domain == sender.email.domain.root_domain
         )
         // legit review button
         or any(body.previous_threads,
                any(.links,
-                   .display_text == "Review and sign"
-                   and .href_url.domain.root_domain == "adobe.com"
+                   .display_text in ("Review and sign", "the document", "Open agreement")
+                   and .href_url.domain.root_domain in (
+                     "adobe.com",
+                     "adobesign.com"
+                   )
                )
         )
+        // accidental recipient
+        or any(recipients.to, .email.email == "adobesign@adobesign.com")
       )
+    )
+  )
+  // known Adobe Sign messaage ID formats
+  and not (
+    (length(headers.references) > 1 or length(body.previous_threads) != 0)
+    and regex.imatch(headers.references[0],
+                     '[0-9]{9,10}\.[0-9]{4,6}\.[0-9]{13}@event-consumer-prod-[a-z]-[a-z0-9]{9,10}-[a-z0-9]{5}',
+                     '[0-9]{8,10}\.[0-9]{5,7}\.[0-9]{13}@(webapp|job)-prod-.*$',
+                     '[a-z0-9]{8}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{12}-APO-PRODHIPAA@apo-p-h'
     )
   )
   and (
     regex.icontains(body.html.raw,
                     'alt="Adobe Acrobat Sign"',
-                    "adobesign@adobesign.com",
                     "adobe-sign-logo.{0,20}.png",
                     'alt="Powered by Adobe Acrobat Sign"'
     )
@@ -50,11 +66,23 @@ source: |
   and not any(headers.hops,
               any(.fields, .name in ("Adobesigneventid", "Agreementid"))
   )
-  and sender.email.domain.root_domain not in (
-    "adobe.com",
-    "adobesign.com",
-    "adobesignsandbox.com",
-    "echosign.com"
+  and not (
+    sender.email.domain.root_domain in (
+      "adobe.com",
+      "adobesign.com",
+      "adobesignsandbox.com",
+      "echosign.com",
+      // ticketing software that embeds emails
+      "helpscout.net"
+    )
+    and headers.auth_summary.dmarc.pass
+  )
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and not headers.auth_summary.dmarc.pass
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
   )
 
 attack_types:
