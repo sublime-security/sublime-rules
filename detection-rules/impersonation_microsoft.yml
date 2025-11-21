@@ -27,7 +27,8 @@ source: |
       and strings.ilike(body.current_thread.text, "*microsoft*")
     )
     or regex.icontains(body.current_thread.text,
-                       ".*reach you.{0,20}Microsoft Teams"
+                       ".*reach you.{0,20}Microsoft Teams",
+                       "microsoft teams.*meeting (recording|event)"
     )
     or strings.ilike(sender.display_name, '*new activity in Teams*')
     or strings.icontains(strings.replace_confusables(sender.display_name),
@@ -52,19 +53,22 @@ source: |
                        "[MḾṀṂⱮМḿṁṃᵯⱮ𝐌𝑀][iíìîïīĭĩįıɪɨᵢⁱ𝐢𝑖][rŕŗřȑȓɾᵣⁿʳ𝐫𝑟][cćĉċčçƈȼ𝐜𝑐][oóòôõöøōŏőɵₒᵒº𝐨𝑜][sśŝšșşʂᵴˢˢ𝐬𝑠][oóòôõöøōŏőɵₒᵒº𝐨𝑜][fḟƒᵮᶠ𝐟𝑓][tťțţᵵₜᵗᵗ𝐭𝑡]" // [sic]
     )
   )
-  and sender.email.domain.root_domain not in~ (
-    'microsoft.com',
-    'microsoftstoreemail.com',
-    'microsoftsupport.com',
-    'office.com',
-    'teams-events.com',
-    'qualtrics-research.com',
-    'skype.com',
-    'azureadnotifications.us',
-    'microsoftonline.us',
-    'mail.microsoft',
-    'office365.com',
-    'microsoftadvertising.com'
+  and (
+    sender.email.domain.root_domain not in~ (
+      'microsoft.com',
+      'microsoftstoreemail.com',
+      'microsoftsupport.com',
+      'office.com',
+      'teams-events.com',
+      'qualtrics-research.com',
+      'skype.com',
+      'azureadnotifications.us',
+      'microsoftonline.us',
+      'mail.microsoft',
+      'office365.com',
+      'microsoftadvertising.com'
+    )
+    or not sender.email.domain.valid
   )
   and not (
     sender.email.domain.domain in~ (
@@ -74,13 +78,15 @@ source: |
     and headers.auth_summary.dmarc.pass
   )
   and (
-    profile.by_sender().prevalence in ("new", "outlier")
-    or (
-      profile.by_sender().any_messages_malicious_or_spam
-      and not profile.by_sender().any_messages_benign
+    (
+      profile.by_sender().prevalence in ("new", "outlier")
+      or (
+        profile.by_sender().any_messages_malicious_or_spam
+        and not profile.by_sender().any_messages_benign
+      )
     )
-  )
-  
+    or not sender.email.domain.valid
+  )  
   // negate legitimate Office 365 bouncebacks
   and not (
     all(attachments,
@@ -109,6 +115,19 @@ source: |
             or .href_url.domain.tld == "microsoft"
     )
     and headers.auth_summary.dmarc.pass
+  )
+
+  // negate Outlook "Clutter" notifications
+  // https://support.microsoft.com/en-us/office/use-clutter-to-sort-low-priority-messages-in-outlook-7b50c5db-7704-4e55-8a1b-dfc7bf1eafa0
+  and not (
+    length(headers.hops) == 1
+    and sender.display_name == "Microsoft Outlook"
+    and any(body.links,
+            .href_url.domain.domain == "outlook.office365.com"
+            and any(.href_url.query_params_decoded["path"],
+                    . == "/options/clutter"
+            )
+    )
   )
   
   // negate highly trusted sender domains unless they fail DMARC authentication
