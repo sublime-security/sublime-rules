@@ -23,10 +23,42 @@ source: |
       'qualtrics-research.com',
       'pb-dynmktg.com'
     ),
-    any(headers.hops, any(.fields, .name == "Resent-From"))
+    any(headers.hops, any(.fields, .name == "Resent-From")),
+    sender.email.local_part == "invites"
   )
-  and regex.icontains(body.current_thread.text, '\b\+?(\d{1}.)?\(?\d{3}?\)?\s~?\s?\d{3}.?~?.\d{4}\b')
-
+  and 1 of (
+    any([
+          "CloudSync",
+          "CloudVault",
+          "Microsoft Subscription Team",
+          "Advanced Suite Services",
+          "TenantHub",
+          "Unified Workspace Team",
+          "18052948531",
+          "MSFT-41713781",
+          "1 805-294-8531",
+          "(812) 223 8395",
+          "Your Microsoft subscription has been renewed"
+        ],
+        strings.icontains(body.current_thread.text, .)
+    ),
+    // phone number regex
+    any([body.current_thread.text, subject.subject],
+        regex.icontains(.,
+                        '\+?([ilo0-9]{1}.)?\(?[ilo0-9]{3}?\)?.[ilo0-9]{3}.?[ilo0-9]{4}',
+                        '\+?([ilo0-9]{1,2})?\s?\(?\d{3}\)?[\s\.\-⋅]{0,5}[ilo0-9]{3}[\s\.\-⋅]{0,5}[ilo0-9]{4}'
+        )
+    ),
+    // If one of the auth headers fail and logo_detect says Microsoft == bad mkay
+    1 of (
+      not headers.auth_summary.spf.pass,
+      not headers.auth_summary.dmarc.pass,
+      not "pass" in~ distinct(map(headers.hops, .authentication_results.dkim))
+    )
+    and any(ml.logo_detect(file.message_screenshot()).brands,
+            strings.starts_with(.name, "Microsoft")
+    )
+  )
 attack_types:
   - "BEC/Fraud"
   - "Callback Phishing"
@@ -37,4 +69,6 @@ tactics_and_techniques:
 detection_methods:
   - "Header analysis"
   - "Sender analysis"
+  - "Content analysis"
+  - "Natural Language Understanding"
 id: "cfe8e804-39ec-546f-9144-f721b95d9df1"
