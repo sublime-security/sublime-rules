@@ -18,8 +18,7 @@ source: |
       ) >= 2
   )
   and 
-  // Exactly one domain appears 1x and is not known/trusted, but is older
-  // Likely indicative of website compromise
+  // Exactly one domain appears 1x and is not known/trusted
   length(filter(body.current_thread.links,
                 length(filter(body.current_thread.links,
                               .href_url.domain.root_domain == ..href_url.domain.root_domain
@@ -32,6 +31,7 @@ source: |
                 and .href_url.domain.root_domain not in ("aka.ms", "zixcorp.com")
                 and .href_url.domain.root_domain not in $tranco_10k
                 and network.whois(.href_url.domain).days_old > 365
+                and strings.istarts_with(.href_url.url, "http")
          )
   ) == 1
   and (
@@ -49,8 +49,12 @@ source: |
   )
   and (
     (
-      profile.by_sender_email().prevalence != "common"
-      and not profile.by_sender_email().solicited
+      profile.by_sender().prevalence != "common"
+      and not profile.by_sender().solicited
+      and (
+        profile.by_sender().message_classifications.most_common is null
+        or profile.by_sender().message_classifications.most_common == "malicious"
+      )
     )
     or not headers.auth_summary.dmarc.pass
   )
