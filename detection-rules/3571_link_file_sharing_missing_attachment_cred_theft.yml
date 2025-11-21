@@ -1,0 +1,92 @@
+name: "Link: File sharing lure with missing attachments and credential theft language"
+description: "Detects messages that reference attachments but contain only inline images or no attachments, combined with file sharing language and credential theft indicators from new free email senders."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  
+  // more than 0 but less than 20 links
+  and 0 < length(body.links) < 20
+  
+  // all attachments are images or there are 0 attachments
+  and (
+    length(attachments) == 0
+    // there are only image attachmetns and all image attachments are served inline
+    or (
+      length(attachments) > 0
+      and (
+        all(attachments,
+            .file_type in $file_types_images
+            // all images are embedded in the html
+            and strings.icontains(body.html.raw,
+                                  strings.concat('src="cid:', .content_id)
+            )
+        )
+      )
+    )
+  )
+  and length(filter(ml.nlu_classifier(body.current_thread.text).topics, .confidence == "high")) == 1
+  and any(ml.nlu_classifier(body.current_thread.text).topics, .name == "File Sharing and Cloud Services" and .confidence == "high")
+  
+  // the body references an attachment 
+  and (
+    strings.contains(body.current_thread.text, "attach")
+    // negate warning banners warning about the attachment(s)
+    and (
+      not (
+        (
+          regex.count(body.current_thread.text, "attach") == 1
+          and regex.icontains(body.current_thread.text,
+                              "(caution|warning).{0,30}attach"
+          )
+        )
+        or ( // WeTransfer expiry warning notification
+          sender.email.email == "noreply@wetransfer.com"
+          and any(body.links,
+                  .display_text == "Don't send me these expiry reminders anymore"
+          )
+        )
+      )
+    )
+  )
+  
+  
+  // body text is determined to contain cred_theft language by nlu or contains a request with suspicious keywords
+  and (
+    any(ml.nlu_classifier(body.current_thread.text).intents,
+        .name == "cred_theft"
+    )
+    or any(ml.nlu_classifier(body.current_thread.text).entities,
+           .name == "request"
+           and (
+             strings.icontains(.text, "kindly")
+             or strings.icontains(.text, "please see attached")
+           )
+    )
+  )
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and not headers.auth_summary.dmarc.pass
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+  and profile.by_sender_email().prevalence == "new"
+  and sender.email.domain.domain in $free_email_providers
+
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Evasion"
+  - "Image as content"
+  - "Free email provider"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Natural Language Understanding"
+  - "Sender analysis"
+id: "bb265def-390a-5e6a-a6b9-022ef90cf986"
+og_id: "7be4f6f2-8c44-5c8b-b7be-b086df1d5a4c"
+testing_pr: 3571
+testing_sha: 7e9bd0f58294bdc99e0e879fe26c3d5fab5e451d
