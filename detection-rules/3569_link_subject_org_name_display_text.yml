@@ -1,0 +1,39 @@
+name: "Link: Credential theft with subject starting with org name and display text"
+description: "Detects messages with short body content where the subject line begins with an organization name followed by link display text, combined with high-confidence credential theft language indicators."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  // short body
+  and regex.count(body.current_thread.text, '\S+') < 100 
+  // subject base starts with org name + link display_text
+  and any(
+          // the distinct diplay_text of links in the current thread
+          distinct(map(filter(body.current_thread.links, .display_text is not null), .display_text)
+          ),
+          any(distinct(map(filter(ml.nlu_classifier(body.current_thread.text).entities,
+                                  .name == "org"
+                           ),
+                           .text
+                       )
+              ),
+              strings.istarts_with(subject.base, strings.concat(., ' ', ..))
+          )
+  )
+  // cred_theft high intent on the body
+  and any(ml.nlu_classifier(body.current_thread.text).intents,
+          .name == "cred_theft" and .confidence == "high"
+  )
+
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Natural Language Understanding"
+id: "4e165fe1-9f3d-5a0f-89e8-ba713e0da9f3"
+og_id: "a5fd1365-f97c-5151-b483-e0e21876d299"
+testing_pr: 3569
+testing_sha: b877d8b5a360682fc65a674f46cf2f1ae7cc0e41
