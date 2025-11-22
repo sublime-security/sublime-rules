@@ -1,0 +1,47 @@
+name: "Credential theft with 'safe content' deception and social engineering topics"
+description: "Detects messages containing credential theft language combined with social engineering topics like secure messages, notifications, or authentication alerts. The rule specifically identifies emails that deceptively claim to be from a 'safe sender' or contain 'safe content' in the first line, which is a common tactic used to bypass security filters and gain user trust."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and any(ml.nlu_classifier(body.current_thread.text).intents,
+          .name == "cred_theft" and .confidence != "low"
+  )
+  and any(ml.nlu_classifier(body.current_thread.text).topics,
+          .name in (
+            "Reminders and Notifications",
+            "Secure Message",
+            "Security and Authentication",
+            "Voicemail Call and Missed Call Notifications",
+            "E-Signature",
+            "Financial Communications"
+          )
+  )
+  and not any(ml.nlu_classifier(body.current_thread.text).topics,
+              .name in (
+                "Advertising and Promotions",
+                "Newsletters and Digests",
+                "News and Current Events"
+              )
+  )
+  // check only the first line of the email
+  and any(regex.iextract(body.current_thread.text, "^[^\r\n]*"),
+          strings.ilike(.full_match,
+                        "*safe content*",
+                        "*safe sender*",
+                        "*trusted sender*"
+          )
+  )
+
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Social engineering"
+  - "Evasion"
+detection_methods:
+  - "Content analysis"
+  - "Natural Language Understanding"
+id: "fecc9601-a1f2-549c-9281-37ea654e5e50"
+og_id: "22ceee0d-1641-5f25-9034-a29b3fdade3d"
+testing_pr: 3579
+testing_sha: 9a910270ffbe5a5813919555c2a0c7e23496980a
