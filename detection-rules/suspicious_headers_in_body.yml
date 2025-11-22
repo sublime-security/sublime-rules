@@ -1,0 +1,48 @@
+name: "Suspicious: Email headers embedded in message body"
+description: "Detects email headers embedded in the message body content, indicating forwarded phishing attempts, MIME boundary manipulation, delivery notification spoofing, or copy-paste phishing. This pattern is commonly seen when attackers forward legitimate emails and the headers get included in the body, or when spoofing system notifications."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  // Headers are in the body.plain.raw but not the body.html.raw
+  and (
+    any([
+          // Gmail-specific headers in body
+          "Delivered-To:",
+          "X-Google-Smtp-Source:",
+          "ARC-Seal: i=",
+          // Generic SMTP headers that should never appear in body
+          "Received: by .{10,80} with SMTP id",
+          "X-Received: by .{10,80} with SMTP id"
+        ],
+        strings.icontains(body.plain.raw, .)
+        and not strings.icontains(body.html.raw, .)
+    )
+  )
+
+  // Negate legitimate forwards where users intentionally include headers
+  and not subject.is_forward
+
+  // Sender is not from org or high trust domains
+  and sender.email.domain.root_domain not in $org_domains
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and not headers.auth_summary.dmarc.pass
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+
+attack_types:
+  - "Credential Phishing"
+  - "BEC/Fraud"
+  - "Spam"
+tactics_and_techniques:
+  - "Evasion"
+  - "Social engineering"
+  - "Spoofing"
+detection_methods:
+  - "Content analysis"
+  - "Header analysis"
+  - "Sender analysis"
+id: "6e8eeebb-5ea2-53e0-b4a8-c07d1248d177"
