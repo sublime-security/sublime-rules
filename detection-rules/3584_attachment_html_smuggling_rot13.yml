@@ -1,0 +1,50 @@
+name: "Attachment: HTML smuggling with ROT13"
+description: |
+  Potential HTML obfuscation attack based on suspicious JavaScript identifiers.
+  Some attackers may use obfuscation techniques such as ROT13 to bypass email security filters.
+  This rule may be expanded to inspect HTML attachments for other suspicious identifiers.
+type: "rule"
+authors:
+  - twitter: "Kyle_Parrish_"
+    name: "Kyle Parrish"
+severity: "high"
+source: |
+  type.inbound
+  and any(attachments,
+          (
+            .file_extension in~ ("html", "htm", "shtml", "dhtml")
+            or .file_extension in~ $file_extensions_common_archives
+            or .file_type in~ ("html", "svg")
+          )
+          and any(file.explode(.),
+                  1 of (
+                      any(.scan.javascript.identifiers,
+                          . in~ ("rot13", "decodeROT13")
+                      ),
+                      any(.scan.strings.strings,
+                        // ROT13 encoded value for https & http
+                        strings.icontains(., "\"uggcf://")
+                        or strings.icontains(., "\"uggc://")
+                      )
+                  )
+                  and length(.scan.javascript.identifiers) < 100
+          )
+  )
+attack_types:
+  - "Credential Phishing"
+  - "Malware/Ransomware"
+tactics_and_techniques:
+  - "Encryption"
+  - "Evasion"
+  - "HTML smuggling"
+  - "Scripting"
+detection_methods:
+  - "Archive analysis"
+  - "Content analysis"
+  - "File analysis"
+  - "Javascript analysis"
+  - "HTML analysis"
+id: "579f49ad-477b-53c5-a2f9-b2abe9d877f7"
+og_id: "6eacc4cf-9357-5441-9380-b561fa630d65"
+testing_pr: 3584
+testing_sha: 85399fec8164235a7db31d513d7dc08e39585c77
