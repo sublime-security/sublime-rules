@@ -847,6 +847,10 @@ def handle_pr_rules(mode):
             has_comment = False
             if author_in_org:
                 print(f"\tPR #{pr['number']}: Author {pr['user']['login']} is in {ORG_NAME}")
+                # remove the label if it's present
+                if not has_label(pr_number, AUTHOR_MEMBERSHIP_EXCLUSION_LABEL):
+                    remove_label(pr_number, AUTHOR_MEMBERSHIP_EXCLUSION_LABEL)
+
             # only invoke has_trigger_comment when author_in_org is false
             if INCLUDE_PRS_WITH_COMMENT and not author_in_org:
                 has_comment = has_trigger_comment(pr['number'], ORG_NAME, COMMENT_TRIGGER)
@@ -894,6 +898,10 @@ def handle_pr_rules(mode):
                     apply_label(pr_number, BULK_PR_LABEL)
                 
                 continue
+            else:
+                # if it has the label, remove it.
+                if has_label(pr_number, BULK_PR_LABEL):
+                    remove_label(pr_number, BULK_PR_LABEL)
 
         # Process files in the PR
         for file in files:
@@ -931,6 +939,10 @@ def handle_pr_rules(mode):
                                 print(f"\tPR #{pr_number} doesn't have the '{label}' label. Applying...")
                                 apply_label(pr_number, label)
 
+                        # remove the IN_TEST_RULES_LABEL label as it's no longer in test-rules
+                        if has_label(pr_number, IN_TEST_RULES_LABEL):
+                            remove_label(pr_number, IN_TEST_RULES_LABEL)
+                        # skip this file and process the next one
                         continue
 
                 # Process file (common for both modes)
