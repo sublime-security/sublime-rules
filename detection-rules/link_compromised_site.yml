@@ -7,6 +7,12 @@ source: |
   and any(ml.nlu_classifier(body.current_thread.text).intents,
           .name == "cred_theft" and .confidence == "high"
   )
+  and (
+    not all(ml.nlu_classifier(body.current_thread.text).topics,
+            .name in ("Travel and Transportation")
+    )
+    or length(ml.nlu_classifier(body.current_thread.text).topics) == 0
+  )
   and length(body.current_thread.links) >= 3
   and 
   // At least one unrelated domain appears 2+ times (legitimate brand)
@@ -32,6 +38,11 @@ source: |
                 and .href_url.domain.root_domain not in $tranco_10k
                 and network.whois(.href_url.domain).days_old > 365
                 and strings.istarts_with(.href_url.url, "http")
+                and (
+                  .display_text != sender.display_name
+                  or .display_text is null
+                  or sender.display_name is null
+                )
          )
   ) == 1
   and (
