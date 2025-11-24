@@ -5,24 +5,26 @@ severity: "medium"
 source: |
   type.inbound
   // Headers are in the body.plain.raw but not the body.html.raw
-  and (
-    any([
-          // Gmail-specific headers in body
-          "Delivered-To:",
-          "X-Google-Smtp-Source:",
-          "ARC-Seal: i=",
-          // Generic SMTP headers that should never appear in body
-          "Received: by .{10,80} with SMTP id",
-          "X-Received: by .{10,80} with SMTP id"
-        ],
-        strings.icontains(body.plain.raw, .)
-        and not strings.icontains(body.html.raw, .)
-    )
+  and 2 of (
+    strings.icontains(body.plain.raw, "Delivered-To:")
+    and not strings.icontains(body.html.raw, "Delivered-To:"),
+    strings.icontains(body.plain.raw, "X-Google-Smtp-Source:")
+    and not strings.icontains(body.html.raw, "X-Google-Smtp-Source:"),
+    strings.icontains(body.plain.raw, "ARC-Seal: i=")
+    and not strings.icontains(body.html.raw, "ARC-Seal: i="),
   )
-
+  and 1 of (
+    regex.icontains(body.plain.raw, "Received: by .{10,80} with SMTP id")
+    and not regex.icontains(body.html.raw, "Received: by .{10,80} with SMTP id"),
+    regex.icontains(body.plain.raw, "X-Received: by .{10,80} with SMTP id")
+    and not regex.icontains(body.html.raw, "X-Received: by .{10,80} with SMTP id"),
+  )
   // Negate legitimate forwards where users intentionally include headers
-  and not subject.is_forward
-
+  and not (
+    (length(headers.references) > 0 or headers.in_reply_to is not null)
+    and (subject.is_forward or subject.is_reply)
+    and length(body.previous_threads) >= 1
+  )
   // Sender is not from org or high trust domains
   and sender.email.domain.root_domain not in $org_domains
   and (
