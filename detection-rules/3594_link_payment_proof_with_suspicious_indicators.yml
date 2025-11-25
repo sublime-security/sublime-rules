@@ -1,0 +1,137 @@
+name: "Link: Payment proof lure with suspicious tracking indicators"
+description: "Detects messages claiming to contain payment proof that include suspicious links with tracking characteristics, generic display text, or unusual URL patterns. The rule identifies messages with payment-related keywords in the subject or body, combined with links containing tracking domains, long paths, or misleading display text from potentially untrusted senders."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and length(body.links) > 0
+  
+  // Payment proof keywords in subject or body
+  and (
+    regex.icontains(subject.subject,
+                    'proof.{0,10}payment|payment.{0,10}proof|payment.{0,10}reference|reference.{0,10}payment'
+    )
+    or regex.icontains(body.current_thread.text,
+                       'proof.{0,10}payment|payment.{0,10}proof|payment.{0,10}reference|reference.{0,10}payment|attached.{0,10}proof'
+    )
+  )
+  
+  // Suspicious link characteristics
+  and any(body.links,
+          // Tracking/redirect domains (common patterns)
+          (
+            regex.icontains(.href_url.domain.domain,
+                            'tracking\.',
+                            'click\.',
+                            'redirect\.',
+                            'link\.',
+                            'go\.',
+                            'url\.',
+                            'r\.'
+            )
+          )
+          // Suspicious URL patterns
+          or regex.match(.href_url.path, '\/l\/[a-f0-9]{32,}')
+          or regex.match(.href_url.path, '\/[a-z0-9]{20,}')
+          or length(.href_url.path) > 50
+          // Query parameters that suggest tracking
+          or strings.icontains(.href_url.query_params, "cache_buster")
+          or strings.icontains(.href_url.query_params, "tracking")
+          or strings.icontains(.href_url.query_params, "ref")
+          or strings.icontains(.href_url.query_params, "utm_")
+          // Generic or misleading link display text
+          or (
+            .display_text != null
+            and regex.icontains(.display_text,
+                                'view.{0,10}payment|payment.{0,10}reference|click.{0,10}here|view.{0,10}here'
+            )
+            and .href_url.domain.root_domain not in (
+              "paypal.com",
+              "stripe.com",
+              "square.com"
+            )
+          )
+  )
+  
+  // Additional suspicious indicators
+  and 2 of (
+    // Short email body (common in phishing)
+    length(body.current_thread.text) < 500,
+  
+    // Sender from suspicious or free domain
+    (
+      sender.email.domain.root_domain in $free_email_providers
+      or profile.by_sender().days_known < 7
+    ),
+  
+    // Generic greeting
+    regex.icontains(body.current_thread.text,
+                    'dear.{0,10}user|dear.{0,10}customer'
+    ),
+  
+    // Financial entities detected but from untrusted sender
+    (
+      any(ml.nlu_classifier(body.current_thread.text).entities,
+          .name == "financial"
+      )
+      and not sender.email.domain.root_domain in $high_trust_sender_root_domains
+    ),
+  
+    // No legitimate attachments despite claiming proof
+    length(attachments) == 0,
+  
+    // Reply-to different from sender
+    (
+      length(headers.reply_to) > 0
+      and any(headers.reply_to,
+              .email.domain.root_domain != sender.email.domain.root_domain
+      )
+    )
+  )
+  // NLU indicates credential theft intent
+  and any(ml.nlu_classifier(body.current_thread.text).intents,
+          .name == "cred_theft" and .confidence in ("medium", "high")
+  )
+  
+  // Exclude legitimate payment processors and financial institutions
+  and not sender.email.domain.root_domain in (
+    "paypal.com",
+    "stripe.com",
+    "square.com",
+    "adyen.com",
+    "worldpay.com",
+    "authorize.net"
+  )
+  
+  // Standard authentication and solicitation checks
+  and (
+    not profile.by_sender().solicited
+    or (
+      profile.by_sender().any_messages_malicious_or_spam
+      and not profile.by_sender().any_messages_benign
+    )
+  )
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and not headers.auth_summary.dmarc.pass
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+
+attack_types:
+  - "Credential Phishing"
+  - "BEC/Fraud"
+tactics_and_techniques:
+  - "Evasion"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Natural Language Understanding"
+  - "Sender analysis"
+  - "URL analysis"
+  - "Header analysis"
+id: "8315c633-7f9d-5539-b310-78cce0f20f54"
+og_id: "95330308-1b6e-5861-8839-6791a5d24d0e"
+testing_pr: 3594
+testing_sha: 697f5f482a09e45c72115fba616508e0c397712c
