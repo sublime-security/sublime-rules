@@ -5,14 +5,23 @@ severity: "medium"
 source: |
   type.inbound
   // short body
-  and regex.count(body.current_thread.text, '\S+') < 100 
+  and regex.count(body.current_thread.text, '\S+') < 100
   // subject base starts with org name + link display_text
   and any(
           // the distinct diplay_text of links in the current thread
-          distinct(map(filter(body.current_thread.links, .display_text is not null), .display_text)
+          distinct(map(filter(body.current_thread.links,
+                              // contains a display_text
+                              .display_text is not null
+                              // the domain is unrelated to the sender
+                              and .href_url.domain.root_domain != sender.email.domain.root_domain
+                       ),
+                       .display_text
+                   )
           ),
           // send an empty subject to NLU to avoid creating self fullfilling logic where the org is extracted from the subject
-          any(distinct(map(filter(ml.nlu_classifier(body.current_thread.text, subject="").entities,
+          any(distinct(map(filter(ml.nlu_classifier(body.current_thread.text,
+                                                    subject=""
+                                  ).entities,
                                   .name == "org"
                            ),
                            .text
@@ -39,4 +48,4 @@ detection_methods:
 id: "4e165fe1-9f3d-5a0f-89e8-ba713e0da9f3"
 og_id: "a5fd1365-f97c-5151-b483-e0e21876d299"
 testing_pr: 3569
-testing_sha: ac9d1a2e5a43ee95fbb9c272ec7cc644c121dbca
+testing_sha: 1ea9e12e6e1ac2008c0e67df77298f818c9b9521
