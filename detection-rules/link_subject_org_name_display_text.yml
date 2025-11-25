@@ -11,20 +11,21 @@ source: |
           // the distinct diplay_text of links in the current thread
           distinct(map(filter(body.current_thread.links, .display_text is not null), .display_text)
           ),
-          any(distinct(map(filter(ml.nlu_classifier(body.current_thread.text).entities,
+          // send an empty subject to NLU to avoid creating self fullfilling logic where the org is extracted from the subject
+          any(distinct(map(filter(ml.nlu_classifier(body.current_thread.text, subject="").entities,
                                   .name == "org"
                            ),
                            .text
                        )
               ),
-              strings.istarts_with(subject.base, strings.concat(., ' ', ..))
+              // exact match (not istarts_with)
+              strings.starts_with(subject.base, strings.concat(., ' ', ..))
           )
   )
   // cred_theft high intent on the body
   and any(ml.nlu_classifier(body.current_thread.text).intents,
           .name == "cred_theft" and .confidence == "high"
   )
-
 attack_types:
   - "Credential Phishing"
 tactics_and_techniques:
