@@ -11,20 +11,23 @@ source: |
           // the distinct diplay_text of links in the current thread
           distinct(map(filter(body.current_thread.links, .display_text is not null), .display_text)
           ),
-          any(distinct(map(filter(ml.nlu_classifier(body.current_thread.text).entities,
+          // send an empty subject to NLU to avoid creating self fullfilling logic where the org is extracted from the subject
+          any(distinct(map(filter(ml.nlu_classifier(body.current_thread.text, subject="").entities,
                                   .name == "org"
                            ),
                            .text
                        )
               ),
-              strings.istarts_with(subject.base, strings.concat(., ' ', ..))
+              // the display text should not be the same as the org
+              . !~ ..
+              // exact match (not istarts_with)
+              and strings.starts_with(subject.base, strings.concat(., ' ', ..))
           )
   )
   // cred_theft high intent on the body
   and any(ml.nlu_classifier(body.current_thread.text).intents,
           .name == "cred_theft" and .confidence == "high"
   )
-
 attack_types:
   - "Credential Phishing"
 tactics_and_techniques:
@@ -36,4 +39,4 @@ detection_methods:
 id: "4e165fe1-9f3d-5a0f-89e8-ba713e0da9f3"
 og_id: "a5fd1365-f97c-5151-b483-e0e21876d299"
 testing_pr: 3569
-testing_sha: b877d8b5a360682fc65a674f46cf2f1ae7cc0e41
+testing_sha: ac9d1a2e5a43ee95fbb9c272ec7cc644c121dbca
