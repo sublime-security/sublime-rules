@@ -5,45 +5,15 @@ severity: "medium"
 source: |
   type.inbound
   // fake thread check
+  and (length(headers.references) == 0 or headers.in_reply_to is null)
   and (
-    (
-      (
-        strings.istarts_with(subject.subject, "RE:")
-        or strings.istarts_with(subject.subject, "EXT RE:")
-        or strings.istarts_with(subject.subject, "FW:")
-        or strings.istarts_with(subject.subject, "FWD:")
-        or regex.imatch(subject.subject,
-                        '(\[[^\]]+\]\s?){0,3}(re|fwd?|automat.*)\s?:.*'
-        )
-      )
-    )
+    subject.is_reply
+    or subject.is_forward
     // fake thread, but no indication in the subject line
     // current_thread pulls the recent thread, but the full body contains the fake "original" email
     or (
-      not (
-        (
-          strings.istarts_with(subject.subject, "RE:")
-          or strings.istarts_with(subject.subject, "R:")
-          or strings.istarts_with(subject.subject, "ODG:")
-          or strings.istarts_with(subject.subject, "答复:")
-          or strings.istarts_with(subject.subject, "AW:")
-          or strings.istarts_with(subject.subject, "TR:")
-          or strings.istarts_with(subject.subject, "FWD:")
-        )
-      )
-      and any([body.current_thread.text, body.html.display_text, body.plain.raw],
-              3 of (
-                strings.icontains(., "from:"),
-                strings.icontains(., "to:"),
-                strings.icontains(., "sent:"),
-                strings.icontains(., "date:"),
-                strings.icontains(., "cc:"),
-                strings.icontains(., "subject:")
-              )
-      )
-      and (
-        length(body.current_thread.text) + 100 < length(body.html.display_text)
-      )
+      not (subject.is_reply or subject.is_forward)
+      and length(body.previous_threads) > 0
     )
   )
 
