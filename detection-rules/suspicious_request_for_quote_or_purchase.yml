@@ -47,12 +47,21 @@ source: |
         regex.icontains(body.current_thread.text,
                         '(discuss.{0,15}purchas(e|ing))'
         ),
+        any(body.previous_threads, regex.icontains(.text,
+                        '(discuss.{0,15}purchas(e|ing))'
+        )),
         regex.icontains(body.current_thread.text,
                         '(sign(ed?)|view).{0,10}(purchase order)|Request for (a Quot(e|ation)|Proposal)'
         ),
+        any(body.previous_threads, regex.icontains(.text,
+                        '(sign(ed?)|view).{0,10}(purchase order)|Request for (a Quot(e|ation)|Proposal)'
+        )),
         regex.icontains(body.current_thread.text,
                         '(please|kindly).{0,30}(?:proposal|quot(e|ation))'
         ),
+        any(body.previous_threads, regex.icontains(.text,
+                        '(please|kindly).{0,30}(?:proposal|quot(e|ation))'
+        )),
         regex.icontains(subject.subject,
                         '(request for (purchase|quot(e|ation))|\bRFQ\b|\bRFP\b|bid invit(e|ation))'
         ),
@@ -62,9 +71,15 @@ source: |
         any(ml.nlu_classifier(body.current_thread.text).tags,
             .name == "purchase_order" and .confidence == "high"
         ),
+        any(body.previous_threads, any(ml.nlu_classifier(.text).tags,
+            .name == "purchase_order" and .confidence == "high"
+        )),
         any(ml.nlu_classifier(body.current_thread.text).entities,
             .name == "financial" and regex.imatch(.text, "rfp|rfq")
-        )
+        ),
+        any(body.previous_threads, any(ml.nlu_classifier(.text).entities,
+            .name == "financial" and regex.imatch(.text, "rfp|rfq")
+        )),
       )
       // Required: at least one RFQ/RFP keyword pattern
   
@@ -75,12 +90,21 @@ source: |
           regex.icontains(body.current_thread.text,
                           '(discuss.{0,15}purchas(e|ing))'
           ),
+          any(body.previous_threads, regex.icontains(.text,
+                          '(discuss.{0,15}purchas(e|ing))'
+          )),
           regex.icontains(body.current_thread.text,
                           '(sign(ed?)|view).{0,10}(purchase order)|Request for a Quot(e|ation)'
           ),
+          any(body.previous_threads, regex.icontains(.text,
+                          '(sign(ed?)|view).{0,10}(purchase order)|Request for a Quot(e|ation)'
+          )),
           regex.icontains(body.current_thread.text,
                           '(please|kindly).{0,30}(?:proposal|quot(e|ation))'
           ),
+          any(body.previous_threads, regex.icontains(.text,
+                          '(please|kindly).{0,30}(?:proposal|quot(e|ation))'
+          )),
           regex.icontains(subject.subject,
                           '(request for (purchase|quot(e|ation))|\bRFQ\b|\bRFP\b|bid invit(e|ation))'
           ),
@@ -90,9 +114,15 @@ source: |
           any(ml.nlu_classifier(body.current_thread.text).tags,
               .name == "purchase_order" and .confidence == "high"
           ),
+          any(body.previous_threads, any(ml.nlu_classifier(.text).tags,
+              .name == "purchase_order" and .confidence == "high"
+          )),
           any(ml.nlu_classifier(body.current_thread.text).entities,
               .name == "financial" and regex.imatch(.text, "rfp|rfq")
           ),
+          any(body.previous_threads, any(ml.nlu_classifier(.text).entities,
+              .name == "financial" and regex.imatch(.text, "rfp|rfq")
+          )),
   
           // Non-keyword indicators
           (
@@ -102,9 +132,22 @@ source: |
             and any(ml.nlu_classifier(body.current_thread.text).entities,
                     .name == "urgency"
             )
-            and not any(beta.ml_topic(body.current_thread.text).topics,
+            and not any(ml.nlu_classifier(body.current_thread.text).topics,
                         .name == "Advertising and Promotions"
                         and .confidence == "high"
+            )
+          ),
+          (
+            any(body.previous_threads, any(ml.nlu_classifier(.text).entities,
+                .name == "request"
+            )
+            and any(ml.nlu_classifier(.text).entities,
+                    .name == "urgency"
+            )
+            and not any(ml.nlu_classifier(.text).topics,
+                        .name == "Advertising and Promotions"
+                        and .confidence == "high"
+            )
             )
           ),
           (
