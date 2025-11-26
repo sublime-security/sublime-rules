@@ -1,0 +1,37 @@
+name: "Headers: SMTPIN_ADDED_MISSING message ID from untrusted sender"
+description: "Detects messages with 'SMTPIN_ADDED_MISSING' in the Message-ID header from google mail senders that are not highly trusted or fail DMARC authentication. This pattern may indicate message manipulation or relay abuse from unsolicited sources."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and strings.icontains(headers.message_id, 'SMTPIN_ADDED_MISSING')
+  
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and not headers.auth_summary.dmarc.pass
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+  
+  // only flag unsolicited messages
+  and (
+    not profile.by_sender().solicited
+    or (
+      profile.by_sender().any_messages_malicious_or_spam
+      and not profile.by_sender().any_messages_benign
+    )
+  )
+  and not profile.by_sender().any_messages_benign
+
+attack_types:
+  - "BEC/Fraud"
+  - "Credential Phishing"
+  - "Malware/Ransomware"
+tactics_and_techniques:
+  - "Evasion"
+  - "Spoofing"
+detection_methods:
+  - "Header analysis"
+  - "Sender analysis"
