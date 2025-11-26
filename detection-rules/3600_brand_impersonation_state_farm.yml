@@ -1,0 +1,46 @@
+name: "Brand impersonation: State Farm"
+description: "Detects messages impersonating State Farm insurance company through display name spoofing or similar variations, excluding legitimate communications from verified State Farm domains with proper DMARC authentication."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and (
+    regex.icontains(sender.display_name, 'state\s?farm')
+    or strings.ilevenshtein(strings.replace_confusables(sender.display_name),
+                            "statefarm"
+    ) <= 2
+  )
+  // and the sender is not in org_domains or from State Farm domains and passes auth
+  and not (
+    (
+      sender.email.domain.root_domain in $org_domains
+      or sender.email.domain.root_domain in (
+        "statefarm.com",
+        "statefarminsurance.com",
+        "statefarm.ca",
+        "statefarmbank.com",
+        "sfauthentication.com",
+        "statefarmservice.com"
+      )
+    )
+    and coalesce(headers.auth_summary.dmarc.pass, false)
+  )
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and not (
+    sender.email.domain.root_domain in $high_trust_sender_root_domains
+    and coalesce(headers.auth_summary.dmarc.pass, false)
+  )
+
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Social engineering"
+  - "Spoofing"
+detection_methods:
+  - "Header analysis"
+  - "Sender analysis"
+id: "48ce040e-1efc-55d6-ab44-ab7e53cb2289"
+og_id: "bcf7eba0-ac94-52c7-81b3-5abd8019f564"
+testing_pr: 3600
+testing_sha: 5ee2b41c9d436bfe91b05cf2b6fd175622abcf96
