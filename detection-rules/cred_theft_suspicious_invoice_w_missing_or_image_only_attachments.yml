@@ -18,7 +18,7 @@ source: |
   and (
     any(ml.nlu_classifier(subject.subject).tags, .name in ("payment", "invoice"))
     or regex.contains(subject.subject,
-                      '(?:\binv(?:oice|o)\b|in_v|in-voice|pay(?:ment|mnt)|pymt|\brec(?:eipt|pt|iept)\b|rcpt|confirm(?:ation)|cnfrm|cnf|po\b|p\.o\.|purch(?:ase)?-?order|\bord(?:er)?\b|bill(?:ing)|billing-info|transact(?:ion)|txn|trx|\bstmt\b|\bstmnt\b|remit(?:tance)|rmt|remndr|remind|\bdue(?:-date)\b|ovrdue|overdue|\bbal(?:ance)\b|\bpaid(?:-invoice)\b)',
+                      '(?:\binv(?:oice|o)\b|in_v|in-voice|pay(?:ment|mnt)|pymt|\brec(?:eipt|pt|iept)\b|rcpt|confirm(?:ation)|cnfrm|cnf|po\b|p\.o\.|purch(?:ase)?-?order|\bord(?:er)?\b|bill(?:ing)|billing-info|transact(?:ion)|txn|trx|\bstmt\b|\bstmnt\b|remit(?:tance)|rmt|remndr|remind|\bdue(?:-date)\b|ovrdue|overdue|\bbal(?:ance)\b|\bpaid(?:-invoice)\b|requires\s+your\s+a(?:ttention|ction)|\b[fF]inal\s+(?:[nN]otice|[uU]npaid).{0,20}[iI]nvoice)',
                       // suspicious invoice format
                       '\d{6}\b.{10,30}(\d{2}\.){3}pdf'
     )
@@ -33,10 +33,21 @@ source: |
     )
     or any(body.links,
            regex.icontains(.display_text,
-                           '(?:\binv(?:oice|o)\b|in_v|in-voice|pay(?:ment|mnt)|pymt|\brec(?:eipt|pt|iept)\b|rcpt|req(?:uest)|rqst|\brq\b|\bpo\b|p\.o\.|purch(?:ase)?-?order|\bord(?:er)?\b|bill(?:ing)|billing-info|transact(?:ion)|txn|trx|\bstmt\b|\bstmnt\b|remit(?:tance)|rmt|remndr|remind|\bdue(?:-date)\b|ovrdue|overdue|\bbal(?:ance)\b|\bpaid(?:-invoice)\b)'
+                           '(?:\binv(?:oice|o)\b|in_v|in-voice|pay(?:ment|mnt)|pymt|\brec(?:eipt|pt|iept)\b|rcpt|req(?:uest)|rqst|\brq\b|\bpo\b|p\.o\.|purch(?:ase)?-?order|\bord(?:er)?\b|bill(?:ing)|billing-info|transact(?:ion)|txn|trx|\bstmt\b|\bstmnt\b|remit(?:tance)|rmt|remndr|remind|\bdue(?:-date)\b|ovrdue|overdue|\bbal(?:ance)\b|\bpaid(?:-invoice)\b|completed\s+doc(?:s|ument|uments)?\b)'
            )
     )
+    or (
+      any(body.links,
+          regex.icontains(.display_text, '\bview\s+(invoice|attachment)')
+      )
+      and any([body.plain.raw, body.html.inner_text],
+              any(ml.nlu_classifier(.).intents,
+                  .name == "cred_theft" and .confidence == "high"
+              )
+      )
+    )
   )
+  
   // the body references an attachment 
   and (
     strings.contains(body.current_thread.text, "attach")
@@ -61,15 +72,22 @@ source: |
   
   // body text is determined to contain cred_theft language by nlu or contains a request with suspicious keywords
   and (
-    any(ml.nlu_classifier(body.current_thread.text).intents,
-        .name == "cred_theft"
+    not (
+      any(ml.nlu_classifier(body.current_thread.text).topics,
+          .name in ("Shipping and Package", "Order Confirmations")
+          and .confidence == "high"
+      )
     )
-    or any(ml.nlu_classifier(body.current_thread.text).entities,
-           .name == "request"
-           and (
-             strings.icontains(.text, "kindly")
-             or strings.icontains(.text, "please see attached")
-           )
+    and (
+      any(ml.nlu_classifier(body.current_thread.text).intents,
+          .name == "cred_theft"
+      )
+      or any(ml.nlu_classifier(body.current_thread.text).entities,
+             .name == "request"
+             and (
+               strings.icontains(.text, "kindly")
+             )
+      )
     )
   )
   // negate highly trusted sender domains unless they fail DMARC authentication
