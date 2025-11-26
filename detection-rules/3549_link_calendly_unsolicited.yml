@@ -1,0 +1,94 @@
+name: "Brand impersonation: Calendly with reply-to mismatch"
+description: "Detects messages impersonating Calendly through display name, subject, or links while having a mismatched reply-to address. The rule validates legitimate Calendly senders through SPF/DMARC authentication and flags unsolicited messages from untrusted domains or those with suspicious reply-to configurations."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+
+  // Legitimate Calendly sending infrastructure
+  and (
+    sender.email.domain.domain == "calendly.com"
+    or strings.icontains(sender.display_name, 'calendly')
+    or strings.icontains(subject.subject, 'calendly')
+    or any(body.links, .href_url.domain.domain == "calendly.com")
+  )
+  
+  // Verify SPF/DMARC for actual calendly.com senders
+  and (
+    sender.email.domain.domain != "calendly.com"
+    or (headers.auth_summary.spf.pass and headers.auth_summary.dmarc.pass)
+  )
+  
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and not headers.auth_summary.dmarc.pass
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+  
+  // negate Mailchimp senders
+  and (
+    sender.email.domain.root_domain not in~ (
+      'mailchimp.com',
+      'mcsv.net',
+      'mcdlv.net'
+    )
+    and headers.return_path.domain.root_domain not in~ (
+      'mailchimp.com',
+      'mcsv.net',
+      'mcdlv.net'
+    )
+    and not any(headers.hops,
+                any(.fields,
+                    .name == "X-Mailer" and strings.icontains(.value, "mailchimp")
+                )
+    )
+  )
+  
+  // flag if reply-to is present and mismatched with sender
+  // (expected for Calendly, but we want to surface for review)
+  and (
+    length(headers.reply_to) > 0
+    and all(headers.reply_to,
+            .email.domain.root_domain != sender.email.domain.root_domain
+    )
+  )
+  
+  // only flag unsolicited messages
+  and (
+    (
+      not profile.by_sender().solicited
+      or (
+        profile.by_sender().any_messages_malicious_or_spam
+        and not profile.by_sender().any_messages_benign
+      )
+    )
+    // if there's a reply-to, check if it's unsolicited
+    or (
+      length(headers.reply_to) > 0
+      and not any(headers.reply_to, .email.email in $recipient_emails)
+    )
+  )
+  and not profile.by_sender().any_messages_benign
+  
+tags:
+  - "Hunt"
+  - "Calendly"
+  - "Scheduling service"
+attack_types:
+  - "BEC/Fraud"
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Social engineering"
+  - "Spoofing"
+detection_methods:
+  - "Header analysis"
+  - "Sender analysis"
+  - "Content analysis"
+id: "12df6047-ed10-5e97-9038-d9b94bdb24d4"
+og_id: "5e2e0377-df8c-5032-8963-09e98a39226d"
+testing_pr: 3549
+testing_sha: 87a3f9aff8a90e237ff2506a7bdac3aae8dbe2d1
