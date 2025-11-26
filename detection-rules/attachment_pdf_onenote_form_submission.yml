@@ -1,0 +1,29 @@
+name: "Attachment: PDF with Microsoft OneNote form submission"
+description: "Detects PDF attachments containing a single sharepoint URL referencing the senders personal OneNote used for form submision lure."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and length(filter(attachments, .file_type == "pdf")) >= 1
+  and any(attachments,
+          .file_type == "pdf"
+          and any(file.explode(.),
+                  any(.scan.url.urls,
+                      strings.icontains(.path,
+                                        strings.concat("/:o:/p/",
+                                                      sender.email.local_part
+                                        )
+                      )
+                  )
+          )
+  )
+
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "PDF"
+  - "Social engineering"
+detection_methods:
+  - "File analysis"
+  - "Content analysis"
+id: "0675bbc5-b322-5bd6-a4ea-61dc5346d603"
