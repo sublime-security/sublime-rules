@@ -5,31 +5,14 @@ severity: "medium"
 source: |
   type.inbound
   // fake thread check
+  and (length(headers.references) == 0 or headers.in_reply_to is null)
   and (
-    (
-      (
-        strings.istarts_with(subject.subject, "RE:")
-        or strings.istarts_with(subject.subject, "FW:")
-        or strings.istarts_with(subject.subject, "FWD:")
-        or regex.imatch(subject.subject,
-                        '(\[[^\]]+\]\s?){0,3}(re|fwd?|automat.*)\s?:.*'
-        )
-      )
-    )
+    subject.is_reply
+    or subject.is_forward
     // fake thread, but no indication in the subject line
     // current_thread pulls the recent thread, but the full body contains the fake "original" email
     or (
-      not (
-        (
-          strings.istarts_with(subject.subject, "RE:")
-          or strings.istarts_with(subject.subject, "R:")
-          or strings.istarts_with(subject.subject, "ODG:")
-          or strings.istarts_with(subject.subject, "答复:")
-          or strings.istarts_with(subject.subject, "AW:")
-          or strings.istarts_with(subject.subject, "TR:")
-          or strings.istarts_with(subject.subject, "FWD:")
-        )
-      )
+      not (subject.is_reply or subject.is_forward)
       and any([body.current_thread.text, body.html.display_text, body.plain.raw],
               3 of (
                 strings.icontains(., "from:"),
@@ -108,6 +91,18 @@ source: |
     // link display text contains invisible characters (U+200F)
     any(body.links, strings.contains(.display_text, "\u{200F}")),
   
+    // Low reputation link with display text ending in a document extension
+    any(body.links,
+        .href_url.domain.root_domain not in $tranco_1m
+        and .href_url.domain.valid
+        and .href_url.domain.root_domain not in $org_domains
+        and .href_url.domain.root_domain not in $high_trust_sender_root_domains
+        and (
+          any($file_extensions_macros, strings.ends_with(..display_text, .))
+          or strings.ends_with(.display_text, 'pdf')
+        )
+    ),
+
     // display name contains an email
     regex.contains(sender.display_name, '[a-z0-9]+@[a-z]+'),
   
