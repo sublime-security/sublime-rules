@@ -6,7 +6,7 @@ source: |
   type.inbound
   and length(body.links) > 0
   
-  // Payment proof keywords in subject or body
+  // payment proof keywords in subject or body
   and (
     regex.icontains(subject.subject,
                     'proof.{0,10}payment|payment.{0,10}proof|payment.{0,10}reference|reference.{0,10}payment'
@@ -16,9 +16,9 @@ source: |
     )
   )
   
-  // Suspicious link characteristics
+  // suspicious link characteristics
   and any(body.links,
-          // Tracking/redirect domains (common patterns)
+          // tracking/redirect domain patterns
           (
             regex.icontains(.href_url.domain.domain,
                             'tracking\.',
@@ -30,16 +30,16 @@ source: |
                             'r\.'
             )
           )
-          // Suspicious URL patterns
+          // suspicious URL patterns
           or regex.match(.href_url.path, '\/l\/[a-f0-9]{32,}')
           or regex.match(.href_url.path, '\/[a-z0-9]{20,}')
           or length(.href_url.path) > 50
-          // Query parameters that suggest tracking
+          // query parameters that suggest tracking
           or strings.icontains(.href_url.query_params, "cache_buster")
           or strings.icontains(.href_url.query_params, "tracking")
           or strings.icontains(.href_url.query_params, "ref")
           or strings.icontains(.href_url.query_params, "utm_")
-          // Generic or misleading link display text
+          // generic or misleading link display text
           or (
             .display_text != null
             and regex.icontains(.display_text,
@@ -52,24 +52,22 @@ source: |
             )
           )
   )
-  
-  // Additional suspicious indicators
   and 2 of (
-    // Short email body (common in phishing)
+    // short email body
     length(body.current_thread.text) < 500,
   
-    // Sender from suspicious or free domain
+    // sender from suspicious or free domain
     (
       sender.email.domain.root_domain in $free_email_providers
       or profile.by_sender().days_known < 7
     ),
   
-    // Generic greeting
+    // generic greeting
     regex.icontains(body.current_thread.text,
                     'dear.{0,10}user|dear.{0,10}customer'
     ),
   
-    // Financial entities detected but from untrusted sender
+    // financial entities detected but from untrusted sender
     (
       any(ml.nlu_classifier(body.current_thread.text).entities,
           .name == "financial"
@@ -77,10 +75,7 @@ source: |
       and not sender.email.domain.root_domain in $high_trust_sender_root_domains
     ),
   
-    // No legitimate attachments despite claiming proof
-    length(attachments) == 0,
-  
-    // Reply-to different from sender
+    // sender mismatch
     (
       length(headers.reply_to) > 0
       and any(headers.reply_to,
@@ -88,22 +83,25 @@ source: |
       )
     )
   )
-  // NLU indicates credential theft intent
+  // NLU thinks credential theft intent
   and any(ml.nlu_classifier(body.current_thread.text).intents,
           .name == "cred_theft" and .confidence in ("medium", "high")
   )
   
-  // Exclude legitimate payment processors and financial institutions
-  and not sender.email.domain.root_domain in (
-    "paypal.com",
-    "stripe.com",
-    "square.com",
-    "adyen.com",
-    "worldpay.com",
-    "authorize.net"
+  // exclude legitimate payment processors and financial institutions who pass auth
+  and not (
+    sender.email.domain.root_domain in (
+      "paypal.com",
+      "stripe.com",
+      "square.com",
+      "adyen.com",
+      "worldpay.com",
+      "authorize.net"
+    )
+    and headers.auth_summary.dmarc.pass
   )
   
-  // Standard authentication and solicitation checks
+  // standard authentication and solicitation checks
   and (
     not profile.by_sender().solicited
     or (
