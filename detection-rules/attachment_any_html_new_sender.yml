@@ -10,7 +10,9 @@ type: "rule"
 severity: "medium"
 source: |
   type.inbound
-  and any(attachments, .file_extension in~ ('htm', 'html') or .file_type == "html")
+  and any(attachments,
+          .file_extension in~ ('htm', 'html') or .file_type == "html"
+  )
   and (
     (
       profile.by_sender().prevalence in ("new", "outlier")
@@ -19,16 +21,12 @@ source: |
     or profile.by_sender().any_messages_malicious_or_spam
   )
   and not profile.by_sender().any_messages_benign
-
-  // negate highly trusted sender domains unless they fail DMARC authentication
-  and (
-    (
-      sender.email.domain.root_domain in $high_trust_sender_root_domains
-      and not headers.auth_summary.dmarc.pass
-    )
-    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  
+  // negate highly trusted sender domains unless they fail DMARC authentication or DMARC is missing
+  and not (
+    sender.email.domain.root_domain in $high_trust_sender_root_domains
+    and coalesce(headers.auth_summary.dmarc.pass, false)
   )
-
 tags:
   - "Attack surface reduction"
 tactics_and_techniques:

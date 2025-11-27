@@ -21,24 +21,30 @@ source: |
                           "*shared this document*"
             )
         )
-        or any(beta.ml_topic(body.current_thread.text).topics,
+        or any(ml.nlu_classifier(body.current_thread.text).topics,
                .name == "File Sharing and Cloud Services"
                and .confidence == "high"
         )
-        or any(file.explode(file.message_screenshot()),
-               strings.ilike(.scan.ocr.raw,
-                             "*shared a file with you*",
-                             "*shared with you*",
-                             "*invited you to access a file*",
-                             "*received a document*",
-                             "*shared a document*",
-                             "*shared a new document*",
-                             "*shared this document*"
-               )
-               or any(beta.ml_topic(.scan.ocr.raw).topics,
-                      .name == "File Sharing and Cloud Services"
-                      and .confidence == "high"
-               )
+        //
+        // This rule makes use of a beta feature and is subject to change without notice
+        // using the beta feature in custom rules is not suggested until it has been formally released
+        //
+        or strings.ilike(beta.ocr(file.message_screenshot()).text,
+                         "*shared a file with you*",
+                         "*shared with you*",
+                         "*invited you to access a file*",
+                         "*received a document*",
+                         "*shared a document*",
+                         "*shared a new document*",
+                         "*shared this document*"
+        )
+        //
+        // This rule makes use of a beta feature and is subject to change without notice
+        // using the beta feature in custom rules is not suggested until it has been formally released
+        //
+        or any(ml.nlu_classifier(beta.ocr(file.message_screenshot()).text).topics,
+               .name == "File Sharing and Cloud Services"
+               and .confidence == "high"
         )
       )
       and (
@@ -310,8 +316,10 @@ source: |
   )
   // if there is a Sharepoint link, ensure the link doesn't match any org SLDs
   and not any(body.links,
-              (.href_url.domain.root_domain == "sharepoint.com"
-              and any($org_slds, . == ..href_url.domain.subdomain))
+              (
+                .href_url.domain.root_domain == "sharepoint.com"
+                and any($org_slds, . == ..href_url.domain.subdomain)
+              )
               or .href_url.domain.domain in $tenant_domains
   )
   and sender.email.domain.root_domain not in $org_domains
@@ -328,9 +336,8 @@ source: |
     // ignore microsoft privacy statement links
     "aka.ms"
   )
-  
   and not (
-     (
+    (
       (
         strings.istarts_with(subject.subject, "RE:")
         or strings.istarts_with(subject.subject, "R:")
@@ -345,10 +352,7 @@ source: |
         )
       )
       and (
-        (
-          length(headers.references) > 0
-          or headers.in_reply_to is not null
-        )
+        (length(headers.references) > 0 or headers.in_reply_to is not null)
         // ensure that there are actual threads
         and (
           length(body.previous_threads) > 0
