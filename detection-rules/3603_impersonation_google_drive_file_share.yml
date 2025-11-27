@@ -1,0 +1,252 @@
+name: "Brand impersonation: Google Drive fake file share"
+description: |
+  This rule detects messages impersonating a Google Drive file sharing email where no links point to known Google domains.
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  
+  // Google Drive body content looks like this
+  and (
+    (
+      (
+        any([body.current_thread.text, body.plain.raw],
+            strings.ilike(.,
+                          "*shared a file with you*",
+                          "*shared with you*",
+                          "*invited you to review*",
+                          "*received a document*",
+                          "*shared a document*",
+                          "*shared a spreadsheet*",
+                          "*shared this document*",
+                          "*shared an item*",
+                          "*received this email because you*",
+                          "*shared a*with you*",
+                          "*automated *mail from google*drive*",
+                          "*added as an editor*",
+                          "*invited you to edit*"
+            )
+        )
+        //
+        // This rule makes use of a beta feature and is subject to change without notice
+        // using the beta feature in custom rules is not suggested until it has been formally released
+        //
+        or strings.ilike(beta.ocr(file.message_screenshot()).text,
+                         "*shared a file with you*",
+                         "*shared with you*",
+                         "*invited you to review*",
+                         "*received a document*",
+                         "*shared a document*",
+                         "*shared a spreadsheet*",
+                         "*shared this document*",
+                         "*shared an item*",
+                         "*received this email because you*",
+                         "*shared a*with you*",
+                         "*automated *mail from google*drive*",
+                         "*added as an editor*",
+                         "*invited you to edit*"
+        )
+      )
+      and (
+        strings.ilike(subject.subject,
+                      "*shared*",
+                      "*updated*",
+                      "*sign*",
+                      "*review*"
+        )
+        or any(recipients.to,
+               strings.icontains(subject.subject, .email.domain.sld)
+        )
+        or strings.ilike(subject.subject, "*Docs*", "*Sheets*", "*Slides*")
+        or any(body.links,
+               strings.icontains(.display_text, "open document")
+               or strings.iends_with(.display_text, ".pdf")
+        )
+        or strings.ilike(sender.display_name, "*Google Drive*")
+        or subject.subject is null
+        or subject.subject == ""
+        or regex.icontains(body.current_thread.text, '^g.o.o.g.l.e')
+      )
+    )
+    or any([
+             "Contigo", // Spanish
+             "Avec vous", // French
+             "Mit Ihnen", // German
+             "Con te", // Italian
+             "Com você", // Portuguese
+             "Met u", // Dutch
+             "С вами", // Russian
+             "与你", // Chinese (Simplified)
+             "與您", // Chinese (Traditional)
+             "あなたと", // Japanese
+             "당신과", // Korean
+             "معك", // Arabic
+             "آپ کے ساتھ", // Urdu
+             "আপনার সাথে", // Bengali
+             "आपके साथ", // Hindi
+             "Sizinle", // Turkish // Azerbaijani
+             "Med dig", // Swedish
+             "Z tobą", // Polish
+             "З вами", // Ukrainian
+             "Önnel", // Hungarian
+             "Μαζί σας", // Greek
+             "איתך", // Hebrew
+             "กับคุณ", // Thai
+             "Với bạn", // Vietnamese
+             "Dengan Anda", // Indonesian // Malay
+             "Nawe", // Swahili
+             "Cu dumneavoastră", // Romanian
+             "S vámi", // Czech
+             "Med deg", // Norwegian
+             "S vami", // Slovak
+             "Med dig", // Danish
+             "Amb vostè", // Catalan
+             "Teiega", // Estonian
+             "S vama", // Serbian
+           ],
+           strings.icontains(subject.subject, .)
+    )
+  )
+  
+  // contains logic that impersonates Google
+  and (
+    any(ml.logo_detect(file.message_screenshot()).brands,
+        strings.starts_with(.name, "Google")
+    )
+    // Google Drive share box formatting
+    or strings.icontains(body.html.raw,
+                         '<table style="width:100%; border:1px solid #dadce0; border-radius:6px; border-spacing:0; border-collapse:separate; table-layout:fixed" role="presentation">'
+    )
+    or any(attachments,
+           .file_type in $file_types_images
+           and (
+             any(ml.logo_detect(.).brands, strings.starts_with(.name, "Google"))
+             or strings.icontains(beta.ocr(.).text,
+                                  strings.concat("You have received this email because ",
+                                                 sender.email.email,
+                                                 " shared a document with you"
+                                  )
+             )
+             or strings.icontains(beta.ocr(.).text,
+                                  strings.concat("You have received this email because ",
+                                                 sender.email.email,
+                                                 " received a file or folder"
+                                  )
+             )
+             or any(recipients.to,
+                    strings.icontains(beta.ocr(..).text,
+                                      strings.concat("You have received this email because ",
+                                                     .email.email,
+                                                     " shared a document with you"
+                                      )
+                    )
+             )
+             or any(recipients.to,
+                    strings.icontains(beta.ocr(..).text,
+                                      strings.concat("You have received this email because ",
+                                                     .email.email,
+                                                     " received a file or folder"
+                                      )
+                    )
+             )
+             or strings.icontains(beta.ocr(.).text,
+                                  strings.concat(sender.display_name,
+                                                 " (",
+                                                 sender.email.email,
+                                                 ") ",
+                                                 "shared"
+                                  )
+             )
+           )
+    )
+    or strings.icontains(body.current_thread.text,
+                         strings.concat("You have received this email because ",
+                                        sender.email.email,
+                                        " shared a document with you"
+                         )
+    )
+    or strings.icontains(body.current_thread.text,
+                         strings.concat("You have received this email because ",
+                                        sender.email.email,
+                                        " received a file or folder"
+                         )
+    )
+    or any(recipients.to,
+           strings.icontains(body.current_thread.text,
+                             strings.concat("You have received this email because ",
+                                            .email.email,
+                                            " shared a document with you"
+                             )
+           )
+    )
+    or any(recipients.to,
+           strings.icontains(body.current_thread.text,
+                             strings.concat("You have received this email because ",
+                                            .email.email,
+                                            " received a file or folder"
+                             )
+           )
+    )
+    or strings.icontains(body.current_thread.text,
+                         strings.concat(sender.display_name,
+                                        " (",
+                                        sender.email.email,
+                                        ") ",
+                                        "shared"
+                         )
+    )
+    // Google address from footer
+    or 2 of (
+      strings.icontains(body.current_thread.text, 'Google LLC'),
+      strings.icontains(body.current_thread.text, '1600 Amphitheatre Parkway'),
+      strings.icontains(body.current_thread.text, 'Mountain View, CA 94043'),
+    )
+  )
+  and not all(body.links, .href_url.domain.root_domain in ("google.com"))
+  and sender.email.domain.root_domain not in $org_domains
+  and sender.email.domain.root_domain not in ("google.com")
+  and not (
+    all(headers.references, strings.ends_with(., '@docs-share.google.com'))
+    and headers.return_path.domain.domain == "doclist.bounces.google.com"
+  )
+  // negate first threads that are a legitimate Google Drive share
+  and not (
+    length(body.previous_threads) != 0
+    and length(body.previous_threads[length(body.previous_threads) - 1].links) != 0
+    and all(body.previous_threads[length(body.previous_threads) - 1].links,
+            .href_url.domain.root_domain == "google.com"
+    )
+  )
+  
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and not headers.auth_summary.dmarc.pass
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+  and (
+    profile.by_sender().solicited == false
+    or profile.by_sender_email().prevalence == "new"
+    or (
+      profile.by_sender().any_messages_malicious_or_spam
+      and not profile.by_sender().any_messages_benign
+    )
+  )
+  and not profile.by_sender().any_messages_benign
+attack_types:
+  - "Credential Phishing"
+  - "Malware/Ransomware"
+detection_methods:
+  - "Content analysis"
+  - "Header analysis"
+  - "URL analysis"
+  - "Computer Vision"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Social engineering"
+id: "d7a83f73-4570-5bfa-a370-a8949c12cd84"
+og_id: "b424a941-2623-50f5-a3be-e90130e538d2"
+testing_pr: 3603
+testing_sha: 1edb9615b41f1329899b1107ee702e69f291fd96
