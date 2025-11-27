@@ -4,20 +4,92 @@ type: "rule"
 severity: "medium"
 source: |
   type.inbound
-  and (
+  and length(body.links) > 0
+  and length(body.previous_threads) == 0
+  // suspicious link
+  and
+  // At least one unrelated domain appears 2+ times (legitimate brand)
+   (
     (
-      any([subject.base, sender.display_name],
-          strings.icontains(., "Xfinity") or strings.icontains(., "Comcast")
+      any(body.current_thread.links,
+          length(filter(body.current_thread.links,
+                        .href_url.domain.root_domain == ..href_url.domain.root_domain
+                        and .href_url.domain.root_domain != sender.email.domain.root_domain
+                 )
+          ) >= 2
       )
-      and any(ml.nlu_classifier(body.current_thread.text).intents,
-              .name in ("cred_theft", "advance_fee") and .confidence != "low"
-      )
+      // Exactly one domain appears 1x and is not known/trusted
+      and length(filter(body.current_thread.links,
+                        length(filter(body.current_thread.links,
+                                      .href_url.domain.root_domain == ..href_url.domain.root_domain
+                               )
+                        ) == 1
+                        and .href_url.domain.root_domain != sender.email.domain.root_domain
+                        and any(recipients.to,
+                                .email.domain.root_domain != ..href_url.domain.root_domain
+                        )
+                        and .href_url.domain.root_domain not in (
+                          "aka.ms",
+                          "zixcorp.com"
+                        )
+                        and .href_url.domain.root_domain not in $tranco_10k
+                        and network.whois(.href_url.domain).days_old > 365
+                        and strings.istarts_with(.href_url.url, "http")
+                        and (
+                          .display_text != sender.display_name
+                          or .display_text is null
+                          or sender.display_name is null
+                        )
+                 )
+      ) == 1
     )
-    or 2 of (
-      strings.icontains(body.current_thread.text, 'Comcast'),
-      strings.icontains(body.current_thread.text, 'Xfinity'),
-      strings.icontains(body.current_thread.text, '1701 JFK Boulevard'),
-      strings.icontains(body.current_thread.text, 'Philadelphia, PA 19103')
+    or length(body.current_thread.links) == 1
+    or length(filter(body.links, .display_text is not null)) == 1
+    or (
+      length(body.current_thread.links) > 1
+      and length(distinct(body.links, .href_url.domain.domain)) == 1
+    )
+  )
+  // suspicious language
+  and 2 of (
+    any(ml.nlu_classifier(body.current_thread.text).intents,
+        .name in ("cred_theft", "advance_fee") and .confidence != "low"
+    ),
+    any(ml.nlu_classifier(body.current_thread.text).topics,
+        .name in (
+          "Security and Authentication",
+          "Financial Communications",
+          "Legal and Compliance"
+        )
+        and .confidence != "low"
+    ),
+    any(ml.nlu_classifier(body.current_thread.text).entities, .name == "urgency")
+  )
+  // Comcast/Xfinity impersonation
+  and 2 of (
+    any([
+          strings.replace_confusables(subject.base),
+          strings.replace_confusables(sender.display_name)
+        ],
+        strings.ilike(., "*Xfinity*", "*Comcast*", "*Xͯfiͥniͥty*")
+    ),
+    any([
+          strings.replace_confusables(subject.base),
+          strings.replace_confusables(sender.display_name)
+        ],
+        strings.ilevenshtein(., "xfinity") < 4
+        or strings.ilevenshtein(., "comcast") < 4
+    ),
+    strings.ilike(body.current_thread.text, '*Comcast*', '*Xfinity*'),
+    strings.icontains(body.current_thread.text, '1701 JFK Boulevard'),
+    strings.icontains(body.current_thread.text, 'Philadelphia, PA 19103'),
+    (
+      regex.contains(subject.subject,
+                     '[\x{1F300}-\x{1F5FF}\x{1F600}-\x{1F64F}\x{1F680}-\x{1F6FF}\x{1F700}-\x{1F77F}\x{1F780}-\x{1F7FF}\x{1F900}-\x{1F9FF}\x{2600}-\x{26FF}\x{2700}-\x{27BF}\x{2300}-\x{23FF}]'
+      )
+      or regex.contains(sender.display_name,
+                        '[\x{1F300}-\x{1F5FF}\x{1F600}-\x{1F64F}\x{1F680}-\x{1F6FF}\x{1F700}-\x{1F77F}\x{1F780}-\x{1F7FF}\x{1F900}-\x{1F9FF}\x{2600}-\x{26FF}\x{2700}-\x{27BF}\x{2300}-\x{23FF}]'
+      )
     )
   )
   and not any(ml.nlu_classifier(body.current_thread.text).topics,
@@ -29,8 +101,28 @@ source: |
       "comcast.net",
       "comcast.com",
       "comcastbusiness.com",
-      "square.com"
+      "square.com",
+      "xumo.com",
+      "xumotv.com",
+      "xfinitymobile.com",
+      "peacocktv.com",
+      "bravotv.com",
+      "nbc.com",
+      // Xfinity equipment returns
+      "completerecovery.com",
+      "completerecoverycorp.com",
+      // Xfinity spam detection service
+      "tnsi.com",
+      // Comcast Business-related
+      "brighttalk.com",
+      "comcastbizleads.com",
+      // Comcast support-related
+      "myissuetrak.com"
     )
+    and headers.auth_summary.dmarc.pass
+  )
+  and not (
+    sender.email.domain.root_domain in $high_trust_sender_root_domains
     and headers.auth_summary.dmarc.pass
   )
 
