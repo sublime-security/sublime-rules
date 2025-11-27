@@ -4,7 +4,7 @@ type: "rule"
 severity: "medium"
 source: |
   type.inbound
-  
+  and length(attachments) < 2
   // Identifies as SSA without catching strings such as "Alyssa"
   and (
     regex.contains(sender.display_name, '^SSA\b')
@@ -12,10 +12,24 @@ source: |
     // there are confusables in the display name
     or (
       strings.replace_confusables(sender.display_name) != sender.display_name
-      and strings.contains(strings.replace_confusables(sender.display_name), "SSA")
+      and strings.contains(strings.replace_confusables(sender.display_name),
+                           "SSA"
+      )
     )
     or any([sender.display_name, subject.subject],
-           regex.icontains(strings.replace_confusables(.), 'Social (?:benefits|security)', )
+           regex.icontains(strings.replace_confusables(.),
+                           'Social (?:benefits|security)',
+           )
+    )
+    or (
+      any(attachments,
+          .file_type in ("doc", "docx")
+          and any(file.explode(.),
+                  strings.icontains(.scan.strings.raw,
+                                    "Social Security Administration"
+                  )
+          )
+      )
     )
     // display name or subject references a statement
     or (
@@ -30,8 +44,6 @@ source: |
       )
     )
   )
-  // Contains a link
-  and length(body.links) >= 1
   
   // Not from a .gov domain
   and not (sender.email.domain.tld == "gov" and headers.auth_summary.dmarc.pass)
@@ -55,6 +67,21 @@ source: |
     )
     or any(ml.logo_detect(file.message_screenshot()).brands,
            .name == "SSA" and .confidence == "high"
+    )
+    or (
+      any(attachments,
+          .file_type in ("doc", "docx")
+          and any(file.explode(.),
+                  strings.icontains(.scan.strings.raw, "suspended")
+                  or strings.icontains(.scan.strings.raw, "fraudulent")
+                  or strings.icontains(.scan.strings.raw, "violated")
+                  or strings.icontains(.scan.strings.raw, "false identity")
+                  or regex.icontains(.scan.strings.raw,
+                                     '\+?([ilo0-9]{1}.)?\(?[ilo0-9]{3}?\)?.[ilo0-9]{3}.?[ilo0-9]{4}',
+                                     '\+?([ilo0-9]{1,2})?\s?\(?\d{3}\)?[\s\.\-⋅]{0,5}[ilo0-9]{3}[\s\.\-⋅]{0,5}[ilo0-9]{4}'
+                  )
+          )
+      )
     )
   )
   and not any(ml.nlu_classifier(body.current_thread.text).topics,
