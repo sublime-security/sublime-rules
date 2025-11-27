@@ -24,9 +24,23 @@ source: |
                 .file_extension in $file_extensions_common_archives
             )
           )
-          
           or any(ml.link_analysis(.).files_downloaded,
-              any(file.explode(.),
+               // call parse_exif to see if there is a sus file
+               any(beta.parse_exif(.).fields,
+                   .key == "ArchivedFileName"
+                   and strings.ilike(.value,
+                                     "*.dll",
+                                     "*.html",
+                                     "*.exe",
+                                     "*.lnk",
+                                     "*.js",
+                                     "*.vba",
+                                     "*.vbs",
+                                     "*.vbe",
+                                     "*.bat"
+                   )
+               )
+               or any(file.explode(.),
                   (
                     // look for files in encrypted zips.
                     // if password cracking the zip wasn't
@@ -35,7 +49,7 @@ source: |
                     // .zip.attempted_files
                     "encrypted_zip" in .flavors.yara
                     and any(.scan.zip.attempted_files,
-                            strings.ilike(., "*.dll", "*.html", "*.exe", "*.lnk", "*.js", "*.vba", "*.vbs", "*.vbe")
+                            strings.ilike(., "*.dll", "*.html", "*.exe", "*.lnk", "*.js", "*.vba", "*.vbs", "*.vbe", "*.bat")
                     )
                   )
                   // for both non-encrypted zips and encrypted zips

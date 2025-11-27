@@ -5,27 +5,29 @@ severity: "medium"
 source: |
   type.inbound
   and length(body.links) < 10
-  and any(beta.ml_topic(body.current_thread.text).topics,
-          .name in (
-            "Travel and Transportation",
-            "Customer Service and Support",
-            "Security and Authentication"
-          )
-          and .confidence != "low"
-          // handle instances in which ml_topic does not hit
-          or (
-            length(body.links) == 0
-            and length(attachments) == 0
-            and length(body.current_thread.text) < 1000
-            and strings.icontains(sender.display_name, "booking.com")
-          )
+  and (
+    any(ml.nlu_classifier(body.current_thread.text).topics,
+        .name in (
+          "Travel and Transportation",
+          "Customer Service and Support",
+          "Security and Authentication"
+        )
+        and .confidence != "low"
+    )
+    // handle instances in which ml_topic does not hit
+    or (
+      length(body.links) == 0
+      and length(attachments) == 0
+      and length(body.current_thread.text) < 1000
+      and strings.icontains(sender.display_name, "booking.com")
+    )
   )
   and (
     any(ml.nlu_classifier(body.current_thread.text).entities,
         .name == "org" and .text == "Booking.com"
-        or strings.icontains(body.current_thread.text, ' booking.com ')
-        or strings.icontains(sender.display_name, "booking.com")
     )
+    or strings.icontains(body.current_thread.text, ' booking.com ')
+    or strings.icontains(sender.display_name, "booking.com")
   )
   and (
     any(ml.nlu_classifier(body.current_thread.text).intents,
@@ -45,7 +47,7 @@ source: |
            or strings.icontains(.href_url.path, "/redir")
     )
     // check for text strings that betray intent
-    or regex.icontains(body.current_thread.text, '(book\sa|open)\srooms', )
+    or regex.icontains(body.current_thread.text, '(?:book\sa|open)\srooms', )
     or strings.ilike(body.current_thread.text, "* availab*", )
     // two seperate HTML elements impersonating the logo
     or (
@@ -57,8 +59,8 @@ source: |
       )
     )
   )
-  and (
-    sender.email.domain.root_domain not in~ ('booking.com', 'siteminder.com')
+  and not (
+    sender.email.domain.root_domain in~ ('booking.com', 'siteminder.com')
     and headers.auth_summary.dmarc.pass
   )
   and (
@@ -66,6 +68,25 @@ source: |
     or (
       profile.by_sender().any_messages_malicious_or_spam
       and not profile.by_sender().any_messages_benign
+    )
+  )
+  
+  // negate microsoft quarantine messages
+  and not (
+    sender.email.email == "quarantine@messaging.microsoft.com"
+    and (
+      headers.auth_summary.dmarc.pass
+      // no sender auth but MS AuthAs is Internal
+      or (
+        not coalesce(headers.auth_summary.dmarc.pass, false)
+        and any(headers.hops,
+                .index == 0
+                and any(.fields,
+                        .name == "X-MS-Exchange-CrossTenant-AuthAs"
+                        and .value == "Internal"
+                )
+        )
+      )
     )
   )
 
