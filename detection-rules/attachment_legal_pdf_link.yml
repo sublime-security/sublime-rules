@@ -4,17 +4,21 @@ type: "rule"
 severity: "medium"
 source: |
   type.inbound
-  // short body
-  and length(body.current_thread.text) < 1500
-  // // legal with urgency
-  and any(beta.ml_topic(body.html.display_text).topics,
+  // short body or contains emoji
+  and (
+    length(body.current_thread.text) < 1500
+    or regex.contains(body.plain.raw,
+                      '[\x{1F300}-\x{1F5FF}\x{1F600}-\x{1F64F}\x{1F680}-\x{1F6FF}\x{1F700}-\x{1F77F}\x{1F780}-\x{1F7FF}\x{1F900}-\x{1F9FF}\x{2600}-\x{26FF}\x{2700}-\x{27BF}\x{2300}-\x{23FF}]'
+    )
+  )
+  // legal with urgency
+  and any(ml.nlu_classifier(body.html.display_text).topics,
           .name == "Legal and Compliance" and .confidence in ("medium", "high")
   )
   
   // is not a reply
   and length(headers.references) == 0
   and headers.in_reply_to is null
-  
   and (
     // only one attachment
     length(attachments) == 1
@@ -34,33 +38,32 @@ source: |
            )
     )
   )
-  
   and any(attachments,
           .file_extension == "pdf"
           and any(file.explode(.),
                   0 < length(.scan.pdf.urls) < 5
                   and (
-                    // exported from google docs
-                    strings.icontains(.scan.exiftool.producer,
-                                      "Google Docs Renderer"
+                    // suspicious producer
+                    strings.ilike(.scan.exiftool.producer,
+                                  "*Google Docs Renderer*",
+                                  "*Skia/PDF*"
                     )
                     and any(.scan.pdf.urls,
-                           // with links that are URL shortners
-                           .domain.root_domain in $url_shorteners
-                           or .domain.domain in $url_shorteners
-                           // when visiting those links, the link it is sus
-                           or ml.link_analysis(.).effective_url.domain.tld in $suspicious_tlds
-                           or ml.link_analysis(.).credphish.contains_captcha
-                           or ml.link_analysis(.).credphish.disposition == "phishing"
-                           or strings.icontains(ml.link_analysis(.).final_dom.display_text,
-                                                "I'm Human"
-                           )
+                            // with links that are URL shortners
+                            .domain.root_domain in $url_shorteners
+                            or .domain.domain in $url_shorteners
+                            or network.whois(.domain).days_old < 14
+                            // when visiting those links, the link it is sus
+                            or ml.link_analysis(.).effective_url.domain.tld in $suspicious_tlds
+                            or ml.link_analysis(.).credphish.contains_captcha
+                            or ml.link_analysis(.).credphish.disposition == "phishing"
+                            or strings.icontains(ml.link_analysis(.).final_dom.display_text,
+                                                 "I'm Human"
+                            )
                     )
                   )
           )
   )
-  
-
 attack_types:
   - "Credential Phishing"
 tactics_and_techniques:
