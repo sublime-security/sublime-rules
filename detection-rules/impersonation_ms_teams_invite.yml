@@ -22,14 +22,35 @@ source: |
   // common in newsletters which link to a webinar style event
   and not any(body.links, strings.icontains(.display_text, "unsub"))
   
+  // FP negation
+  and not any(body.links,
+              strings.icontains(.display_text, "Join Zoom Meeting")
+              or .href_url.domain.root_domain == "zoom.us"
+  )
+  
   // one of the links contains "join the meeting now"
   and any(body.links, regex.icontains(.display_text, "join .{0,10}meeting"))
   
   // the "join the meeting now" link does not go to microsoft
-  and all(filter(body.links,
+  and all(filter(body.current_thread.links,
                  regex.icontains(.display_text, "join .{0,10}meeting")
           ),
-          .href_url.domain.root_domain not in ("microsoft.com", "microsoft.us")
+          (
+            .href_url.domain.root_domain not in (
+              "microsoft.com",
+              "microsoft.us",
+              "live.com"
+            )
+            and not any(.href_url.query_params_decoded['domain'],
+                        . in ("teams.microsoft.com", "teams.live.com")
+            )
+            // when Mimecast doesn't give us the domain
+            and not (
+              .href_url.domain.root_domain == "mimecastprotect.com"
+              and length(.href_url.query_params_decoded['domain']) == 0
+            )
+          )
+  
           // rewriters often abstract the link
           and .href_url.domain.root_domain not in $bulk_mailer_url_root_domains
   )
