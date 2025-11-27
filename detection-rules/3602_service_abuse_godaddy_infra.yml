@@ -1,0 +1,72 @@
+name: "Service Abuse: GoDaddy infrastructure"
+description: "Detects messages from legitimate GoDaddy domains with suspicious indicators. Observed abused for call back phishing and extortion campaigns."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and length(attachments) == 0
+  // legitimate GoDaddy sending infrastructure
+  and (
+    sender.email.domain.root_domain == "godaddy.com"
+    and headers.auth_summary.dmarc.pass
+    // negate newsletters
+    and sender.email.domain.domain != "e.godaddy.com"
+  )
+  and (
+    (
+      any(ml.nlu_classifier(body.current_thread.text).intents,
+          .name in~ ("callback_scam", "cred_theft", "extortion")
+          and .confidence == "high"
+      )
+      and any(ml.nlu_classifier(body.current_thread.text).entities,
+              .name == "financial" and .name == "request"
+      )
+    )
+    // manual extortion indicators
+    or (
+      regex.icontains(sender.display_name,
+                      'big(\s|[[:punct:]])?brother|seeing(\s|[[:punct:]])?eye'
+      )
+      or regex.icontains(body.current_thread.text,
+                         '((I|you).{0,25}(leak|compromise|hack|see|record|expose))|(dirty|little) secret'
+      )
+    )
+    // manual callback phishing indicators
+    or (
+      // phone number in display name or subject
+      any([sender.display_name, subject.base],
+          regex.icontains(.,
+                          '\b\+?([ilo0-9]{1}.)?\(?[ilo0-9]{3}?\)?.[ilo0-9]{3}.?[ilo0-9]{4}\b'
+          )
+      )
+      // references commonly impersonated brands in body
+      or strings.ilike(strings.replace_confusables(body.current_thread.text),
+                       "*Pay?Pal*",
+                       "*Best?Buy*",
+                       "*Geek?Squad*",
+      )
+    )
+    // emojis in link display text
+    or any(body.links,
+           regex.contains(.display_text,
+                          '[\x{1F300}-\x{1F5FF}\x{1F600}-\x{1F64F}\x{1F680}-\x{1F6FF}\x{1F700}-\x{1F77F}\x{1F780}-\x{1F7FF}\x{1F900}-\x{1F9FF}\x{2600}-\x{26FF}\x{2700}-\x{27BF}\x{2300}-\x{23FF}]'
+           )
+    )
+    // links leading to cloudflare R2 or edge services
+    or any(body.links,
+           .href_url.domain.root_domain in~ ("r2.dev", "pages.dev", "workers.dev")
+    )
+  )
+
+attack_types:
+  - "Callback Phishing"
+  - "Extortion"
+tactics_and_techniques:
+  - "Evasion"
+detection_methods:
+  - "Natural Language Understanding"
+  - "Content analysis"
+id: "29bfe06b-630b-5ab0-9404-302b0298d94d"
+og_id: "8a2dd357-3ecf-5d23-bcd8-d215a5f677dd"
+testing_pr: 3602
+testing_sha: b258403f1d59406c9d8beb3fc1e0ec78dac2a9aa
