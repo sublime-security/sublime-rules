@@ -15,13 +15,24 @@ source: |
       and length(sender.email.domain.domain) < 15
     )
     or strings.ilike(subject.subject, '*DHL notification*')
-    or strings.icontains(body.current_thread.text, 'DHL International')
+    or regex.icontains(subject.subject, 'dhl? express')
     or regex.contains(subject.subject, '\bD.{0,2}H.{0,2}L.{0,2}\b')
+    or (
+      any(ml.nlu_classifier(body.current_thread.text).topics,
+          .name == "Shipping and Package" and .confidence == "high"
+      )
+      and strings.contains(body.current_thread.text, 'DHL ')
+    )
   )
   and (
     any(ml.nlu_classifier(body.current_thread.text).entities, .name == "urgency")
     or any(ml.nlu_classifier(body.current_thread.text).entities,
-           .name == "org" and .text =~ "DHL"
+           .name == "org"
+           and (
+             .text =~ "DHL" 
+             or .text =~ "DHL Express"
+             or strings.istarts_with(.text, "DHL International")
+           )
     )
     or any(ml.logo_detect(file.message_screenshot()).brands,
            .name == "DHL" and .confidence in ("medium", "high")
@@ -106,7 +117,10 @@ source: |
     'dhl.nl',
     'adhlawfirm.com', // similar name but unrelated
     'attendhlth.com', // dhl in domain but unrelated
-    'tdhlaw.com' // dhl in domain but unrelated
+    'tdhlaw.com', // dhl in domain but unrelated
+    'hapibenefits.com', // DHL rewards program
+    'dhlgpi.com', // DHL Australia
+    'dhlfreight-news.com'
   )
   and (
     profile.by_sender().prevalence in ("new", "outlier")
@@ -137,4 +151,4 @@ detection_methods:
 id: "eb1260d6-be8b-5efc-b612-9d630f04fecb"
 og_id: "be4b4ae0-d393-5f8b-b984-5cf4ad7cbeb5"
 testing_pr: 3460
-testing_sha: 171a7b68b768865dda56ccbd0c0a38a76b26eb91
+testing_sha: aa9b4b8203485f87e38ed6871978f42d486233b8
