@@ -7,8 +7,19 @@ source: |
   and (
     (
       strings.ilike(sender.display_name, 'quickbook*')
+      or strings.like(sender.display_name, "QB-*")
+      or strings.ilike(sender.display_name, 'intuit*')
       or strings.ilevenshtein(sender.display_name, 'quickbooks') <= 1
       or strings.ilike(sender.email.domain.domain, '*quickbook*')
+      or (
+        length(filter(ml.nlu_classifier(body.current_thread.text).entities,
+                      strings.icontains(.text, "quickbooks")
+               )
+        ) > 2
+        and any(ml.nlu_classifier(body.current_thread.text).intents,
+                .name == "cred_theft"
+        )
+      )
     )
     or strings.ilike(body.current_thread.text, "*invoice*")
   )
@@ -35,15 +46,26 @@ source: |
                       '\+?([ilo0-9]{1,2})?\s?\(?\d{3}\)?[\s\.\-⋅]{0,5}[ilo0-9]{3}[\s\.\-⋅]{0,5}[ilo0-9]{4}'
       )
       and any(ml.nlu_classifier(body.current_thread.text).topics,
-              .name == "Software and App Updates"
+              .name in ("Software and App Updates", "Security and Authentication")
       )
   
       // we need to re-check for QB indicators, otherwise we can have "*invoice*"
       // and this block, which is much more than just QB impersonation
       and (
-        strings.ilike(sender.display_name, '*quickbooks*')
+        strings.ilike(sender.display_name, 'quickbook*')
+        or strings.like(sender.display_name, "QB-*")
+        or strings.ilike(sender.display_name, 'intuit*')
         or strings.ilevenshtein(sender.display_name, 'quickbooks') <= 1
-        or strings.ilike(sender.email.domain.domain, '*quickbooks*')
+        or strings.ilike(sender.email.domain.domain, '*quickbook*')
+        or (
+          length(filter(ml.nlu_classifier(body.current_thread.text).entities,
+                        strings.icontains(.text, "quickbooks")
+                 )
+          ) > 2
+          and any(ml.nlu_classifier(body.current_thread.text).intents,
+                  .name == "cred_theft"
+          )
+        )
       )
     )
   )

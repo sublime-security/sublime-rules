@@ -33,14 +33,23 @@ source: |
            network.whois(.href_url.domain).days_old < 30
     )
     or (
-      any(beta.ml_topic(body.current_thread.text).topics,
-          .name in ("B2B Cold Outreach", "Professional and Career Development") and .confidence != "low"
+      any(ml.nlu_classifier(body.current_thread.text).topics,
+          .name in ("B2B Cold Outreach", "Professional and Career Development")
+          and .confidence != "low"
       )
     )
     // sender display name or subject contains confusables
     or (
       sender.display_name != strings.replace_confusables(sender.display_name)
       or subject.subject != strings.replace_confusables(subject.subject)
+    )
+    // IP pool appears to be tagged by Xero via Mailgun
+    // https://help.mailgun.com/hc/en-us/articles/360052184214-IP-Pools
+    or any(headers.hops,
+           any(.fields,
+               .name == "X-Mailgun-Sending-Ip-Pool-Name"
+               and .value == "High Risk Pool"
+           )
     )
   )
   and (
@@ -73,11 +82,10 @@ source: |
                    )
            )
     )
-    or regex.icontains(subject.subject,
-                       "termination.*notice"
-    )
+    or regex.icontains(subject.subject, "termination.*notice")
     or any(ml.nlu_classifier(body.current_thread.text).entities,
-         .name == "sender" and regex.icontains(.text, 'Recruitment|staffing|\bhr\b')
+           .name in ("sender", "org")
+           and regex.icontains(.text, 'Recruitment|staffing|\bhr\b')
     )
   )
 attack_types:

@@ -12,7 +12,12 @@ source: |
     or (
       length(attachments) > 0
       and all(attachments,
-              .file_type in $file_types_images or .file_type == 'pdf'
+              .file_type in $file_types_images
+              or .file_type == 'pdf'
+              or (
+                .file_extension == "ics"
+                or .content_type in ("text/calendar", "application/ics")
+              )
       )
     )
   )
@@ -49,6 +54,9 @@ source: |
                                      "Dokument (überprüfen|prüfen|unterschreiben|geschickt)",
                                      // German (important|urgent|immediate)
                                      "(wichtig|dringend|sofort)"
+                     )
+                     and any(ml.nlu_classifier(.scan.ocr.raw).topics,
+                             .name == "E-Signature"
                      )
                      and not strings.count(.scan.ocr.raw, "\n\n\n\n\n\n\n\n\n\n") > 3
                    )
@@ -96,50 +104,44 @@ source: |
     // accomidate truncated pngs and GIF files which can cause logodetect/OCR failures
     or (
       any(attachments,
-          (
-            .file_type =~ "gif"
-            or any(file.explode(.),
-                   any(.scan.exiftool.fields,
-                       .key == "Warning" and .value == "Truncated PNG image"
-                   )
-            )
+          .file_type =~ "gif"
+          //
+          // This rule makes use of a beta feature and is subject to change without notice
+          // using the beta feature in custom rules is not suggested until it has been formally released
+          //
+          or any(beta.parse_exif(.).fields,
+                 .key == "Warning" and .value == "Truncated PNG image"
           )
       )
       and (
-        any(ml.logo_detect(file.message_screenshot()).brands,
-            (
-              .name == "DocuSign"
-              or any(file.explode(file.message_screenshot()),
-                     strings.ilike(.scan.ocr.raw, "*DocuSign*")
-              )
-            )
-        )
-        and (
-          any(file.explode(file.message_screenshot()),
-              (
-                any(ml.nlu_classifier(.scan.ocr.raw).intents,
-                    .name == "cred_theft" and .confidence != "low"
-                )
-                or regex.icontains(.scan.ocr.raw,
-                                   "((re)?view|access|complete(d)?) document(s)?",
-                                   "[^d][^o][^c][^u]sign",
-                                   "important edocs",
-                                   // German (Document (check|check|sign|sent))
-                                   "Dokument (überprüfen|prüfen|unterschreiben|geschickt)",
-                                   // German (important|urgent|immediate)
-                                   "(wichtig|dringend|sofort)"
-                )
-              )
+        any(ml.logo_detect(file.message_screenshot()).brands, .name == "DocuSign")
+        //
+        // This rule makes use of a beta feature and is subject to change without notice
+        // using the beta feature in custom rules is not suggested until it has been formally released
+        //
+        or strings.ilike(beta.ocr(file.message_screenshot()).text, "*DocuSign*")
+      )
+      and (
+        (
+          any(ml.nlu_classifier(beta.ocr(file.message_screenshot()).text).intents,
+              .name == "cred_theft" and .confidence != "low"
+          )
+          or regex.icontains(beta.ocr(file.message_screenshot()).text,
+                             "((re)?view|access|complete(d)?) document(s)?",
+                             "[^d][^o][^c][^u]sign",
+                             "important edocs",
+                             // German (Document (check|check|sign|sent))
+                             "Dokument (überprüfen|prüfen|unterschreiben|geschickt)",
+                             // German (important|urgent|immediate)
+                             "(wichtig|dringend|sofort)"
           )
         )
-        and not any(file.explode(file.message_screenshot()),
-                    strings.ilike(.scan.ocr.raw,
-                                  "*DocuSigned By*",
-                                  "*DocuSign Envelope ID*",
-                                  "*Certificate Of Completion*",
-                                  "*Adobe Sign*"
-                    )
-        )
+      )
+      and not strings.ilike(beta.ocr(file.message_screenshot()).text,
+                            "*DocuSigned By*",
+                            "*DocuSign Envelope ID*",
+                            "*Certificate Of Completion*",
+                            "*Adobe Sign*"
       )
     )
   )
@@ -169,7 +171,6 @@ source: |
   
   // negate replies to docusign notifications
   and not any(headers.references, strings.iends_with(., '@camail.docusign.net'))
-
 attack_types:
   - "Credential Phishing"
 tactics_and_techniques:
