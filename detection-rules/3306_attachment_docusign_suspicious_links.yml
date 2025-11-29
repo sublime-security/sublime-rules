@@ -40,7 +40,17 @@ source: |
         (
           any(ml.logo_detect(.).brands, .name == "DocuSign")
           or any(file.explode(.),
-                 regex.icontains(.scan.ocr.raw, "DocuSi?gn")
+                 (
+                   regex.icontains(.scan.ocr.raw, "DocuSi?gn")
+                   // account for OCR misses
+                   and not any(regex.iextract(.scan.ocr.raw,
+                                              '^(?P<envelope_id>.{20})'
+                               ),
+                               strings.ilevenshtein(.named_groups["envelope_id"],
+                                                    'Docusign Envelope ID'
+                               ) < 4
+                   )
+                 )
                  and (
                    any(ml.nlu_classifier(.scan.ocr.raw).intents,
                        .name == "cred_theft" and .confidence != "low"
@@ -187,4 +197,4 @@ detection_methods:
 id: "769e60db-785b-5779-a8a4-c98655d97868"
 og_id: "814a5694-d626-5bf4-a1ba-a1dbcb625279"
 testing_pr: 3306
-testing_sha: d1e790c76de33e302f676a7059aeeaa1ac2bbfb6
+testing_sha: 4cc3f3ec14e50902cdd6ee3a5f13e39bfae7241b
