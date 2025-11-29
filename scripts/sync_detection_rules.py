@@ -1,11 +1,14 @@
 import base64
 import os
+import sys
 import uuid
 from datetime import datetime, timedelta, timezone
 import re
 from urllib.parse import quote
 
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 # Common configuration
 GITHUB_TOKEN = os.getenv('GITHUB_TOKEN')
@@ -63,6 +66,8 @@ COMMENT_TRIGGER = os.getenv('COMMENT_TRIGGER', '/update-test-rules')
 ADD_TEST_RULES_LABEL = os.getenv('ADD_TEST_RULES_LABEL', 'false').lower() == 'true'
 # label to apply to PRs that have rules in test-rules
 IN_TEST_RULES_LABEL = os.getenv('IN_TEST_RULES_LABEL', 'in-test-rules')
+# label to apply to PRs that are excluded due to author membership
+AUTHOR_MEMBERSHIP_EXCLUSION_LABEL = os.getenv('AUTHOR_MEMBERSHIP_EXCLUSION_LABEL', 'test-rules:excluded:author_membership')
 
 # flag to skip files containing specific text patterns
 # this is due to test-rules not supporting specific functions
@@ -95,10 +100,26 @@ REQUIRED_CHECK_CONCLUSION = os.getenv('REQUIRED_CHECK_CONCLUSION', 'success')
 if not os.path.exists(OUTPUT_FOLDER):
     os.makedirs(OUTPUT_FOLDER)
 
+# Configure requests session with retry strategy for GitHub API
+retry_strategy = Retry(
+    total=3,  # Maximum number of retries
+    backoff_factor=2,  # Exponential backoff factor (wait 2^retry seconds)
+    status_forcelist=[429, 500, 502, 503, 504],  # HTTP status codes to retry on
+    allowed_methods=["HEAD", "GET", "POST", "PUT", "DELETE", "OPTIONS", "TRACE"]
+)
+
+adapter = HTTPAdapter(max_retries=retry_strategy)
+github_session = requests.Session()
+github_session.mount("http://", adapter)
+github_session.mount("https://", adapter)
+
 headers = {
     'Authorization': f'token {GITHUB_TOKEN}',
     'Accept': 'application/vnd.github.v3+json'
 }
+
+# Configure session headers
+github_session.headers.update(headers)
 
 def has_label(pr_number, label_name):
     """
@@ -112,7 +133,7 @@ def has_label(pr_number, label_name):
         bool: True if PR has the label, False otherwise
     """
     url = f'https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/issues/{pr_number}/labels'
-    response = requests.get(url, headers=headers)
+    response = github_session.get(url)
     response.raise_for_status()
     labels = response.json()
     
@@ -132,14 +153,41 @@ def apply_label(pr_number, label_name):
     url = f'https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/issues/{pr_number}/labels'
     payload = {'labels': [label_name]}
     
-    response = requests.post(url, headers=headers, json=payload)
-    
-    if response.status_code == 200:
+    try:
+        response = github_session.post(url, json=payload)
+        response.raise_for_status()
         print(f"\tApplied label '{label_name}' to PR #{pr_number}")
         return True
-    else:
-        print(f"\tFailed to apply label '{label_name}' to PR #{pr_number}: {response.status_code}")
-        return False
+    except Exception as e:
+        print(f"\tFailed to apply label '{label_name}' to PR #{pr_number}: {e}")
+        print("Failed to get valid response after retries. Exiting script.")
+        sys.exit(1)
+
+def remove_label(pr_number, label_name):
+    """
+    Remove a label from a PR.
+
+    Args:
+        pr_number (int): Pull request number
+        label_name (str): Label name to remove
+
+    Returns:
+        bool: True if label was removed successfully, False otherwise
+    """
+    url = f'https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/issues/{pr_number}/labels/{label_name}'
+    
+    try:
+        response = github_session.delete(url)
+        if response.status_code == 404:
+            print(f"\tLabel '{label_name}' not found on PR #{pr_number}")
+            return True  # Consider it successful if the label wasn't there
+        response.raise_for_status()
+        print(f"\tRemoved label '{label_name}' from PR #{pr_number}")
+        return True
+    except Exception as e:
+        print(f"\tFailed to remove label '{label_name}' from PR #{pr_number}: {e}")
+        print("Failed to get valid response after retries. Exiting script.")
+        sys.exit(1)
 
 def is_user_in_org(username, org_name):
     """
@@ -153,8 +201,17 @@ def is_user_in_org(username, org_name):
         bool: True if user is a member, False otherwise
     """
     url = f'https://api.github.com/orgs/{org_name}/members/{username}'
-    response = requests.get(url, headers=headers)
-    return response.status_code == 204
+    try:
+        response = github_session.get(url)
+        # 404 is expected when user is not in org, so handle it separately
+        if response.status_code == 404:
+            return False
+        response.raise_for_status()
+        return response.status_code == 204
+    except Exception as e:
+        print(f"Error checking organization membership for {username} in {org_name}: {e}")
+        print("Failed to get valid response after retries. Exiting script.")
+        sys.exit(1)
 
 
 def has_trigger_comment(pr_number, org_name, trigger_comment):
@@ -170,7 +227,7 @@ def has_trigger_comment(pr_number, org_name, trigger_comment):
         bool: True if a matching comment is found, False otherwise
     """
     url = f'https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/issues/{pr_number}/comments'
-    response = requests.get(url, headers=headers)
+    response = github_session.get(url)
     response.raise_for_status()
     comments = response.json()
 
@@ -207,11 +264,20 @@ def has_required_action_completed(pr_sha, action_name, required_status):
     # Add the required Accept header for the Checks API
     custom_headers['Accept'] = 'application/vnd.github.v3+json'
 
-    response = requests.get(url, headers=custom_headers)
-
-    if response.status_code != 200:
-        print(f"\tError checking action status: {response.status_code}")
-        return False
+    # Temporarily update session headers for this request
+    original_accept = github_session.headers.get('Accept')
+    github_session.headers.update(custom_headers)
+    
+    try:
+        response = github_session.get(url)
+        response.raise_for_status()
+    except Exception as e:
+        print(f"\tError checking action status: {e}")
+        print("Failed to get valid response after retries. Exiting script.")
+        sys.exit(1)
+    finally:
+        # Restore original Accept header
+        github_session.headers['Accept'] = original_accept
 
     check_runs = response.json()
 
@@ -386,7 +452,7 @@ def get_closed_pull_requests():
         url = f'https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/pulls'
         params = {'page': page, 'per_page': per_page, 'state': 'closed', 'sort': 'updated', 'direction': 'desc'}
         print(f"Fetching page {page} of CLOSED Pull Requests")
-        response = requests.get(url, headers=headers, params=params)
+        response = github_session.get(url, params=params)
         response.raise_for_status()
 
         # Extend the list with the pull requests from the current page
@@ -423,7 +489,7 @@ def get_open_pull_requests():
         url = f'https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/pulls'
         params = {'page': page, 'per_page': per_page, 'sort': 'updated', 'direction': 'desc'}
         print(f"Fetching page {page} of Pull Requests")
-        response = requests.get(url, headers=headers, params=params)
+        response = github_session.get(url, params=params)
         response.raise_for_status()
 
         # Extend the list with the pull requests from the current page
@@ -453,7 +519,7 @@ def get_open_pull_requests():
 
 def get_files_for_pull_request(pr_number):
     url = f'https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/pulls/{pr_number}/files'
-    response = requests.get(url, headers=headers)
+    response = github_session.get(url)
     response.raise_for_status()
     return response.json()
 
@@ -477,8 +543,22 @@ def count_yaml_rules_in_pr(files):
     return yaml_count
 
 
-def get_file_contents(contents_url):
-    response = requests.get(contents_url, headers=headers)
+def get_file_contents(file_path, ref):
+    """
+    Get file contents from GitHub at a specific commit.
+
+    Args:
+        file_path (str): Path to the file in the repository
+        ref (str): Git ref (branch, tag, or commit SHA) to fetch from
+
+    Returns:
+        str: Decoded file content
+    """
+    # Construct the contents API URL with the specific ref
+    url = f'https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/contents/{file_path}'
+    params = {'ref': ref}
+
+    response = github_session.get(url, params=params)
     response.raise_for_status()
     content = response.json()['content']
     return base64.b64decode(content).decode('utf-8')
@@ -767,12 +847,27 @@ def handle_pr_rules(mode):
             has_comment = False
             if author_in_org:
                 print(f"\tPR #{pr['number']}: Author {pr['user']['login']} is in {ORG_NAME}")
+                # remove the label if it's present
+                if not has_label(pr_number, AUTHOR_MEMBERSHIP_EXCLUSION_LABEL):
+                    remove_label(pr_number, AUTHOR_MEMBERSHIP_EXCLUSION_LABEL)
+
             # only invoke has_trigger_comment when author_in_org is false
             if INCLUDE_PRS_WITH_COMMENT and not author_in_org:
                 has_comment = has_trigger_comment(pr['number'], ORG_NAME, COMMENT_TRIGGER)
+                
+                # If trigger comment was found, remove the exclusion label
+                if has_comment and has_label(pr_number, AUTHOR_MEMBERSHIP_EXCLUSION_LABEL):
+                    print(f"\tPR #{pr_number}: Removing '{AUTHOR_MEMBERSHIP_EXCLUSION_LABEL}' label due to trigger comment")
+                    remove_label(pr_number, AUTHOR_MEMBERSHIP_EXCLUSION_LABEL)
 
                 if not author_in_org and not has_comment:
                     print(f"\tSkipping PR #{pr_number}: Author {pr['user']['login']} is not in {ORG_NAME} and is missing comment trigger")
+                    
+                    # Apply exclusion label if not already present
+                    if not has_label(pr_number, AUTHOR_MEMBERSHIP_EXCLUSION_LABEL):
+                        print(f"\tPR #{pr_number} doesn't have the '{AUTHOR_MEMBERSHIP_EXCLUSION_LABEL}' label. Applying...")
+                        apply_label(pr_number, AUTHOR_MEMBERSHIP_EXCLUSION_LABEL)
+                    
                     process_pr = False
 
         if not process_pr:
@@ -803,6 +898,10 @@ def handle_pr_rules(mode):
                     apply_label(pr_number, BULK_PR_LABEL)
                 
                 continue
+            else:
+                # if it has the label, remove it.
+                if has_label(pr_number, BULK_PR_LABEL):
+                    remove_label(pr_number, BULK_PR_LABEL)
 
         # Process files in the PR
         for file in files:
@@ -825,7 +924,8 @@ def handle_pr_rules(mode):
 
             # If file should be processed, get content and apply mode-specific logic
             if process_file:
-                content = get_file_contents(file['contents_url'])
+                # Fetch file content at the specific commit SHA to avoid race conditions
+                content = get_file_contents(file['filename'], latest_sha)
 
                 # Skip files with specific text if flag is set
                 if SKIP_FILES_WITH_TEXT and SKIP_TEXTS:
@@ -839,6 +939,10 @@ def handle_pr_rules(mode):
                                 print(f"\tPR #{pr_number} doesn't have the '{label}' label. Applying...")
                                 apply_label(pr_number, label)
 
+                        # remove the IN_TEST_RULES_LABEL label as it's no longer in test-rules
+                        if has_label(pr_number, IN_TEST_RULES_LABEL):
+                            remove_label(pr_number, IN_TEST_RULES_LABEL)
+                        # skip this file and process the next one
                         continue
 
                 # Process file (common for both modes)
