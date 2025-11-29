@@ -40,17 +40,7 @@ source: |
         (
           any(ml.logo_detect(.).brands, .name == "DocuSign")
           or any(file.explode(.),
-                 (
-                   regex.icontains(.scan.ocr.raw, "DocuSi?gn")
-                   // account for OCR misses
-                   and not any(regex.iextract(.scan.ocr.raw,
-                                              '^(?P<envelope_id>.{20})'
-                               ),
-                               strings.ilevenshtein(.named_groups["envelope_id"],
-                                                    'Docusign Envelope ID'
-                               ) < 4
-                   )
-                 )
+                 regex.icontains(.scan.ocr.raw, "DocuSi?gn")
                  and (
                    any(ml.nlu_classifier(.scan.ocr.raw).intents,
                        .name == "cred_theft" and .confidence != "low"
@@ -81,6 +71,15 @@ source: |
                                   "*Adobe Sign*",
                                   // Additional Adobe Acrobat Sign check
                                   "*Powered by\nAdobe\nAcrobat Sign*"
+                    )
+                    or (
+                      .scan.ocr.raw is not null
+                      // account for OCR misses
+                      and any(regex.iextract(.scan.ocr.raw, '^(?P<envelope_id>.{20})'),
+                          0 < strings.ilevenshtein(.named_groups["envelope_id"],
+                                                   'Docusign Envelope ID'
+                          ) <= 4
+                      )
                     )
                     or (
                       .depth == 0
@@ -197,4 +196,4 @@ detection_methods:
 id: "769e60db-785b-5779-a8a4-c98655d97868"
 og_id: "814a5694-d626-5bf4-a1ba-a1dbcb625279"
 testing_pr: 3306
-testing_sha: 4cc3f3ec14e50902cdd6ee3a5f13e39bfae7241b
+testing_sha: 42c1e944857b4ef0954d51cdc65cab19035666e8
