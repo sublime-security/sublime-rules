@@ -9,11 +9,27 @@ source: |
   and (
     regex.contains(sender.display_name, '^SSA\b')
     or strings.icontains(sender.display_name, "Social Security Administration")
+    // there are confusables in the display name
+    or (
+      strings.replace_confusables(sender.display_name) != sender.display_name
+      and strings.contains(strings.replace_confusables(sender.display_name), "SSA")
+    )
     or any([sender.display_name, subject.subject],
-           regex.icontains(., 'Social (?:benefits|security)', )
+           regex.icontains(strings.replace_confusables(.), 'Social (?:benefits|security)', )
+    )
+    // display name or subject references a statement
+    or (
+      any([sender.display_name, subject.subject],
+          regex.icontains(strings.replace_confusables(.),
+                          '(Digital|(e[[:punct:]]?))\s?Statements?.{0,10}(Generated|Created|Issued|Ready)'
+          )
+      )
+      // with SSA impersonation in the body
+      and strings.icontains(body.current_thread.text,
+                            'Social Security Administration'
+      )
     )
   )
-  
   // Contains a link
   and length(body.links) >= 1
   
@@ -25,7 +41,11 @@ source: |
     any(ml.nlu_classifier(body.current_thread.text).topics,
         .name == "Secure Message" and .confidence == "high"
     )
-    or strings.contains(body.current_thread.text, "SSA Statement Viewer")
+    or strings.icontains(body.current_thread.text, "SSA Statement Viewer")
+    or strings.icontains(body.current_thread.text, "Social Security Statement")
+    or regex.icontains(body.current_thread.text,
+                       "(?:view|open) (?:your|the).{0,8} (statement|document)"
+    )
     // real SSA phone number
     or strings.icontains(body.current_thread.text, "1-800-772-1213")
     or any(body.links,
@@ -33,9 +53,17 @@ source: |
                .named_groups["ext"] in $file_extensions_executables
            )
     )
+    or any(ml.logo_detect(file.message_screenshot()).brands,
+           .name == "SSA" and .confidence == "high"
+    )
   )
   and not any(ml.nlu_classifier(body.current_thread.text).topics,
-              .name == "Newsletters and Digests" and .confidence == "high"
+              .name in (
+                "Newsletters and Digests",
+                "Advertising and Promotions",
+                "Events and Webinars"
+              )
+              and .confidence == "high"
   )
   // not a forward or reply
   and (headers.in_reply_to is null or length(headers.references) == 0)
