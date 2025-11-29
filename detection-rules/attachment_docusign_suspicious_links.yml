@@ -40,7 +40,17 @@ source: |
         (
           any(ml.logo_detect(.).brands, .name == "DocuSign")
           or any(file.explode(.),
-                 regex.icontains(.scan.ocr.raw, "DocuSi?gn")
+                 (
+                   regex.icontains(.scan.ocr.raw, "DocuSi?gn")
+                   // account for OCR misses
+                   and not any(regex.iextract(.scan.ocr.raw,
+                                              '^(?P<envelope_id>.{20})'
+                               ),
+                               strings.ilevenshtein(.named_groups["envelope_id"],
+                                                    'Docusign Envelope ID'
+                               ) < 4
+                   )
+                 )
                  and (
                    any(ml.nlu_classifier(.scan.ocr.raw).intents,
                        .name == "cred_theft" and .confidence != "low"
