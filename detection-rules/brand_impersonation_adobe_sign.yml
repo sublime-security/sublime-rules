@@ -23,15 +23,41 @@ source: |
             )
             or .href_url.domain.root_domain in $org_domains
             or .href_url.domain.root_domain == sender.email.domain.root_domain
-            or any(recipients.to, .email.domain.root_domain == ..href_url.domain.root_domain)
+            or any(recipients.to,
+                   .email.domain.root_domain == ..href_url.domain.root_domain
+            )
         )
         // legit review button
         or any(body.previous_threads,
                any(.links,
-                   .display_text in ("Review and sign", "the document", "Open agreement")
-                   and .href_url.domain.root_domain in (
-                     "adobe.com",
-                     "adobesign.com"
+                   .display_text in (
+                     "Review and sign",
+                     "the document",
+                     "Open agreement",
+                     'VIEW DOCUMENTS'
+                   )
+                   and (
+                     .href_url.domain.root_domain in (
+                       "adobe.com",
+                       "adobesign.com",
+                       "echosign.com",
+                       "adobesignsandbox.com",
+                     )
+                     // Mimecast link logic
+                     or (
+                       .href_url.domain.root_domain in (
+                         "mimecastprotect.com",
+                         "mimecast.com"
+                       )
+                       and any(.href_url.query_params_decoded['domain'],
+                               strings.parse_url(strings.concat("https://", .)).domain.root_domain in (
+                                 "adobe.com",
+                                 "adobesign.com",
+                                 "echosign.com",
+                                 "adobesignsandbox.com",
+                               )
+                       )
+                     )
                    )
                )
         )
@@ -44,7 +70,7 @@ source: |
   and not (
     (length(headers.references) > 1 or length(body.previous_threads) != 0)
     and regex.imatch(headers.references[0],
-                     '[0-9]{9,10}\.[0-9]{4,6}\.[0-9]{13}@event-consumer-prod-[a-z]-[a-z0-9]{9,10}-[a-z0-9]{5}',
+                     '[0-9]{9,10}\.[0-9]{4,6}\.[0-9]{13}@event-consumer-prod-[a-z]-[a-z0-9]{7,10}-[a-z0-9]{5}',
                      '[0-9]{8,10}\.[0-9]{5,7}\.[0-9]{13}@(webapp|job)-prod-.*$',
                      '[a-z0-9]{8}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{12}-APO-PRODHIPAA@apo-p-h'
     )
