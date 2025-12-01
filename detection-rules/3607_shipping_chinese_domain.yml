@@ -1,0 +1,34 @@
+name: "Fake shipping notification from Chinese sender domain"
+description: "Detects messages from senders using Alibaba (HiChina) hosting services that contain shipping, customer service, or order confirmation topics."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and length(body.previous_threads) == 0
+  and length(network.whois(sender.email.domain).name_servers) > 0
+  and all(network.whois(sender.email.domain).name_servers,
+          .root_domain == "hichina.com"
+  )
+  and any(ml.nlu_classifier(body.current_thread.text).topics,
+          .name in (
+            'Shipping and Package',
+            "Customer Service and Support",
+            "Order Confirmations"
+          )
+  )
+tags:
+  - "Attack surface reduction"
+attack_types:
+  - "BEC/Fraud"
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Natural Language Understanding"
+  - "Sender analysis"
+  - "Whois"
+id: "f06895ee-8225-5929-a02a-bc86de15b278"
+og_id: "4392a14e-421e-5e2f-8659-a92d1a6bb1fd"
+testing_pr: 3607
+testing_sha: 6211bf760198c4362940d34b2255ebbc3b727905
