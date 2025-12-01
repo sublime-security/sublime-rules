@@ -4,7 +4,7 @@ type: "rule"
 severity: "medium"
 source: |
   type.inbound
-  
+  and length(attachments) < 2
   // Identifies as SSA without catching strings such as "Alyssa"
   and (
     regex.contains(sender.display_name, '^SSA\b')
@@ -20,6 +20,16 @@ source: |
            regex.icontains(strings.replace_confusables(.),
                            'Social (?:benefits|security)',
            )
+    )
+    or (
+      any(attachments,
+          .file_type in ("doc", "docx")
+          and any(file.explode(.),
+                  strings.icontains(.scan.strings.raw,
+                                    "Social Security Administration"
+                  )
+          )
+      )
     )
     // display name or subject references a statement
     or (
@@ -51,8 +61,6 @@ source: |
          or .inner_text =~ "Social Security"
     )
   )
-  // Contains a link
-  and length(body.links) >= 1
   
   // Not from a .gov domain
   and not (sender.email.domain.tld == "gov" and headers.auth_summary.dmarc.pass)
@@ -76,6 +84,21 @@ source: |
     )
     or any(ml.logo_detect(file.message_screenshot()).brands,
            .name == "SSA" and .confidence == "high"
+    )
+    or (
+      any(attachments,
+          .file_type in ("doc", "docx")
+          and any(file.explode(.),
+                  strings.icontains(.scan.strings.raw, "suspended")
+                  or strings.icontains(.scan.strings.raw, "fraudulent")
+                  or strings.icontains(.scan.strings.raw, "violated")
+                  or strings.icontains(.scan.strings.raw, "false identity")
+                  or regex.icontains(.scan.strings.raw,
+                                     '\+?([ilo0-9]{1}.)?\(?[ilo0-9]{3}?\)?.[ilo0-9]{3}.?[ilo0-9]{4}',
+                                     '\+?([ilo0-9]{1,2})?\s?\(?\d{3}\)?[\s\.\-⋅]{0,5}[ilo0-9]{3}[\s\.\-⋅]{0,5}[ilo0-9]{4}'
+                  )
+          )
+      )
     )
   )
   and not any(ml.nlu_classifier(body.current_thread.text).topics,
@@ -112,4 +135,4 @@ detection_methods:
 id: "e7477674-13e7-5848-8d83-9a034adb580b"
 og_id: "6196767e-6264-5833-96f3-d1e34424d7b5"
 testing_pr: 3575
-testing_sha: 77578718f391e6d3a694f7cdfcac989d9458f234
+testing_sha: 39a77ffda3a590f132bddc9fd0683dd04b4096da
