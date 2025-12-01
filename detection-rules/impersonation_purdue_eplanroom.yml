@@ -1,0 +1,25 @@
+name: "Brand impersonation: Purdue ePlanroom with suspicious links"
+description: "Detects messages impersonating Purdue ePlanroom with links that either not from the legitimate reprographix.com domain or contain suspicious credential theft indicators."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and strings.icontains(body.current_thread.text, "Purdue ePlanroom")
+  and (
+    any(filter(body.links, strings.contains(.display_text, "Review This Project")),
+        .href_url.domain.root_domain != "reprographix.com"
+    )
+    or any(body.links, ml.link_analysis(.).credphish.disposition == "unknown")
+  )
+  and sender.email.domain.root_domain != "reprographix.com"
+
+attack_types:
+  - "Credential Phishing"
+  - "BEC/Fraud"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Sender analysis"
+  - "URL analysis"
