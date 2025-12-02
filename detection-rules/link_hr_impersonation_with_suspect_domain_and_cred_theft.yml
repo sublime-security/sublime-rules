@@ -6,7 +6,6 @@ source: |
   type.inbound
   // high number of links
   and length(body.links) > 20
-  
   // hr-related subject or sender
   and (
     regex.icontains(sender.display_name, "\\bhr\\b")
@@ -20,14 +19,6 @@ source: |
     )
     or strings.icontains(body.current_thread.text, "vacation plan")
   )
-  
-  // if the link is still active, check if it's cred theft
-  and any(body.links,
-          any(ml.nlu_classifier(beta.ocr(ml.link_analysis(.).screenshot).text).intents,
-              .name == "cred_theft" and .confidence == "high"
-          )
-  )
-  
   // suspect domain irregularities (like www.,company.com)
   and any(body.links,
           (
@@ -49,8 +40,10 @@ source: |
             )
           )
           and .visible == true
+          and any(ml.nlu_classifier(beta.ocr(ml.link_analysis(.).screenshot).text).intents,
+                  .name == "cred_theft" and .confidence == "high"
+          )
   )
-  
   // exclusions for legitimate sources 
   and not any(ml.nlu_classifier(body.current_thread.text).topics,
               .name in (
