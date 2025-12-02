@@ -7,7 +7,10 @@ source: |
   and (
     (
       length(body.links) < 15
-      and any(body.links, 'monday_tracker' in .href_url.rewrite.encoders)
+      and any(body.links,
+              'monday_tracker' in .href_url.rewrite.encoders
+              and .href_url.scheme != "mailto"
+      )
     )
     or (
       length(attachments) <= 3
@@ -21,6 +24,7 @@ source: |
             and any(beta.scan_qr(.).items,
                     .type is not null
                     and 'monday_tracker' in .url.rewrite.encoders
+                    and .url.scheme != "mailto"
             )
             //
             // This rule makes use of a beta feature and is subject to change without notice
@@ -53,7 +57,7 @@ source: |
         and beta.parse_exif(file.message_screenshot()).image_width < 2000
         and beta.scan_qr(file.message_screenshot()).found
         and any(beta.scan_qr(file.message_screenshot()).items,
-                .type is not null and 'monday_tracker' in .url.rewrite.encoders
+                .type is not null and 'monday_tracker' in .url.rewrite.encoders and .url.scheme != "mailto"
         )
       )
     )
@@ -68,9 +72,7 @@ source: |
               or .content_type in ("message/rfc822")
             )
             and any(file.explode(.),
-                    any(.scan.url.urls,
-                        'monday_tracker' in .rewrite.encoders
-                    )
+                    any(.scan.url.urls, 'monday_tracker' in .rewrite.encoders)
             )
         )
       )
@@ -86,12 +88,7 @@ source: |
   )
   // negating legit replies
   and not (
-    (
-      strings.istarts_with(subject.subject, "RE:")
-      or strings.istarts_with(subject.subject, "FW:")
-      or strings.istarts_with(subject.subject, "FWD:")
-      or strings.istarts_with(subject.subject, "Automatic reply:")
-    )
+    (subject.is_reply or subject.is_forward)
     and (
       length(headers.references) > 0
       and any(headers.hops, any(.fields, strings.ilike(.name, "In-Reply-To")))
@@ -106,7 +103,7 @@ source: |
           "Newsletters and Digests",
           "Events and Webinars"
         )
-        and .confidence == "high"
+        and .confidence != "low"
     )
     and any(ml.nlu_classifier(body.current_thread.text).intents,
             .name == "benign" and .confidence == "high"
