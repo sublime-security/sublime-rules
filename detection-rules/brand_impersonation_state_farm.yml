@@ -5,12 +5,7 @@ severity: "medium"
 source: |
   type.inbound
   and (
-    (
-      regex.icontains(sender.display_name, 'state\s?farm')
-      or strings.ilevenshtein(strings.replace_confusables(sender.display_name),
-                              "statefarm"
-      ) <= 2
-    )
+    regex.icontains(sender.display_name, 'state\s?farm')
     and not (
       strings.icontains(sender.display_name, "state farm")
       and (
@@ -25,10 +20,11 @@ source: |
     )
   )
   
-  // and the sender is not in org_domains or from State Farm domains and passes auth
+  // and the sender is not in org_domains or from State Farm domains
   and not (
     (
       sender.email.domain.root_domain in $org_domains
+      or sender.email.domain.root_domain in $high_trust_sender_root_domains
       or sender.email.domain.root_domain in (
         "statefarm.com",
         "statefarminsurance.com",
@@ -37,10 +33,10 @@ source: |
         "sfauthentication.com",
         "statefarmarena.com",
         "statefarmservice.com",
-        "statefarmisthere.com"
+        "statefarmisthere.com",
+        "digitalpayouts.com" // State Farm use this domain for claim payouts
       )
     )
-    and coalesce(headers.auth_summary.dmarc.pass, false)
   )
   // negate highly trusted sender domains unless they fail DMARC authentication
   and not (
