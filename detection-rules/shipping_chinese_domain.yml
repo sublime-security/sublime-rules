@@ -4,20 +4,24 @@ type: "rule"
 severity: "medium"
 source: |
   type.inbound
+  // direct to recipient
+  and length(recipients.to) == 1
   and length(body.previous_threads) == 0
+  
+  // Known patterns
+  and (sender.display_name is null or sender.email.local_part == "support")
+  and all(headers.reply_to, .email.domain.root_domain == sender.email.domain.root_domain)
+  
+  // Alibaba Cloud nameservers
   and length(network.whois(sender.email.domain).name_servers) > 0
   and all(network.whois(sender.email.domain).name_servers,
           .root_domain == "hichina.com"
   )
+  
+  // Shipping notification
   and any(ml.nlu_classifier(body.current_thread.text).topics,
-          .name in (
-            'Shipping and Package',
-            "Customer Service and Support",
-            "Order Confirmations"
-          )
+          .name in ('Shipping and Package', "Order Confirmations")
   )
-tags:
-  - "Attack surface reduction"
 attack_types:
   - "BEC/Fraud"
   - "Credential Phishing"
