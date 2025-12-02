@@ -119,7 +119,16 @@ source: |
       or not headers.auth_summary.spf.pass
     )
   )
-  
+  // negate legit bounce backs
+  and not any(ml.nlu_classifier(body.current_thread.text).topics,
+              .name in ("Bounce Back and Delivery Failure Notifications")
+  )
+  // negate legit forwards and replies
+  and not (
+    (subject.is_reply or subject.is_forward)
+    and length(body.previous_threads) > 0
+    and (length(headers.references) > 0 or headers.in_reply_to is not null)
+  )
   // negate benign newsletters that mention cyber extortion
   and not (
     any(body.links,
@@ -138,7 +147,6 @@ source: |
     )
     or sender.email.domain.root_domain not in $high_trust_sender_root_domains
   )
-
 attack_types:
   - "Extortion"
 tactics_and_techniques:
@@ -152,4 +160,4 @@ detection_methods:
 id: "f96a8612-c76d-52b3-8d40-af91a82b83d5"
 og_id: "265913eb-2ccd-5f77-9a09-f6d8539fd2f6"
 testing_pr: 3441
-testing_sha: be00577766620181880493edc8559726bcd4db15
+testing_sha: a835777a5793cc64e44e1fc65e5bd5901014af10
