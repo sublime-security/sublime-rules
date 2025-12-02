@@ -1,0 +1,111 @@
+name: "Spam: Website errors solicitation"
+description: "This rule detects messages claiming to have identified errors on a website. The messages typically offer to send pricing or information upon request."
+type: "rule"
+severity: "low"
+source: |
+  type.inbound
+  and (
+    sender.email.email not in $recipient_emails
+    or not profile.by_sender().solicited
+  )
+  and 1 of (
+    // Single thread message groups
+    (
+      length(attachments) == 0
+      and length(body.links) == 0
+      and length(body.previous_threads) == 0
+      and 20 < length(body.current_thread.text) < 500
+      and regex.icontains(strings.replace_confusables(body.current_thread.text),
+                          "screenshot|error list|plan|quote|rank|professional|price|mistake"
+      )
+      and regex.icontains(strings.replace_confusables(body.current_thread.text),
+                          ".*(hi|hello|hey)"
+      )
+      and regex.icontains(strings.replace_confusables(body.current_thread.text),
+                          ".*(error|report|issues|website)"
+      )
+      and regex.icontains(strings.replace_confusables(body.current_thread.text),
+                          ".*(site|website)"
+      )
+      and (
+        regex.icontains(strings.replace_confusables(subject.subject),
+                        ".*(proposal|cost|estimate|report|error|audit|screenshot|strategy|rankings|issues|fix|(web\\s*site|website|site)s?)"
+        )
+        or length(subject.subject) < 5
+      )
+    ),
+    // Single thread message groups but with 1 unsubscribe link or link is recipient
+    (
+      length(attachments) == 0
+      and length(body.links) == 1
+      and (
+        regex.icontains(body.html.raw, "mailto:*[++unsubscribe@]")
+        or any(body.links, .href_url.domain.root_domain in~ $org_domains)
+      )
+      and length(body.previous_threads) == 0
+      and 20 < length(body.current_thread.text) < 500
+      and regex.icontains(strings.replace_confusables(body.current_thread.text),
+                          "screenshot|error list|plan|quote|rank|professional|price"
+      )
+      and regex.icontains(strings.replace_confusables(body.current_thread.text),
+                          ".*(hi|hello|hey)"
+      )
+      and regex.icontains(strings.replace_confusables(body.current_thread.text),
+                          ".*(error|report|issues|website)"
+      )
+      and regex.icontains(strings.replace_confusables(body.current_thread.text),
+                          ".*(site|website)"
+      )
+      and (
+        regex.icontains(strings.replace_confusables(subject.subject),
+                        ".*(proposal|cost|estimate|report|error|audit|screenshot|strategy|rankings|issues|fix|(web\\s*site|website|site)s?)"
+        )
+        or length(subject.subject) < 5
+      )
+    ),
+    // Multiple thread message groups
+    (
+      length(attachments) == 0
+      and length(body.links) == 0
+      and length(body.previous_threads) < 5
+      and (
+        regex.icontains(strings.replace_confusables(subject.subject),
+                        ".*(proposal|cost|estimate|report|error|audit|screenshot|strategy|rankings|issues|fix|(web\\s*site|website|site)s?)"
+        )
+        or (
+          (
+            length(subject.subject) < 5
+            or regex.icontains(subject.subject, "^(re|fwd)\\s*:")
+          )
+          and any(body.previous_threads,
+                  regex.icontains(strings.replace_confusables(.text),
+                                  '.*(screenshot|\b(web\s*site|website|site)s?\b)'
+                  )
+          )
+        )
+      )
+      and any(body.previous_threads,
+              length(.text) < 400
+              and regex.icontains(strings.replace_confusables(.text),
+                                  '.*(hey|hi|hello|morning)'
+              )
+              and regex.icontains(strings.replace_confusables(.text),
+                                  '.*(\berror(?:\s+list)?\b|screenshot|report|plan)'
+              )
+              and ml.nlu_classifier(.text).language == "english"
+      )
+    )
+  )
+
+tags:
+  - "Attack surface reduction"
+attack_types:
+  - "Spam"
+detection_methods:
+  - "Content analysis"
+  - "Sender analysis"
+  - "Natural Language Understanding"
+id: "d521085c-0998-5695-bc21-ac30b18c52c6"
+og_id: "122ea794-f619-5f29-acb2-83261d8f81fc"
+testing_pr: 3614
+testing_sha: c525d36e17ed42d882ba1faae684e4bc64d5bbec
