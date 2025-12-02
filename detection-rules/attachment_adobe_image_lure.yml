@@ -86,7 +86,17 @@ source: |
     or sender.email.domain.root_domain not in $high_trust_sender_root_domains
   )
   and (
-    not profile.by_sender_email().solicited
+    not (
+      // exclude solicited senders
+      profile.by_sender_email().solicited
+      // unless its a solicited sender and there are undisclosed, or no recipients
+      and not (
+        length(recipients.to) == 0
+        or all(recipients.to,
+               strings.ilike(.display_name, "undisclosed?recipients")
+        )
+      )
+    )
     or profile.by_sender_email().prevalence == "new"
     or (
       profile.by_sender_email().any_messages_malicious_or_spam
