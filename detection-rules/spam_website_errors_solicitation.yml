@@ -16,17 +16,22 @@ source: |
       and length(body.previous_threads) == 0
       and 20 < length(body.current_thread.text) < 500
       and regex.icontains(strings.replace_confusables(body.current_thread.text),
-                          "screenshot|error list|plan|quote|rank|professional|price"
+                          "screenshot|error list|plan|quote|rank|professional|price|mistake"
       )
-      and regex.icontains(strings.replace_confusables(body.current_thread.text), ".*(hi|hello|hey)")
+      and regex.icontains(strings.replace_confusables(body.current_thread.text),
+                          ".*(hi|hello|hey)"
+      )
       and regex.icontains(strings.replace_confusables(body.current_thread.text),
                           ".*(error|report|issues|website)"
       )
       and regex.icontains(strings.replace_confusables(body.current_thread.text),
                           ".*(site|website)"
       )
-      and regex.icontains(strings.replace_confusables(subject.subject),
-                          ".*(proposal|cost|report|error|audit|screenshot|strategy)"
+      and (
+        regex.icontains(strings.replace_confusables(subject.subject),
+                        ".*(proposal|cost|estimate|report|error|audit|screenshot|strategy|rankings|issues|fix|(web\\s*site|website|site)s?)"
+        )
+        or length(subject.subject) < 5
       )
     ),
     // Single thread message groups but with 1 unsubscribe link or link is recipient
@@ -42,15 +47,20 @@ source: |
       and regex.icontains(strings.replace_confusables(body.current_thread.text),
                           "screenshot|error list|plan|quote|rank|professional|price"
       )
-      and regex.icontains(strings.replace_confusables(body.current_thread.text), ".*(hi|hello|hey)")
+      and regex.icontains(strings.replace_confusables(body.current_thread.text),
+                          ".*(hi|hello|hey)"
+      )
       and regex.icontains(strings.replace_confusables(body.current_thread.text),
                           ".*(error|report|issues|website)"
       )
       and regex.icontains(strings.replace_confusables(body.current_thread.text),
                           ".*(site|website)"
       )
-      and regex.icontains(strings.replace_confusables(subject.subject),
-                          ".*(proposal|cost|report|error|audit|screenshot|strategy)"
+      and (
+        regex.icontains(strings.replace_confusables(subject.subject),
+                        ".*(proposal|cost|estimate|report|error|audit|screenshot|strategy|rankings|issues|fix|(web\\s*site|website|site)s?)"
+        )
+        or length(subject.subject) < 5
       )
     ),
     // Multiple thread message groups
@@ -58,18 +68,30 @@ source: |
       length(attachments) == 0
       and length(body.links) == 0
       and length(body.previous_threads) < 5
-      and regex.icontains(strings.replace_confusables(subject.subject),
-                          ".*(proposal|cost|report|error|audit|screenshot|strategy)"
+      and (
+        regex.icontains(strings.replace_confusables(subject.subject),
+                        ".*(proposal|cost|estimate|report|error|audit|screenshot|strategy|rankings|issues|fix|(web\\s*site|website|site)s?)"
+        )
+        or (
+          (
+            length(subject.subject) < 5
+            or regex.icontains(subject.subject, "^(re|fwd)\\s*:")
+          )
+          and any(body.previous_threads,
+                  regex.icontains(strings.replace_confusables(.text),
+                                  '.*(screenshot|\b(web\s*site|website|site)s?\b)'
+                  )
+          )
+        )
       )
       and any(body.previous_threads,
               length(.text) < 400
-              and regex.icontains(strings.replace_confusables(.text), 
-              '.*(hey|hi|hello)'
+              and regex.icontains(strings.replace_confusables(.text),
+                                  '.*(hey|hi|hello|morning)'
               )
               and regex.icontains(strings.replace_confusables(.text),
                                   '.*(\berror(?:\s+list)?\b|screenshot|report|plan)'
               )
-              and strings.count(.text, "?") >= 3
               and ml.nlu_classifier(.text).language == "english"
       )
     )
