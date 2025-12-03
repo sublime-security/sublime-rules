@@ -16,12 +16,11 @@ source: |
       ) == 1
       and length(filter(attachments,
                         .file_type in $file_types_images
-                        and 
-                        (
+                        and (
                           any(regex.extract(.content_id, '^<(?P<cid>.*)\>$'),
-                            strings.icontains(body.html.raw,
-                                              .named_groups["cid"]
-                            )
+                              strings.icontains(body.html.raw,
+                                                .named_groups["cid"]
+                              )
                           )
                           or strings.icontains(body.html.raw, .content_id)
                         )
@@ -52,10 +51,11 @@ source: |
               sender.email.email in map(recipients.to, .email.email)
               and length(recipients.to) == 1
               and sender.email.email == file.parse_eml(.).sender.email.email
-              and sender.email.email in map(file.parse_eml(.).recipients.to, .email.email) 
+              and sender.email.email in map(file.parse_eml(.).recipients.to,
+                                            .email.email
+              )
               and length(file.parse_eml(.).recipients.to) == 1
             )
-            
           )
           and not (
             all(file.parse_eml(.).body.links,
@@ -66,7 +66,10 @@ source: |
                                   "We’re making sure your attachments are safe"
             )
           )
-          and file.parse_eml(.).sender.email.domain.root_domain not in $org_domains
+          and not (
+            file.parse_eml(.).sender.email.domain.root_domain in $org_domains
+            and coalesce(file.parse_eml(.).headers.auth_summary.dmarc.pass, false)
+          )
   )
   and (
     not profile.by_sender().solicited
