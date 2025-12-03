@@ -86,13 +86,17 @@ source: |
       )
       or (
         length(attachments) == 0
-        and any(file.explode(beta.message_screenshot()),
-                .scan.exiftool.image_height < 2000
-                and .scan.exiftool.image_width < 2000
-                and .scan.qr.type is not null
-                and regex.contains(.scan.qr.data, '\.')
+        //
+        // This rule makes use of a beta feature and is subject to change without notice
+        // using the beta feature in custom rules is not suggested until it has been formally released
+        //
+        and beta.parse_exif(file.message_screenshot()).image_height < 2000
+        and beta.parse_exif(file.message_screenshot()).image_width < 2000
+        and any(beta.scan_qr(file.message_screenshot()).items,
+                .type is not null
+                and regex.contains(.data, '\.')
                 // exclude contact cards
-                and not strings.istarts_with(.scan.qr.data, "BEGIN:VCARD")
+                and not strings.istarts_with(.data, "BEGIN:VCARD")
         )
       )
     )
@@ -343,16 +347,13 @@ source: |
         and length(recipients.cc) == 0
         and length(recipients.bcc) == 0
       )
-      or any(file.explode(beta.message_screenshot()),
+      or any(beta.scan_qr(file.message_screenshot()).items,
              (
-               .scan.qr.url.domain.tld in $suspicious_tlds
-               and .scan.qr.url.domain.root_domain != "app.link"
+               .url.domain.tld in $suspicious_tlds
+               and .url.domain.root_domain != "app.link"
              )
-             or 
              // linkanalysis phishing disposition
-             any([ml.link_analysis(.scan.qr.url)],
-                 .credphish.disposition == "phishing"
-             )
+             or ml.link_analysis(.url).credphish.disposition == "phishing"
       )
       or any(attachments,
              (
@@ -392,7 +393,6 @@ source: |
     sender.email.domain.root_domain in $high_trust_sender_root_domains
     and coalesce(headers.auth_summary.dmarc.pass, false)
   )
-
 attack_types:
   - "Credential Phishing"
 tactics_and_techniques:

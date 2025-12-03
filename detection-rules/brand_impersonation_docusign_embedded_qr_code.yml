@@ -6,18 +6,18 @@ source: |
   type.inbound
   and length(body.current_thread.text) < 1000
   and length(attachments) == 0
-  and (
-    regex.icontains(body.current_thread.text, '\bQ(\.)?R(\.)?\b')
-    and regex.icontains(body.current_thread.text, "scan|mobile|camera")
-    and any(ml.logo_detect(beta.message_screenshot()).brands,
-            strings.starts_with(.name, "DocuSign")
-            and any(file.explode(beta.message_screenshot()),
-                    .scan.qr.type is not null
-                    and regex.contains(.scan.qr.data, '\.')
-            )
-    )
+  and regex.icontains(body.current_thread.text, '\bQ(\.)?R(\.)?\b')
+  and regex.icontains(body.current_thread.text, "scan|mobile|camera")
+  and any(ml.logo_detect(file.message_screenshot()).brands,
+          strings.starts_with(.name, "DocuSign")
   )
-  
+  //
+  // This rule makes use of a beta feature and is subject to change without notice
+  // using the beta feature in custom rules is not suggested until it has been formally released
+  //
+  and any(beta.scan_qr(file.message_screenshot()).items,
+          .type is not null and regex.contains(.data, '\.')
+  )
   and (
     not profile.by_sender().solicited
     or (
@@ -35,8 +35,6 @@ source: |
     )
     or sender.email.domain.root_domain not in $high_trust_sender_root_domains
   )
-  
-
 attack_types:
   - "Credential Phishing"
 tactics_and_techniques:

@@ -15,36 +15,55 @@ source: |
       and length(sender.email.domain.domain) < 15
     )
     or strings.ilike(subject.subject, '*DHL notification*')
+    or regex.icontains(subject.subject, 'dhl? express')
     or regex.contains(subject.subject, '\bD.{0,2}H.{0,2}L.{0,2}\b')
+    or (
+      any(ml.nlu_classifier(body.current_thread.text).topics,
+          .name == "Shipping and Package" and .confidence == "high"
+      )
+      and strings.contains(body.current_thread.text, 'DHL ')
+    )
   )
   and (
     any(ml.nlu_classifier(body.current_thread.text).entities, .name == "urgency")
     or any(ml.nlu_classifier(body.current_thread.text).entities,
-           .name == "org" and .text =~ "DHL"
+           .name == "org"
+           and (
+             .text =~ "DHL" 
+             or .text =~ "DHL Express"
+             or strings.istarts_with(.text, "DHL International")
+           )
     )
-    or any(ml.logo_detect(beta.message_screenshot()).brands,
+    or any(ml.logo_detect(file.message_screenshot()).brands,
            .name == "DHL" and .confidence in ("medium", "high")
     )
     or regex.icontains(body.current_thread.text, '\bDHL\b')
     // it contains a QR code
-    or any(file.explode(beta.message_screenshot()), .scan.qr.url.url is not null)
     or (
-      any(file.explode(beta.message_screenshot()),
-          strings.ilike(.scan.ocr.raw,
-                        "*package*",
-                        "*parcel*",
-                        "*shipping*",
-                        "*delivery*",
-                        "*track*"
-          )
-      )
-      or strings.ilike(body.current_thread.text,
-                       "*package*",
-                       "*parcel*",
-                       "*shipping*",
-                       "*delivery*",
-                       "*track*"
-      )
+      //
+      // This rule makes use of a beta feature and is subject to change without notice
+      // using the beta feature in custom rules is not suggested until it has been formally released
+      //
+      beta.scan_qr(file.message_screenshot()).found
+      and any(beta.scan_qr(file.message_screenshot()).items, .type == "url")
+    )
+    //
+    // This rule makes use of a beta feature and is subject to change without notice
+    // using the beta feature in custom rules is not suggested until it has been formally released
+    //
+    or strings.ilike(beta.ocr(file.message_screenshot()).text,
+                     "*package*",
+                     "*parcel*",
+                     "*shipping*",
+                     "*delivery*",
+                     "*track*"
+    )
+    or strings.ilike(body.current_thread.text,
+                     "*package*",
+                     "*parcel*",
+                     "*shipping*",
+                     "*delivery*",
+                     "*track*"
     )
   )
   and (
@@ -91,13 +110,17 @@ source: |
     'dhltariff.co.uk',
     'dhlindia-kyc.com',
     'dpogroup.com',
-    '4flow-service.com',  // shipping service
+    '4flow-service.com', // shipping service
     'leaders-in-logistics.com', // legit sight for leadership webinar events
     'deutschepost.de', // German postal service
     'dhlecommerce.nl',
     'dhl.nl',
     'adhlawfirm.com', // similar name but unrelated
-    'attendhlth.com' // dhl in domain but unrelated
+    'attendhlth.com', // dhl in domain but unrelated
+    'tdhlaw.com', // dhl in domain but unrelated
+    'hapibenefits.com', // DHL rewards program
+    'dhlgpi.com', // DHL Australia
+    'dhlfreight-news.com'
   )
   and (
     profile.by_sender().prevalence in ("new", "outlier")
@@ -115,6 +138,7 @@ source: |
     )
     or sender.email.domain.root_domain not in $high_trust_sender_root_domains
   )
+
 attack_types:
   - "Credential Phishing"
 tactics_and_techniques:
