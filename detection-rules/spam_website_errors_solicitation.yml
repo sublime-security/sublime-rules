@@ -9,39 +9,66 @@ source: |
     or not profile.by_sender().solicited
   )
   and 1 of (
-      // Single thread message groups
+    // Single thread message groups
     (
       length(attachments) == 0
       and length(body.links) == 0
       and length(body.previous_threads) == 0
       and 20 < length(body.current_thread.text) < 500
-      and regex.icontains(body.current_thread.text, "screenshot")
-      and regex.icontains(body.current_thread.text, '.*(hi|hello|hey)')
-      and regex.icontains(body.current_thread.text, ".*(error|report|issues)")
-      and regex.icontains(subject.subject, ".*(proposal|cost|report|error|audit|screenshot)")
+      and regex.icontains(strings.replace_confusables(body.current_thread.text),
+                          "screenshot|error list|plan|quote|rank|professional|price"
+      )
+      and regex.icontains(strings.replace_confusables(body.current_thread.text), ".*(hi|hello|hey)")
+      and regex.icontains(strings.replace_confusables(body.current_thread.text),
+                          ".*(error|report|issues|website)"
+      )
+      and regex.icontains(strings.replace_confusables(body.current_thread.text),
+                          ".*(site|website)"
+      )
+      and regex.icontains(strings.replace_confusables(subject.subject),
+                          ".*(proposal|cost|report|error|audit|screenshot|strategy)"
+      )
     ),
-    // Single thread message groups but with 1 unsubscribe link
+    // Single thread message groups but with 1 unsubscribe link or link is recipient
     (
       length(attachments) == 0
       and length(body.links) == 1
-      and regex.icontains(body.html.raw, "mailto:*[++unsubscribe@]")
+      and (
+        regex.icontains(body.html.raw, "mailto:*[++unsubscribe@]")
+        or any(body.links, .href_url.domain.root_domain in~ $org_domains)
+      )
       and length(body.previous_threads) == 0
       and 20 < length(body.current_thread.text) < 500
-      and regex.icontains(body.current_thread.text, "screenshot")
-      and regex.icontains(body.current_thread.text, '.*(hi|hello|hey)')
-      and regex.icontains(body.current_thread.text, ".*(error|report|issues)")
-      and regex.icontains(subject.subject, ".*(proposal|cost|report|error|audit|screenshot)")
+      and regex.icontains(strings.replace_confusables(body.current_thread.text),
+                          "screenshot|error list|plan|quote|rank|professional|price"
+      )
+      and regex.icontains(strings.replace_confusables(body.current_thread.text), ".*(hi|hello|hey)")
+      and regex.icontains(strings.replace_confusables(body.current_thread.text),
+                          ".*(error|report|issues|website)"
+      )
+      and regex.icontains(strings.replace_confusables(body.current_thread.text),
+                          ".*(site|website)"
+      )
+      and regex.icontains(strings.replace_confusables(subject.subject),
+                          ".*(proposal|cost|report|error|audit|screenshot|strategy)"
+      )
     ),
     // Multiple thread message groups
     (
       length(attachments) == 0
       and length(body.links) == 0
       and length(body.previous_threads) < 5
-      and regex.icontains(subject.subject, ".*(proposal|cost|report|error|audit)")
+      and regex.icontains(strings.replace_confusables(subject.subject),
+                          ".*(proposal|cost|report|error|audit|screenshot|strategy)"
+      )
       and any(body.previous_threads,
               length(.text) < 400
-              and regex.icontains(.text, '.*(hey|hi|hello)')
-              and regex.icontains(.text, ".*(error|screenshot|report)")
+              and regex.icontains(strings.replace_confusables(.text), 
+              '.*(hey|hi|hello)'
+              )
+              and regex.icontains(strings.replace_confusables(.text),
+                                  '.*(\berror(?:\s+list)?\b|screenshot|report|plan)'
+              )
               and strings.count(.text, "?") >= 3
               and ml.nlu_classifier(.text).language == "english"
       )
