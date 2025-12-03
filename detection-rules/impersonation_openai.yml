@@ -5,45 +5,58 @@ severity: "medium"
 source: |
   type.inbound
   and (
-    (
-      sender.display_name =~ "openai"
-      or strings.ilevenshtein(sender.display_name, 'openai') <= 1
-      or any(ml.logo_detect(file.message_screenshot()).brands,
-             .name == "OpenAI" and .confidence in ("low")
-      )
+    // Brand impersonation indicators
+    strings.icontains(sender.display_name, "openai")
+    or strings.icontains(sender.display_name, "chatgpt")
+    or any(ml.logo_detect(file.message_screenshot()).brands,
+           .name == "OpenAI" and .confidence in ("low")
     )
-    // copyright footer
+    // OpenAI copyright footer
     or (
       (
         strings.icontains(body.html.raw, '© 2025 OpenAI, L.L.C.')
         or strings.icontains(body.plain.raw, '© 2025 OpenAI, L.L.C.')
       )
       and (
-        strings.icontains(body.html.raw,
-                          '3180 18th Street, San Francisco, CA 94110'
-        )
-        or strings.icontains(body.plain.raw,
-                             '3180 18th Street, San Francisco, CA 94110'
-        )
+        strings.icontains(body.html.raw, '3180 18th Street, San Francisco, CA 94110')
+        or strings.icontains(body.plain.raw, '3180 18th Street, San Francisco, CA 94110')
       )
     )
+    // Typosquatting domains in links
+    or any(body.links,
+           strings.ilevenshtein(.display_url.domain.root_domain, "openai.com") <= 2
+           and .display_url.domain.root_domain != "openai.com"
+    )
+    or any(body.links,
+           strings.ilevenshtein(.display_url.domain.root_domain, "chatgpt.com") <= 2
+           and .display_url.domain.root_domain != "chatgpt.com"
+    )
   )
+  // Sender reputation checks
   and (
-    // Sender reputation checks
     sender.email.domain.root_domain in $free_email_providers
     or not headers.auth_summary.dmarc.pass
     or not headers.auth_summary.spf.pass
     or network.whois(sender.email.domain).days_old < 30
+    // Hosting platforms commonly abused for brand impersonation
+    or sender.email.domain.root_domain in~ (
+      "firebaseapp.com",
+      "web.app",
+      "appspot.com",
+      "herokuapp.com",
+      "vercel.app",
+      "netlify.app",
+      "github.io",
+      "cloudflareaccess.com",
+      "pages.dev",
+      "repl.co"
+    )
   )
-  and sender.email.domain.root_domain not in $alexa_1m
   // Exclude legitimate OpenAI domains
   and sender.email.domain.root_domain not in~ (
     "openai.com",
     "chatgpt.com",
-    "openai.andopen.co"
-  )
-  // negate the genuine domains
-  and sender.email.domain.root_domain not in~ (
+    "openai.andopen.co",
     "openli.com",
     "openai1.discoursemail.com",
     "crunchbase.com",
@@ -54,14 +67,40 @@ source: |
     "rocketmoney.com",
     "psm.knowbe4.com"
   )
-  // negate highly trusted sender domains unless they fail DMARC authentication
+  // Negate highly trusted senders unless on hosting platform or DMARC fails
   and (
-    (
-      sender.email.domain.root_domain in $high_trust_sender_root_domains
-      and not headers.auth_summary.dmarc.pass
+    sender.email.domain.root_domain not in $high_trust_sender_root_domains
+    or not headers.auth_summary.dmarc.pass
+    or sender.email.domain.root_domain in~ (
+      "firebaseapp.com",
+      "web.app",
+      "appspot.com",
+      "herokuapp.com",
+      "vercel.app",
+      "netlify.app",
+      "github.io",
+      "cloudflareaccess.com",
+      "pages.dev",
+      "repl.co"
     )
-    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
   )
+  // Negate if in Alexa 1M unless on hosting platform
+  and (
+    sender.email.domain.root_domain not in $alexa_1m
+    or sender.email.domain.root_domain in~ (
+      "firebaseapp.com",
+      "web.app",
+      "appspot.com",
+      "herokuapp.com",
+      "vercel.app",
+      "netlify.app",
+      "github.io",
+      "cloudflareaccess.com",
+      "pages.dev",
+      "repl.co"
+    )
+  )
+  // Exclude legitimate content types
   and (
     not any(ml.nlu_classifier(body.current_thread.text).topics,
             .name in (
