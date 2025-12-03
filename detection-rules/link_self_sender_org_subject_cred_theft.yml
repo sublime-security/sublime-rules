@@ -8,18 +8,28 @@ source: |
   and length(recipients.to) == 1
   and length(recipients.cc) == 0
   and sender.email.email == recipients.to[0].email.email
+  
   // not self sender from the org_domain, this rule is not going to detect spoofed domains to limit FPs caused by various email auth issues.
   and not sender.email.domain.domain in $org_domains
-  // org name in the subject
-  and any(filter(ml.nlu_classifier(body.current_thread.text).entities,
+  
+  and profile.by_sender_email().prevalence == "new"
+  
+  // org name in the subject, removing the subject from NLU to prevent the org being extracted from the subject
+  and any(filter(ml.nlu_classifier(body.current_thread.text, subject="").entities,
                  .name == "org"
+                 and .text != sender.email.domain.sld
+                 and .text != sender.email.domain.domain
           ),
+          // not an icontains, make it an exact match
           strings.contains(subject.base, .text)
   )
   // must contain a link
   and 0 < length(body.current_thread.links) < 20
+  
   // cred theft
-  and any(ml.nlu_classifier(body.current_thread.text).intents, .name == "cred_theft" and .confidence == "high")
+  and any(ml.nlu_classifier(body.current_thread.text).intents,
+          .name == "cred_theft" and .confidence == "high"
+  )
   // all attachments are inline images or there are 0 attachments
   and (
     length(attachments) == 0
@@ -37,7 +47,6 @@ source: |
       )
     )
   )
-
 attack_types:
   - "Credential Phishing"
 tactics_and_techniques:
