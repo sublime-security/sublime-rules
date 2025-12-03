@@ -7,24 +7,32 @@ type: "rule"
 severity: "medium"
 source: |
   type.inbound
-  and length(filter(attachments, .file_extension == "htm")) >= 1
-  and any(attachments,
-          .size < 10000
-          and .file_extension == "htm"
-          and (
-            regex.icontains(file.parse_html(.).raw,
-                            "const (?:urlParts|fakeEvent|progressBar|segments)"
+  and 1 of (
+    length(attachments) >= 1
+    and any(attachments,
+            .size < 10000
+            and .file_extension == "htm"
+            and (
+              regex.icontains(file.parse_html(.).raw,
+                              "const (?:urlParts|fakeEvent|progressBar|segments)"
+              )
+              or any([file.parse_html(.).raw],
+                     strings.icontains(., "impact?")
+                     or strings.icontains(., "/impact")
+              )
             )
-            or any([file.parse_html(.).raw],
-                  strings.icontains(., "impact?")
-                  or strings.icontains(., "/impact")
-                  or strings.icontains(., ":8443")
-                  or strings.icontains(., "file://")
-            )
-          )
+    ),
+    any(body.links,
+        (
+          strings.icontains(.href_url.url, "impact?")
+          or strings.icontains(.href_url.url, "/impact")
+        )
+        and (
+          strings.icontains(.href_url.url, ":8443")
+          or strings.icontains(.href_url.url, ":2087")
+        )
+    )
   )
-
-
 attack_types:
   - "Credential Phishing"
 tactics_and_techniques:
@@ -34,4 +42,4 @@ detection_methods:
 id: "5ab4e668-916c-5ef5-8fed-0bb53205baa7"
 og_id: "4d197faf-31bc-5f09-bf60-9f6a52f913a9"
 testing_pr: 3554
-testing_sha: 4b5c650916ec45bf2deab04bb3c51abf5e1a5e3a
+testing_sha: 7267ac905b2033af80bbc030a6f3cdff68778e50
