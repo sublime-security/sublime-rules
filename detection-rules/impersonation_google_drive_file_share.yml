@@ -17,24 +17,30 @@ source: |
                           "*invited you to review*",
                           "*received a document*",
                           "*shared a document*",
+                          "*shared a spreadsheet*",
                           "*shared this document*",
                           "*shared an item*",
                           "*received this email because you*",
-                          "*shared a*with you*"
+                          "*shared a*with you*",
+                          "*automated *mail from google*drive*"
             )
         )
-        or any(file.explode(beta.message_screenshot()),
-               strings.ilike(.scan.ocr.raw,
-                             "*shared a file with you*",
-                             "*shared with you*",
-                             "*invited you to review*",
-                             "*received a document*",
-                             "*shared a document*",
-                             "*shared this document*",
-                             "*shared an item*",
-                             "*received this email because you*",
-                             "*shared a*with you*"
-               )
+        //
+        // This rule makes use of a beta feature and is subject to change without notice
+        // using the beta feature in custom rules is not suggested until it has been formally released
+        //
+        or strings.ilike(beta.ocr(file.message_screenshot()).text,
+                         "*shared a file with you*",
+                         "*shared with you*",
+                         "*invited you to review*",
+                         "*received a document*",
+                         "*shared a document*",
+                         "*shared a spreadsheet*",
+                         "*shared this document*",
+                         "*shared an item*",
+                         "*received this email because you*",
+                         "*shared a*with you*",
+                         "*automated *mail from google*drive*"
         )
       )
       and (
@@ -44,9 +50,14 @@ source: |
                       "*sign*",
                       "*review*"
         )
-        or any(recipients.to, strings.icontains(subject.subject, .email.domain.sld))
+        or any(recipients.to,
+               strings.icontains(subject.subject, .email.domain.sld)
+        )
         or strings.ilike(subject.subject, "*Docs*", "*Sheets*", "*Slides*")
-        or any(body.links, strings.icontains(.display_text, "open document"))
+        or any(body.links,
+               strings.icontains(.display_text, "open document")
+               or strings.iends_with(.display_text, ".pdf")
+        )
         or strings.ilike(sender.display_name, "*Google Drive*")
         or subject.subject is null
         or subject.subject == ""
@@ -94,12 +105,54 @@ source: |
   
   // contains logic that impersonates Google
   and (
-    any(ml.logo_detect(beta.message_screenshot()).brands,
+    any(ml.logo_detect(file.message_screenshot()).brands,
         strings.starts_with(.name, "Google")
+    )
+    // Google Drive share box formatting
+    or strings.icontains(body.html.raw,
+                         '<table style="width:100%; border:1px solid #dadce0; border-radius:6px; border-spacing:0; border-collapse:separate; table-layout:fixed" role="presentation">'
     )
     or any(attachments,
            .file_type in $file_types_images
-           and any(ml.logo_detect(.).brands, strings.starts_with(.name, "Google"))
+           and (
+             any(ml.logo_detect(.).brands, strings.starts_with(.name, "Google"))
+             or strings.icontains(beta.ocr(.).text,
+                                  strings.concat("You have received this email because ",
+                                                 sender.email.email,
+                                                 " shared a document with you"
+                                  )
+             )
+             or strings.icontains(beta.ocr(.).text,
+                                  strings.concat("You have received this email because ",
+                                                 sender.email.email,
+                                                 " received a file or folder"
+                                  )
+             )
+             or any(recipients.to,
+                    strings.icontains(beta.ocr(..).text,
+                                      strings.concat("You have received this email because ",
+                                                     .email.email,
+                                                     " shared a document with you"
+                                      )
+                    )
+             )
+             or any(recipients.to,
+                    strings.icontains(beta.ocr(..).text,
+                                      strings.concat("You have received this email because ",
+                                                     .email.email,
+                                                     " received a file or folder"
+                                      )
+                    )
+             )
+             or strings.icontains(beta.ocr(.).text,
+                                  strings.concat(sender.display_name,
+                                                 " (",
+                                                 sender.email.email,
+                                                 ") ",
+                                                 "shared"
+                                  )
+             )
+           )
     )
     or strings.icontains(body.current_thread.text,
                          strings.concat("You have received this email because ",
@@ -129,6 +182,14 @@ source: |
                              )
            )
     )
+    or strings.icontains(body.current_thread.text,
+                         strings.concat(sender.display_name,
+                                        " (",
+                                        sender.email.email,
+                                        ") ",
+                                        "shared"
+                         )
+    )
     // Google address from footer
     or 2 of (
       strings.icontains(body.current_thread.text, 'Google LLC'),
@@ -142,6 +203,14 @@ source: |
   and not (
     all(headers.references, strings.ends_with(., '@docs-share.google.com'))
     and headers.return_path.domain.domain == "doclist.bounces.google.com"
+  )
+  // negate first threads that are a legitimate Google Drive share
+  and not (
+    length(body.previous_threads) != 0
+    and length(body.previous_threads[length(body.previous_threads) - 1].links) != 0
+    and all(body.previous_threads[length(body.previous_threads) - 1].links,
+            .href_url.domain.root_domain == "google.com"
+    )
   )
   
   // negate highly trusted sender domains unless they fail DMARC authentication
