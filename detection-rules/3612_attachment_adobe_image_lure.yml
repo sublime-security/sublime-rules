@@ -86,18 +86,15 @@ source: |
     or sender.email.domain.root_domain not in $high_trust_sender_root_domains
   )
   and (
-    not (
-      // exclude solicited senders
-      profile.by_sender_email().solicited
-      // unless its a solicited sender and there are undisclosed, or no recipients
-      and not (
-        length(recipients.to) == 0
-        or all(recipients.to,
-               strings.ilike(.display_name, "undisclosed?recipients")
-        )
-      )
-    )
+    // exclude solicited senders
+    not profile.by_sender_email().solicited
     or profile.by_sender_email().prevalence == "new"
+    or length(recipients.to) == 0
+    // domains for recipients to/cc must be valid
+    or (
+      all(recipients.to, .email.domain.valid == false)
+      and all(recipients.cc, .email.domain.valid == false)
+    )
     or (
       profile.by_sender_email().any_messages_malicious_or_spam
       and not profile.by_sender_email().any_messages_benign
@@ -119,4 +116,4 @@ detection_methods:
 id: "b4af86f5-e216-5179-9e88-f2e12a0cd3c1"
 og_id: "1d7add81-9822-576a-bcae-c4440e75e393"
 testing_pr: 3612
-testing_sha: 635bbf77fafe0e1a2078f080d218cc715d2a44eb
+testing_sha: 8df806b7148d15021b330c164ac6e060a99dfaed
