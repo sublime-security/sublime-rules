@@ -543,8 +543,22 @@ def count_yaml_rules_in_pr(files):
     return yaml_count
 
 
-def get_file_contents(contents_url):
-    response = github_session.get(contents_url)
+def get_file_contents(file_path, ref):
+    """
+    Get file contents from GitHub at a specific commit.
+
+    Args:
+        file_path (str): Path to the file in the repository
+        ref (str): Git ref (branch, tag, or commit SHA) to fetch from
+
+    Returns:
+        str: Decoded file content
+    """
+    # Construct the contents API URL with the specific ref
+    url = f'https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/contents/{file_path}'
+    params = {'ref': ref}
+
+    response = github_session.get(url, params=params)
     response.raise_for_status()
     content = response.json()['content']
     return base64.b64decode(content).decode('utf-8')
@@ -833,6 +847,10 @@ def handle_pr_rules(mode):
             has_comment = False
             if author_in_org:
                 print(f"\tPR #{pr['number']}: Author {pr['user']['login']} is in {ORG_NAME}")
+                # remove the label if it's present
+                if not has_label(pr_number, AUTHOR_MEMBERSHIP_EXCLUSION_LABEL):
+                    remove_label(pr_number, AUTHOR_MEMBERSHIP_EXCLUSION_LABEL)
+
             # only invoke has_trigger_comment when author_in_org is false
             if INCLUDE_PRS_WITH_COMMENT and not author_in_org:
                 has_comment = has_trigger_comment(pr['number'], ORG_NAME, COMMENT_TRIGGER)
@@ -880,6 +898,10 @@ def handle_pr_rules(mode):
                     apply_label(pr_number, BULK_PR_LABEL)
                 
                 continue
+            else:
+                # if it has the label, remove it.
+                if has_label(pr_number, BULK_PR_LABEL):
+                    remove_label(pr_number, BULK_PR_LABEL)
 
         # Process files in the PR
         for file in files:
@@ -902,7 +924,8 @@ def handle_pr_rules(mode):
 
             # If file should be processed, get content and apply mode-specific logic
             if process_file:
-                content = get_file_contents(file['contents_url'])
+                # Fetch file content at the specific commit SHA to avoid race conditions
+                content = get_file_contents(file['filename'], latest_sha)
 
                 # Skip files with specific text if flag is set
                 if SKIP_FILES_WITH_TEXT and SKIP_TEXTS:
@@ -916,6 +939,10 @@ def handle_pr_rules(mode):
                                 print(f"\tPR #{pr_number} doesn't have the '{label}' label. Applying...")
                                 apply_label(pr_number, label)
 
+                        # remove the IN_TEST_RULES_LABEL label as it's no longer in test-rules
+                        if has_label(pr_number, IN_TEST_RULES_LABEL):
+                            remove_label(pr_number, IN_TEST_RULES_LABEL)
+                        # skip this file and process the next one
                         continue
 
                 # Process file (common for both modes)
