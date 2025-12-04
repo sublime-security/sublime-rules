@@ -1,0 +1,37 @@
+name: "Attachment: DOCX with hyperlink targeting recipient address"
+description: "Detects DOCX attachments containing hyperlinks with anchor references that match recipient email addresses. This technique is commonly used to personalize malicious documents and evade detection."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and any(filter(attachments, .file_extension in ('docx', 'docm')),
+          any(file.explode(.),
+              any(regex.iextract(.scan.strings.raw,
+                                '<w:hyperlink[^\>]*w:anchor="(?P<email_address>[^\"]+)"'
+                  ),
+                  any(filter(recipients.to, .email.domain.valid),
+                      ..named_groups["email_address"] == .email.email
+                      or any(beta.scan_base64(..named_groups["email_address"],
+                                              ignore_padding=true
+                            ),
+                            strings.icontains(., ..email.email)
+                      )
+                  )
+              )
+          )
+  )
+
+attack_types:
+  - "Credential Phishing"
+  - "Malware/Ransomware"
+tactics_and_techniques:
+  - "Evasion"
+  - "Social engineering"
+detection_methods:
+  - "File analysis"
+  - "Archive analysis"
+  - "XML analysis"
+id: "d2ff2c1e-2994-5ca2-8bf3-508213e11364"
+og_id: "9ec8fa49-bda9-5e8f-876f-1e53a46d83ca"
+testing_pr: 3472
+testing_sha: 47546cdb1b343d8818c13d4c731608476d0fefcb
