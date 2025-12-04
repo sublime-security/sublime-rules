@@ -6,16 +6,19 @@ source: |
   type.inbound
   and any(filter(attachments, .file_extension in ('docx', 'docm')),
           any(filter(file.explode(.), .file_name == 'word/document.xml'),
+              any(regex.iextract(.scan.strings.raw,
+                                '<w:hyperlink[^\>]*w:anchor="(?P<email_address>[^\"]+)"'
+                  ),
                   any(filter(recipients.to, .email.domain.valid),
-                    ..named_groups["email_address"] == .email.email
-                    or any(beta.scan_base64(..named_groups["email_address"],
-                                            ignore_padding=true
-                           ),
-                           strings.icontains(., ..email.email)
-                    )
+                      ..named_groups["email_address"] == .email.email
+                      or any(beta.scan_base64(..named_groups["email_address"],
+                                              ignore_padding=true
+                            ),
+                            strings.icontains(., ..email.email)
+                      )
                   )
+              )
           )
-      )
   )
 
 attack_types:
