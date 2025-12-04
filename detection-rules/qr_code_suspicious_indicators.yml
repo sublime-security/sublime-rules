@@ -86,25 +86,20 @@ source: |
       )
       or (
         length(attachments) == 0
-        and any(file.explode(beta.message_screenshot()),
-                .scan.qr.type is not null
-                and regex.contains(.scan.qr.data, '\.')
-                and (
-                  (
-                    .scan.exiftool.image_height < 2000
-                    and .scan.exiftool.image_width < 2000
-                  )
-                  // ignore image height/width if there is excessive whitespace padding
-                  or regex.contains(body.html.raw,
-                                     '<td style=\"padding:0px 0px \d{4}px 0px;\"'
-                  )
-                )
         //
         // This rule makes use of a beta feature and is subject to change without notice
         // using the beta feature in custom rules is not suggested until it has been formally released
         //
-        and beta.parse_exif(file.message_screenshot()).image_height < 2000
-        and beta.parse_exif(file.message_screenshot()).image_width < 2000
+        and (
+          (
+            beta.parse_exif(file.message_screenshot()).image_height < 2000
+            and beta.parse_exif(file.message_screenshot()).image_width < 2000
+          )
+          // ignore image height/width if there is excessive whitespace padding
+          or regex.contains(body.html.raw,
+                            '<td style=\"padding:0px 0px \d{4}px 0px;\"'
+          )
+        )
         and any(beta.scan_qr(file.message_screenshot()).items,
                 .type is not null
                 and regex.contains(.data, '\.')
