@@ -1,0 +1,37 @@
+name: "Attachment: Calendar file with invisible Unicode characters"
+description: "Detects calendar (.ics) attachments containing suspicious invisible Unicode characters, which may be used to hide malicious content or bypass security filters. The rule triggers on messages with calendar-related keywords in the subject or body."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and not subject .is_reply
+  and any(attachments, .file_extension in~ ('ics'))
+  and any(attachments,
+          any(file.explode(.),
+              .file_extension in~ ('ics')
+              and regex.icontains(.scan.strings.raw,
+                                  '[\x{E0000}-\x{E007F}\x{E0100}-\x{E01EF}\x{2062}\x{2064}]{8,}'
+              )
+          )
+  )
+  and (
+    regex.icontains(subject.subject, '(calendar|meeting|event|appointment)')
+    or regex.icontains(body.current_thread.text,
+                       '(calendar|meeting|event|appointment)'
+    )
+    or any(attachments, .content_type in~ ("text/calendar"))
+  )
+
+attack_types:
+  - "BEC/Fraud"
+  - "Credential Phishing"
+  - "Malware/Ransomware"
+tactics_and_techniques:
+  - "Evasion"
+detection_methods:
+  - "File analysis"
+  - "Content analysis"
+id: "e8af7271-26e0-5640-a863-8bb9ff90f697"
+og_id: "050fceac-98fa-564c-8d3f-34778949dae0"
+testing_pr: 3593
+testing_sha: 508205a2b8815dbdb6936ac8971d28db6be099de
