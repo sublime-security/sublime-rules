@@ -20,18 +20,32 @@ source: |
       or not any(headers.hops, any(.fields, strings.ilike(.name, "In-Reply-To")))
     )
   )
-  and 3 of (
-    any([subject.subject, body.current_thread.text],
-        regex.icontains(., '(full|part).time')
-    ),
-    strings.ilike(body.current_thread.text, '*job*'),
-    regex.icontains(body.current_thread.text, '\bHR\b'),
-    strings.ilike(body.current_thread.text, '*manager*'),
-    strings.ilike(body.current_thread.text, '*commission*'),
-    strings.ilike(body.current_thread.text, '*hourly*'),
-    strings.ilike(body.current_thread.text, '*prior experience*'),
-    strings.ilike(body.current_thread.text, '*company rep*'),
-    strings.ilike(body.current_thread.text, "100% legal")
+  and (
+    3 of (
+      any([subject.subject, body.current_thread.text],
+          regex.icontains(., '(full|part).time')
+      ),
+      strings.ilike(body.current_thread.text, '*job*'),
+      regex.icontains(body.current_thread.text, '\bHR\b'),
+      strings.ilike(body.current_thread.text, '*manager*'),
+      strings.ilike(body.current_thread.text, '*commission*'),
+      strings.ilike(body.current_thread.text, '*hourly*'),
+      strings.ilike(body.current_thread.text, '*per hour*'),
+      strings.ilike(body.current_thread.text, '*prior experience*'),
+      strings.ilike(body.current_thread.text, '*company rep*'),
+      strings.ilike(body.current_thread.text, "100% legal")
+    )
+    or (
+      length(ml.nlu_classifier(body.current_thread.text).topics) == 1
+      and any(ml.nlu_classifier(body.current_thread.text).topics,
+              .name == "Professional and Career Development"
+              and .confidence == "high"
+      )
+      and (
+        length(recipients.to) == 0
+        or all(recipients.to, strings.ilike(.display_name, "Undisclosed?recipients"))
+      )
+    )
   )
   
   // all attachments are images or there's no attachments
@@ -43,13 +57,13 @@ source: |
     or length(attachments) == 0
   )
   
-  // there's an email in the body
-  and regex.contains(body.current_thread.text,
-                     "[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}"
+  // there's an email in the body and it's a freemail
+  and any(regex.extract(body.current_thread.text,
+                        "[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}"
+          ),
+          strings.parse_email(.full_match).domain.domain in $free_email_providers
+          or strings.parse_email(.full_match).domain.root_domain in $free_email_providers
   )
-  
-  // and it's likely a freemail
-  and any($free_email_providers, strings.icontains(body.current_thread.text, .))
   
   // and that email doesn't match the sender domain
   and (
