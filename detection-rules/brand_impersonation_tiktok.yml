@@ -14,11 +14,13 @@ source: |
                               'tiktok'
       ) <= 1
       or (
-        length(ml.logo_detect(beta.message_screenshot()).brands) == 1
-        and any(ml.logo_detect(beta.message_screenshot()).brands,
+        length(ml.logo_detect(file.message_screenshot()).brands) == 1
+        and any(ml.logo_detect(file.message_screenshot()).brands,
                 .name == "TikTok" and .confidence == "high"
         )
       )
+      // hyphenated sender domain contains tiktok
+      or strings.iends_with(sender.email.domain.root_domain, "-tiktok.com")
     )
     // OR TikTok verification language
     or (
@@ -30,12 +32,13 @@ source: |
         or strings.icontains(body.current_thread.text, "verification complete")
         or strings.icontains(body.current_thread.text, "almost verified")
         or strings.icontains(body.current_thread.text, "review complete")
+        or strings.icontains(body.current_thread.text, "verify profile")
       )
     )
   )
   and (
     // ML Topic Analysis and Credential Theft Detection
-    any(beta.ml_topic(body.current_thread.text).topics,
+    any(ml.nlu_classifier(body.current_thread.text).topics,
         .name in (
           "Security and Authentication",
           "Secure Message",
@@ -43,19 +46,19 @@ source: |
         )
         and .confidence in ("medium", "high")
     )
-    or any(beta.ml_topic(beta.ocr(beta.message_screenshot()).text).topics,
+    or any(ml.nlu_classifier(beta.ocr(file.message_screenshot()).text).topics,
            .name in (
              "Security and Authentication",
              "Secure Message",
              "Reminders and Notifications"
            )
            and .confidence in ("medium", "high")
-           and beta.ocr(beta.message_screenshot()).text != ""
+           and beta.ocr(file.message_screenshot()).text != ""
     )
     or any(ml.nlu_classifier(body.current_thread.text).intents,
            .name == "cred_theft" and .confidence == "high"
     )
-    or any(ml.nlu_classifier(beta.ocr(beta.message_screenshot()).text).intents,
+    or any(ml.nlu_classifier(beta.ocr(file.message_screenshot()).text).intents,
            .name == "cred_theft" and .confidence == "high"
     )
   )
@@ -66,6 +69,7 @@ source: |
       sender.email.domain.root_domain in (
         "tiktok.com",
         "tiktokglobalshop.com",
+        "tiktokusds.com",
         "bytedance.com",
         "tiktokacademy.com",
         "webassessor.com" // used for this https://ads.tiktok.com/business/en-US/academy/tiktok-certification

@@ -11,11 +11,38 @@ source: |
                     '*united healthcare*'
       )
       or strings.ilike(strings.replace_confusables(sender.display_name), 'UHC*')
+      or regex.icontains(sender.display_name, 'united ?health ?care')
     )
     // levenshtein distance similar to UHC
     or strings.ilevenshtein(strings.replace_confusables(sender.display_name),
                             'united healthcare'
     ) <= 1
+    or (
+      regex.icontains(body.current_thread.text, 'united ?health ?care')
+      and (
+        regex.icontains(body.current_thread.text, 'quick .{0,10}survey')
+        // Free benefits/items lure commonly used in UHC impersonation
+        or regex.icontains(body.current_thread.text,
+          'dental (benefits?|coverage).{0,50}(free|eligible|no.{0,10}cost)'
+        )
+        or regex.icontains(body.current_thread.text,
+          'free.{0,30}(toothbrush|dental|benefit)'
+        )
+      )
+    )
+    // Brand name in sender local part from non-UHC domain
+    or (
+      strings.icontains(sender.email.local_part, "unitedhealthcare")
+      and sender.email.domain.root_domain not in (
+        "uhc.com",
+        "unitedhealthcare.com",
+        "uhcmedicaresolutions.com",
+        "unitedhealthcareupdate.com",
+        "yourhealth-wellnessteam.com",
+        "uhc-customer.com",
+        "leavesource.com"
+      )
+    )
   )
   // and the sender is not in org_domains or from UHC domains and passes auth
   and not (
@@ -28,7 +55,8 @@ source: |
           "uhcmedicaresolutions.com",
           "unitedhealthcareupdate.com",
           "yourhealth-wellnessteam.com",
-          "uhc-customer.com"
+          "uhc-customer.com",
+          "leavesource.com"
         )
         or sender.display_name in (
           "UHCOM Faculty Affairs",
@@ -37,6 +65,11 @@ source: |
       )
       and headers.auth_summary.dmarc.pass
     )
+  )
+  // negate UHC job related posting
+  and not any(ml.nlu_classifier(body.current_thread.text).topics,
+              .name == "Professional and Career Development"
+              and .confidence == "high"
   )
   // and the sender is not from high trust sender root domains
   and (

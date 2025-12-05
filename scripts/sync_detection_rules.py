@@ -1,11 +1,14 @@
 import base64
 import os
+import sys
 import uuid
 from datetime import datetime, timedelta, timezone
 import re
 from urllib.parse import quote
 
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 # Common configuration
 GITHUB_TOKEN = os.getenv('GITHUB_TOKEN')
@@ -63,14 +66,23 @@ COMMENT_TRIGGER = os.getenv('COMMENT_TRIGGER', '/update-test-rules')
 ADD_TEST_RULES_LABEL = os.getenv('ADD_TEST_RULES_LABEL', 'false').lower() == 'true'
 # label to apply to PRs that have rules in test-rules
 IN_TEST_RULES_LABEL = os.getenv('IN_TEST_RULES_LABEL', 'in-test-rules')
+# label to apply to PRs that are excluded due to author membership
+AUTHOR_MEMBERSHIP_EXCLUSION_LABEL = os.getenv('AUTHOR_MEMBERSHIP_EXCLUSION_LABEL', 'test-rules:excluded:author_membership')
 
-# flag to skip files containing specific text
+# flag to skip files containing specific text patterns
 # this is due to test-rules not supporting specific functions
 SKIP_FILES_WITH_TEXT = os.getenv('SKIP_FILES_WITH_TEXT', 'false').lower() == 'true'
-# text to search for in files to skip
-SKIP_TEXT = os.getenv('SKIP_TEXT', 'ml.link_analysis')
-ADD_SKIP_TEXT_LABEL = os.getenv('ADD_SKIP_TEXT_LABEL', 'false').lower() == 'true'
-SKIP_TEXT_LABEL = os.getenv('SKIP_TEXT_LABEL', 'hunting-required')
+# Skip texts configuration: {text: [labels_to_apply]}
+SKIP_TEXTS = {
+    'ml.link_analysis': ['hunting-required', 'test-rules:excluded:link_analysis']
+}
+
+# # flag to enable skipping PRs with too many rules
+SKIP_BULK_PRS = os.getenv('SKIP_BULK_PRS', 'false').lower() == 'true'
+# maximum number of YAML rules allowed in a PR before skipping
+MAX_RULES_PER_PR = int(os.getenv('MAX_RULES_PER_PR', '10'))
+# label to apply to PRs that are skipped due to too many rules
+BULK_PR_LABEL = os.getenv('BULK_PR_LABEL', 'test-rules:excluded:bulk_rules')
 
 # flag to check if required actions have completed
 # we should only include rules which have passed validation
@@ -88,10 +100,26 @@ REQUIRED_CHECK_CONCLUSION = os.getenv('REQUIRED_CHECK_CONCLUSION', 'success')
 if not os.path.exists(OUTPUT_FOLDER):
     os.makedirs(OUTPUT_FOLDER)
 
+# Configure requests session with retry strategy for GitHub API
+retry_strategy = Retry(
+    total=3,  # Maximum number of retries
+    backoff_factor=2,  # Exponential backoff factor (wait 2^retry seconds)
+    status_forcelist=[429, 500, 502, 503, 504],  # HTTP status codes to retry on
+    allowed_methods=["HEAD", "GET", "POST", "PUT", "DELETE", "OPTIONS", "TRACE"]
+)
+
+adapter = HTTPAdapter(max_retries=retry_strategy)
+github_session = requests.Session()
+github_session.mount("http://", adapter)
+github_session.mount("https://", adapter)
+
 headers = {
     'Authorization': f'token {GITHUB_TOKEN}',
     'Accept': 'application/vnd.github.v3+json'
 }
+
+# Configure session headers
+github_session.headers.update(headers)
 
 def has_label(pr_number, label_name):
     """
@@ -105,7 +133,7 @@ def has_label(pr_number, label_name):
         bool: True if PR has the label, False otherwise
     """
     url = f'https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/issues/{pr_number}/labels'
-    response = requests.get(url, headers=headers)
+    response = github_session.get(url)
     response.raise_for_status()
     labels = response.json()
     
@@ -125,14 +153,41 @@ def apply_label(pr_number, label_name):
     url = f'https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/issues/{pr_number}/labels'
     payload = {'labels': [label_name]}
     
-    response = requests.post(url, headers=headers, json=payload)
-    
-    if response.status_code == 200:
+    try:
+        response = github_session.post(url, json=payload)
+        response.raise_for_status()
         print(f"\tApplied label '{label_name}' to PR #{pr_number}")
         return True
-    else:
-        print(f"\tFailed to apply label '{label_name}' to PR #{pr_number}: {response.status_code}")
-        return False
+    except Exception as e:
+        print(f"\tFailed to apply label '{label_name}' to PR #{pr_number}: {e}")
+        print("Failed to get valid response after retries. Exiting script.")
+        sys.exit(1)
+
+def remove_label(pr_number, label_name):
+    """
+    Remove a label from a PR.
+
+    Args:
+        pr_number (int): Pull request number
+        label_name (str): Label name to remove
+
+    Returns:
+        bool: True if label was removed successfully, False otherwise
+    """
+    url = f'https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/issues/{pr_number}/labels/{label_name}'
+    
+    try:
+        response = github_session.delete(url)
+        if response.status_code == 404:
+            print(f"\tLabel '{label_name}' not found on PR #{pr_number}")
+            return True  # Consider it successful if the label wasn't there
+        response.raise_for_status()
+        print(f"\tRemoved label '{label_name}' from PR #{pr_number}")
+        return True
+    except Exception as e:
+        print(f"\tFailed to remove label '{label_name}' from PR #{pr_number}: {e}")
+        print("Failed to get valid response after retries. Exiting script.")
+        sys.exit(1)
 
 def is_user_in_org(username, org_name):
     """
@@ -146,8 +201,17 @@ def is_user_in_org(username, org_name):
         bool: True if user is a member, False otherwise
     """
     url = f'https://api.github.com/orgs/{org_name}/members/{username}'
-    response = requests.get(url, headers=headers)
-    return response.status_code == 204
+    try:
+        response = github_session.get(url)
+        # 404 is expected when user is not in org, so handle it separately
+        if response.status_code == 404:
+            return False
+        response.raise_for_status()
+        return response.status_code == 204
+    except Exception as e:
+        print(f"Error checking organization membership for {username} in {org_name}: {e}")
+        print("Failed to get valid response after retries. Exiting script.")
+        sys.exit(1)
 
 
 def has_trigger_comment(pr_number, org_name, trigger_comment):
@@ -163,7 +227,7 @@ def has_trigger_comment(pr_number, org_name, trigger_comment):
         bool: True if a matching comment is found, False otherwise
     """
     url = f'https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/issues/{pr_number}/comments'
-    response = requests.get(url, headers=headers)
+    response = github_session.get(url)
     response.raise_for_status()
     comments = response.json()
 
@@ -200,11 +264,20 @@ def has_required_action_completed(pr_sha, action_name, required_status):
     # Add the required Accept header for the Checks API
     custom_headers['Accept'] = 'application/vnd.github.v3+json'
 
-    response = requests.get(url, headers=custom_headers)
-
-    if response.status_code != 200:
-        print(f"\tError checking action status: {response.status_code}")
-        return False
+    # Temporarily update session headers for this request
+    original_accept = github_session.headers.get('Accept')
+    github_session.headers.update(custom_headers)
+    
+    try:
+        response = github_session.get(url)
+        response.raise_for_status()
+    except Exception as e:
+        print(f"\tError checking action status: {e}")
+        print("Failed to get valid response after retries. Exiting script.")
+        sys.exit(1)
+    finally:
+        # Restore original Accept header
+        github_session.headers['Accept'] = original_accept
 
     check_runs = response.json()
 
@@ -235,18 +308,27 @@ def has_required_action_completed(pr_sha, action_name, required_status):
     print(f"\tNo check matching '{action_name}' found")
     return False
 
-def contains_skip_text(content, skip_text):
+def check_skip_texts(content, skip_texts):
     """
-    Check if file content contains the text to skip.
+    Check if file content contains any of the configured skip texts (case-insensitive).
 
     Args:
         content (str): File content
-        skip_text (str): Text to search for
+        skip_texts (dict): Dictionary of {text: [labels]} to check
 
     Returns:
-        bool: True if content contains the skip text, False otherwise
+        tuple: (matched_texts, all_labels) where matched_texts is a list of 
+               matching texts and all_labels is a set of all labels to apply
     """
-    return skip_text in content
+    matched_texts = []
+    all_labels = set()
+    
+    for text, labels in skip_texts.items():
+        if text.lower() in content.lower():
+            matched_texts.append(text)
+            all_labels.update(labels)
+    
+    return matched_texts, all_labels
 
 
 def generate_deterministic_uuid(seed_string):
@@ -370,7 +452,7 @@ def get_closed_pull_requests():
         url = f'https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/pulls'
         params = {'page': page, 'per_page': per_page, 'state': 'closed', 'sort': 'updated', 'direction': 'desc'}
         print(f"Fetching page {page} of CLOSED Pull Requests")
-        response = requests.get(url, headers=headers, params=params)
+        response = github_session.get(url, params=params)
         response.raise_for_status()
 
         # Extend the list with the pull requests from the current page
@@ -407,7 +489,7 @@ def get_open_pull_requests():
         url = f'https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/pulls'
         params = {'page': page, 'per_page': per_page, 'sort': 'updated', 'direction': 'desc'}
         print(f"Fetching page {page} of Pull Requests")
-        response = requests.get(url, headers=headers, params=params)
+        response = github_session.get(url, params=params)
         response.raise_for_status()
 
         # Extend the list with the pull requests from the current page
@@ -437,13 +519,46 @@ def get_open_pull_requests():
 
 def get_files_for_pull_request(pr_number):
     url = f'https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/pulls/{pr_number}/files'
-    response = requests.get(url, headers=headers)
+    response = github_session.get(url)
     response.raise_for_status()
     return response.json()
 
 
-def get_file_contents(contents_url):
-    response = requests.get(contents_url, headers=headers)
+def count_yaml_rules_in_pr(files):
+    """
+    Count the number of YAML rule files in the PR.
+    
+    Args:
+        files (list): List of file objects from GitHub API
+        
+    Returns:
+        int: Number of YAML files in detection-rules directory
+    """
+    yaml_count = 0
+    for file in files:
+        if (file['status'] in ['added', 'modified', 'changed'] and 
+            file['filename'].startswith('detection-rules/') and 
+            file['filename'].endswith('.yml')):
+            yaml_count += 1
+    return yaml_count
+
+
+def get_file_contents(file_path, ref):
+    """
+    Get file contents from GitHub at a specific commit.
+
+    Args:
+        file_path (str): Path to the file in the repository
+        ref (str): Git ref (branch, tag, or commit SHA) to fetch from
+
+    Returns:
+        str: Decoded file content
+    """
+    # Construct the contents API URL with the specific ref
+    url = f'https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/contents/{file_path}'
+    params = {'ref': ref}
+
+    response = github_session.get(url, params=params)
     response.raise_for_status()
     content = response.json()['content']
     return base64.b64decode(content).decode('utf-8')
@@ -732,12 +847,27 @@ def handle_pr_rules(mode):
             has_comment = False
             if author_in_org:
                 print(f"\tPR #{pr['number']}: Author {pr['user']['login']} is in {ORG_NAME}")
+                # remove the label if it's present
+                if not has_label(pr_number, AUTHOR_MEMBERSHIP_EXCLUSION_LABEL):
+                    remove_label(pr_number, AUTHOR_MEMBERSHIP_EXCLUSION_LABEL)
+
             # only invoke has_trigger_comment when author_in_org is false
             if INCLUDE_PRS_WITH_COMMENT and not author_in_org:
                 has_comment = has_trigger_comment(pr['number'], ORG_NAME, COMMENT_TRIGGER)
+                
+                # If trigger comment was found, remove the exclusion label
+                if has_comment and has_label(pr_number, AUTHOR_MEMBERSHIP_EXCLUSION_LABEL):
+                    print(f"\tPR #{pr_number}: Removing '{AUTHOR_MEMBERSHIP_EXCLUSION_LABEL}' label due to trigger comment")
+                    remove_label(pr_number, AUTHOR_MEMBERSHIP_EXCLUSION_LABEL)
 
                 if not author_in_org and not has_comment:
                     print(f"\tSkipping PR #{pr_number}: Author {pr['user']['login']} is not in {ORG_NAME} and is missing comment trigger")
+                    
+                    # Apply exclusion label if not already present
+                    if not has_label(pr_number, AUTHOR_MEMBERSHIP_EXCLUSION_LABEL):
+                        print(f"\tPR #{pr_number} doesn't have the '{AUTHOR_MEMBERSHIP_EXCLUSION_LABEL}' label. Applying...")
+                        apply_label(pr_number, AUTHOR_MEMBERSHIP_EXCLUSION_LABEL)
+                    
                     process_pr = False
 
         if not process_pr:
@@ -755,6 +885,23 @@ def handle_pr_rules(mode):
                 continue
 
         files = get_files_for_pull_request(pr_number)
+
+        # Check if PR has too many rules and should be skipped
+        if SKIP_BULK_PRS:
+            yaml_rule_count = count_yaml_rules_in_pr(files)
+            if yaml_rule_count > MAX_RULES_PER_PR:
+                print(f"\tSkipping PR #{pr_number}: Contains {yaml_rule_count} YAML rules (max allowed: {MAX_RULES_PER_PR})")
+                
+                # Apply label to indicate PR was skipped due to too many rules
+                if not has_label(pr_number, BULK_PR_LABEL):
+                    print(f"\tPR #{pr_number} doesn't have the '{BULK_PR_LABEL}' label. Applying...")
+                    apply_label(pr_number, BULK_PR_LABEL)
+                
+                continue
+            else:
+                # if it has the label, remove it.
+                if has_label(pr_number, BULK_PR_LABEL):
+                    remove_label(pr_number, BULK_PR_LABEL)
 
         # Process files in the PR
         for file in files:
@@ -777,15 +924,26 @@ def handle_pr_rules(mode):
 
             # If file should be processed, get content and apply mode-specific logic
             if process_file:
-                content = get_file_contents(file['contents_url'])
+                # Fetch file content at the specific commit SHA to avoid race conditions
+                content = get_file_contents(file['filename'], latest_sha)
 
                 # Skip files with specific text if flag is set
-                if SKIP_FILES_WITH_TEXT and contains_skip_text(content, SKIP_TEXT):
-                    print(f"\tSkipping file {file['filename']}: contains {SKIP_TEXT}")
-                    if ADD_SKIP_TEXT_LABEL and not has_label(pr_number, SKIP_TEXT_LABEL):
-                        print(f"\tPR #{pr_number} doesn't have the '{SKIP_TEXT_LABEL}' label. Applying...")
-                        apply_label(pr_number, SKIP_TEXT_LABEL)
-                    continue
+                if SKIP_FILES_WITH_TEXT and SKIP_TEXTS:
+                    matched_texts, labels_to_apply = check_skip_texts(content, SKIP_TEXTS)
+                    if matched_texts:
+                        print(f"\tSkipping file {file['filename']}: contains texts {matched_texts}")
+
+                        # Apply all associated labels
+                        for label in labels_to_apply:
+                            if not has_label(pr_number, label):
+                                print(f"\tPR #{pr_number} doesn't have the '{label}' label. Applying...")
+                                apply_label(pr_number, label)
+
+                        # remove the IN_TEST_RULES_LABEL label as it's no longer in test-rules
+                        if has_label(pr_number, IN_TEST_RULES_LABEL):
+                            remove_label(pr_number, IN_TEST_RULES_LABEL)
+                        # skip this file and process the next one
+                        continue
 
                 # Process file (common for both modes)
                 target_save_filename = f"{pr['number']}_{os.path.basename(file['filename'])}"

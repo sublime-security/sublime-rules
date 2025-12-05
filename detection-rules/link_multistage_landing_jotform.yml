@@ -6,14 +6,20 @@ source: |
   type.inbound
   and length(filter(body.links, .href_url.domain.root_domain == "jotform.com")) > 0
   and any(filter(body.links, .href_url.domain.root_domain == "jotform.com"),
-  
           // the form as been disabled
           strings.icontains(ml.link_analysis(.).final_dom.inner_text,
                             'This form is disabled...'
           )
+          // lure to open a document with phishing intent
+          or (
+            any(ml.link_analysis(.).final_dom.links,
+                regex.icontains(.display_text, "VIEW DOCUMENT ONLINE")
+                and ml.link_analysis(.href_url).credphish.disposition == "phishing"
+            )
+          )
           // it contains suspicious elements within the extracted "appInfo"
           or any(regex.iextract(ml.link_analysis(.).final_dom.raw,
-                                'window\.__appInfo = (?P<appInfo>\{[^\;]+\})\;'
+                                'window\.__appInfo = (?P<appInfo>\{[^\n]+\})\;\n'
                  ),
                  // the title/description/name contains suspicious keywords
                  any([

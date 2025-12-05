@@ -27,7 +27,15 @@ source: |
                       'Instagram ?Helpdesk',
                       'Instagram ?Support',
                       'Ads ?Team',
-                      'Meta & Coursera'
+                      'Meta & Coursera',
+                      'Compliance & Security',
+                      'meta.*inc',
+                      'meta ?copyright',
+                      'meta ?compliance',
+                      'meta ?pro',
+                      'meta ?certify',
+                      'social.?media.?(master|expert|pro|guru)',
+                      'meta.?(social|skill|ads).?(star|set|expert)'
       )
       or strings.ilevenshtein(sender.display_name, 'facebook ads') <= 2
       or strings.ilevenshtein(sender.display_name, 'facebook business') <= 2
@@ -43,6 +51,7 @@ source: |
           and sender.email.domain.root_domain == 'veza.com'
           and headers.auth_summary.dmarc.pass
         )
+        and not sender.display_name == "Get Support"
       )
       or strings.ilike(sender.email.domain.domain, '*facebook*')
       or strings.ilike(sender.email.local_part,
@@ -71,21 +80,26 @@ source: |
         or strings.ilevenshtein(sender.display_name, 'facebook') <= 2
       )
       and (
-        any(ml.logo_detect(beta.message_screenshot()).brands,
+        any(ml.logo_detect(file.message_screenshot()).brands,
             .name in ("Facebook", "Meta", "Instagram", "Threads")
         )
         or any(ml.nlu_classifier(body.current_thread.text).intents,
                .name in ("cred_theft", "callback_scam", "steal_pii")
                and .confidence in ("medium", "high")
         )
-        or regex.icontains(body.plain.raw, "(violation|infringe|copyright)")
+        or (
+          length(body.current_thread.text) < 2000
+          and regex.icontains(body.current_thread.text,
+                              "(?:violation|infringe|copyright)"
+          )
+        )
         or any(body.links, .href_url.domain.root_domain == "rebrand.ly")
       )
     )
     // salesforce sender combined with logo detection and nlu is enough
     or (
       sender.email.domain.root_domain == "salesforce.com"
-      and any(ml.logo_detect(beta.message_screenshot()).brands,
+      and any(ml.logo_detect(file.message_screenshot()).brands,
               .name in ("Facebook", "Meta", "Instagram", "Threads")
       )
       and any(ml.nlu_classifier(body.current_thread.text).intents,
@@ -132,7 +146,7 @@ source: |
     )
     // we've seen advertising "advice/recommendations"
     or (
-      all(beta.ml_topic(body.current_thread.text).topics,
+      all(ml.nlu_classifier(body.current_thread.text).topics,
           .name in ("Advertising and Promotions", "Reminders and Notifications")
       )
       // Meta mention
@@ -151,6 +165,16 @@ source: |
     or (
       strings.icontains(body.current_thread.text, "Meta Professional Certificate")
       and strings.icontains(body.current_thread.text, "Meta & Coursera Team")
+      // Add link validation
+      and any(body.links, 
+        strings.icontains(.display_text, "coursera")
+        and .href_url.domain.root_domain != "coursera.org"
+      )
+    )
+    or 2 of (
+      strings.icontains(body.current_thread.text, 'Meta'),
+      strings.icontains(body.current_thread.text, '1602 Willow Road'),
+      strings.icontains(body.current_thread.text, 'Menlo Park, CA 91024'),
     )
   )
   and sender.email.domain.root_domain not in~ (
@@ -166,7 +190,10 @@ source: |
     'workplace.com',
     'capterra.com', // they mention "Community Guidelines"
     'facebookblueprint.com',
-    'metaenterprisemail.com'
+    'metaenterprisemail.com',
+    'pigfacebookstore.com.au', // unrelated domain but hitting on facebook 
+    'metacompliance.com',
+    'metaprop.com' // unrelated domain but hitting on meta pro
   )
   // negate metaenterprise links
   and not any(headers.reply_to, .email.email == "noreply@facebookmail.com")
@@ -183,6 +210,7 @@ source: |
     or sender.email.domain.root_domain == "salesforce.com"
   )
   and not profile.by_sender().any_messages_benign
+
 attack_types:
   - "Credential Phishing"
 tactics_and_techniques:
