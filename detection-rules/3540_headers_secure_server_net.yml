@@ -1,0 +1,38 @@
+name: "Headers: GoDaddy SecureServer return-path with untrusted sender"
+description: "Detects messages with a GoDaddy SecureServer return-path from untrusted or DMARC-failing sender domains that are unsolicited."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+    and strings.icontains(headers.return_path.email, 'secureserver.net')
+  
+    // negate highly trusted sender domains unless they fail DMARC authentication
+    and (
+      (
+        sender.email.domain.root_domain in $high_trust_sender_root_domains
+        and not headers.auth_summary.dmarc.pass
+      )
+      or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+    )
+    and sender.email.domain.root_domain not in $alexa_1m
+  
+    // only flag unsolicited messages
+    and (
+      not profile.by_sender().any_messages_benign
+      and not profile.by_sender().solicited
+    )
+tags:
+ - "Attack surface reduction"
+attack_types:
+  - "Spam"
+tactics_and_techniques:
+  - "Spoofing"
+  - "Evasion"
+detection_methods:
+  - "Header analysis"
+  - "Sender analysis"
+  - "Threat intelligence"
+id: "413329d2-e4d7-5605-bd70-5a96f7123040"
+og_id: "5813ac82-82ae-51b7-895f-d6150376afb6"
+testing_pr: 3540
+testing_sha: e305364487b05b2903087acd87f5f4f72aadfa69
