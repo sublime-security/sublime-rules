@@ -13,11 +13,25 @@ source: |
                   and .scan.qr.type == "url"
   
                   // linkanalysis phishing disposition
-                  and any([ml.link_analysis(.scan.qr.url)],
-                          .credphish.disposition == "phishing"
-                          or any(..scan.qr.url.rewrite.encoders,
-                                 strings.icontains(., "open_redirect")
-                          )
+                  and (
+                    ml.link_analysis(.scan.qr.url).credphish.disposition == "phishing"
+                    or (
+                      strings.ilike(ml.link_analysis(.scan.qr.url).final_dom.display_text,
+                                    "*robot*",
+                                    "*session check*",
+                                    "*verify*",
+                                    "*human*"
+                      )
+                      and length(ml.link_analysis(.scan.qr.url).final_dom.display_text
+                      ) < 250
+                    )
+                    or any(ml.link_analysis(.scan.qr.url).unique_urls_accessed,
+                           .domain.domain == "challenges.cloudflare.com"
+                           and strings.icontains(.path, "turnstile")
+                    )
+                    or any(.scan.qr.url.rewrite.encoders,
+                           strings.icontains(., "open_redirect")
+                    )
                   )
                   and .scan.qr.url.domain.root_domain not in $org_domains
           )
@@ -34,5 +48,4 @@ detection_methods:
   - "Content analysis"
   - "File analysis"
   - "QR code analysis"
-
 id: "9908ed3a-4c01-5a8d-82f9-78794b367c6e"
