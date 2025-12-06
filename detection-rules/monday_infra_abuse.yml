@@ -57,7 +57,9 @@ source: |
         and beta.parse_exif(file.message_screenshot()).image_width < 2000
         and beta.scan_qr(file.message_screenshot()).found
         and any(beta.scan_qr(file.message_screenshot()).items,
-                .type is not null and 'monday_tracker' in .url.rewrite.encoders and .url.scheme != "mailto"
+                .type is not null
+                and 'monday_tracker' in .url.rewrite.encoders
+                and .url.scheme != "mailto"
         )
       )
     )
@@ -86,6 +88,9 @@ source: |
       and headers.auth_summary.dmarc.pass
     )
   )
+  and any(ml.nlu_classifier(body.current_thread.text).intents,
+          .name != "benign" and .confidence == "high"
+  )
   // negating legit replies
   and not (
     (subject.is_reply or subject.is_forward)
@@ -94,7 +99,7 @@ source: |
       and any(headers.hops, any(.fields, strings.ilike(.name, "In-Reply-To")))
     )
   )
-  // negate graymail and newsletters with a benign NLU intent
+  // negate graymail and newsletters
   and not (
     any(ml.nlu_classifier(body.current_thread.text).topics,
         .name in~ (
@@ -104,9 +109,6 @@ source: |
           "Events and Webinars"
         )
         and .confidence != "low"
-    )
-    and any(ml.nlu_classifier(body.current_thread.text).intents,
-            .name == "benign" and .confidence == "high"
     )
   )
   
