@@ -8,29 +8,33 @@ severity: "medium"
 source: |
   type.inbound
   and (
-    length(attachments) >= 1
-    and any(attachments,
-            .size < 10000
-            and .file_extension == "htm"
-            and (
-              regex.icontains(file.parse_html(.).raw,
-                              "const (?:urlParts|fakeEvent|progressBar|segments)"
+    (
+      length(attachments) >= 1
+      and any(attachments,
+              .size < 10000
+              and .file_extension == "htm"
+              and (
+                regex.icontains(file.parse_html(.).raw,
+                                "const (?:urlParts|fakeEvent|progressBar|segments)"
+                )
+                or any([file.parse_html(.).raw],
+                       strings.icontains(., "impact?")
+                       or strings.icontains(., "/impact")
+                )
               )
-              or any([file.parse_html(.).raw],
-                     strings.icontains(., "impact?")
-                     or strings.icontains(., "/impact")
-              )
-            )
+      )
     )
-    or any(body.links,
-        (
-          strings.icontains(.href_url.url, "impact?")
-          or strings.icontains(.href_url.url, "/impact")
-        )
-        and (
-          strings.icontains(.href_url.url, ":8443")
-          or strings.icontains(.href_url.url, ":2087")
-        )
+    or (
+      any(body.links,
+          (
+            strings.icontains(.href_url.url, "impact?")
+            or strings.icontains(.href_url.url, "/impact")
+          )
+          and (
+            strings.icontains(.href_url.url, ":8443")
+            or strings.icontains(.href_url.url, ":2087")
+          )
+      )
     )
   )
 attack_types:
