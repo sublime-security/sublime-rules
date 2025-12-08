@@ -71,6 +71,8 @@ ADD_TEST_RULES_LABEL = os.getenv('ADD_TEST_RULES_LABEL', 'false').lower() == 'tr
 IN_TEST_RULES_LABEL = os.getenv('IN_TEST_RULES_LABEL', 'in-test-rules')
 # label to apply to PRs that are excluded due to author membership
 AUTHOR_MEMBERSHIP_EXCLUSION_LABEL = os.getenv('AUTHOR_MEMBERSHIP_EXCLUSION_LABEL', 'test-rules:excluded:author_membership')
+# label to apply to PRs that are manually excluded (by removing in-test-rules label)
+MANUAL_EXCLUSION_LABEL = os.getenv('MANUAL_EXCLUSION_LABEL', 'test-rules:excluded:manual')
 
 # flag to skip files containing specific text patterns
 # this is due to test-rules not supporting specific functions
@@ -573,6 +575,23 @@ def save_file(path, content):
         file.write(content)
 
 
+def pr_has_synced_files(pr_number):
+    """
+    Check if a PR has any synced files in the output folder.
+
+    Args:
+        pr_number (int): Pull request number
+
+    Returns:
+        bool: True if files exist for this PR, False otherwise
+    """
+    prefix = f"{pr_number}_"
+    for filename in os.listdir(OUTPUT_FOLDER):
+        if filename.startswith(prefix) and filename.endswith('.yml'):
+            return True
+    return False
+
+
 def clean_output_folder(valid_files):
     for filename in os.listdir(OUTPUT_FOLDER):
         file_path = os.path.join(OUTPUT_FOLDER, filename)
@@ -843,6 +862,22 @@ def handle_pr_rules(mode):
             continue
 
         pr_number = pr['number']
+
+        # Check for manual exclusion label (user opted out of test-rules)
+        if ADD_TEST_RULES_LABEL and has_label(pr_number, MANUAL_EXCLUSION_LABEL):
+            print(f"Skipping manually excluded PR #{pr_number}: {pr['title']}")
+            # Remove in-test-rules label if both are present (manual exclusion takes precedence)
+            if has_label(pr_number, IN_TEST_RULES_LABEL):
+                print(f"\tRemoving '{IN_TEST_RULES_LABEL}' label since manual exclusion takes precedence")
+                remove_label(pr_number, IN_TEST_RULES_LABEL)
+            continue
+
+        # Check if user removed the in-test-rules label (opt-out)
+        # If PR has synced files but no in-test-rules label, user must have removed it
+        if ADD_TEST_RULES_LABEL and pr_has_synced_files(pr_number) and not has_label(pr_number, IN_TEST_RULES_LABEL):
+            print(f"PR #{pr_number} has synced files but '{IN_TEST_RULES_LABEL}' label was removed - applying manual exclusion")
+            apply_label(pr_number, MANUAL_EXCLUSION_LABEL)
+            continue
 
         # Organization membership and comment trigger checks (for any mode if flags are set)
         process_pr = True
