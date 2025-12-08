@@ -16,28 +16,31 @@ source: |
       and length(body.previous_threads) == 0
       and 20 < length(body.current_thread.text) < 500
       and regex.icontains(strings.replace_confusables(body.current_thread.text),
-                          "screenshot|error list|plan|quote|rank|professional|price|mistake"
+                          "(?:screenshot|error list|plan|quote|rank|professional|price|mistake)"
       )
       and regex.icontains(strings.replace_confusables(body.current_thread.text),
-                          ".*(hi|hello|hey)"
+                          'h(?:i|ello|ey)\b'
       )
       and regex.icontains(strings.replace_confusables(body.current_thread.text),
-                          ".*(error|report|issues|repair|redesign|upgrade)"
+                          "(?:error|report|issues|repair|redesign|upgrade)"
       )
       and regex.icontains(strings.replace_confusables(body.current_thread.text),
-                          ".*(site|website|page)"
+                          "(?:site|website|page)"
       )
       and (
         regex.icontains(strings.replace_confusables(subject.subject),
-                        ".*(proposal|cost|estimate|error|bug|audit|screenshot|strategy|rankings|issues|fix|website|design)"
+                        "(?:proposal|cost|estimate|error|bug|audit|screenshot|strategy|rankings|issues|fix|website|design)"
         )
         or (
-          regex.icontains(strings.replace_confusables(subject.subject), "report")
-          and regex.icontains(strings.replace_confusables(body.current_thread.text),
-                              "(free|send you|can i send|may i send|let me know|interested|get back to me|reply back)"
+          strings.icontains(strings.replace_confusables(subject.subject),
+                            "report"
+          )
+          and regex.icontains(strings.replace_confusables(body.current_thread.text
+                              ),
+                              "(?:free|send you|can i send|may i send|let me know|interested|get back to me|reply back)"
           )
         )
-        or length(subject.subject) < 5
+        or length(subject.base) < 5
       )
     ),
     // Single thread message groups but with 1 unsubscribe link or link is recipient
@@ -51,28 +54,30 @@ source: |
       and length(body.previous_threads) == 0
       and 20 < length(body.current_thread.text) < 500
       and regex.icontains(strings.replace_confusables(body.current_thread.text),
-                          "screenshot|error list|plan|quote|rank|professional|price"
+                          "(?:screenshot|error list|plan|quote|rank|professional|price)"
       )
       and regex.icontains(strings.replace_confusables(body.current_thread.text),
-                          ".*(hi|hello|hey)"
+                          'h(?:i|ello|ey)\b'
       )
       and regex.icontains(strings.replace_confusables(body.current_thread.text),
-                          ".*(error|report|issues|website|repair|redesign|upgrade)"
+                          "(?:error|report|issues|website|repair|redesign|upgrade)"
       )
       and regex.icontains(strings.replace_confusables(body.current_thread.text),
-                          ".*(site|website|page)"
+                          "(?:site|website|page)"
       )
       and (
         regex.icontains(strings.replace_confusables(subject.subject),
-                        ".*(proposal|cost|estimate|error|bug|audit|screenshot|strategy|rankings|issues|fix|website|design)"
+                        "(?:proposal|cost|estimate|error|bug|audit|screenshot|strategy|rankings|issues|fix|website|design)"
         )
         or (
-          regex.icontains(strings.replace_confusables(subject.subject), "report")
+          strings.icontains(strings.replace_confusables(subject.subject),
+                            "report"
+          )
           and regex.icontains(strings.replace_confusables(body.current_thread.text),
-                              "(free|send you|can i send|may i send|let me know|interested|get back to me|reply back)"
+                              "(?:free|send you|can i send|may i send|let me know|interested|get back to me|reply back)"
           )
         )
-        or length(subject.subject) < 5
+        or length(subject.base) < 5
       )
     ),
     // Multiple thread message groups
@@ -82,27 +87,32 @@ source: |
       and length(body.previous_threads) < 5
       and (
         regex.icontains(strings.replace_confusables(subject.subject),
-                        ".*(proposal|cost|estimate|error|bug|audit|screenshot|strategy|rankings|issues|fix|website)"
+                        "(?:proposal|cost|estimate|error|bug|audit|screenshot|strategy|rankings|issues|fix|website|design)"
         )
         or (
           (
-            length(subject.subject) < 5
+            length(subject.base) < 5
             or regex.icontains(subject.subject, "^(re|fwd)\\s*:")
           )
           and any(body.previous_threads,
                   regex.icontains(strings.replace_confusables(.text),
-                                  '.*(screenshot|website)'
+                                  "(?:screenshot|website)"
                   )
           )
         )
       )
       and any(body.previous_threads,
               length(.text) < 400
-              and regex.icontains(strings.replace_confusables(.text),
-                                  '.*(hey|hi|hello|morning)'
+              and (
+                regex.icontains(strings.replace_confusables(.text),
+                                'h(?:i|ello|ey)\b'
+                )
+                or strings.icontains(strings.replace_confusables(.text),
+                                     "morning"
+                )
               )
               and regex.icontains(strings.replace_confusables(.text),
-                                  '.*(\berror(?:\s+list)?\b|screenshot|report|plan)'
+                                  '(?:\berror(?:\s+list)?\b|screenshot|report|plan)'
               )
               and ml.nlu_classifier(.text).language == "english"
       )
