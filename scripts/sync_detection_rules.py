@@ -834,6 +834,9 @@ def handle_pr_rules(mode):
         # Common checks for all modes
         if pr['draft'] and not INCLUDE_DRAFT_PRS:
             print(f"Skipping draft PR #{pr['number']}: {pr['title']}")
+            # Remove in-test-rules label if previously applied
+            if ADD_TEST_RULES_LABEL and has_label(pr['number'], IN_TEST_RULES_LABEL):
+                remove_label(pr['number'], IN_TEST_RULES_LABEL)
             continue
         if pr['base']['ref'] != 'main':
             print(f"Skipping non-main branch PR #{pr['number']}: {pr['title']} -- dest branch: {pr['base']['ref']}")
@@ -870,7 +873,11 @@ def handle_pr_rules(mode):
                     if not has_label(pr_number, AUTHOR_MEMBERSHIP_EXCLUSION_LABEL):
                         print(f"\tPR #{pr_number} doesn't have the '{AUTHOR_MEMBERSHIP_EXCLUSION_LABEL}' label. Applying...")
                         apply_label(pr_number, AUTHOR_MEMBERSHIP_EXCLUSION_LABEL)
-                    
+
+                    # Remove in-test-rules label if previously applied
+                    if ADD_TEST_RULES_LABEL and has_label(pr_number, IN_TEST_RULES_LABEL):
+                        remove_label(pr_number, IN_TEST_RULES_LABEL)
+
                     process_pr = False
 
         if not process_pr:
@@ -885,6 +892,9 @@ def handle_pr_rules(mode):
             if not has_required_action_completed(latest_sha, REQUIRED_CHECK_NAME, REQUIRED_CHECK_CONCLUSION):
                 print(
                     f"\tSkipping PR #{pr_number}: Required check '{REQUIRED_CHECK_NAME}' has not completed with conclusion '{REQUIRED_CHECK_CONCLUSION}'")
+                # Remove in-test-rules label if previously applied
+                if ADD_TEST_RULES_LABEL and has_label(pr_number, IN_TEST_RULES_LABEL):
+                    remove_label(pr_number, IN_TEST_RULES_LABEL)
                 continue
 
         files = get_files_for_pull_request(pr_number)
@@ -894,12 +904,16 @@ def handle_pr_rules(mode):
             yaml_rule_count = count_yaml_rules_in_pr(files)
             if yaml_rule_count > MAX_RULES_PER_PR:
                 print(f"\tSkipping PR #{pr_number}: Contains {yaml_rule_count} YAML rules (max allowed: {MAX_RULES_PER_PR})")
-                
+
                 # Apply label to indicate PR was skipped due to too many rules
                 if not has_label(pr_number, BULK_PR_LABEL):
                     print(f"\tPR #{pr_number} doesn't have the '{BULK_PR_LABEL}' label. Applying...")
                     apply_label(pr_number, BULK_PR_LABEL)
-                
+
+                # Remove in-test-rules label if previously applied
+                if ADD_TEST_RULES_LABEL and has_label(pr_number, IN_TEST_RULES_LABEL):
+                    remove_label(pr_number, IN_TEST_RULES_LABEL)
+
                 continue
             else:
                 # if it has the label, remove it.
