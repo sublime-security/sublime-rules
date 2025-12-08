@@ -9,17 +9,29 @@ source: |
   )
   and (
     any(ml.nlu_classifier(body.current_thread.text).topics,
-          .name in (
-            "Reminders and Notifications",
-            "Secure Message",
-            "Security and Authentication",
-            "Voicemail Call and Missed Call Notifications",
-            "E-Signature",
-            "Financial Communications"
-          )
+        .name in (
+          "Reminders and Notifications",
+          "Secure Message",
+          "Security and Authentication",
+          "Voicemail Call and Missed Call Notifications",
+          "E-Signature",
+          "Financial Communications"
+        )
     )
-    or all(['financial', 'request'],
-          . in map(ml.nlu_classifier(body.current_thread.text).entities, .name)
+    or (
+      length(distinct(filter(ml.nlu_classifier(body.current_thread.text).entities,
+                             .name not in ("org", "recipient", "sender")
+                      ),
+                      .name
+             )
+      ) > 0
+      and all(distinct(filter(ml.nlu_classifier(body.current_thread.text).entities,
+                              .name not in ("org", "recipient", "sender")
+                       ),
+                       .name
+              ),
+              .name in ("request", "financial", "urgency")
+      )
     )
   )
   and not any(ml.nlu_classifier(body.current_thread.text).topics,
@@ -54,4 +66,4 @@ detection_methods:
 id: "fecc9601-a1f2-549c-9281-37ea654e5e50"
 og_id: "22ceee0d-1641-5f25-9034-a29b3fdade3d"
 testing_pr: 3579
-testing_sha: 5e12cc03c1be3d6441a320d10d05d0ec070e205b
+testing_sha: 2b72209431e6abaf4007963c65184c254fda522d
