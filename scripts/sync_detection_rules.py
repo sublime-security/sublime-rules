@@ -47,6 +47,9 @@ DELETE_RULES_FROM_CLOSED_PRS_DELAY = int(os.getenv('DELETE_RULES_FROM_CLOSED_PRS
 CREATE_OPEN_PR_TAG = os.getenv('CREATE_OPEN_PR_TAG', 'true').lower() == 'true'
 OPEN_PR_TAG = os.getenv('OPEN_PR_TAG', 'created_from_open_prs')
 
+# flag to include draft PRs in sync (default: skip drafts)
+INCLUDE_DRAFT_PRS = os.getenv('INCLUDE_DRAFT_PRS', 'false').lower() == 'true'
+
 # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 # Start test-rules mode configuration options         #
 # The below options only apply when mode = test-rules #
@@ -829,7 +832,7 @@ def handle_pr_rules(mode):
 
     for pr in pull_requests:
         # Common checks for all modes
-        if pr['draft']:
+        if pr['draft'] and not INCLUDE_DRAFT_PRS:
             print(f"Skipping draft PR #{pr['number']}: {pr['title']}")
             continue
         if pr['base']['ref'] != 'main':
