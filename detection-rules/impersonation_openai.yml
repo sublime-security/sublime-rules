@@ -13,14 +13,8 @@ source: |
     )
     // OpenAI copyright footer
     or (
-      (
-        strings.icontains(body.html.raw, '© 2025 OpenAI, L.L.C.')
-        or strings.icontains(body.plain.raw, '© 2025 OpenAI, L.L.C.')
-      )
-      and (
-        strings.icontains(body.html.raw, '3180 18th Street, San Francisco, CA 94110')
-        or strings.icontains(body.plain.raw, '3180 18th Street, San Francisco, CA 94110')
-      )
+      strings.icontains(body.current_thread.text, '© 2025 OpenAI, L.L.C.')
+      and strings.icontains(body.current_thread.text, '3180 18th Street, San Francisco, CA 94110')
     )
     // Typosquatting domains in links
     or any(body.links,
@@ -67,11 +61,10 @@ source: |
     "rocketmoney.com",
     "psm.knowbe4.com"
   )
-  // Negate highly trusted senders unless on hosting platform or DMARC fails
+  // Bypass trust/reputation negations for hosting platforms (always suspicious)
+  // Otherwise apply standard high-trust and top-domain negations
   and (
-    sender.email.domain.root_domain not in $high_trust_sender_root_domains
-    or not headers.auth_summary.dmarc.pass
-    or sender.email.domain.root_domain in~ (
+    sender.email.domain.root_domain in~ (
       "firebaseapp.com",
       "web.app",
       "appspot.com",
@@ -83,28 +76,18 @@ source: |
       "pages.dev",
       "repl.co"
     )
-  )
-  // Negate if in Alexa 1M unless on hosting platform
-  and (
-    sender.email.domain.root_domain not in $alexa_1m
-    or sender.email.domain.root_domain in~ (
-      "firebaseapp.com",
-      "web.app",
-      "appspot.com",
-      "herokuapp.com",
-      "vercel.app",
-      "netlify.app",
-      "github.io",
-      "cloudflareaccess.com",
-      "pages.dev",
-      "repl.co"
+    or (
+      (
+        sender.email.domain.root_domain not in $high_trust_sender_root_domains
+        or not headers.auth_summary.dmarc.pass
+      )
+      and sender.email.domain.root_domain not in $tranco_1m
     )
   )
   // Negate forwarded emails, replies, and legitimate threads
   and not subject.is_forward
   and not subject.is_reply
   and length(body.previous_threads) == 0
-  )
   // Exclude legitimate content types
   and (
     not any(ml.nlu_classifier(body.current_thread.text).topics,
