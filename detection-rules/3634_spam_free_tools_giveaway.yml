@@ -1,0 +1,44 @@
+name: "Spam: Free Tools and Giveaways by Brands"
+description: "Detects spam related to free tools and giveaways by multiple different brands."
+type: "rule"
+severity: "low"
+source: |
+  type.inbound
+  and any(ml.nlu_classifier(body.current_thread.text).entities,
+          .name == "sender" and .text != sender.display_name
+  )
+  and (
+      any(
+          html.xpath(
+              body.html,
+              "//div[contains(@style, 'BACKGROUND: URL')]"
+          ).nodes,
+          .raw is not null
+      )
+      or any(html.xpath(body.html, "//a/@href").nodes,
+          any([
+                "blob.core.windows.net",
+                "click.email.formula1.com",
+                "firmy-praha.eu"
+              ],
+              strings.icontains(..raw, .)
+          )
+      )
+  )
+  and regex.icontains(subject.base, "#[a-zA-Z]+")
+
+attack_types:
+  - "Spam"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Natural Language Understanding"
+  - "HTML analysis"
+  - "Sender analysis"
+  - "URL analysis"
+id: "92d37825-cd7e-56fa-8b83-d3ea5d720593"
+og_id: "8bc49fa3-5fdc-5eca-a9cd-f9f5ecf04a7c"
+testing_pr: 3634
+testing_sha: 2436bee22ace4675a7257c8125f35ab727a0b5fe
