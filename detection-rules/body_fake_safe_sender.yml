@@ -9,17 +9,29 @@ source: |
   )
   and (
     any(ml.nlu_classifier(body.current_thread.text).topics,
-          .name in (
-            "Reminders and Notifications",
-            "Secure Message",
-            "Security and Authentication",
-            "Voicemail Call and Missed Call Notifications",
-            "E-Signature",
-            "Financial Communications"
-          )
+        .name in (
+          "Reminders and Notifications",
+          "Secure Message",
+          "Security and Authentication",
+          "Voicemail Call and Missed Call Notifications",
+          "E-Signature",
+          "Financial Communications"
+        )
     )
-    or all(['financial', 'request'],
-          . in map(ml.nlu_classifier(body.current_thread.text).entities, .name)
+    or (
+      length(distinct(filter(ml.nlu_classifier(body.current_thread.text).entities,
+                             .name not in ("org", "recipient", "sender")
+                      ),
+                      .name
+             )
+      ) > 0
+      and all(distinct(filter(ml.nlu_classifier(body.current_thread.text).entities,
+                              .name not in ("org", "recipient", "sender")
+                       ),
+                       .name
+              ),
+              .name in ("request", "financial", "urgency")
+      )
     )
   )
   and not any(ml.nlu_classifier(body.current_thread.text).topics,
