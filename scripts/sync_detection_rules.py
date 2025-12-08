@@ -47,9 +47,6 @@ DELETE_RULES_FROM_CLOSED_PRS_DELAY = int(os.getenv('DELETE_RULES_FROM_CLOSED_PRS
 CREATE_OPEN_PR_TAG = os.getenv('CREATE_OPEN_PR_TAG', 'true').lower() == 'true'
 OPEN_PR_TAG = os.getenv('OPEN_PR_TAG', 'created_from_open_prs')
 
-# flag to include draft PRs in sync (default: skip drafts)
-INCLUDE_DRAFT_PRS = os.getenv('INCLUDE_DRAFT_PRS', 'false').lower() == 'true'
-
 # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 # Start test-rules mode configuration options         #
 # The below options only apply when mode = test-rules #
@@ -851,12 +848,13 @@ def handle_pr_rules(mode):
 
     for pr in pull_requests:
         # Common checks for all modes
-        if pr['draft'] and not INCLUDE_DRAFT_PRS:
-            print(f"Skipping draft PR #{pr['number']}: {pr['title']}")
-            # Remove in-test-rules label if previously applied
+        # Draft PRs are skipped unless user explicitly added the in-test-rules label
+        if pr['draft']:
             if ADD_TEST_RULES_LABEL and has_label(pr['number'], IN_TEST_RULES_LABEL):
-                remove_label(pr['number'], IN_TEST_RULES_LABEL)
-            continue
+                print(f"Processing draft PR #{pr['number']} (has '{IN_TEST_RULES_LABEL}' label): {pr['title']}")
+            else:
+                print(f"Skipping draft PR #{pr['number']}: {pr['title']}")
+                continue
         if pr['base']['ref'] != 'main':
             print(f"Skipping non-main branch PR #{pr['number']}: {pr['title']} -- dest branch: {pr['base']['ref']}")
             continue
