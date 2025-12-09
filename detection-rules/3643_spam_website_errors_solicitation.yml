@@ -1,0 +1,130 @@
+name: "Spam: Website errors solicitation"
+description: "This rule detects messages claiming to have identified errors on a website. The messages typically offer to send pricing or information upon request."
+type: "rule"
+severity: "low"
+source: |
+  type.inbound
+  and (
+    sender.email.email not in $recipient_emails
+    or not profile.by_sender().solicited
+  )
+  and 1 of (
+    // Single thread message groups
+    (
+      length(attachments) == 0
+      and length(body.links) == 0
+      and length(body.previous_threads) == 0
+      and 20 < length(body.current_thread.text) < 500
+      and regex.icontains(strings.replace_confusables(body.current_thread.text),
+                          "(?:screenshot|error list|plan|quote|rank|professional|price|mistake)"
+      )
+      and regex.icontains(strings.replace_confusables(body.current_thread.text),
+                          'h(?:i|ello|ey)\b'
+      )
+      and regex.icontains(strings.replace_confusables(body.current_thread.text),
+                          '(?:error|report|issues|repair|redesign|upgrade|Google\s+.{0,15}find it)'
+      )
+      and regex.icontains(strings.replace_confusables(body.current_thread.text),
+                          "(?:site|website|page)"
+      )
+      and (
+        regex.icontains(strings.replace_confusables(subject.subject),
+                        "(?:proposal|cost|estimate|error|bug|audit|screenshot|strategy|rankings|issues|fix|website|design)"
+        )
+        or (
+          strings.icontains(strings.replace_confusables(subject.subject), "report")
+          and regex.icontains(strings.replace_confusables(body.current_thread.text),
+                              "(?:free|send you|can i send|may i send|let me know|interested|get back to me|reply back|just reply)"
+          )
+        )
+        or length(subject.base) < 5
+      )
+    ),
+    // Single thread message groups but with 1 unsubscribe link or link is recipient
+    (
+      length(attachments) == 0
+      and length(body.links) == 1
+      and (
+        regex.icontains(body.html.raw, "mailto:*[++unsubscribe@]")
+        or any(body.links, .href_url.domain.root_domain in~ $org_domains)
+      )
+      and length(body.previous_threads) == 0
+      and 20 < length(body.current_thread.text) < 500
+      and regex.icontains(strings.replace_confusables(body.current_thread.text),
+                          "(?:screenshot|error list|plan|quote|rank|professional|price)"
+      )
+      and regex.icontains(strings.replace_confusables(body.current_thread.text),
+                          'h(?:i|ello|ey)\b'
+      )
+      and regex.icontains(strings.replace_confusables(body.current_thread.text),
+                          '(?:error|report|issues|website|repair|redesign|upgrade|Google\s+.{0,15}find it)'
+      )
+      and regex.icontains(strings.replace_confusables(body.current_thread.text),
+                          "(?:site|website|page)"
+      )
+      and (
+        regex.icontains(strings.replace_confusables(subject.subject),
+                        "(?:proposal|cost|estimate|error|bug|audit|screenshot|strategy|rankings|issues|fix|website|design)"
+        )
+        or (
+          strings.icontains(strings.replace_confusables(subject.subject),
+                            "report"
+          )
+          and regex.icontains(strings.replace_confusables(body.current_thread.text),
+                              "(?:free|send you|can i send|may i send|let me know|interested|get back to me|reply back|just reply)"
+          )
+        )
+        or length(subject.base) < 5
+      )
+    ),
+    // Multiple thread message groups
+    (
+      length(attachments) == 0
+      and length(body.links) == 0
+      and length(body.previous_threads) < 5
+      and (
+        regex.icontains(strings.replace_confusables(subject.subject),
+                        "(?:proposal|cost|estimate|error|bug|audit|screenshot|strategy|rankings|issues|fix|website|design)"
+        )
+        or (
+          (
+            length(subject.base) < 5
+            or subject.is_reply or subject.is_forward
+          )
+          and any(body.previous_threads,
+                  regex.icontains(strings.replace_confusables(.text),
+                                  "(?:screenshot|website)"
+                  )
+          )
+        )
+      )
+      and any(body.previous_threads,
+              length(.text) < 400
+              and (
+                regex.icontains(strings.replace_confusables(.text),
+                                'h(?:i|ello|ey)\b'
+                )
+                or strings.icontains(strings.replace_confusables(.text),
+                                     "morning"
+                )
+              )
+              and regex.icontains(strings.replace_confusables(.text),
+                                  '(?:\berror(?:\s+list)?\b|screenshot|report|plan)'
+              )
+              and ml.nlu_classifier(.text).language == "english"
+      )
+    )
+  )
+
+tags:
+  - "Attack surface reduction"
+attack_types:
+  - "Spam"
+detection_methods:
+  - "Content analysis"
+  - "Sender analysis"
+  - "Natural Language Understanding"
+id: "366c9346-4af0-5b72-856e-f83a26b1373d"
+og_id: "122ea794-f619-5f29-acb2-83261d8f81fc"
+testing_pr: 3643
+testing_sha: 7222a8f7ff38dd6533600b3c9ab58f1d860d9c04
