@@ -1,0 +1,49 @@
+name: "Brand impersonation: Mimecast"
+description: "Detects messages impersonating Mimecast with malformed HTML structure, including specific DOCTYPE declarations, empty title tags, Mimecast-specific CSS classes, and suspicious logo handling that deviates from legitimate Mimecast messaging patterns."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and html.xpath(body.html, "node()").nodes[0].raw == '<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">'
+  and any(html.xpath(body.html, "//title").nodes, .inner_text == "")
+  and any(html.xpath(body.html, "//table/@class").nodes,
+          strings.count(.raw, "mc-e-") > 3
+  )
+  
+  // all legit messages have urls for logos
+  // and html.xpath(body.html, "//img//src").nodes[0]
+  and (
+    html.xpath(body.html, "//img@src").nodes[0].inner_text == "Logo"
+    and html.xpath(body.html, "//img/@alt").nodes[0].raw == "Logo"
+  )
+  and (
+    not strings.starts_with(html.xpath(body.html, "//img/@src").nodes[0].raw,
+                            "http://"
+    )
+    or not strings.starts_with(html.xpath(body.html, "//img/@src").nodes[0].raw,
+                               "https://"
+    )
+    or not strings.contains(html.xpath(body.html, "//img/@src").nodes[0].raw,
+                        strings.concat("/branding/",
+                                       sender.email.domain.sld,
+                                       "/NOTIFICATION_LOGO_ID"
+                        )
+    )
+  )
+  
+  // Legitimate mimecast emails contain this comment and a single dive with 29 &nbsp; but we can't currently detect these using xpath except if it's empty string
+  and (
+    any(html.xpath(body.html, "//comment()").nodes,
+        .raw == "<!-- prevent Gmail on iOS font size manipulation -->"
+    )
+    and any(html.xpath(body.html, "//div[text()]").nodes, .inner_text == "")
+  )
+
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Evasion"
+detection_methods:
+  - "HTML analysis"
+  - "Content analysis"
