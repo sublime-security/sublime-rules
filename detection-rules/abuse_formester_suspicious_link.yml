@@ -1,0 +1,43 @@
+name: "Service abuse: Formester with suspicious link behavior"
+description: "Detects abuse of the Formester form service where links either redirect to credential phishing pages, contain suspicious top-level domains in the final DOM and/or redirect history, or display 'secure message' text indicating potential credential theft."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  // formester service abuse
+  and any(body.links, .href_url.domain.root_domain == 'formester.com')
+  // LA invokes page first before scanning additional links
+  and (
+    any(body.links,
+        (
+          ml.link_analysis(., mode="aggressive").credphish.disposition == "phishing"
+        )
+        // any links in the final dom lead to a suspicious tld
+        or any(ml.link_analysis(.).final_dom.links,
+               .href_url.domain.tld in $suspicious_tlds
+               or ml.link_analysis(.href_url).effective_url.domain.tld in $suspicious_tlds
+        )
+  
+        // link redirects to a suspicious TLD
+        or any(ml.link_analysis(., mode="aggressive").redirect_history,
+               .domain.tld in $suspicious_tlds
+        )
+        // keywords can be expanded
+        or strings.icontains(ml.link_analysis(., mode="aggressive").final_dom.display_text,
+                             "secure message"
+        )
+    )
+  )
+
+attack_types:
+  - "Credential Phishing"
+  - "BEC/Fraud"
+tactics_and_techniques:
+  - "Open redirect"
+  - "Social engineering"
+  - "Free file host"
+detection_methods:
+  - "Computer Vision"
+  - "Content analysis"
+  - "URL analysis"
+  - "URL screenshot"
