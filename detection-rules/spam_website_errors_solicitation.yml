@@ -7,24 +7,24 @@ source: |
   and not profile.by_sender().solicited
   // no attachments
   and length(attachments) == 0
-  // subject must contain SEO/web dev spam keywords or be short
+  // subject must contain SEO or web dev spam keywords or be short
   and (
     (
       // SEO or web development service keywords
       regex.icontains(strings.replace_confusables(subject.subject),
                       "(?:proposal|cost|estimate|error|bug|audit|screenshot|strategy|rankings|issues|fix|website|design)"
       )
-      // "report" and follow up keywords
+      // report and follow up keywords
       or (
         strings.icontains(strings.replace_confusables(subject.subject), "report")
         and regex.icontains(strings.replace_confusables(body.current_thread.text),
                             "(?:free|send you|can i send|may i send|let me know|interested|get back to me|reply back|just reply)"
         )
       )
-      // short subject (often "Hi")
+      // short subject
       or length(subject.base) < 5
     )
-    // or a reply/forward in a thread that mentions website or screenshots
+    // or a reply or forward in a thread that mentions website or screenshots
     or (
       (length(subject.base) < 5 or subject.is_reply or subject.is_forward)
       and any(body.previous_threads,
@@ -36,11 +36,11 @@ source: |
   )
   // body structure and content patterns
   and (
-    // Single thread, no links
+    // Single thread with no links
     (
       length(body.links) == 0
       and length(body.previous_threads) == 0
-      // short message (20 and 500 chars)
+      // short message between 20 and 500 chars
       and 20 < length(body.current_thread.text) < 500
       // service offering keywords
       and regex.icontains(strings.replace_confusables(body.current_thread.text),
@@ -50,11 +50,11 @@ source: |
       and regex.icontains(strings.replace_confusables(body.current_thread.text),
                           'h(?:i|ello|ey)\b'
       )
-      // problem/urgency keywords
+      // problem or urgency keywords
       and regex.icontains(strings.replace_confusables(body.current_thread.text),
                           '(?:error|report|issues|repair|redesign|upgrade|Google\s+.{0,15}find it)'
       )
-      // website/page mention
+      // website or page mention
       and regex.icontains(strings.replace_confusables(body.current_thread.text),
                           "(?:site|website|page)"
       )
@@ -69,7 +69,7 @@ source: |
         or any(body.links, .href_url.domain.root_domain in~ $org_domains)
       )
       and length(body.previous_threads) == 0
-      // short message (20 and 500 chars)
+      // short message between 20 and 500 chars
       and 20 < length(body.current_thread.text) < 500
       // service offering keywords
       and regex.icontains(strings.replace_confusables(body.current_thread.text),
@@ -79,11 +79,11 @@ source: |
       and regex.icontains(strings.replace_confusables(body.current_thread.text),
                           '(?:h(?:i|ello|ey)|morning)\b'
       )
-      // problem/urgency keywords
+      // problem or urgency keywords
       and regex.icontains(strings.replace_confusables(body.current_thread.text),
                           '(?:error|report|issues|website|repair|redesign|upgrade|Google\s+.{0,15}find it)'
       )
-      // website/page mention
+      // website or page mention
       and regex.icontains(strings.replace_confusables(body.current_thread.text),
                           "(?:site|website|page)"
       )
@@ -91,11 +91,11 @@ source: |
     // Multiple thread messages
     or (
       length(body.links) == 0
-      // small thread, less than 5 messages
+      // small thread with less than 5 messages
       and length(body.previous_threads) < 5
       // check previous messages for spam characteristics
       and any(body.previous_threads,
-              // short previous message(s) less than 400 chars
+              // short previous messages less than 400 chars
               length(.text) < 400
               and (
                 // generic greeting
