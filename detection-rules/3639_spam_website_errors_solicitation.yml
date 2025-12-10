@@ -1,0 +1,127 @@
+name: "Spam: Website errors solicitation"
+description: "This rule detects messages claiming to have identified errors on a website. The messages typically offer to send pricing or information upon request."
+type: "rule"
+severity: "low"
+source: |
+  type.inbound
+  and not profile.by_sender().solicited
+  // no attachments
+  and length(attachments) == 0
+  // subject must contain SEO or web dev spam keywords or be short
+  and (
+    (
+      // SEO or web development service keywords
+      regex.icontains(strings.replace_confusables(subject.subject),
+                      "(?:proposal|cost|estimate|error|bug|audit|screenshot|strategy|rankings|issues|fix|website|design)"
+      )
+      // report and follow up keywords
+      or (
+        strings.icontains(strings.replace_confusables(subject.subject), "report")
+        and regex.icontains(strings.replace_confusables(body.current_thread.text),
+                            "(?:free|send you|can i send|may i send|let me know|interested|get back to me|reply back|just reply)"
+        )
+      )
+      // short subject
+      or length(subject.base) < 5
+    )
+    // or a reply or forward in a thread that mentions website or screenshots
+    or (
+      (length(subject.base) < 5 or subject.is_reply or subject.is_forward)
+      and any(body.previous_threads,
+              regex.icontains(strings.replace_confusables(.text),
+                              "(?:screenshot|website)"
+              )
+      )
+    )
+  )
+  // body structure and content patterns
+  and (
+    // Single thread with no links
+    (
+      length(body.links) == 0
+      and length(body.previous_threads) == 0
+      // short message between 20 and 500 chars
+      and 20 < length(body.current_thread.text) < 500
+      // service offering keywords
+      and regex.icontains(strings.replace_confusables(body.current_thread.text),
+                          "(?:screenshot|error list|plan|quote|rank|professional|price|mistake)"
+      )
+      // generic greeting
+      and regex.icontains(strings.replace_confusables(body.current_thread.text),
+                          'h(?:i|ello|ey)\b'
+      )
+      // problem or urgency keywords
+      and regex.icontains(strings.replace_confusables(body.current_thread.text),
+                          '(?:error|report|issues|website|repair|redesign|upgrade|Google\s+.{0,15}find it)'
+      )
+      // website or page mention
+      and regex.icontains(strings.replace_confusables(body.current_thread.text),
+                          "(?:site|website|page)"
+      )
+    )
+    // Single thread with only unsubscribe link
+    or (
+      length(body.links) == 1
+      and (
+        // unsubscribe mailto link
+        regex.icontains(body.html.raw, "mailto:*[++unsubscribe@]")
+        // or link to found in org_domains
+        or any(body.links, .href_url.domain.root_domain in~ $org_domains)
+      )
+      and length(body.previous_threads) == 0
+      // short message between 20 and 500 chars
+      and 20 < length(body.current_thread.text) < 500
+      // service offering keywords
+      and regex.icontains(strings.replace_confusables(body.current_thread.text),
+                          "(?:screenshot|error list|plan|quote|rank|professional|price|mistake)"
+      )
+      // generic greeting
+      and regex.icontains(strings.replace_confusables(body.current_thread.text),
+                          '(?:h(?:i|ello|ey)|morning)\b'
+      )
+      // problem or urgency keywords
+      and regex.icontains(strings.replace_confusables(body.current_thread.text),
+                          '(?:error|report|issues|website|repair|redesign|upgrade|Google\s+.{0,15}find it)'
+      )
+      // website or page mention
+      and regex.icontains(strings.replace_confusables(body.current_thread.text),
+                          "(?:site|website|page)"
+      )
+    )
+    // Multiple thread messages
+    or (
+      length(body.links) == 0
+      // small thread with less than 5 messages
+      and length(body.previous_threads) < 5
+      // check previous messages for spam characteristics
+      and any(body.previous_threads,
+              // short previous messages less than 400 chars
+              length(.text) < 400
+              and (
+                // generic greeting
+                regex.icontains(strings.replace_confusables(.text),
+                                '(?:h(?:i|ello|ey)|morning)\b'
+                )
+                // service offering keywords
+                and regex.icontains(strings.replace_confusables(.text),
+                                    '(?:\berror(?:\s+list)?\b|screenshot|report|plan)'
+                )
+                // previous threads written in English
+                and ml.nlu_classifier(.text).language == "english"
+              )
+      )
+    )
+  )
+
+tags:
+  - "Attack surface reduction"
+attack_types:
+  - "Spam"
+detection_methods:
+  - "Content analysis"
+  - "Sender analysis"
+  - "Natural Language Understanding"
+id: "ae92f4f9-e030-5287-bad1-c1f7bf3ccdfc"
+og_id: "122ea794-f619-5f29-acb2-83261d8f81fc"
+testing_pr: 3639
+testing_sha: f6f00840640c3f91f45ee8e3680b79dc7699f936
