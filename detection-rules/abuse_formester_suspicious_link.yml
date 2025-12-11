@@ -4,28 +4,37 @@ type: "rule"
 severity: "medium"
 source: |
   type.inbound
-  // formester service abuse
-  and any(body.links, .href_url.domain.root_domain == 'formester.com')
-  // LA invokes page first before scanning additional links
+  // LA invokes page first before scanning additional links.
   and (
-    any(body.links,
+    any(filter(body.links, .href_url.domain.root_domain == 'formester.com'),
         (
           ml.link_analysis(., mode="aggressive").credphish.disposition == "phishing"
         )
-        // any links in the final dom lead to a suspicious tld
+        // any links in the final dom lead to a suspicious tld.
         or any(ml.link_analysis(.).final_dom.links,
                .href_url.domain.tld in $suspicious_tlds
                or ml.link_analysis(.href_url).effective_url.domain.tld in $suspicious_tlds
         )
   
-        // link redirects to a suspicious TLD
+        // link redirects to a suspicious TLD.
         or any(ml.link_analysis(., mode="aggressive").redirect_history,
                .domain.tld in $suspicious_tlds
         )
-        // keywords can be expanded
+        // suspicious landing verbiage. Keywords can be expanded.
         or strings.icontains(ml.link_analysis(., mode="aggressive").final_dom.display_text,
                              "secure message"
         )
+        // suspicious link verbiage.
+        or regex.icontains(.display_text,
+                           "(view|show|download).{0,20}(Doc(ument)?(s)?|files(s)?|attached)"
+        )
+    )
+    // suspicious keywords/phrasing in body.
+    or (
+      any(body.links, .href_url.domain.root_domain == 'formester.com')
+      and strings.icontains(body.current_thread.text,
+                            "use of Microsoft 365 and may contain content"
+      )
     )
   )
 
