@@ -1,0 +1,66 @@
+name: "Service abuse: Callback phishing via Microsoft Teams invite"
+description: "Detects abuse of legitimate Microsoft Teams invites containing callback scam content, including brand references and financial transaction language with phone numbers."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and sender.email.domain.domain == "teams.mail.microsoft"
+  // MS Teams invite indicators
+  and (
+    any(body.links,
+        .display_text == "Open Microsoft Teams"
+        and (
+          .href_url.domain.domain == "login.microsoftonline.com"
+          or strings.iends_with(.href_url.query_params,
+                                "login.microsoftonline.com"
+          )
+        )
+    )
+  )
+  and (
+    (
+      regex.icontains(strings.replace_confusables(body.current_thread.text),
+                      (
+                        "mcafee|norton|geek.{0,5}squad|pay.?pal|ebay|symantec|best buy|lifelock|(ms|microsoft|teams).{0,10}premium"
+                      )
+      )
+    )
+    or 3 of (
+      strings.ilike(body.current_thread.text, '*purchase*'),
+      strings.ilike(body.current_thread.text, '*p?ym?nt*'),
+      strings.ilike(body.current_thread.text, '*transaction*'),
+      strings.ilike(body.current_thread.text, '*subscription*'),
+      strings.ilike(body.current_thread.text, '*antivirus*'),
+      strings.ilike(body.current_thread.text, '*order*'),
+      strings.ilike(body.current_thread.text, '*support*'),
+      strings.ilike(body.current_thread.text, '*help line*'),
+      strings.ilike(body.current_thread.text, '*receipt*'),
+      strings.ilike(body.current_thread.text, '*c?ntact*'),
+      strings.ilike(body.current_thread.text, '*cancel*'),
+      strings.ilike(body.current_thread.text, '*renew*'),
+      strings.ilike(body.current_thread.text, '*refund*'),
+      strings.ilike(body.current_thread.text, '*billing*'),
+      regex.icontains(body.current_thread.text, '[li]nv.[li]ce')
+    )
+    // phone number regex
+    and any([body.current_thread.text, subject.subject],
+            regex.icontains(.,
+                            '\+?([ilo0-9]{1}.)?\(?[ilo0-9]{3}?\)?.[ilo0-9]{3}.?[ilo0-9]{4}'
+            )
+    )
+  )
+
+attack_types:
+  - "Callback Phishing"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Out of band pivot"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "URL analysis"
+  - "Sender analysis"
+id: "27d45429-1183-5587-b3d4-1498ef14532f"
+og_id: "13e35e5f-6d1e-5844-96a4-41a42f7e06a3"
+testing_pr: 3650
+testing_sha: a32a9975e346cb29c4c24d702b0b7eeba6cc0153
