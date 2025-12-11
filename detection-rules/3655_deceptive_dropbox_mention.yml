@@ -1,0 +1,64 @@
+name: "Deceptive Dropbox mention"
+description: "Detects when a message mentions Dropbox but comes from non-Dropbox infrastructure, contains links to suspicious domains, shows discrepancies in sender identity, and contains language patterns associated with credential theft."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and strings.icontains(body.current_thread.text, 'dropbox')
+  and any(beta.ml_topic(coalesce(body.html.display_text, body.current_thread.text)).topics, .name == "File Sharing and Cloud Services" and .confidence != "low")
+  
+  and (
+    // Email address discrepancy detection - looking for matches in the domain name from the sender but not the current thread proposed sender name
+    any(regex.iextract(body.current_thread.text,
+                     '(?P<whole_email>(?P<local_part>[a-zA-Z0-9._%-]+)@(?P<domain_name>[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}))'
+                    ),
+      strings.parse_email(.named_groups["whole_email"]).domain.domain == sender.email.domain.domain
+      and strings.parse_email(.named_groups["whole_email"]).local_part != sender.email.local_part
+      and not strings.parse_email(.named_groups["whole_email"]).email in~ map(filter(recipients.to, .email.domain.valid), .email.email)
+    )
+    // self sender
+    or (
+      length(recipients.to) == 1
+      and sender.email.email == recipients.to[0].email.email
+    )
+  )
+  
+  // Not from legitimate Dropbox infrastructure
+  and sender.email.domain.root_domain not in~ (
+    'dropbox.com',
+    'docsend.com',
+    'box.com',
+    'wetransfer.com',
+    // tuning: exlude hellosign emails that are covered in another rule
+    'hellosign.com'
+  )
+  
+  // Contains suspicious links to non-Dropbox/file-sharing domains
+  and any(body.links,
+          (.href_url.domain.root_domain in~ $free_subdomain_hosts
+          or .href_url.domain.root_domain in~ $free_file_hosts)
+          and .href_url.domain.valid
+  )
+  
+  // ML indicates potential credential theft
+  and any(ml.nlu_classifier(body.current_thread.text).intents,
+          .name == "cred_theft" and .confidence != "low"
+  )
+
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Free file host"
+  - "Free subdomain host"
+  - "Social engineering"
+detection_methods:
+  - "Header analysis"
+  - "Content analysis"
+  - "Natural Language Understanding"
+  - "Sender analysis"
+  - "URL analysis"
+id: "dcdc13b6-d51f-59d1-b3c0-6766a9605dec"
+og_id: "58a107bc-dd68-5fdd-9813-4a05411aafd9"
+testing_pr: 3655
+testing_sha: 69739860a01ad31c7c8472a5144f8bb6812d8f10
