@@ -7,31 +7,30 @@ source: |
   and any(html.xpath(body.html, "//table/@class").nodes,
           strings.count(.raw, "mc-e-") > 3
   )
-  and strings.icontains(body.html.raw, '<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">')
-  
-  and (
-    not html.xpath(body.html, "//img@src").nodes[0].inner_text == "Logo"
-    and not html.xpath(body.html, "//img/@alt").nodes[0].raw == "Logo"
+  and strings.icontains(body.html.raw,
+                        '<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">'
   )
+  
+  // The image should be a URL and should be a specific format
   and (
     not strings.starts_with(html.xpath(body.html, "//img/@src").nodes[0].raw,
-                        "https://"
+                            "http"
     )
     or not strings.contains(html.xpath(body.html, "//img/@src").nodes[0].raw,
-                        strings.concat("/branding/",
-                                       sender.email.domain.sld,
-                                       "/NOTIFICATION_LOGO_ID"
-                        )
+                            strings.concat("/branding/",
+                                           sender.email.domain.sld,
+                                           "/NOTIFICATION_LOGO_ID"
+                            )
     )
   )
   
   // Legitimate mimecast emails contain this comment
   // Sometimes it is the last comment so taking the length of all comments and subtracting one to get the last element
-  and (
-      length(html.xpath(body.html, "//comment()").nodes) == 1
-      and html.xpath(body.html, "//comment()").nodes[0].raw == "<!-- prevent Gmail on iOS font size manipulation -->"
-      or length(html.xpath(body.html, "//comment()").nodes) > 1
-      and html.xpath(body.html, "//comment()").nodes[length(html.xpath(body.html, "//comment()").nodes) - 1].raw == "<!-- prevent Gmail on iOS font size manipulation -->"
+  and 1 of (
+    length(html.xpath(body.html, "//comment()").nodes) == 1
+    and html.xpath(body.html, "//comment()").nodes[0].raw == "<!-- prevent Gmail on iOS font size manipulation -->",
+    length(html.xpath(body.html, "//comment()").nodes) > 1
+    and html.xpath(body.html, "//comment()").nodes[length(html.xpath(body.html, "//comment()").nodes) - 1].raw == "<!-- prevent Gmail on iOS font size manipulation -->"
   )
 attack_types:
   - "Credential Phishing"
