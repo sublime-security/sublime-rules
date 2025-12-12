@@ -1,0 +1,129 @@
+name: "Link: Malware download with shell execution instructions"
+description: "Detects messages containing links to executable files with accompanying shell execution patterns and system launcher instructions. The rule identifies suspicious combinations of download links for executables (exe, msi, ps1, sh, etc.) paired with shell commands like 'curl |', 'IEX(', or 'chmod +x', along with detailed instructions for accessing system terminals or command prompts across Windows, macOS, and Linux platforms."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  // Link to a file to download/execute
+  and any(filter(body.links, length(body.links) > 0),
+          any(["setup", "deploy", "launch", "run", "install", "installer"],
+              strings.icontains(..href_url.path, .)
+          )
+          and regex.contains(.href_url.path,
+                             ".(sh|exe|msi|ps1|pkg|dmg|deb|rpm|scr|bat|cmd|bin)"
+          )
+  )
+  // Shell execution pattern
+  and any([
+            "| bash",
+            "| sh",
+            "| zsh",
+            "| powershell",
+            "| python",
+            "curl |",
+            "wget |",
+            "IEX(",
+            "DownloadString",
+            "iwr",
+            "invoke-webrequest",
+            "chmod +x",
+            "bitsadmin",
+            "certutil",
+            "msiexec",
+            "wsl curl",
+            "npm install",
+            "pip install",
+            "brew install",
+            "docker pull"
+          ],
+          strings.icontains(body.html.raw, .)
+  )
+  
+  // Launcher instruction pattern (macOS, Windows, Linux)
+  and any([
+            // macOS Launchers
+            "Copy and paste",
+            "Command ⌘ + Space",
+            "Cmd + Shift + A",
+            "Fn + Space",
+            "Control + Command + D",
+            "Cmd + Shift + U",
+            "LaunchPad",
+            "Spotlight",
+            "iTerm",
+            "Terminal.app",
+  
+            // Windows Launchers
+            "Win + X",
+            "Win + R",
+            "Win + S",
+            "Ctrl + Shift + Esc",
+            "Win + E",
+            "Win + V",
+            "Alt + F2",
+            "Right-click Desktop",
+            "Right-click Start",
+            "Start Menu",
+            "Windows Terminal",
+            "PowerShell (Admin)",
+            "Windows PowerShell",
+  
+            // Linux Launchers
+            "Super key alone",
+            "Win key alone",
+            "Super + T",
+            "Super + R",
+            "Alt + F2",
+            "Ctrl + Alt + T",
+            "Activities",
+            "Activities (top-left)",
+            "Right-click desktop",
+            "Application menu",
+            "Application Menu",
+            "Application menu icon",
+            "Taskbar",
+            "Dock",
+            "System Tools",
+            "Open Terminal Here",
+            "GNOME",
+            "KDE",
+            "XFCE",
+            "Ubuntu",
+            "Debian",
+  
+            // Generic patterns
+            "Type Terminal",
+            "Type PowerShell",
+            "Type cmd",
+            "Search for Terminal",
+            "Press Command",
+            "Press Ctrl",
+            "Press Win",
+            "Press Alt",
+            "Step 1",
+            "Quick steps",
+            "Quick install"
+          ],
+          strings.icontains(body.html.raw, .)
+  )
+  and (
+    strings.icontains(body.html.raw, "type")
+    or strings.icontains(body.html.raw, "search for")
+  )
+  and any(["terminal", "iterm", "cmd", "powershell", "bash", "zsh", "command"],
+          strings.icontains(body.html.raw, .)
+  )
+
+attack_types:
+  - "Malware/Ransomware"
+tactics_and_techniques:
+  - "Social engineering"
+  - "Scripting"
+  - "Evasion"
+detection_methods:
+  - "Content analysis"
+  - "URL analysis"
+id: "6055debd-31ad-5364-a213-62a3a260c303"
+og_id: "561466af-cd7f-596b-a90d-913d2e5c17f5"
+testing_pr: 3663
+testing_sha: 5fe6945376f6a787930ac73ddbaba15bb2539de8
