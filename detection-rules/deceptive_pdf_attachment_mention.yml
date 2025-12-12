@@ -18,17 +18,27 @@ source: |
   )
   // display text ends with .pdf and link is a free subdomain host
   and any(body.current_thread.links,
-          (
-            .href_url.domain.root_domain in $free_subdomain_hosts
-            or strings.parse_domain(.href_url.query_params_decoded["domain"][0]).root_domain in $free_subdomain_hosts
+        strings.ends_with(.display_text, '.pdf')
+        and .href_url.domain.subdomain is not null
+        and .visible
+        and not (
+          .href_url.domain.root_domain == "googleusercontent.com"
+          and strings.istarts_with(.href_url.path, "/mail-sig")
+        )
+        and (
+          .href_url.domain.root_domain in $free_subdomain_hosts
+          or ml.link_analysis(.href_url).effective_url.domain.root_domain in $free_subdomain_hosts
+          // Mimecast link logic
+          or (
+            .href_url.domain.root_domain in (
+              "mimecastprotect.com",
+              "mimecast.com"
+            )
+            and any(.href_url.query_params_decoded['domain'],
+                    strings.parse_domain(.).root_domain in $free_subdomain_hosts
+            )
           )
-          and strings.ends_with(.display_text, '.pdf')
-          and .href_url.domain.subdomain is not null
-          and .visible
-          and not (
-            .href_url.domain.root_domain == "googleusercontent.com"
-            and strings.istarts_with(.href_url.path, "/mail-sig")
-          )
+        )
   )
 
 attack_types:
