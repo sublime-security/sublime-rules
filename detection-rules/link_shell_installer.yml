@@ -3,9 +3,53 @@ description: "Detects messages containing links to shell installer scripts (endi
 type: "rule"
 severity: "medium"
 source: |
-  type.inbound
-  and any(body.links, strings.ends_with(.href_url.path, "installer.sh"))
-  and strings.icontains(body.html.raw, "terminal")
+  type.inbound // Link to a file to download/execute
+  and any(filter(body.links, length(body.links) > 0),
+          any(["setup", "deploy", "launch", "run", "install", "installer"],
+              strings.icontains(..href_url.path, .)
+          )
+          and regex.contains(.href_url.path,
+                             ".(sh|exe|msi|ps1|pkg|dmg|deb|rpm|scr|bat|cmd|bin)"
+          )
+  )
+  and any([
+            "bash",
+            "sh",
+            "zsh",
+            "powershell",
+            "pwsh",
+            "Invoke-WebRequest",
+            "Invoke-RestMethod",
+            "Start-BitsTransfer",
+            "Invoke-Expression",
+            "DownloadString",
+            "DownloadFile",
+            "-EncodedCommand",
+            "python",
+            "curl",
+            "wget",
+            "IEX(",
+            "iwr",
+            "chmod +x",
+            "bitsadmin",
+            "certutil",
+            "mshta",
+            "wscript",
+            "cscript",
+            "msiexec",
+            "rundll32",
+            "regsvr32",
+            "ftp",
+            "sftp",
+            "tftp",
+            "wsl curl",
+            "npm install",
+            "pip install",
+            "brew install",
+            "docker pull"
+          ],
+          strings.icontains(body.html.raw, .)
+  )
 tags:
   - "Attack surface reduction"
 attack_types:
