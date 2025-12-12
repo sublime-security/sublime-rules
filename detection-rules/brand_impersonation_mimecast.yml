@@ -21,6 +21,36 @@ source: |
                                            "/NOTIFICATION_LOGO_ID"
                             )
     )
+    or (
+      // if all of these are present
+      all(filter(body.links,
+                 .display_text is not null
+          ),
+          .display_text in (
+            "Release all",
+            "Permit all",
+            "Block all",
+            "Personal Portal",
+            "Release",
+            "Permit",
+            "Block"
+          )
+      )
+      // but they don't have a root_domain as mimecast
+      and not length(filter(body.links,
+                        .display_text in (
+                          "Release all",
+                          "Permit all",
+                          "Block all",
+                          "Personal Portal",
+                          "Release",
+                          "Permit",
+                          "Block"
+                        )
+                        and .href_url.domain.root_domain == "mimecast.com"
+                 )
+      ) >= 7
+    )
   )
   
   // Legitimate mimecast emails contain this comment
@@ -31,6 +61,7 @@ source: |
     length(html.xpath(body.html, "//comment()").nodes) > 1
     and html.xpath(body.html, "//comment()").nodes[length(html.xpath(body.html, "//comment()").nodes) - 1].raw == "<!-- prevent Gmail on iOS font size manipulation -->"
   )
+
 attack_types:
   - "Credential Phishing"
 tactics_and_techniques:
