@@ -24,6 +24,13 @@ source: |
           )
         )
       )
+      or (
+        // localpart is sendgrid but first time sender
+        strings.ilike(strings.replace_confusables(sender.email.local_part),
+                      '*sendgrid*'
+        )
+        and sender.email.email not in $sender_emails
+      )
       or any(ml.logo_detect(file.message_screenshot()).brands,
              .name == "SendGrid" and .confidence == "high"
       )
@@ -138,7 +145,13 @@ source: |
     )
     or sender.email.domain.root_domain not in $high_trust_sender_root_domains
   )
-  and not profile.by_sender().solicited
+  and (
+    not profile.by_sender().solicited
+    or profile.by_sender().solicited
+    and profile.by_sender().prevalence == "new"
+    and profile.by_sender().days_known == 0
+  )
+
 
 attack_types:
   - "BEC/Fraud"
