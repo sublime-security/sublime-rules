@@ -1,0 +1,33 @@
+name: "Attachment: PDF with banking and payment references from freemail sender"
+description: "Detects PDF attachments containing banking terminology such as SWIFT codes, account numbers, and payment references from free email providers. These attachments often contain fraudulent payment instructions or fake banking documents used in business email compromise attacks."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and sender.email.domain.root_domain in $free_email_providers
+  and length(attachments) == 1
+  and any(filter(attachments,
+          .file_extension == "pdf"),
+          any(file.explode(.),
+                  .depth == 1
+                  and (
+                    regex.icontains(.scan.ocr.raw, "payment")
+                    or regex.contains(.scan.ocr.raw, "SWIFT")
+                    or regex.contains(.scan.ocr.raw, "Swift Copy")
+                    or regex.icontains(.scan.ocr.raw, "bank code:")
+                    or regex.icontains(.scan.ocr.raw, "account number:")
+                    or regex.icontains(.scan.ocr.raw, "payment")
+                  )
+          )
+  )
+
+attack_types:
+  - "BEC/Fraud"
+tactics_and_techniques:
+  - "Free email provider"
+  - "PDF"
+  - "Social engineering"
+detection_methods:
+  - "File analysis"
+  - "Optical Character Recognition"
+  - "Sender analysis"
