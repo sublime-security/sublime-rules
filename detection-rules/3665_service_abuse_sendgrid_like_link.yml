@@ -1,0 +1,28 @@
+name: "Service abuse: SendGrid-formatted link with actor-controlled fragment"
+description: "Detects messages containing SendGrid or SendGrid-like links with base64-encoded zlib-compressed JSON in the URL fragment, indicating potential abuse of legitimate email services for malicious purposes."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and length(body.links) < 10
+  and any(body.links,
+          // SendGrid or SendGrid-like links have been abused
+          (
+            .href_url.path == "/ls/click"
+            or any(.href_url.query_params_decoded['upn'], . is not null)
+          )
+  )
+  and length(html.xpath(body.html, "//img[contains(@src, '/wf/open?upn=')]").nodes) == 1
+
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Evasion"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "URL analysis"
+id: "8e115451-1394-52af-bf93-a2e9cc27d6be"
+og_id: "cb511fe9-ff90-572a-ba6d-15debadf9352"
+testing_pr: 3665
+testing_sha: 44b68c1df590b9496e7b2d6370b502969ea19085
