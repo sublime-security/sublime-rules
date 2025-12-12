@@ -5,12 +5,12 @@ type: "rule"
 severity: "low"
 source: |
   type.inbound
-
+  
   // undisclosed recipients
   and any([recipients.to, recipients.bcc, recipients.cc],
           any(., .display_name =~ "Undisclosed recipients")
   )
-
+  
   // mismatched sender (from) and Reply-to
   and any(headers.reply_to,
           length(headers.reply_to) > 0
@@ -18,21 +18,20 @@ source: |
                   .email.domain.root_domain != sender.email.domain.root_domain
           )
   )
-
+  
   // generic recipient
   and any(ml.nlu_classifier(body.current_thread.text).entities,
           .name == "recipient" and regex.icontains(.text, "(sir|madam)")
   )
-
+  
   // request made
   and any(ml.nlu_classifier(body.current_thread.text).entities,
-          .name == "request")
-
-  // not a bec scam
-  and all(ml.nlu_classifier(body.current_thread.text).intents,
-          .name != "bec"
+          .name == "request"
   )
-
+  
+  // not a bec scam
+  and all(ml.nlu_classifier(body.current_thread.text).intents, .name != "bec")
+  
   // negate highly trusted sender domains unless they fail DMARC authentication
   and (
     (
@@ -52,8 +51,6 @@ source: |
     )
   )
   and not profile.by_sender().any_messages_benign
-
-
 attack_types:
   - "BEC/Fraud"
 tactics_and_techniques:

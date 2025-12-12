@@ -4,7 +4,6 @@ type: "rule"
 severity: "medium"
 source: |
   type.inbound
-  
   and 3 of (
     // urgent subjects
     strings.ilike(subject.subject, '*quick question*'),
@@ -16,8 +15,6 @@ source: |
     strings.ilike(subject.subject, '*checking in*'),
     strings.ilike(subject.subject, '*awaiting*response*'),
     strings.ilike(subject.subject, '*catch*up*'),
-
-
   
     // BEC body patterns
     strings.ilike(body.current_thread.text, '*sorry to bother*'),
@@ -26,7 +23,6 @@ source: |
     strings.ilike(body.current_thread.text, '*do you have a moment*'),
     strings.ilike(body.current_thread.text, '*please respond*asap*'),
     strings.ilike(subject.subject, '*quick question*'),
-
   
     // brand name
     regex.icontains(body.current_thread.text, 'a\s?m\s?a\s?z\s?o\s?n'), // Catches "Amaz on", "Amazon", etc.
@@ -37,7 +33,6 @@ source: |
     length(body.current_thread.text) < 200,
     strings.count(body.current_thread.text, ' ') < 30
   )
-  
   and 3 of (
     // suspicious sender
     sender.email.domain.root_domain in $free_email_providers,
@@ -51,12 +46,14 @@ source: |
     strings.starts_with(headers.mailer, 'Open-Xchange Mailer'),
     strings.ilike(headers.x_originating_ip.ip, '*.*.*.0'), // Common in some BEC campaigns
     // deifferent reply-to address
-    (length(headers.reply_to) > 0 and sender.email.email not in map(headers.reply_to, .email.email)),
+    (
+      length(headers.reply_to) > 0
+      and sender.email.email not in map(headers.reply_to, .email.email)
+    ),
     // sender display name is part of the subject
     strings.icontains(subject.subject, sender.display_name),
   )
   and profile.by_sender_email().prevalence not in ("common")
-
 attack_types:
   - "BEC/Fraud"
   - "Callback Phishing"
