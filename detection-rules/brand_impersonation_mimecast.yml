@@ -1,0 +1,73 @@
+name: "Brand impersonation: Mimecast"
+description: "Detects messages impersonating Mimecast with malformed HTML structure, including specific DOCTYPE declarations, empty title tags, Mimecast-specific CSS classes, and suspicious logo handling that deviates from legitimate Mimecast messaging patterns."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and length(html.xpath(body.html, "//table[@class='mc-e-body']").nodes) == 1
+  and length(html.xpath(body.html, "//table[@class='mc-e-spacer']").nodes) >= 3
+  and strings.icontains(body.html.raw,
+                        '<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">'
+  )
+  
+  // The image should be a URL and should be a specific format
+  and (
+    not strings.starts_with(html.xpath(body.html, "//img/@src").nodes[0].raw,
+                            "http"
+    )
+    or not strings.contains(html.xpath(body.html, "//img/@src").nodes[0].raw,
+                            strings.concat("/branding/",
+                                           sender.email.domain.sld,
+                                           "/NOTIFICATION_LOGO_ID"
+                            )
+    )
+    or (
+      // if all of these are present
+      all(filter(body.links,
+                 .display_text is not null
+          ),
+          .display_text in (
+            "Release all",
+            "Permit all",
+            "Block all",
+            "Personal Portal",
+            "Release",
+            "Permit",
+            "Block"
+          )
+      )
+      // but they don't have a root_domain as mimecast
+      and not length(filter(body.links,
+                        .display_text in (
+                          "Release all",
+                          "Permit all",
+                          "Block all",
+                          "Personal Portal",
+                          "Release",
+                          "Permit",
+                          "Block"
+                        )
+                        and .href_url.domain.root_domain == "mimecast.com"
+                 )
+      ) >= 7
+    )
+  )
+  
+  // Legitimate mimecast emails contain this comment
+  // Sometimes it is the last comment so taking the length of all comments and subtracting one to get the last element
+  and 1 of (
+    length(html.xpath(body.html, "//comment()").nodes) == 1
+    and html.xpath(body.html, "//comment()").nodes[0].raw == "<!-- prevent Gmail on iOS font size manipulation -->",
+    length(html.xpath(body.html, "//comment()").nodes) > 1
+    and html.xpath(body.html, "//comment()").nodes[length(html.xpath(body.html, "//comment()").nodes) - 1].raw == "<!-- prevent Gmail on iOS font size manipulation -->"
+  )
+
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Evasion"
+detection_methods:
+  - "HTML analysis"
+  - "Content analysis"
+id: "fde1930e-800e-530c-a11a-ffd7fee835e5"
