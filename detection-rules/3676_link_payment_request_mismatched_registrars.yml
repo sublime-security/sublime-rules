@@ -1,0 +1,33 @@
+name: "Link: Payment request with mismatched registrars"
+description: "Detects messages containing links to domains with different registrars than the sender's domain, where the sender appears to be replying but has no previous thread history, and the message contains high-confidence payment-related content from low-reputation domains."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and headers.in_reply_to is not null
+  and length(body.previous_threads) == 0
+  and any(filter(body.links,
+                 .href_url.domain.root_domain != sender.email.domain.root_domain
+          ),
+          network.whois(sender.email.domain).registrar_name != network.whois(.href_url.domain
+          ).registrar_name
+  )
+  and sender.email.domain.root_domain not in $tranco_50k
+  and sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  and any(ml.nlu_classifier(body.current_thread.text).topics, .name == "Payment Information" and .confidence == "high")
+attack_types:
+  - "BEC/Fraud"
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Spoofing"
+  - "Social engineering"
+detection_methods:
+  - "Header analysis"
+  - "URL analysis"
+  - "Whois"
+  - "Natural Language Understanding"
+  - "Sender analysis"
+id: "4714464a-732d-5e08-9d91-85e7db03564d"
+og_id: "83e435b3-b94a-5f67-9536-7caf7606ca32"
+testing_pr: 3676
+testing_sha: 4c76ff0f50869fb46241416ca1907d48f54d20b6
