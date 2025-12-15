@@ -1,0 +1,43 @@
+name: "Self-sent fake PDF attachment with misleading link"
+description: "Detects messages sent from a user to themselves containing a fake PDF icon from Google's CDN, claiming to have an attachment while only containing images, and including links that appear to be PDF files."
+type: "rule"
+severity: "low"
+source: |
+  type.inbound
+  // pdf image
+  and strings.contains(body.html.raw,
+                       'https://ci3.googleusercontent.com/meips/ADKq_Naq6rm1GwC4XYZepCUQtEMnJ-r-HjyX_C5lBU7lpxQk1OIDV7vvQYvSJQWYmQCzG8moTgX3Wak625OtyHWRinVeUJs7K710JiIZ4JNXVpTmC8PJjV4K34GsBA=s0-d-e1-ft#https://res-1.cdn.office.net/assets/mail/file-icon/png/pdf_16x16.png'
+  )
+  // mentions attachments but there are none or just images with no pdfs
+  and strings.starts_with(body.current_thread.text, 'Please see attached.')
+  and all(attachments, .file_type in $file_types_images)
+  //self sender
+  and (
+    length(recipients.to) == 1
+    and sender.email.email == recipients.to[0].email.email
+  )
+  // display text ends with .pdf
+  and any(body.current_thread.links,
+        strings.ends_with(.display_text, '.pdf')
+        and .href_url.domain.subdomain is not null
+        and .visible
+        and not (
+          .href_url.domain.root_domain == "googleusercontent.com"
+          and strings.istarts_with(.href_url.path, "/mail-sig")
+        )
+  )
+
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Evasion"
+  - "Free subdomain host"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "URL analysis"
+  - "Sender analysis"
+id: "ecaf543e-6151-5fb8-a79c-771de90f4e81"
+og_id: "8a285d2e-3e40-5dfa-b269-947011663a5a"
+testing_pr: 3674
+testing_sha: 92f58b52bf349d60ca7bb4c2f9b357555697f199
