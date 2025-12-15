@@ -1,0 +1,126 @@
+name: "Link: Blogspot hosted credential theft with multilingual password reset language"
+description: "Detects links to blogspot domains containing WordPress login parameters or cryptocurrency references, combined with password reset language in Spanish, Italian, French, or English. The rule identifies potential credential theft targeting users through compromised blog platforms with multilingual social engineering tactics."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and length(body.links) < 20
+  
+  // message contains blogspot reference and WordPress/crypto patterns
+  and any(body.links,
+          // blogspot domain reference
+          strings.icontains(.href_url.url, 'blogspot')
+          and (
+            // WordPress login in mimecast query params
+            strings.icontains(.href_url.query_params, 'wp-login')
+  
+            // or cryptocurrency references in body text
+            or (
+              (
+                // crypto keyword
+                regex.icontains(body.current_thread.text,
+                                '\bmetamask\b',
+                                '\bethereum\b',
+                                '\bbinance\b',
+                                '\bgemini\b',
+                                '\bwallet\b',
+                                '\bkraken\b',
+                                '\bsolana\b',
+                                '\btrezor\b',
+                                '\bledger\b'
+                )
+                // token name, e.g. $USDT
+                or regex.contains(body.current_thread.text, '\s\$[A-Z]{3,4}\s')
+              )
+              and not (
+                sender.email.domain.root_domain in (
+                  "gemini.com",
+                  "ledger.com",
+                  "binance.com",
+                  "trezor.io",
+                  "kraken.com",
+                  "solana.com",
+                  "metamask.com",
+                  "ethereum.org",
+                  "bloomberg.com"
+                )
+                and headers.auth_summary.dmarc.pass
+              )
+            )
+          )
+          // hosted on mimecast rewrite
+          and .href_url.domain.root_domain == "mimecastprotect.com"
+  )
+  
+  // password reset language
+  and (
+    // Spanish
+    strings.icontains(body.current_thread.text, 'contraseña')
+    or strings.icontains(body.current_thread.text, 'restablecer contraseña')
+    or strings.icontains(body.current_thread.text, 'establecer tu contraseña')
+  
+    // Italian
+    or strings.icontains(body.current_thread.text, 'password')
+    or strings.icontains(body.current_thread.text, 'reimpostare password')
+    or strings.icontains(body.current_thread.text, 'impostare la password')
+    or strings.icontains(body.current_thread.text, 'ripristinare password')
+  
+    // French
+    or strings.icontains(body.current_thread.text, 'mot de passe')
+    or strings.icontains(body.current_thread.text, 'réinitialiser mot de passe')
+    or strings.icontains(body.current_thread.text, 'définir votre mot de passe')
+    or strings.icontains(body.current_thread.text, 'établir votre mot de passe')
+  
+    // English
+    or strings.icontains(body.current_thread.text, 'password reset')
+    or strings.icontains(body.current_thread.text, 'set your password')
+    or strings.icontains(body.current_thread.text, 'establish password')
+  
+    // Subject line checks (any language)
+    or strings.icontains(subject.subject, 'password')
+    or strings.icontains(subject.subject, 'contraseña')
+    or strings.icontains(subject.subject, 'mot de passe')
+  )
+  
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and not headers.auth_summary.dmarc.pass
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+  and not profile.by_sender().any_messages_benign
+  // negate cryptocurrency newsletters
+  and not (
+    any(body.links,
+        strings.icontains(.display_text, "unsubscribe")
+        and (
+          strings.icontains(.href_url.path, "unsubscribe")
+          // handle mimecast URL rewrites
+          or (
+            .href_url.domain.root_domain == 'mimecastprotect.com'
+            and strings.icontains(.href_url.query_params,
+                                  sender.email.domain.root_domain
+            )
+          )
+        )
+    )
+  )
+
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Evasion"
+  - "Free subdomain host"
+  - "Impersonation: Brand"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Header analysis"
+  - "Sender analysis"
+  - "URL analysis"
+id: "02018720-c64b-5f38-ab99-4a921422d7ed"
+og_id: "5856a3ce-ab92-5740-a4c5-89a225c3bc17"
+testing_pr: 3675
+testing_sha: 303c44d6628c21a4755750adff8106135aaef49d
