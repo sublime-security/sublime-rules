@@ -8,7 +8,10 @@ severity: "high"
 source: |
   type.inbound
   and any(body.links,
-          .href_url.domain.domain in ("ncv.microsoft.com", "customervoice.microsoft.com")
+          .href_url.domain.domain in (
+            "ncv.microsoft.com",
+            "customervoice.microsoft.com"
+          )
           and ml.link_analysis(.).effective_url.domain.domain == "customervoice.microsoft.com"
   
           // confirm it is a form
@@ -19,21 +22,23 @@ source: |
             or strings.icontains(ml.link_analysis(.).final_dom.raw,
                                  "cdn.forms.office.net"
             )
+            or .href_url.path == "/Pages/ResponsePage.aspx"
           )
-          
+  
           // analyze for credential phishing signals
           and (
-            any(file.explode(ml.link_analysis(.).screenshot),
-                any(ml.nlu_classifier(.scan.ocr.raw).intents,
-                   .name == "cred_theft" and .confidence != "low"
-                )
+            //
+            // This rule makes use of a beta feature and is subject to change without notice
+            // using the beta feature in custom rules is not suggested until it has been formally released
+            //
+            any(ml.nlu_classifier(beta.ocr(ml.link_analysis(.).screenshot).text).intents,
+                .name == "cred_theft" and .confidence != "low"
             )
             or any(ml.nlu_classifier(body.current_thread.text).intents,
                    .name == "cred_theft" and .confidence != "low"
             )
           )
   )
-
   and (
     not profile.by_sender().solicited
     or (
@@ -41,9 +46,8 @@ source: |
       and not profile.by_sender().any_messages_benign
     )
   )
-
   and not profile.by_sender().any_messages_benign
-
+  
   // negate highly trusted sender domains unless they fail DMARC authentication
   and (
     (
