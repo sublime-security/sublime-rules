@@ -22,7 +22,7 @@ source: |
   and (
     (
       any(ml.nlu_classifier(strings.replace_confusables(body.current_thread.text)).intents,
-          (.name == "extortion" and .confidence != "low")
+          (.name == "extortion" and .confidence == "high")
       )
       and (
         any(ml.nlu_classifier(strings.replace_confusables(body.current_thread.text
@@ -59,7 +59,8 @@ source: |
       // a timeframe to pay
       regex.icontains(strings.replace_confusables(body.current_thread.text),
                       '[ilo0-9]{2} (?:hou[rŗṝ][sṣ]|uu[rŗ])',
-                      '(?:one|tw[oờ]|2|th[rŗ]ee|\d) [dḍ][aảǡą]y[sṣ]?'
+                      '(?:one|tw[oờ]|2|th[rŗ]ee|\d) [dḍ][aảǡą]y[sṣ]?',
+                      'set a timer'
       ),
       // a promise from the actor
       regex.icontains(strings.replace_confusables(body.current_thread.text),
@@ -72,7 +73,7 @@ source: |
       // bitcoin language (excluding newsletters)
       (
         regex.icontains(strings.replace_confusables(body.current_thread.text),
-                        '[bḆḂ]it[cĉƈ][oöة]+in|\bbtc\b|blockchain'
+                        '[bḆḂ]it[cĉƈ][oöة]i[nņɲ]|\bbtc\b|blockchain'
         )
         // negate cryptocurrency newsletters
         and not (
@@ -139,6 +140,8 @@ source: |
     and length(body.current_thread.text) > 2000
   )
   and length(body.current_thread.text) < 8000
+  // negate TOS collisions from legal phrasing
+  and not strings.icontains(body.current_thread.text, "terms of service")
   // negate highly trusted sender domains unless they fail DMARC authentication
   and (
     (
@@ -147,6 +150,7 @@ source: |
     )
     or sender.email.domain.root_domain not in $high_trust_sender_root_domains
   )
+
 attack_types:
   - "Extortion"
 tactics_and_techniques:
