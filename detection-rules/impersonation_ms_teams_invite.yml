@@ -30,18 +30,18 @@ source: |
   // common in newsletters which link to a webinar style event
   and not any(body.links, strings.icontains(.display_text, "unsub"))
   
-  // one of the links contains is a CTA
-  and (
-    any(body.links,
-        .display_text =~ "join the meeting now"
-        or strings.icontains(.display_text, "play recording")
-    )
-    // the "join the meeting now" link does not go to microsoft
-    and all(filter(body.links, .display_text =~ "join the meeting now"),
-            .href_url.domain.root_domain not in ("microsoft.com", "microsoft.us")
-            // rewriters often abstract the link
-            and .href_url.domain.root_domain not in $bulk_mailer_url_root_domains
-    )
+  // one of the links contains is a CTA that doesn't link to MS
+  and any(body.links,
+          (
+            .display_text =~ "join the meeting now"
+            or strings.icontains(.display_text, "play recording")
+          )
+          and .href_url.domain.root_domain not in (
+            "microsoft.com",
+            "microsoft.us"
+          )
+          // rewriters often abstract the link
+          and .href_url.domain.root_domain not in $bulk_mailer_url_root_domains
   )
   // missing the dial by phone element
   and not strings.icontains(body.current_thread.text, 'Dial in by phone')
