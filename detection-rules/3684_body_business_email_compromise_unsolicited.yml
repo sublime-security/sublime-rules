@@ -1,0 +1,51 @@
+name: "Business Email Compromise (BEC) attempt from unsolicited sender"
+description: |
+  Detects potential Business Email Compromise (BEC) attacks by analyzing text within the email body from unsolicited senders.
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and any(ml.nlu_classifier(body.current_thread.text).intents,
+          .name in ("bec") and .confidence == "high"
+  )
+  and 
+  // mismatched From and Reply-to
+  (
+    (
+      length(headers.reply_to) > 0
+      and all(headers.reply_to,
+              .email.domain.root_domain != sender.email.domain.root_domain
+      )
+    )
+    or not headers.auth_summary.dmarc.pass
+    or not headers.auth_summary.spf.pass
+  )
+  
+  // negate "via" senders via dmarc authentication or gmail autoforwards
+  and not (
+    strings.ilike(headers.return_path.local_part, "*+caf_=*")
+    and strings.contains(sender.display_name, "via")
+    and (headers.auth_summary.dmarc.pass)
+  )
+  and (
+    not profile.by_sender_email().solicited
+    or (
+      profile.by_sender().any_messages_malicious_or_spam
+      and not profile.by_sender().any_messages_benign
+    )
+  )
+
+attack_types:
+  - "BEC/Fraud"
+tactics_and_techniques:
+  - "Social engineering"
+  - "Spoofing"
+detection_methods:
+  - "Content analysis"
+  - "File analysis"
+  - "Header analysis"
+  - "Sender analysis"
+id: "1ad385a9-346c-5b74-b74d-e7368c27f205"
+og_id: "57eccc45-0408-55ee-ae33-8203e166254a"
+testing_pr: 3684
+testing_sha: 090ce884f5f66613d17f5293e3da684758aecfbd
