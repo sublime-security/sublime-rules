@@ -1,0 +1,196 @@
+name: "Request for Quote or Purchase (RFQ|RFP) with suspicious sender or recipient pattern"
+description: |
+  RFQ/RFP scams involve fraudulent emails posing as legitimate requests for quotations or purchases, often sent by scammers impersonating reputable organizations.
+  These scams aim to deceive recipients into providing sensitive information or conducting unauthorized transactions, often leading to financial loss, or data leakage.
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and (
+    (
+      (
+        length(recipients.to) == 0
+        or all(recipients.to,
+               .display_name in (
+                 "Undisclosed recipients",
+                 "undisclosed-recipients"
+               )
+        )
+      )
+      and length(recipients.cc) == 0
+    )
+    or (
+      sender.email.domain.root_domain in $free_email_providers
+      and any(headers.reply_to, .email.email != sender.email.email)
+      and any(headers.reply_to, .email.email not in $recipient_emails)
+    )
+    or (
+      length(headers.reply_to) > 0
+      and all(headers.reply_to,
+              .email.domain.root_domain != sender.email.domain.root_domain
+              and not .email.domain.root_domain in $org_domains
+      )
+      // wetransfer includes user specific reply-to's & link display text which triggers NLU logic further within the rule
+      and not sender.email.domain.root_domain == "wetransfer.com"
+    )
+    or (
+      length(recipients.to) == 1
+      and all(recipients.to, .email.email == sender.email.email)
+      and (length(recipients.cc) > 0 or length(recipients.bcc) > 0)
+    )
+  )
+  and (
+    // Group the keyword patterns that specifically indicate RFQ/RFP
+    (
+      1 of (
+        // RFQ/RFP specific language patterns
+        regex.icontains(body.current_thread.text,
+                        '(discuss.{0,15}purchas(e|ing))'
+        ),
+        regex.icontains(body.current_thread.text,
+                        '(sign(ed?)|view).{0,10}(purchase order)|Request for (a Quot(e|ation)|Proposal)'
+        ),
+        regex.icontains(body.current_thread.text,
+                        '(please|kindly).{0,30}(?:proposal|quot(e|ation))'
+        ),
+        regex.icontains(subject.subject,
+                        '(request for (purchase|quot(e|ation))|\bRFQ\b|\bRFP\b|bid invit(e|ation))'
+        ),
+        any(attachments,
+            regex.icontains(.file_name, "(purchase.?order|Quot(e|ation))")
+        ),
+        any(ml.nlu_classifier(body.current_thread.text).tags,
+            .name == "purchase_order" and .confidence == "high"
+        ),
+        any(ml.nlu_classifier(body.current_thread.text).entities,
+            .name == "financial" and regex.imatch(.text, "rfp|rfq")
+        )
+      )
+      // Required: at least one RFQ/RFP keyword pattern
+  
+      // Optional: at least one additional indicator (can be another keyword pattern or a non-keyword indicator)
+      and (
+        2 of (
+          // RFQ/RFP keyword patterns (same as above)
+          regex.icontains(body.current_thread.text,
+                          '(discuss.{0,15}purchas(e|ing))'
+          ),
+          regex.icontains(body.current_thread.text,
+                          '(sign(ed?)|view).{0,10}(purchase order)|Request for a Quot(e|ation)'
+          ),
+          regex.icontains(body.current_thread.text,
+                          '(please|kindly).{0,30}(?:proposal|quot(e|ation))'
+          ),
+          regex.icontains(subject.subject,
+                          '(request for (purchase|quot(e|ation))|\bRFQ\b|\bRFP\b|bid invit(e|ation))'
+          ),
+          any(attachments,
+              regex.icontains(.file_name, "(purchase.?order|Quot(e|ation))")
+          ),
+          any(ml.nlu_classifier(body.current_thread.text).tags,
+              .name == "purchase_order" and .confidence == "high"
+          ),
+          any(ml.nlu_classifier(body.current_thread.text).entities,
+              .name == "financial" and regex.imatch(.text, "rfp|rfq")
+          ),
+  
+          // Non-keyword indicators
+          (
+            any(ml.nlu_classifier(body.current_thread.text).entities,
+                .name == "request"
+            )
+            and any(ml.nlu_classifier(body.current_thread.text).entities,
+                    .name == "urgency"
+            )
+            and not any(ml.nlu_classifier(body.current_thread.text).topics,
+                        .name == "Advertising and Promotions"
+                        and .confidence == "high"
+            )
+          ),
+          (
+            0 < length(filter(body.links,
+                              (
+                                .href_url.domain.domain in $free_subdomain_hosts
+                                or .href_url.domain.domain in $free_file_hosts
+                                or network.whois(.href_url.domain).days_old < 30
+                                or length(body.links) == 1
+                              )
+                              and (
+                                // all letters are capital, except for an optional file extension
+                                regex.match(.display_text, '[^a-z\n]+(?:pdf)?')
+                                or any(ml.nlu_classifier(.display_text).entities,
+                                       .name in ("request", "urgency")
+                                )
+                                or any(ml.nlu_classifier(.display_text).intents,
+                                       .name in ("cred_theft")
+                                )
+                              )
+                       )
+            ) < 3
+          ),
+          // mentions an attachment that does not exist
+          (
+            length(attachments) == 0
+            and strings.icontains(body.current_thread.text, "attached")
+          )
+        )
+      )
+    )
+    or (
+      length(attachments) == 1
+      and length(body.current_thread.text) < 100
+      and all(attachments,
+              .file_type in $file_types_images
+              and any(file.explode(.),
+                      2 of (
+                        regex.icontains(.scan.ocr.raw,
+                                        '(discuss.{0,15}purchas(e|ing))'
+                        ),
+                        regex.icontains(.scan.ocr.raw,
+                                        '(sign(ed?)|view).{0,10}(purchase order)|Request for a Quot(e|ation)'
+                        ),
+                        regex.icontains(.scan.ocr.raw,
+                                        '(please|kindly).{0,30}quote'
+                        ),
+                        (
+                          any(ml.nlu_classifier(.scan.ocr.raw).entities,
+                              .name == "request"
+                          )
+                          and any(ml.nlu_classifier(.scan.ocr.raw).entities,
+                                  .name == "urgency"
+                          )
+                        ),
+                        any(ml.nlu_classifier(.scan.ocr.raw).tags,
+                            .name == "purchase_order" and .confidence == "high"
+                        ),
+                        any(ml.nlu_classifier(.scan.ocr.raw).entities,
+                            .name == "financial"
+                            and regex.imatch(.text, "rfp|rfq")
+                        ),
+                      )
+              )
+      )
+    )
+  )
+  
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and not headers.auth_summary.dmarc.pass
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+attack_types:
+  - "BEC/Fraud"
+tactics_and_techniques:
+  - "Evasion"
+  - "Free email provider"
+detection_methods:
+  - "Content analysis"
+  - "Natural Language Understanding"
+  - "URL analysis"
+id: "e12a6854-d46c-545c-98ef-8befb2909bc4"
+og_id: "2ac0d329-c1fb-5c87-98dd-ea3e5b85377a"
+testing_pr: 3680
+testing_sha: 490b15b5e38183694f1a5c3a35a94f07a7a0c2a7
