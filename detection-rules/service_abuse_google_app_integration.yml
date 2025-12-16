@@ -6,6 +6,7 @@ source: |
   type.inbound
   and sender.email.email == "noreply-application-integration@google.com"
   and headers.auth_summary.dmarc.pass
+  and length(body.links) < 10
   and any(body.links,
           .href_url.domain.domain in $free_file_hosts
           or .href_url.domain.domain in $free_subdomain_hosts
@@ -17,6 +18,23 @@ source: |
               ).domain.root_domain in $free_subdomain_hosts
             )
           )
+          // Mimecast link logic
+          or (
+            .href_url.domain.root_domain in (
+              "mimecastprotect.com",
+              "mimecast.com"
+            )
+            and any(.href_url.query_params_decoded['domain'],
+                    strings.parse_domain(.).root_domain in $free_file_hosts
+                    or strings.parse_domain(.).root_domain in $free_subdomain_hosts
+                    or . in (
+                      "storage.cloud.google.com",
+                      "login.microsoftonline.com"
+                    )
+            )
+          )
+          or network.whois(.href_url.domain).days_old < 30
+          or .href_url.domain.root_domain == "share.google"
   )
 tags:
   - "Attack surface reduction"
