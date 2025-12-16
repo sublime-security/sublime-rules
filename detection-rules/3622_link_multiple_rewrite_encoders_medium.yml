@@ -1,0 +1,45 @@
+name: "Link: Multiple URL rewrite encoders"
+description: "Detects URLs that use multiple encoding techniques, either in message body links or attachment URLs. This includes cases with three or more encoders but only two distinct types, or between two to three distinct encoding methods, which may indicate evasion tactics."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and 1 of (
+    any(body.links,
+        1 of (
+          // 3 or more encoders but only two distinct ones
+          length(.href_url.rewrite.encoders) >= 3
+          and length(distinct(.href_url.rewrite.encoders)) == 2,
+          // 1 to 3 distinct encoders
+          1 < length(distinct(.href_url.rewrite.encoders)) < 4
+        )
+    ),
+    any(attachments,
+        any(file.explode(.),
+            any(.scan.url.urls,
+                1 of (
+                  // 3 or more encoders but only two distinct ones
+                  length(.rewrite.encoders) >= 3
+                  and length(distinct(.rewrite.encoders)) == 2,
+                  // 1 to 3 distinct encoders
+                  1 < length(distinct(.rewrite.encoders)) < 4
+                )
+            )
+        )
+    )
+  )
+
+attack_types:
+  - "Credential Phishing"
+  - "Malware/Ransomware"
+tactics_and_techniques:
+  - "Evasion"
+detection_methods:
+  - "URL analysis"
+  - "Content analysis"
+  - "Archive analysis"
+  - "File analysis"
+id: "29fcb45c-ef7c-5bfe-83bb-d40708605bb8"
+og_id: "a46223fc-9dd2-5d7a-93e1-cf1d8a0232b1"
+testing_pr: 3622
+testing_sha: 0f74ec13f8689315d95ef05a86ae019a0668243f
