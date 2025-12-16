@@ -1,0 +1,166 @@
+name: "Credential phishing: Fake storage alerts (unsolicited)"
+description: "This rule targets credential phishing attempts disguised as storage space alerts, activating for inbound emails with specific storage-related keywords and evaluating sender trustworthiness and history."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and (
+    (
+      0 < length(body.links) < 13
+      and any([subject.subject, sender.display_name],
+              regex.icontains(., "storage|mailbox")
+      )
+    )
+    or (
+      //
+      // This rule makes use of a beta feature and is subject to change without notice
+      // using the beta feature in custom rules is not suggested until it has been formally released
+      //
+      any(ml.nlu_classifier(beta.ocr(file.message_screenshot()).text).intents,
+          .name == "cred_theft" and .confidence == "high"
+      )
+      and regex.icontains(beta.ocr(file.message_screenshot()).text,
+                          "storage.{0,50}full",
+                          "free.{0,50}upgrade",
+                          "storage.{0,50}details",
+                          "storage.{0,50}quot",
+                          "email.{0,50}storage",
+                          "total.{0,50}storage",
+                          "storage.{0,50}limit"
+      )
+      and not strings.ilike(beta.ocr(file.message_screenshot()).text,
+                            "*free plan*"
+      )
+    )
+    or (
+      any(body.links,
+          // fingerprints of a hyperlinked image
+          .display_text is null
+          and .display_url.url is null
+          and (
+            .href_url.domain.root_domain in $free_file_hosts
+            or .href_url.domain.root_domain == "beehiiv.com"
+          )
+      )
+      and length(attachments) == 1
+      and all(attachments,
+              .file_type in $file_types_images
+              and .size > 2000
+              and any(file.explode(.),
+                      regex.icontains(.scan.ocr.raw,
+                                      "storage.{0,50}full",
+                                      "free.{0,50}upgrade",
+                                      "storage.{0,50}details",
+                                      "storage.{0,50}quot",
+                                      "email.{0,50}storage",
+                                      "total.{0,50}storage"
+                      )
+              )
+      )
+    )
+  )
+  and (
+    regex.icontains(subject.subject, '\bfull\b')
+    or strings.icontains(subject.subject, "exceeded")
+    or strings.icontains(subject.subject, "out of")
+    or strings.icontains(subject.subject, "mailbox")
+    or strings.icontains(subject.subject, "icloud")
+    or regex.icontains(subject.subject, '\blimit(?:ed|\b)')
+    or strings.icontains(subject.subject, "all storage used")
+    or strings.icontains(subject.subject, "compliance")
+    or strings.icontains(subject.subject, "max storage")
+    or strings.icontains(subject.subject, "storage space")
+    or strings.icontains(subject.subject, "be deleted")
+    or strings.icontains(subject.subject, "action required")
+    or strings.icontains(subject.subject, "undelivered messages")
+    or regex.icontains(subject.subject, "(review|account) storage")
+    or regex.icontains(subject.subject, "upgrade (today|now)")
+  )
+  
+  // negate customer service requests about storage
+  and not any(ml.nlu_classifier(body.current_thread.text).topics,
+              .name == "Customer Service and Support" and .confidence == "high"
+  )
+  
+  // negate links to loopnet.com - a popular commerical property listing service
+  and not (any(body.links, .href_url.domain.root_domain == "loopnet.com"))
+  
+  // negate legitimate sharepoint storage alerts
+  and (
+    (
+      sender.email.email == "no-reply@sharepointonline.com"
+      and not headers.auth_summary.dmarc.pass
+      and (
+        not all(body.links,
+                .href_url.domain.root_domain in~ (
+                  "sharepoint.com",
+                  "microsoft.com",
+                  "aka.ms"
+                )
+        )
+      )
+    )
+    or sender.email.email != "no-reply@sharepointonline.com"
+  )
+  
+  // negate legitimate iCloud China storage alerts
+  and (
+    (
+      sender.email.email == "noreply@icloud.com.cn"
+      and not headers.auth_summary.dmarc.pass
+      and (
+        not all(body.links,
+                .href_url.domain.root_domain in~ ("icloud.com", "aka.ms")
+        )
+      )
+    )
+    or sender.email.email != "noreply@icloud.com.cn"
+  )
+  
+  // negate bouncebacks and undeliverables
+  and not any(attachments,
+              .content_type in (
+                "message/global-delivery-status",
+                "message/delivery-status",
+              )
+              or (
+                .content_type == "message/rfc822"
+                and any(file.parse_eml(.).attachments,
+                        .content_type in (
+                          "message/global-delivery-status",
+                          "message/delivery-status",
+                        )
+                )
+              )
+  )
+  
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and not headers.auth_summary.dmarc.pass
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+  and (
+    not profile.by_sender().solicited
+    or profile.by_sender().any_messages_malicious_or_spam
+  )
+  // negate instances where proofpoint sends a review of a reported message via analyzer 
+  and not (
+    sender.email.email == "analyzer@analyzer.securityeducation.com"
+    and any(headers.domains, .root_domain == "pphosted.com")
+    and headers.auth_summary.spf.pass
+    and headers.auth_summary.dmarc.pass
+  )
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Sender analysis"
+id: "88a54002-9bbc-54b9-8ad4-3d11fb74afd8"
+og_id: "750f04d6-f68a-564c-9e41-c1e5a58df28f"
+testing_pr: 3687
+testing_sha: 5da05a0a47664881e71b3890754bc274f4febcd6
