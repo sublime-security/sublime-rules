@@ -29,9 +29,9 @@ source: |
       and all(headers.reply_to,
               .email.domain.root_domain != sender.email.domain.root_domain
               and not .email.domain.root_domain in $org_domains
-              // wetransfer includes user specific reply-to's & link display text which triggers NLU logic further within the rule
-              and not sender.email.domain.root_domain == "wetransfer.com"
       )
+      // wetransfer includes user specific reply-to's & link display text which triggers NLU logic further within the rule
+      and not sender.email.domain.root_domain == "wetransfer.com"
     )
     or (
       length(recipients.to) == 1
@@ -102,7 +102,7 @@ source: |
             and any(ml.nlu_classifier(body.current_thread.text).entities,
                     .name == "urgency"
             )
-            and not any(beta.ml_topic(body.current_thread.text).topics,
+            and not any(ml.nlu_classifier(body.current_thread.text).topics,
                         .name == "Advertising and Promotions"
                         and .confidence == "high"
             )
@@ -113,9 +113,11 @@ source: |
                                 .href_url.domain.domain in $free_subdomain_hosts
                                 or .href_url.domain.domain in $free_file_hosts
                                 or network.whois(.href_url.domain).days_old < 30
+                                or length(body.links) == 1
                               )
                               and (
-                                regex.match(.display_text, '[A-Z ]+')
+                                // all letters are capital, except for an optional file extension
+                                regex.match(.display_text, '[^a-z\n]+(?:pdf)?')
                                 or any(ml.nlu_classifier(.display_text).entities,
                                        .name in ("request", "urgency")
                                 )
