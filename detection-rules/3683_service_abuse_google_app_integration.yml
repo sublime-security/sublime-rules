@@ -1,0 +1,38 @@
+name: "Service abuse: Google application integration redirecting to suspicious hosts"
+description: "Detects legitimate Google application integration emails that contain links redirecting to free file hosting services or free subdomain hosts, including Microsoft OAuth redirects to suspicious domains. These could indicate abuse of Google's legitimate service for malicious redirects."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and sender.email.email == "noreply-application-integration@google.com"
+  and headers.auth_summary.dmarc.pass
+  and any(body.links,
+          .href_url.domain.domain in $free_file_hosts
+          or .href_url.domain.domain in $free_subdomain_hosts
+          or (
+            .href_url.domain.domain == "login.microsoftonline.com"
+            and (
+              strings.parse_url(.href_url.query_params_decoded['redirect_uri'][0]).domain.root_domain in $free_file_hosts
+              or strings.parse_url(.href_url.query_params_decoded['redirect_uri'][0]
+              ).domain.root_domain in $free_subdomain_hosts
+            )
+          )
+  )
+tags:
+  - "Attack surface reduction"
+attack_types:
+  - "Credential Phishing"
+  - "Malware/Ransomware"
+tactics_and_techniques:
+  - "Evasion"
+  - "Free file host"
+  - "Free subdomain host"
+  - "Open redirect"
+detection_methods:
+  - "Header analysis"
+  - "Sender analysis"
+  - "URL analysis"
+id: "db68061a-56e0-5590-8ff1-5fe2fa21a6f5"
+og_id: "473d3247-8f99-5130-b091-ed95a6fff5ba"
+testing_pr: 3683
+testing_sha: cb55a0d41043fd9d188e793aa19f7f87a7cb371d
