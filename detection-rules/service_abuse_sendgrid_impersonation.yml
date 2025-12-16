@@ -6,32 +6,30 @@ source: |
   type.inbound
   // SendGird impersonation patterns
   and (
-    (
-      
-      strings.ilike(strings.replace_confusables(sender.display_name),
+    strings.ilike(strings.replace_confusables(sender.display_name), '*sendgrid*')
+    or strings.ilevenshtein(strings.replace_confusables(sender.display_name),
+                            'sendgrid'
+    ) <= 1
+    or (
+      strings.ilike(strings.replace_confusables(sender.email.local_part),
                     '*sendgrid*'
       )
-      or strings.ilevenshtein(strings.replace_confusables(sender.display_name),
-                              'sendgrid'
-      ) <= 1
-      or (
-        strings.ilike(strings.replace_confusables(sender.email.local_part),
-                      '*sendgrid*'
+      and (
+        sender.display_name is null
+        or strings.ilike(strings.replace_confusables(subject.subject),
+                         '*sendgrid*'
         )
-        and (
-          sender.display_name is null
-          or strings.ilike(strings.replace_confusables(subject.subject),
-                           '*sendgrid*'
-          )
-        )
-      )
-      or any(ml.logo_detect(file.message_screenshot()).brands,
-             .name == "SendGrid" and .confidence == "high"
       )
     )
+    or any(ml.logo_detect(file.message_screenshot()).brands,
+           .name == "SendGrid" and .confidence == "high"
+    )
+  )
   and profile.by_sender_email().prevalence == "new"
   // sent from sendgrid infra
-  and any(headers.domains, strings.icontains(.domain, 'outbound-mail.sendgrid.net'))
+  and any(headers.domains,
+          strings.icontains(.domain, 'outbound-mail.sendgrid.net')
+  )
 
 attack_types:
   - "Credential Phishing"
