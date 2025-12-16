@@ -1,0 +1,125 @@
+name: "Attachment: Adobe image lure in body or attachment with suspicious link"
+description: "Detects Adobe phishing messages with an Adobe logo in the body or attachment, with suspicious link language."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and (
+    length(filter(attachments, .file_type not in $file_types_images)) == 0
+    or length(filter(attachments, .file_type != "pdf")) == 0
+    or length(filter(attachments, .file_type == "pdf")) == 1
+  )
+  and (
+    (
+      any(ml.logo_detect(file.message_screenshot()).brands, .name == "Adobe")
+      and 0 < length(body.links) < 10
+      and any(body.links, .display_text is null)
+      and (
+        length(filter(body.links,
+                      (
+                        .display_text is null
+                        and .display_url.url == sender.email.domain.root_domain
+                      )
+                      or .href_url.domain.root_domain in (
+                        "aka.ms",
+                        "mimecast.com",
+                        "mimecastprotect.com",
+                        "cisco.com"
+                      )
+               )
+        ) != length(body.links)
+      )
+    )
+    or any(filter(attachments,
+                  // filter down to attachments with adobe logo
+                  any(ml.logo_detect(.).brands,
+                      .name == "Adobe" and .confidence in ("medium", "high")
+                  )
+                  or any(file.explode(.),
+                         any(ml.nlu_classifier(.scan.ocr.raw).intents,
+                             .name == "cred_theft" and .confidence == "high"
+                         )
+                  )
+           ),
+           // the attachment (or message body) contain links
+           any(file.explode(.),
+               (
+                 length(.scan.url.urls) > 0
+                 or length(.scan.pdf.urls) > 0
+                 or length(body.links) > 0
+               )
+           )
+    )
+  )
+  and (
+    (
+      (
+        length(headers.references) > 0
+        or not any(headers.hops,
+                   any(.fields, strings.ilike(.name, "In-Reply-To"))
+        )
+      )
+      and not (
+        (
+          strings.istarts_with(subject.subject, "RE:")
+          or strings.istarts_with(subject.subject, "RES:")
+          or strings.istarts_with(subject.subject, "R:")
+          or strings.istarts_with(subject.subject, "ODG:")
+          or strings.istarts_with(subject.subject, "答复:")
+          or strings.istarts_with(subject.subject, "AW:")
+          or strings.istarts_with(subject.subject, "TR:")
+          or strings.istarts_with(subject.subject, "FWD:")
+          or regex.imatch(subject.subject, '(\[[^\]]+\]\s?){0,3}(re|fwd?)\s?:')
+        )
+      )
+    )
+    or length(headers.references) == 0
+  )
+  
+  // not a newsletter or advertisement
+  and not any(headers.hops, any(.fields, .name == "List-Unsubscribe-Post"))
+  and not any(ml.nlu_classifier(body.current_thread.text).topics,
+              .name in ("Advertising and Promotions", "Newsletters and Digests")
+              and .confidence == "high"
+  )
+  
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and not headers.auth_summary.dmarc.pass
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+  and (
+    // exclude solicited senders
+    not profile.by_sender_email().solicited
+    or profile.by_sender_email().prevalence == "new"
+    or length(recipients.to) == 0
+    // domains for recipients to/cc must be valid
+    or (
+      all(recipients.to, .email.domain.valid == false)
+      and all(recipients.cc, .email.domain.valid == false)
+    )
+    or (
+      profile.by_sender_email().any_messages_malicious_or_spam
+      and not profile.by_sender_email().any_messages_benign
+    )
+  )
+  and not profile.by_sender_email().any_messages_benign
+
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Image as content"
+  - "Impersonation: Brand"
+detection_methods:
+  - "Content analysis"
+  - "Computer Vision"
+  - "Optical Character Recognition"
+  - "Sender analysis"
+  - "URL analysis"
+id: "f59842e4-64d8-5844-aed5-e3cf5f9895f7"
+og_id: "1d7add81-9822-576a-bcae-c4440e75e393"
+testing_pr: 3608
+testing_sha: b3257ebfddb34a139eab2295ee5fc3671d321fce
