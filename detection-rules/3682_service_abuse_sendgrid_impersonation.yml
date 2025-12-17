@@ -1,0 +1,45 @@
+name: "Service abuse: SendGrid impersonation via Sendgrid from first-time sender"
+description: "Detects messages impersonating SendGrid from senders that have not been seen before, while routing through legitimate SendGrid infrastructure. This pattern is commonly used to abuse trusted email services for malicious purposes."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  // SendGird impersonation patterns
+  and (
+    strings.ilike(strings.replace_confusables(sender.display_name), '*sendgrid*')
+    or strings.ilevenshtein(strings.replace_confusables(sender.display_name),
+                            'sendgrid'
+    ) <= 1
+    or (
+      strings.ilike(strings.replace_confusables(sender.email.local_part),
+                    '*sendgrid*'
+      )
+      and (
+        sender.display_name is null
+        or strings.ilike(strings.replace_confusables(subject.subject),
+                         '*sendgrid*'
+        )
+      )
+    )
+    or any(ml.logo_detect(file.message_screenshot()).brands,
+           .name == "SendGrid" and .confidence == "high"
+    )
+  )
+  and profile.by_sender_email().prevalence == "new"
+  // sent from sendgrid infra
+  and any(headers.domains,
+          strings.icontains(.domain, 'outbound-mail.sendgrid.net')
+  )
+
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Social engineering"
+detection_methods:
+  - "Header analysis"
+  - "Sender analysis"
+id: "e562e95f-980e-5a87-bf85-2c86f91e0648"
+og_id: "aa5d18ca-665a-5817-89d6-d76e29c44580"
+testing_pr: 3682
+testing_sha: 4d003ab109d16a33dc136da6ba113fd289f83d1b
