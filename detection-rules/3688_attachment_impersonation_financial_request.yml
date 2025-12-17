@@ -1,0 +1,71 @@
+name: "Attachment: Executive impersonation with financial transaction request"
+description: "Detects messages from free email providers using executive titles or corporate naming patterns in sender information, containing financial transaction language with urgency indicators, short message length, and attachments from unsolicited senders."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  
+  // Free email provider (including Proton)
+  and sender.email.domain.root_domain in $free_email_providers
+  
+  // Display name or local_part suggests executive/authority
+  and (
+    // Common executive titles
+    regex.icontains(sender.display_name,
+                    '\\b(CEO|CFO|COO|President|Chairman|Director|VP|EVP|SVP)\\b'
+    )
+    // Or looks like: firstname.lastname.company@freemail
+    or regex.count(sender.email.local_part, '\.') == 2
+    // or any defined org brands like: first.last.sublime@freemail
+    or any($org_brand_names, strings.icontains(sender.email.local_part, .))
+    // Or contains common company abbreviations
+    or regex.imatch(sender.email.local_part, '.*\\.(inc|corp|ltd|llc|co)$')
+  )
+  
+  // Financial/transaction language
+  and (
+    regex.icontains(body.current_thread.text,
+                    'transaction|lawyer|wire|transfer|payment|invoice|bank.*account'
+    )
+    or any(ml.nlu_classifier(body.current_thread.text).entities,
+           .name == "financial"
+    )
+    and any(ml.nlu_classifier(body.current_thread.text).topics,
+          .name == "Legal and Compliance" and .confidence == "high"
+    )
+  )
+  
+  // Urgency indicators
+  and (
+    any(ml.nlu_classifier(body.current_thread.text).entities, .name == "urgency")
+    or regex.icontains(body.current_thread.text,
+                       'urgent|asap|immediately|today|by.*(?:friday|weekend|eod|end of day)'
+    )
+  )
+  
+  // Short message (BEC pattern)
+  and length(body.current_thread.text) < 200
+  
+  // Has attachment
+  and 0 < length(attachments) < 3
+  
+  // Unsolicited
+  and not profile.by_sender().solicited
+
+attack_types:
+  - "BEC/Fraud"
+tactics_and_techniques:
+  - "Free email provider"
+  - "Impersonation: Employee"
+  - "Impersonation: VIP"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Header analysis"
+  - "Natural Language Understanding"
+  - "Sender analysis"
+  - "File analysis"
+id: "adc6916c-1d46-546e-b1a7-a79f310311ac"
+og_id: "0de211f0-e2ca-52e9-8cc4-162d59e35420"
+testing_pr: 3688
+testing_sha: 8d4178f7d249516e7786b16c05964eb3f62edb4f
