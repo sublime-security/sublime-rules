@@ -1,0 +1,56 @@
+name: "Link: Document sharing with undisclosed recipients"
+description: "Detects messages sent to undisclosed recipients containing links with suspicious document sharing language, either in the link display text or detected through OCR analysis of message screenshots."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  // no recipients defined
+  and (
+    length(recipients.to) == 0
+    or all(recipients.to, strings.ilike(.display_name, "undisclosed?recipients"))
+    or all(recipients.to, .email.email == sender.email.email)
+  )
+  and length(recipients.cc) == 0
+  and length(recipients.bcc) == 0
+  
+  // sus display text or no display text 
+  and (
+    any(body.links,
+        regex.icontains(.display_text,
+                        "(view|show|download).{0,20}(Doc(ument)?(s)?|files(s)?|attached)"
+        )
+    )
+    or (
+      any(body.links, .display_text is null and .display_url.url is null)
+      and 
+      // suspicious file sharing/doc sharing language in the image
+      any(file.explode(file.message_screenshot()),
+          regex.icontains(.scan.ocr.raw,
+                          "(view|show|download).{0,20}(Doc(ument)?(s)?|files(s)?|attached)"
+          )
+      )
+    )
+  )
+  and all(attachments,
+          .file_extension in $file_types_images
+          or .file_extension in $file_extensions_suspicious
+  )
+  and not any(ml.nlu_classifier(body.current_thread.text).topics,
+              .name == "Newsletters and Digests"
+  )
+attack_types:
+  - "Credential Phishing"
+  - "Malware/Ransomware"
+tactics_and_techniques:
+  - "Evasion"
+  - "Social engineering"
+detection_methods:
+  - "Header analysis"
+  - "Content analysis"
+  - "Optical Character Recognition"
+  - "Computer Vision"
+  - "URL analysis"
+id: "c0f44196-e70f-5c8c-9f29-22886756c48b"
+og_id: "4b1c8f25-bf58-5021-bd4f-dfc2baa1c97b"
+testing_pr: 3652
+testing_sha: 3f17098405780f3d1dc0e5ae238f60f05fa88cd8
