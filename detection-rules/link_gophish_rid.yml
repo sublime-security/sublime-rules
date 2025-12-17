@@ -4,6 +4,7 @@ type: "rule"
 severity: "low"
 source: |
   type.inbound
+  and sender.email.domain.root_domain not in $tranco_50k
   // few body links
   and length(body.links) < 20
   // Adding loop of different query param values
@@ -41,6 +42,12 @@ source: |
               and regex.icount(.href_url.query_params, '=[^\=]+(?:&|$)') <= 3
           )
   )
+  // not high trust sender domains
+  and not (
+    sender.email.domain.root_domain in $high_trust_sender_root_domains
+    and headers.auth_summary.dmarc.pass
+  )
+  and not profile.by_sender_email().any_messages_benign
 attack_types:
   - "Credential Phishing"
   - "Malware/Ransomware"
