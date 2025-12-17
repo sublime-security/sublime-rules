@@ -1,0 +1,37 @@
+name: "Service abuse: Google Drive shares with excessive CC recipients and credential theft language"
+description: "Detects messages from legitimate Google Drive sharing addresses that contain credential theft language and either have more than 30 CC recipients from different domains or use undisclosed recipients, indicating potential abuse of Google's trusted sending reputation."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  // using legit google sender
+  and sender.email.email in (
+    'drive-shares-dm-noreply@google.com',
+    'drive-shares-noreply@google.com',
+  )
+  // length of cc'd 
+  and (
+    (
+      length(recipients.cc) > 30
+      and not length(distinct(recipients.cc, .email.domain.root_domain)) == 1
+    ) 
+    or all(recipients.to, .display_name == "Undisclosed recipients")
+  )
+  and any(ml.nlu_classifier(body.current_thread.text).intents,
+          .name == "cred_theft"
+  )
+
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Header analysis"
+  - "Natural Language Understanding"
+  - "Sender analysis"
+id: "5f3d3d74-1b7c-52c8-b333-33e2b323f54f"
+og_id: "19dc6f1c-4c46-5dc5-b2ee-a594e768d79b"
+testing_pr: 3692
+testing_sha: 8beb2ab21e53a54f92829990a17f49821a404dc6
