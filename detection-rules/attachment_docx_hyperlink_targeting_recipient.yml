@@ -5,22 +5,21 @@ severity: "medium"
 source: |
   type.inbound
   and any(filter(attachments, .file_extension in ('docx', 'docm')),
-          any(file.explode(.),
+          any(filter(file.explode(.),
+                     strings.icontains(.scan.strings.raw, '<w:hyperlink')
+              ),
               any(regex.iextract(.scan.strings.raw,
-                                '<w:hyperlink[^\>]*w:anchor="(?P<email_address>[^\"]+)"'
+                                 '<w:hyperlink[^\>]*w:anchor="(?P<email_address>[^\"]+)"'
                   ),
-                  any(filter(recipients.to, .email.domain.valid),
-                      ..named_groups["email_address"] == .email.email
-                      or any(beta.scan_base64(..named_groups["email_address"],
-                                              ignore_padding=true
-                            ),
-                            strings.icontains(., ..email.email)
-                      )
+                  .named_groups["email_address"] == recipients.to[0].email.email
+                  or any(strings.scan_base64(.named_groups["email_address"],
+                                             ignore_padding=true
+                         ),
+                         strings.icontains(., recipients.to[0].email.email)
                   )
               )
           )
   )
-
 attack_types:
   - "Credential Phishing"
   - "Malware/Ransomware"
