@@ -1,0 +1,45 @@
+name: "Service abuse: PayPal with reply-to mismatch and suspicious indicators"
+description: "Detects potential PayPal service abuse where emails claiming to be from PayPal contain suspicious characteristics including reply-to addresses using free email providers, low-numbered invoice tickets, sender display names in subjects, or recipients using onmicrosoft.com domains."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and headers.from.email.domain.domain == "paypal.com"
+  and strings.icontains(subject.subject, "invoice")
+  and (
+    (
+      length(headers.reply_to) > 0
+      and any(headers.reply_to,
+              .email.domain.root_domain in $free_email_providers
+      )
+    )
+    or length(headers.reply_to) == 0
+  )
+  and 2 of (
+  	// Multiple occurences of the display name being in the subject
+    strings.icontains(subject.subject, sender.display_name),
+    // bad actor has been observed using mailing lists
+    any(recipients.to, .email.domain.root_domain == "onmicrosoft.com"),
+    // bad actor has been observed using very low-numbered "tickets" in paypal
+    (regex.icontains(subject.subject, '\((000?[0-9]|001[0-9])\)')),
+    (
+      regex.icontains(body.current_thread.text,
+                      'invoice\s+number\s*[\r\n\s]*(000?[0-9]|001[0-9])'
+      )
+    )
+  )
+
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Free email provider"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Header analysis"
+  - "Sender analysis"
+id: "fdd8a4d1-566d-5a1d-b59f-4b7f2aba15c5"
+og_id: "2455ca0a-f18b-590f-8b0f-d20f16f6adf2"
+testing_pr: 3691
+testing_sha: 287c7ea701048e6b79ca32bf78da761e3c1ac3ba
