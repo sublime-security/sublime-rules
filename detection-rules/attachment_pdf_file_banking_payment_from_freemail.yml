@@ -4,22 +4,61 @@ type: "rule"
 severity: "medium"
 source: |
   type.inbound
-  and sender.email.domain.root_domain in $free_email_providers
-  and length(attachments) == 1
-  and any(filter(attachments,
-          .file_extension == "pdf"),
+  // Has attachment
+  and 0 < length(attachments) < 3
+  // Short message (BEC pattern)
+  and length(body.current_thread.text) < 200
+  // pdf with these keywords
+  and any(filter(attachments, .file_extension == "pdf"),
           any(file.explode(.),
-                  .depth == 1
-                  and (
-                    regex.icontains(.scan.ocr.raw, "payment")
-                    or regex.contains(.scan.ocr.raw, "SWIFT")
-                    or regex.contains(.scan.ocr.raw, "Swift Copy")
-                    or regex.icontains(.scan.ocr.raw, "bank code:")
-                    or regex.icontains(.scan.ocr.raw, "account number:")
-                    or regex.icontains(.scan.ocr.raw, "payment")
-                  )
+              .depth == 1
+              and (
+                regex.icontains(.scan.ocr.raw, "payment")
+                or regex.contains(.scan.ocr.raw, "SWIFT")
+                or regex.contains(.scan.ocr.raw, "Swift Copy")
+                or regex.icontains(.scan.ocr.raw, "bank code:")
+                or regex.icontains(.scan.ocr.raw, "account number:")
+                or regex.icontains(.scan.ocr.raw, "payment")
+              )
           )
   )
+  // Display name or local_part suggests executive/authority
+  and (
+    // Common executive titles
+    regex.icontains(sender.display_name,
+                    '\\b(CEO|CFO|COO|President|Chairman|Director|VP|EVP|SVP)\\b'
+    )
+    // Or looks like: firstname.lastname.company@freemail
+    or regex.count(sender.email.local_part, '\.') == 2
+    // or any defined org brands like: first.last.sublime@freemail
+    or any($org_brand_names, strings.icontains(sender.email.local_part, .))
+    // Or contains common company abbreviations
+    or regex.imatch(sender.email.local_part, '.*\\.(inc|corp|ltd|llc|co)$')
+  )
+  
+  // Financial/transaction language
+  and (
+    regex.icontains(body.current_thread.text,
+                    'transaction|lawyer|wire|transfer|payment|invoice|bank.*account'
+    )
+    or any(ml.nlu_classifier(body.current_thread.text).entities,
+           .name == "financial"
+    )
+  )
+  
+  // Urgency indicators
+  and (
+    any(ml.nlu_classifier(body.current_thread.text).entities, .name == "urgency")
+    or regex.icontains(body.current_thread.text,
+                       'urgent|asap|immediately|today|by.*(?:friday|weekend|eod|end of day)'
+    )
+  )
+  
+  // Free email provider (including Proton)
+  and sender.email.domain.root_domain in $free_email_providers
+  
+  // Unsolicited
+  and not profile.by_sender().solicited
 
 attack_types:
   - "BEC/Fraud"
