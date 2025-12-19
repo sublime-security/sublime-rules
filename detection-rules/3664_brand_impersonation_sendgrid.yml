@@ -20,16 +20,9 @@ source: |
         and (
           sender.display_name is null
           or strings.ilike(strings.replace_confusables(subject.subject),
-                           '*sendgrid*'
+                              '*sendgrid*'
           )
         )
-      )
-      or (
-        // localpart is sendgrid but first time sender
-        strings.ilike(strings.replace_confusables(sender.email.local_part),
-                      '*sendgrid*'
-        )
-        and sender.email.email not in $sender_emails
       )
       or any(ml.logo_detect(file.message_screenshot()).brands,
              .name == "SendGrid" and .confidence == "high"
@@ -118,6 +111,7 @@ source: |
     or any(ml.nlu_classifier(beta.ocr(file.message_screenshot()).text).intents,
            .name == "cred_theft" and .confidence == "high"
     )
+    or any(ml.nlu_classifier(body.current_thread.text).entities, .name == "org" and .text == "SendGrid")
   )
   
   // and the sender is not in org_domains or from sendgrid domains and passes auth
@@ -145,13 +139,7 @@ source: |
     )
     or sender.email.domain.root_domain not in $high_trust_sender_root_domains
   )
-  and (
-    not profile.by_sender().solicited
-    or profile.by_sender().solicited
-    and profile.by_sender().prevalence == "new"
-    and profile.by_sender().days_known == 0
-  )
-
+  and not profile.by_sender().solicited
 
 attack_types:
   - "BEC/Fraud"
@@ -169,4 +157,4 @@ detection_methods:
 id: "d36c3f32-16fe-5ce9-8b7d-ee63c6cdfd21"
 og_id: "d800124f-6aa4-58e1-8fa7-beec4958924f"
 testing_pr: 3664
-testing_sha: ff59d696181b27df7a03522209027af4fd85f461
+testing_sha: 7075c2f353d1d31196960ad93a1186175bdbd78d
