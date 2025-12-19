@@ -1,0 +1,94 @@
+name: "Spam: Free tools and giveaways by brands"
+description: "Detects spam related to free tools and giveaways by multiple different brands."
+type: "rule"
+severity: "low"
+source: |
+  type.inbound
+  and 1 of (
+    (
+      any(html.xpath(body.html, "//div[contains(@style, 'BACKGROUND: URL')]").nodes,
+          .raw is not null
+      )
+    ),
+    (
+      any(html.xpath(body.html, "//a/@href").nodes,
+          any([
+                "blob.core.windows.net",
+                "click.email.formula1.com",
+                "firmy-praha.eu"
+              ],
+              strings.icontains(..raw, .)
+          )
+      )
+    )
+  )
+  and 1 of (
+    (
+      // subject has # plus random characters only
+      regex.icontains(subject.base, "#[a-zA-Z0-9]{5,}?")
+      // plus one of these
+      and 1 of (
+        // display name has a # + random characters only
+        regex.icontains(sender.display_name, "#[a-zA-Z0-9]{5,}?"),
+        // subject starts with a period (yes, both subject cases should be true)
+        strings.starts_with(subject.base, "."),
+        // two emojis in display name
+        regex.icount(sender.display_name,
+                     '[\x{1F300}-\x{1F5FF}\x{1F600}-\x{1F64F}\x{1F680}-\x{1F6FF}\x{1F700}-\x{1F77F}\x{1F780}-\x{1F7FF}\x{1F900}-\x{1F9FF}\x{2600}-\x{26FF}\x{2700}-\x{27BF}\x{2300}-\x{23FF}]'
+        ) == 2
+      )
+    ),
+    (
+      // Subject contains 2 emjois
+      regex.icount(subject.base,
+                   '[\x{1F300}-\x{1F5FF}\x{1F600}-\x{1F64F}\x{1F680}-\x{1F6FF}\x{1F700}-\x{1F77F}\x{1F780}-\x{1F7FF}\x{1F900}-\x{1F9FF}\x{2600}-\x{26FF}\x{2700}-\x{27BF}\x{2300}-\x{23FF}]'
+      ) == 2
+    ),
+    // another variant with different strings that have numbers but the same pattern is in both subject and displayname
+    (
+      // subject has # plus random characters & numbers
+      regex.icontains(subject.base, "#[1-9a-zA-Z]")
+      // plus one of these
+      and 1 of (
+        regex.icontains(sender.display_name, "#[1-9a-zA-Z]")
+        or strings.icontains(sender.display_name, "rewards")
+      )
+    ),
+    (
+      // or promotions in subject
+      strings.icontains(strings.replace_confusables(subject.base), "prornotions")
+      // and rewards in display name
+      and strings.icontains(sender.display_name, "rewards")
+    ),
+    (
+      // subject has * plus 4 random characters and numbers *
+      regex.icontains(subject.base, "[/*][1-9a-zA-Z]{4,}[/*]")
+      // same with the display name
+      and regex.icontains(sender.display_name, "[/*][1-9a-zA-Z]{4,}[/*]")
+    ),
+    (
+      // subject and display name has two *
+      regex.icount(subject.base, "[*?]") == 2
+      and regex.icount(sender.display_name, "[*?]") == 2
+    ),
+    (
+      // subject has random characters and numbers
+      regex.icount(subject.base, "[a-z]+[0-9]+[A-Z]+[0-9]+[a-z]+[0-9]$") == 1
+    )
+  )
+
+attack_types:
+  - "Spam"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Natural Language Understanding"
+  - "HTML analysis"
+  - "Sender analysis"
+  - "URL analysis"
+id: "92d37825-cd7e-56fa-8b83-d3ea5d720593"
+og_id: "8bc49fa3-5fdc-5eca-a9cd-f9f5ecf04a7c"
+testing_pr: 3634
+testing_sha: e7face6f1877d96fe050a3cadecb312eb2732273
