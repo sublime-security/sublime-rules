@@ -25,20 +25,24 @@ source: |
   and 1 of (
     (
       // subject has # plus random characters only
-      regex.icontains(subject.base, "#[a-zA-Z]+")
+      regex.icontains(subject.base, "#[a-zA-Z0-9]{5,}?")
       // plus one of these
       and 1 of (
         // display name has a # + random characters only
-        regex.icontains(sender.display_name, "#[a-zA-Z]+"),
-        // subject starts with a period
+        regex.icontains(sender.display_name, "#[a-zA-Z0-9]{5,}?"),
+        // subject starts with a period (yes, both subject cases should be true)
         strings.starts_with(subject.base, "."),
+        // two emojis in display name
+        regex.icount(sender.display_name,
+                     '[\x{1F300}-\x{1F5FF}\x{1F600}-\x{1F64F}\x{1F680}-\x{1F6FF}\x{1F700}-\x{1F77F}\x{1F780}-\x{1F7FF}\x{1F900}-\x{1F9FF}\x{2600}-\x{26FF}\x{2700}-\x{27BF}\x{2300}-\x{23FF}]'
+        ) == 2
       )
     ),
     (
-        // Subject contains 2 emjois
-        regex.icount(subject.base,
-                       '[\x{1F300}-\x{1F5FF}\x{1F600}-\x{1F64F}\x{1F680}-\x{1F6FF}\x{1F700}-\x{1F77F}\x{1F780}-\x{1F7FF}\x{1F900}-\x{1F9FF}\x{2600}-\x{26FF}\x{2700}-\x{27BF}\x{2300}-\x{23FF}]'
-        ) == 2
+      // Subject contains 2 emjois
+      regex.icount(subject.base,
+                   '[\x{1F300}-\x{1F5FF}\x{1F600}-\x{1F64F}\x{1F680}-\x{1F6FF}\x{1F700}-\x{1F77F}\x{1F780}-\x{1F7FF}\x{1F900}-\x{1F9FF}\x{2600}-\x{26FF}\x{2700}-\x{27BF}\x{2300}-\x{23FF}]'
+      ) == 2
     ),
     // another variant with different strings that have numbers but the same pattern is in both subject and displayname
     (
@@ -49,6 +53,12 @@ source: |
         regex.icontains(sender.display_name, "#[1-9a-zA-Z]")
         or strings.icontains(sender.display_name, "rewards")
       )
+    ),
+    (
+      // or promotions in subject
+      strings.icontains(strings.replace_confusables(subject.base), "prornotions")
+      // and rewards in display name
+      and strings.icontains(sender.display_name, "rewards")
     ),
     (
       // subject has * plus 4 random characters and numbers *
