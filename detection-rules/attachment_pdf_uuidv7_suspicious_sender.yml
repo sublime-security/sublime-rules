@@ -1,0 +1,69 @@
+name: "Attachment: PDF with structured URL paths and social engineering keywords"
+description: "Detects PDF attachments containing URLs with ULID/UUID patterns in /app/ structures combined with social engineering keywords like 'SECURE', 'REVIEW', or 'ACCESS' from suspicious senders. The URLs target non-legitimate file sharing domains and end with action-oriented endpoints."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  
+  // ULID or UUID v7 in path with /app/ structure
+  and any(filter(attachments, .file_extension == "pdf"),
+          any(file.explode(.),
+              any(.scan.url.urls,
+                  // ULID pattern (26 chars)
+                  regex.imatch(.path,
+                               '^/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/app/[\w?a-fA-F0-9-]+/(?:latest|view|access)$'
+                  )
+  
+                  // Contains social engineering keywords in path
+                  and regex.icontains(.path,
+                                      'DOCUMENT|SECURE|REVIEW|SHARED|FILE|VIEW|ACCESS|MESSAGE'
+                  )
+                  // Ends with version/action endpoint
+                  and regex.imatch(.path,
+                                   '.*/(?:latest|current|view|access|open|v[0-9]+)$'
+                  )
+  
+                  // Not legitimate file sharing services
+                  and not .domain.root_domain in $free_file_hosts
+              )
+          )
+  )
+  
+  // Sender reputation checks
+  and (
+    (
+      profile.by_sender().prevalence in ("new", "outlier")
+      and not profile.by_sender().solicited
+    )
+    or (
+      profile.by_sender().any_messages_malicious_or_spam
+      and not profile.by_sender().any_messages_benign
+    )
+    or (
+      // Account compromise indicators
+      sender.email.domain.domain in $org_domains
+      and (length(body.links) <= 3 and length(body.current_thread.text) < 500)
+    )
+  )
+  
+  // Not from highly trusted domains with valid DMARC
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and not headers.auth_summary.dmarc.pass
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+
+attack_types:
+  - "Credential Phishing"
+  - "BEC/Fraud"
+tactics_and_techniques:
+  - "PDF"
+  - "Social engineering"
+  - "Evasion"
+detection_methods:
+  - "Archive analysis"
+  - "File analysis"
+  - "Sender analysis"
+  - "URL analysis"
