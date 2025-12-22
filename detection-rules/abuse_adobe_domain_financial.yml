@@ -1,0 +1,30 @@
+name: "Service abuse: Adobe email domain with financial keywords"
+description: "Message sent to an Adobe email address with legitimate authentication that contains payment-related keywords in the subject, potentially indicating abuse of Adobe's email services for fraudulent purposes."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and any(recipients.to, .email.domain.domain == "email.adobe.com")
+  and (
+    (
+      headers.auth_summary.spf.pass
+      or headers.auth_summary.spf.details.verdict == "none"
+    )
+    and any(distinct(headers.hops, .authentication_results.dkim is not null),
+            strings.ilike(.authentication_results.dkim, "pass")
+    )
+  )
+  and any(["payment", "secure", "authorization"],
+          strings.icontains(subject.base, .)
+  )
+tags:
+  - "Attack surface reduction"
+attack_types:
+  - "BEC/Fraud"
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Social engineering"
+detection_methods:
+  - "Header analysis"
+  - "Content analysis"
+  - "Sender analysis"
