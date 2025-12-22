@@ -69,15 +69,22 @@ source: |
       )
     )
   )
-  and sender.email.domain.root_domain not in~ (
-    'intuit.com',
-    'turbotax.com',
-    'intuit.ca',
-    'meliopayments.com',
-    'qemailserver.com',
-    'intuit.co.uk',
-    'quickbooksonline.com',
-    'tsheets.com'
+  and (
+    sender.email.domain.root_domain not in~ (
+      'intuit.com',
+      'turbotax.com',
+      'intuit.ca',
+      'meliopayments.com',
+      'qemailserver.com',
+      'intuit.co.uk',
+      'quickbooksonline.com',
+      'tsheets.com'
+    )
+    or (
+      not headers.auth_summary.spf.pass
+      or not headers.auth_summary.dmarc.pass
+      or not 'fail' in~ distinct(map(headers.hops, .authentication_results.dkim))
+    )
   )
   and (
     not profile.by_sender().any_messages_benign
