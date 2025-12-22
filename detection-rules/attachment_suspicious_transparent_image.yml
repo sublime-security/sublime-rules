@@ -1,0 +1,28 @@
+name: "Attachment: Suspicious 32x32 pixel transparent image with specific EXIF properties"
+description: "Detects image attachments with a specific file size of 174 bytes and exact EXIF metadata properties including 32-pixel height, 0.001 megapixels, and zero transparency value. These characteristics may indicate malicious tracking pixels or exploitation techniques using crafted image files."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and any(filter(attachments, .size == 174),
+          any(beta.parse_exif(.).fields,
+              (.key == "Transparency" and .value == "0")
+          )
+          and any(beta.parse_exif(.).fields,
+                  (.key == "Megapixels" and .value == "0.001")
+          )
+          and any(beta.parse_exif(.).fields,
+                  (.key == "ImageHeight" and .value == "32")
+          )
+  )
+tags:
+  - "Attack surface reduction"
+attack_types:
+  - "Malware/Ransomware"
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Image as content"
+  - "Evasion"
+detection_methods:
+  - "Exif analysis"
+  - "File analysis"
