@@ -20,7 +20,7 @@ source: |
         and (
           sender.display_name is null
           or strings.ilike(strings.replace_confusables(subject.subject),
-                              '*sendgrid*'
+                           '*sendgrid*'
           )
         )
       )
@@ -84,7 +84,8 @@ source: |
     )
   )
   and (
-    // Content analysis using ML/NLU
+    // UPDATED: Expanded content analysis to catch account warnings
+    // Original ML/NLU checks
     any(ml.nlu_classifier(body.current_thread.text).topics,
         .name in (
           "Security and Authentication",
@@ -111,10 +112,52 @@ source: |
     or any(ml.nlu_classifier(beta.ocr(file.message_screenshot()).text).intents,
            .name == "cred_theft" and .confidence == "high"
     )
-    or any(ml.nlu_classifier(body.current_thread.text).entities, .name == "org" and .text == "SendGrid")
+  
+    // NEW: Account/capacity limit warning patterns
+    or (
+      (
+        strings.icontains(subject.subject, "capacity")
+        or strings.icontains(subject.subject, "limit")
+        or strings.icontains(subject.subject, "quota")
+        or strings.icontains(subject.subject, "usage")
+        or strings.icontains(subject.subject, "threshold")
+      )
+      and (
+        strings.icontains(subject.subject, "reach")
+        or strings.icontains(subject.subject, "exceed")
+        or strings.icontains(subject.subject, "warning")
+        or strings.icontains(subject.subject, "alert")
+        or strings.icontains(subject.subject, "notification")
+      )
+    )
+  
+    // NEW: Body content patterns for account warnings
+    or (
+      2 of (
+        strings.icontains(body.current_thread.text, "capacity"),
+        strings.icontains(body.current_thread.text, "limit"),
+        strings.icontains(body.current_thread.text, "quota"),
+        strings.icontains(body.current_thread.text, "usage"),
+        strings.icontains(body.current_thread.text, "threshold")
+      )
+      and (
+        strings.icontains(body.current_thread.text, "reached")
+        or strings.icontains(body.current_thread.text, "exceeded")
+        or strings.icontains(body.current_thread.text, "warning")
+        or strings.icontains(body.current_thread.text, "upgrade")
+      )
+      and (
+        // Must have urgency + action
+        strings.icontains(body.current_thread.text, "view details")
+        or strings.icontains(body.current_thread.text, "manage")
+        or strings.icontains(body.current_thread.text, "click here")
+        or strings.icontains(body.current_thread.text, "take action")
+        or any(body.links, strings.ilike(.display_text, "*view*"))
+      )
+    )
   )
   
-  // and the sender is not in org_domains or from sendgrid domains and passes auth
+  // Sender is not from actual SendGrid/org domains
   and not (
     sender.email.domain.valid
     and (
@@ -124,14 +167,15 @@ source: |
           "sendgrid.com",
           "sendgrid.net",
           "twilio.com",
-          "swoogo.com", // events planning software used by Twillio
-          "sendsafely.com" // secure delivery used by Twillio
+          "swoogo.com",
+          "sendsafely.com"
         )
       )
     )
     and headers.auth_summary.dmarc.pass
   )
-  // Exclude high trust domains with valid auth and solicited senders
+  
+  // Exclude high trust domains with valid auth
   and (
     (
       sender.email.domain.root_domain in $high_trust_sender_root_domains
