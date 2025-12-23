@@ -4,15 +4,36 @@ description: Reference ips from this article https://help.phriendlyphishing.com/
 type: "query"
 source: |
   type.inbound
-  and headers.auth_summary.spf.details.client_ip.ip in (
-    "54.252.116.154",
-    "54.153.200.195",
-    "52.63.70.98",
-    "52.64.99.134",
-    "35.176.5.2"
-  )
-  and headers.return_path.domain.sld == "phriendlyphishing"
   and 1 of (
+    // Phriendly Phishing ips
+    any(headers.ips,
+        .ip in (
+          "54.153.200.195",
+          "54.252.116.154",
+          "52.63.70.98",
+          "52.64.99.134",
+          "35.176.5.2"
+        )
+    ),
+    // Phriendly Phishing domains
+    sender.email.domain.root_domain in~ (
+      "phriendlyphishing.com",
+      "phishingacademy.com",
+      "phriendlyphishes.com",
+      "phriendlyphishingtraining.com",
+      "phriendlyphishingsupport.com",
+      "phriendlyphishingapp.com"
+    ),
+    // Return-path domain check
+    headers.return_path.domain.root_domain in~ (
+      "phriendlyphishing.com",
+      "phishingacademy.com",
+      "phriendlyphishes.com",
+      "phriendlyphishingtraining.com",
+      "phriendlyphishingsupport.com",
+      "phriendlyphishingapp.com"
+    ),
+    // Phriendly Phishing urls
     length(body.links) >= 1
     and any(body.links,
             .href_url.domain.domain in (
@@ -27,6 +48,7 @@ source: |
               "phriendlyphishingsupport.com"
             )
     ),
+    // Phriendly Phishing urls in attachments
     length(attachments) >= 1
     and any(attachments,
             strings.icontains(file.parse_html(.).raw,
@@ -34,6 +56,7 @@ source: |
             )
     )
   )
+  and headers.return_path.domain.sld == "phriendlyphishing"
 severity: "informational"
 tags:
   - "Headers"
