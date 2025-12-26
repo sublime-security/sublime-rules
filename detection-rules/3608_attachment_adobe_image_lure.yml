@@ -5,9 +5,21 @@ severity: "medium"
 source: |
   type.inbound
   and (
+    // all images
     length(filter(attachments, .file_type not in $file_types_images)) == 0
+    // only pdf attachments
     or length(filter(attachments, .file_type != "pdf")) == 0
-    or length(filter(attachments, .file_type == "pdf")) == 1
+    // pdf and image attachements where images are all embedded into the message body
+    or length(filter(attachments,
+                     .file_type == 'pdf'
+                     or (
+                       .file_type in $file_types_images
+                       and strings.icontains(body.html.raw,
+                                             strings.concat("cid:", .content_id)
+                       )
+                     )
+              )
+    ) == length(attachments)
   )
   and (
     (
@@ -117,4 +129,4 @@ detection_methods:
 id: "f59842e4-64d8-5844-aed5-e3cf5f9895f7"
 og_id: "1d7add81-9822-576a-bcae-c4440e75e393"
 testing_pr: 3608
-testing_sha: c6791b0d66fda377107f1d5d9d4b5231b97953fe
+testing_sha: 97451988d0a707f2ed431b9ec05f0b8ca43179d4
