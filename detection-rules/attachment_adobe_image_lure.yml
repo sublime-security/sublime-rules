@@ -5,9 +5,21 @@ severity: "medium"
 source: |
   type.inbound
   and (
+    // all images
     length(filter(attachments, .file_type not in $file_types_images)) == 0
+    // only pdf attachments
     or length(filter(attachments, .file_type != "pdf")) == 0
-    or length(filter(attachments, .file_type == "pdf")) == 1
+    // pdf and image attachements where images are all embedded into the message body
+    or length(filter(attachments,
+                     .file_type == 'pdf'
+                     or (
+                       .file_type in $file_types_images
+                       and strings.icontains(body.html.raw,
+                                             strings.concat("cid:", .content_id)
+                       )
+                     )
+              )
+    ) == length(attachments)
   )
   and (
     (
