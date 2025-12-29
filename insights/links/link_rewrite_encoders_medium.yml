@@ -4,28 +4,32 @@ description: |
 type: "query"
 source: |
   type.inbound
-  and 1 of (
+  and (
     any(body.links,
-        1 of (
+        (
           // 3 or more encoders but only two distinct ones
           length(.href_url.rewrite.encoders) >= 3
-          and length(distinct(.href_url.rewrite.encoders)) == 2,
+          and length(distinct(.href_url.rewrite.encoders)) == 2
+        )
+        or (
           // 1 to 3 distinct encoders
           1 < length(distinct(.href_url.rewrite.encoders)) < 4
         )
-    ),
-    any(attachments,
-        any(file.explode(.),
-            any(.scan.url.urls,
-                1 of (
-                  // 3 or more encoders but only two distinct ones
-                  length(.rewrite.encoders) >= 3
-                  and length(distinct(.rewrite.encoders)) == 2,
-                  // 1 to 3 distinct encoders
-                  1 < length(distinct(.rewrite.encoders)) < 4
-                )
-            )
-        )
+    )
+    or any(attachments,
+          any(file.explode(.),
+              any(.scan.url.urls,
+                  (
+                    // 3 or more encoders but only two distinct ones
+                    length(.rewrite.encoders) >= 3
+                    and length(distinct(.rewrite.encoders)) == 2
+                  )
+                  or (
+                    // 1 to 3 distinct encoders
+                    1 < length(distinct(.rewrite.encoders)) < 4
+                  )
+              )
+          )
     )
   )
 severity: "medium"
