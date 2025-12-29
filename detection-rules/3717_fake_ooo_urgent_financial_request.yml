@@ -1,0 +1,54 @@
+name: "Out-of-office auto-reply with urgent financial request from free email provider"
+description: "Detects suspicious out-of-office messages from free email providers that contain urgent financial payment requests. These messages combine legitimate auto-reply topics with BEC indicators including urgency, financial terms, and payment processing language to appear trustworthy while requesting financial actions."
+type: "rule"
+severity: "low"
+source: |
+  type.inbound
+  and sender.email.domain.root_domain in~ $free_email_providers
+  and length(body.previous_threads) == 0
+  and length(body.current_thread.text) < 500
+  and not subject.is_reply
+  and not subject.is_forward
+  
+  // Subject line exclusions for legitimate auto-replies
+  and not strings.contains(subject.subject, "Automatic reply:")
+  and not strings.contains(subject.subject, "Auto-Reply")
+  and not strings.contains(subject.subject, "EXT Automatic reply:")
+  
+  // Must be classified as out-of-office topic
+  and any(ml.nlu_classifier(body.current_thread.text).topics,
+          .name == "Out of Office and Automatic Replies"
+  )
+  
+  // Must contain the suspicious combo: urgency + financial + request
+  and length(distinct(filter(ml.nlu_classifier(body.current_thread.text).entities,
+                              .name in ("urgency", "financial", "request")
+                      ),
+                      .name
+              )
+  ) == 3
+  
+  // Specific payment/financial request patterns (the key BEC indicator)
+  and (
+      strings.icontains(body.current_thread.text, "processing an expense payment")
+      or strings.icontains(body.current_thread.text, "handle the payment")
+      or strings.icontains(body.current_thread.text, "process the invoice")
+      or strings.icontains(body.current_thread.text, "expense payment")
+      or strings.icontains(body.current_thread.text, "payment during")
+  )
+
+attack_types:
+  - "BEC/Fraud"
+tactics_and_techniques:
+  - "Free email provider"
+  - "Impersonation: Employee"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Header analysis"
+  - "Natural Language Understanding"
+  - "Sender analysis"
+id: "4182fbde-f254-5d42-ada2-50ee5d2e9b79"
+og_id: "5c9fc8ab-84d7-5bf3-a044-101529ef0d9a"
+testing_pr: 3717
+testing_sha: bc7ca33b2d24d51ff6eb4711a3c5ffbdf1899956
