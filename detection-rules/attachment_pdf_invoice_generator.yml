@@ -1,0 +1,53 @@
+name: "Attachment: PDF with invoice generator default metadata"
+description: "Detects single-page PDF attachments with suspicious metadata characteristics common in invoice scam campaigns, including ReportLab with default titles, OpenPDF with missing creators, or specific LibreOffice Draw versions, sent from free email providers or with missing recipients."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and any(filter(attachments, .file_extension == "pdf"),
+          // single page, nonlinearized PDFs
+          beta.parse_exif(.).page_count == 1
+          and coalesce(beta.parse_exif(.).linearized, "No") == "No"
+          // exclude legit invoice platforms
+          and not strings.icontains(beta.parse_exif(.).producer,
+                                    "OpenPDF 1.0.0-SNAPSHOT"
+          )
+          and (
+            // ReportLab with default "untitled" title
+            (
+              strings.icontains(beta.parse_exif(.).producer, "ReportLab")
+              and beta.parse_exif(.).title == "untitled"
+            )
+            // OpenPDF with empty creator
+            or (
+              strings.icontains(beta.parse_exif(.).producer, "OpenPDF")
+              and coalesce(beta.parse_exif(.).creator, "") == ""
+            )
+            // LibreOffice Draw, specific version seen in invoice scams
+            or (
+              strings.istarts_with(beta.parse_exif(.).producer,
+                                   "LibreOffice 25.8"
+              )
+              and beta.parse_exif(.).creator == "Draw"
+            )
+          )
+  )
+  and (
+    headers.return_path.domain.root_domain in $free_email_providers
+    or any(headers.reply_to, .email.domain.root_domain in $free_email_providers)
+    or length(recipients.to) == 0
+  )
+
+attack_types:
+  - "BEC/Fraud"
+  - "Callback Phishing"
+  - "Credential Phishing"
+  - "Malware/Ransomware"
+tactics_and_techniques:
+  - "Evasion"
+  - "PDF"
+  - "Free email provider"
+detection_methods:
+  - "File analysis"
+  - "Header analysis"
+  - "Sender analysis"
