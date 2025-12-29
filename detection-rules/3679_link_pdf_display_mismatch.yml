@@ -4,39 +4,60 @@ type: "rule"
 severity: "high"
 source: |
   type.inbound
-  
-  // SECTION 1: Core PDF Display Mismatch Pattern (High Confidence Indicator)
+
+  // Core PDF Display Mismatch Pattern (High Confidence Indicator)
   and any(body.links,
-      // Link displays as PDF but points to HTML page
-      strings.ilike(.display_text, "*.pdf")
-      and strings.icontains(.href_url.url, ".html")
-      // Link domain is not reputable  
-      and .href_url.domain.root_domain not in $tranco_1m
-      // Domain completely unrelated to sender's organization
-      and .href_url.domain.root_domain != sender.email.domain.root_domain
+          // Link displays as PDF but points to HTML page
+          strings.ilike(.display_text, "*.pdf")
+          and strings.icontains(.href_url.url, ".html")
+          // Link domain is not reputable  
+          and .href_url.domain.root_domain not in $tranco_1m
+          // Domain completely unrelated to sender's organization
+          and .href_url.domain.root_domain != sender.email.domain.root_domain
   )
   
-  // SECTION 3: Business Document Social Engineering Context
+  // Business Document Social Engineering Context
   and (
     // Look for business proposal/document language
-    strings.ilike(body.html.display_text, 
-                 "*proposal*", "*RFP*", "*selected*", "*document*", 
-                 "*preview*", "*review*", "*architects*", "*invited*")
-    or strings.ilike(subject.subject, 
-                    "*proposal*", "*RFP*", "*document*", "*architects*")
+    strings.ilike(body.html.display_text,
+                  "*proposal*",
+                  "*RFP*",
+                  "*selected*",
+                  "*document*",
+                  "*preview*",
+                  "*review*",
+                  "*architects*",
+                  "*invited*"
+    )
+    or strings.ilike(subject.subject,
+                     "*proposal*",
+                     "*RFP*",
+                     "*document*",
+                     "*architects*"
+    )
   )
   
-  // SECTION 5: False Positive Reduction
+  // Not from organizational domains
   and not (
-    // Not from organizational domains
     sender.email.domain.root_domain in $org_domains
-    // Not from established legitimate senders
-    or profile.by_sender().any_messages_benign
-    // Not legitimate document sharing services
-    or any(body.links,
-           strings.ilike(.display_text, "*.pdf")
-           and .href_url.domain.root_domain in ("dropbox.com", "onedrive.live.com", "drive.google.com")
+    and (
+      coalesce(headers.auth_summary.spf.pass, false)
+      and coalesce(headers.auth_summary.dmarc.pass, false)
+      and not 'fail' in~ distinct(map(headers.hops, .authentication_results.dkim))
     )
+  )
+  
+  // Not from established legitimate senders
+  and not profile.by_sender().any_messages_benign
+  
+  // Not legitimate document sharing services
+  and not any(body.links,
+              strings.ilike(.display_text, "*.pdf")
+              and .href_url.domain.root_domain in (
+                "dropbox.com",
+                "onedrive.live.com",
+                "drive.google.com"
+              )
   )
 attack_types:
   - "Credential Phishing"
@@ -53,4 +74,4 @@ detection_methods:
 id: "813c4820-6d55-5c33-8ee0-86d6de9c042f"
 og_id: "901c1dd0-d557-57cf-b520-a287ad6e8be7"
 testing_pr: 3679
-testing_sha: 785c84065fe639481d5bb817069da2fdfd03af01
+testing_sha: 88c6e1b01730fe57d401ab1ad6191afae3a5728b
