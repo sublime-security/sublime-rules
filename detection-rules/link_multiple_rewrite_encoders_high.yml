@@ -1,39 +1,37 @@
-name: "Link: Many URL rewrite encoders"
-description: "Detects URLs with many encoding patterns, including multiple instances of the same encoder or four or more distinct encoders. These techniques are commonly used to obfuscate malicious URLs and evade security filters."
+name: "Link: Excessive URL rewrite encoders"
+description: "Detects URLs with many (excessive) encoding patterns, including multiple instances of the same encoder or four or more distinct encoders. These techniques are commonly used to obfuscate malicious URLs and evade security filters."
 type: "rule"
 severity: "high"
 source: |
   type.inbound
-  and 1 of (
-    any(filter(body.links,
-               .href_url.domain.root_domain not in $high_trust_sender_root_domains
-               or .href_url.domain.root_domain not in $tranco_10k
-        ),
-        1 of (
+  and (
+    any(body.links,
+        (
           // 3 or more encoders but they are all the same ones
           length(.href_url.rewrite.encoders) >= 3
-          and length(distinct(.href_url.rewrite.encoders)) == 1,
+          and length(distinct(.href_url.rewrite.encoders)) == 1
+        )
+        or (
           // 4 or more encoders but they are all distinct
           length(.href_url.rewrite.encoders) >= 4
-          and length(distinct(.href_url.rewrite.encoders)) >= 4,
+          and length(distinct(.href_url.rewrite.encoders)) >= 4
         )
-    ),
-    any(attachments,
-        any(file.explode(.),
-            any(filter(.scan.url.urls,
-                       .domain.root_domain not in $high_trust_sender_root_domains
-                       or .domain.root_domain not in $tranco_10k
-                ),
-                1 of (
-                  // 3 or more encoders but they are all the same ones
-                  length(.rewrite.encoders) >= 3
-                  and length(distinct(.rewrite.encoders)) == 1,
-                  // 4 or more encoders but they are all distinct
-                  length(.rewrite.encoders) >= 4
-                  and length(distinct(.rewrite.encoders)) >= 4,
-                )
-            )
-        )
+    )
+    or any(attachments,
+          any(file.explode(.),
+              any(.scan.url.urls,
+                  (
+                    // 3 or more encoders but they are all the same ones
+                    length(.rewrite.encoders) >= 3
+                    and length(distinct(.rewrite.encoders)) == 1
+                  )
+                  or (
+                    // 4 or more encoders but they are all distinct
+                    length(.rewrite.encoders) >= 4
+                    and length(distinct(.rewrite.encoders)) >= 4
+                  )
+              )
+          )
     )
   )
 attack_types:
