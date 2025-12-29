@@ -4,34 +4,32 @@ type: "rule"
 severity: "medium"
 source: |
   type.inbound
-  and 1 of (
-    any(filter(body.links,
-               .href_url.domain.root_domain not in $high_trust_sender_root_domains
-               or .href_url.domain.root_domain not in $tranco_10k
-        ),
-        1 of (
+  and (
+    any(body.links,
+        (
           // 3 or more encoders but only two distinct ones
           length(.href_url.rewrite.encoders) >= 3
-          and length(distinct(.href_url.rewrite.encoders)) == 2,
+          and length(distinct(.href_url.rewrite.encoders)) == 2
+        )
+        or (
           // 1 to 3 distinct encoders
           1 < length(distinct(.href_url.rewrite.encoders)) < 4
         )
-    ),
-    any(attachments,
-        any(file.explode(.),
-            any(filter(.scan.url.urls,
-                       .domain.root_domain not in $high_trust_sender_root_domains
-                       or .domain.root_domain not in $tranco_10k
-                ),
-                1 of (
-                  // 3 or more encoders but only two distinct ones
-                  length(.rewrite.encoders) >= 3
-                  and length(distinct(.rewrite.encoders)) == 2,
-                  // 1 to 3 distinct encoders
-                  1 < length(distinct(.rewrite.encoders)) < 4
-                )
-            )
-        )
+    )
+    or any(attachments,
+          any(file.explode(.),
+              any(.scan.url.urls,
+                  (
+                    // 3 or more encoders but only two distinct ones
+                    length(.rewrite.encoders) >= 3
+                    and length(distinct(.rewrite.encoders)) == 2
+                  )
+                  or (
+                    // 1 to 3 distinct encoders
+                    1 < length(distinct(.rewrite.encoders)) < 4
+                  )
+              )
+          )
     )
   )
 attack_types:
@@ -47,4 +45,4 @@ detection_methods:
 id: "29fcb45c-ef7c-5bfe-83bb-d40708605bb8"
 og_id: "a46223fc-9dd2-5d7a-93e1-cf1d8a0232b1"
 testing_pr: 3622
-testing_sha: 2839b4b0a8881f87f184738ce92c841ce9044f03
+testing_sha: 266233c5fdc6e8293f87bd776d0a2a51f66ff58b
