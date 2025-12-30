@@ -5,23 +5,20 @@ severity: "medium"
 source: |
   type.inbound
 
-  // Domain contains hyphens (common in typosquatting)
+  // // Contains security/notification related terms
   and (
-    strings.contains(sender.email.domain.sld, "-")
-    or any(body.links, strings.contains(.href_url.domain.sld, "-"))
-  )
-  
-  // Contains security/notification related terms
-  and regex.icontains(sender.email.domain.domain,
+    regex.icontains(sender.email.domain.domain,
                       '(?:noreply|no-reply|notify|notification|message|secure)'
+    )
+    and strings.icount(sender.email.domain.domain, "-") >= 1
+    and strings.icount(sender.email.domain.sld, "-") >= 1
   )
   
-  // Short domain name (often used in phishing)
+  // // Short domain name (often used in phishing)
   and length(sender.email.domain.sld) < 12
   and sender.email.domain.root_domain not in $high_trust_sender_root_domains
-  and sender.email.domain.root_domain not in $tranco_10k
   
-  and not any(headers.hops, any(.fields, .name == "Feedback-ID"))
+  and any(headers.hops, any(.fields, .name == "From" and strings.istarts_with(.value, "=?utf-8?b?")))
 tags:
   - "Attack surface reduction"
 attack_types:
