@@ -1,0 +1,29 @@
+name: "Headers: ARC-Seal validation failure after initial success"
+description: "Detects messages with ARC-Seal headers showing an initial validation success (cv=none) followed by a validation failure (cv=fail), indicating potential authentication bypass or message tampering."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and any(headers.hops,
+          any(filter(.fields, .name == "ARC-Seal" and .value != ""),
+              strings.starts_with(.value, "i=1")
+              and strings.contains(.value, "cv=none;")
+          )
+  )
+  and any(headers.hops,
+          any(filter(.fields, .name == "ARC-Seal" and .value != ""),
+              regex.match(.value, "i=[2-9];.*?")
+              and strings.contains(.value, "cv=fail;")
+          )
+  )
+tags:
+  - "Attack surface reduction"
+attack_types:
+  - "BEC/Fraud"
+  - "Credential Phishing"
+  - "Malware/Ransomware"
+tactics_and_techniques:
+  - "Evasion"
+  - "Spoofing"
+detection_methods:
+  - "Header analysis"
