@@ -5,15 +5,23 @@ type: "rule"
 severity: "medium"
 source: |
   type.inbound
+  // detect generic greetings
+  and (body.plain.raw is null or length(body.plain.raw) <= 200)
   and length(body.current_thread.text) <= 20
   and length(subject.base) <= 15
   // exclude messages with previous thread context (forwards/replies)
   and length(body.previous_threads) == 0
-  // detect generic greetings
   and (
     any(ml.nlu_classifier(body.current_thread.text).entities, .name == "greeting")
     or strings.ilike(body.current_thread.text, "*hi*", "*hello*", "*hey*")
     or length(body.current_thread.text) <= 5
+    or (
+      regex.match(subject.subject, '^\d+$')
+      or regex.icontains(body.current_thread.text,
+                         '\b[bcdfghjklmnpqrstvwxyz]{3,}\b'
+      )
+      or length(sender.email.local_part) >= 30
+    )
   )
   // external freemail sender
   and sender.email.domain.root_domain in $free_email_providers
