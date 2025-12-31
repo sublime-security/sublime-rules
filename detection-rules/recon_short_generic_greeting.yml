@@ -14,6 +14,10 @@ source: |
     any(ml.nlu_classifier(body.current_thread.text).entities, .name == "greeting")
     or strings.ilike(body.current_thread.text, "*hi*", "*hello*", "*hey*")
     or length(body.current_thread.text) <= 5
+    or regex.icontains(body.current_thread.text,
+                       '\+?([ilo0-9]{1}.)?\(?[ilo0-9]{3}?\)?.[ilo0-9]{3}.?[ilo0-9]{4}',
+                       '\+?([ilo0-9]{1,2})?\s?\(?\d{3}\)?[\s\.\-⋅]{0,5}[ilo0-9]{3}[\s\.\-⋅]{0,5}[ilo0-9]{4}'
+    )
   )
   // external freemail sender
   and sender.email.domain.root_domain in $free_email_providers
@@ -41,25 +45,15 @@ source: |
   // no attachments or links
   and length(attachments) == 0
   and length(body.current_thread.links) == 0
-  // negate sender profiles completely if auth is failing
+  // unknown sender or repeat offender
   and (
     (
-      not (
-        headers.auth_summary.dmarc.pass == false
-        or headers.auth_summary.spf.pass == false
-      )
-      and (
-        not profile.by_sender().solicited
-        or (
-          profile.by_sender().any_messages_malicious_or_spam
-          and not profile.by_sender().any_false_positives
-        )
-      )
-      and not profile.by_sender().any_false_positives
+      profile.by_sender().prevalence in ("new", "outlier")
+      and not profile.by_sender().solicited
     )
     or (
-      headers.auth_summary.dmarc.pass == false
-      or headers.auth_summary.spf.pass == false
+      profile.by_sender().any_messages_malicious_or_spam
+      and not profile.by_sender().any_messages_benign
     )
   )
 
