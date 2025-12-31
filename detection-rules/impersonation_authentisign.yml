@@ -5,7 +5,18 @@ severity: "medium"
 source: |
   type.inbound
   and (
-    strings.icontains(body.current_thread.text, "authentisign")
+    (
+      strings.icontains(body.current_thread.text, "authentisign")
+      and (
+        strings.ilike(body.current_thread.text,
+                      "*signing party*",
+                      "*signing name*"
+        )
+        or regex.icontains(body.current_thread.text,
+                           '\bs[\s\W_]*i[\s\W_]*g[\s\W_]*n\b'
+        )
+      )
+    )
     or strings.ilike(sender.display_name, '*authentisign*')
     or strings.ilevenshtein(sender.display_name, 'authentisign') <= 1
     or strings.ilike(sender.email.domain.domain, '*authentisign*')
@@ -16,6 +27,29 @@ source: |
     or (
       sender.email.domain.root_domain == "authentisign.com"
       and not (headers.auth_summary.spf.pass or headers.auth_summary.dmarc.pass)
+    )
+  )
+  // negate legitimate conversations
+  and not (
+    (
+      strings.istarts_with(subject.subject, "RE:")
+      or strings.istarts_with(subject.subject, "RES:")
+      or strings.istarts_with(subject.subject, "R:")
+      or strings.istarts_with(subject.subject, "ODG:")
+      or strings.istarts_with(subject.subject, "答复:")
+      or strings.istarts_with(subject.subject, "AW:")
+      or strings.istarts_with(subject.subject, "TR:")
+      or strings.istarts_with(subject.subject, "FW:")
+      or strings.istarts_with(subject.subject, "FWD:")
+      or regex.imatch(subject.subject,
+                      '(\[[^\]]+\]\s?){0,3}(re|fwd?|automat.*)\s?:.*'
+      )
+      or subject.is_reply
+      or subject.is_forward
+    )
+    and (
+      length(headers.references) > 0
+      and any(headers.hops, any(.fields, strings.ilike(.name, "In-Reply-To")))
     )
   )
 
