@@ -9,16 +9,26 @@ source: |
     'drive-shares-dm-noreply@google.com',
     'drive-shares-noreply@google.com',
   )
-  // length of cc'd 
+  // length of cc'd recipients is > 30, not all the same, or unidsclosed recipients
   and (
     (
       length(recipients.cc) > 30
       and not length(distinct(recipients.cc, .email.domain.root_domain)) == 1
-    ) 
-    or all(recipients.to, .display_name == "Undisclosed recipients")
+    )
+    or (
+      all(recipients.to, .email.domain.valid == false)
+      and all(recipients.cc, .email.domain.valid == false)
+    )
   )
+  // email contains warning that sender is outside the organization
+  and any(html.xpath(body.html,
+                     '//div[contains(@style, "background: #fef7e0")]//div'
+          ).nodes,
+          strings.icontains(.display_text, "is outside your organization")
+  )
+  // high confidence cred theft
   and any(ml.nlu_classifier(body.current_thread.text).intents,
-          .name == "cred_theft"
+          .name == "cred_theft" and .confidence != "low"
   )
 
 attack_types:
@@ -34,4 +44,4 @@ detection_methods:
 id: "5f3d3d74-1b7c-52c8-b333-33e2b323f54f"
 og_id: "19dc6f1c-4c46-5dc5-b2ee-a594e768d79b"
 testing_pr: 3692
-testing_sha: 8beb2ab21e53a54f92829990a17f49821a404dc6
+testing_sha: d8b643fed19bb7ca3ea1168387d4c68d24f6d5b6
