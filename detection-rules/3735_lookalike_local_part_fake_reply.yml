@@ -1,0 +1,79 @@
+name: "VIP impersonation: Lookalike local part with fake reply thread"
+description: "Detects impersonation of VIP employees using similar local parts (e.g., 'john.doe' vs 'john.d.oe') combined with fake reply thread indicators. The sender uses a subject line starting with 'Re:' but lacks proper threading headers, suggesting an attempt to appear as part of an ongoing conversation."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and any($org_vips,
+          strings.contains(sender.email.local_part, ".")
+          and strings.starts_with(.email, sender.email.local_part)
+          and (
+            sender.email.email != .email
+            or (
+              sender.email.email == .email and not headers.auth_summary.dmarc.pass
+            )
+          )
+  )
+  and (
+    // ignore personal <> work emails
+    // where the sender and mailbox's display name are the same
+    length(recipients.to) > 0
+    or length(recipients.cc) > 0
+    or sender.display_name != mailbox.display_name
+  )
+  // bounce-back negations
+  and not strings.like(sender.email.local_part,
+                       "*postmaster*",
+                       "*mailer-daemon*",
+                       "*administrator*"
+  )
+  // subject contains "Re" but is not a previous thread
+  and (
+    strings.istarts_with(subject.subject, "re:")
+    and (not subject.is_reply or length(body.previous_threads) == 0)
+  )
+  
+  // negate org domains unless they fail DMARC authentication
+  and (
+    (
+      sender.email.domain.root_domain in $org_domains
+      and not headers.auth_summary.dmarc.pass
+    )
+    or sender.email.domain.root_domain not in $org_domains
+  )
+  
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and not headers.auth_summary.dmarc.pass
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+  // sender profile
+  and (
+    not profile.by_sender_email().solicited
+    or not profile.by_sender_email().any_messages_benign
+    or (
+      profile.by_sender_email().any_messages_malicious_or_spam
+      and not profile.by_sender_email().any_messages_benign
+    )
+    or (
+      sender.email.domain.domain in $org_domains
+      and not coalesce(headers.auth_summary.dmarc.pass, false)
+    )
+  )
+
+attack_types:
+  - "BEC/Fraud"
+tactics_and_techniques:
+  - "Impersonation: VIP"
+  - "Social engineering"
+  - "Spoofing"
+detection_methods:
+  - "Header analysis"
+  - "Sender analysis"
+id: "55f6bd01-bff6-5311-85b1-15cd363ee957"
+og_id: "9987543b-d204-533e-96d4-fc8879b7ef3f"
+testing_pr: 3735
+testing_sha: 77b388d2b1b5377676c7a8ab534e505a7c40bc42
