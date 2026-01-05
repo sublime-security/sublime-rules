@@ -45,10 +45,14 @@ source: |
     "visitly.io",
     "rocketmoney.com"
   )
-  // Bypass trust/reputation negations for hosting platforms (always suspicious)
-  // Otherwise apply standard high-trust and top-domain negations
   and (
-    sender.email.domain.root_domain in~ (
+   // not a high trust sender root domain
+    not (
+      sender.email.domain.root_domain not in $high_trust_sender_root_domains
+      and coalesce(headers.auth_summary.dmarc.pass, false)
+    )
+    // or a hosting platforms (always suspicious) which might be in high trust
+    or sender.email.domain.root_domain in~ (
       "firebaseapp.com",
       "web.app",
       "appspot.com",
@@ -59,13 +63,6 @@ source: |
       "cloudflareaccess.com",
       "pages.dev",
       "repl.co"
-    )
-    or (
-      (
-        sender.email.domain.root_domain not in $high_trust_sender_root_domains
-        or not headers.auth_summary.dmarc.pass
-      )
-      and sender.email.domain.root_domain not in $tranco_1m
     )
   )
   // Negate forwarded emails, replies, and legitimate threads
@@ -110,4 +107,4 @@ detection_methods:
 id: "f5f0a18f-bd0f-5b47-b383-7df5e25b73b3"
 og_id: "7a470716-a910-566e-9cb0-7a641c0d4b40"
 testing_pr: 2952
-testing_sha: 9b584da1535f2ea49d9b81f9ccf4c3159e4f76a0
+testing_sha: f6cfaf939237a5b14355a8bcd255f88a7a5b9b42
