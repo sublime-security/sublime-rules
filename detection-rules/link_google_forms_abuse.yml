@@ -9,13 +9,14 @@ source: |
           // avoid invoking Link Analysis if the display-text has strong indications of phishing
           (
             regex.icontains(strings.replace_confusables(.display_text),
-                            'review|proposal|document|efax|restore|\b[o0]pen\b|secure|messaging|reset|account|verify|login|notification|alert|urgent|immediate|access|support|\bupdate\b|download|attachment|service|payment|remittance|invoice'
+                            'review|proposal|document|efax|restore|\b[o0]pen\b|secure|messaging|reset|account|verify|login|notification|alert|urgent|immediate|access|\bupdate\b|download|attachment|service|payment|remittance|invoice'
             )
             // add confidence to these strings by using profile.by_sender()
             and (
               not profile.by_sender().solicited
               and profile.by_sender().prevalence in ('new', 'outlier')
             )
+            // further FP reduction
             and not (
               // negate replies and forwards
               (
@@ -33,24 +34,33 @@ source: |
                   or any(recipients.to, strings.icontains(.display_name, 'list'))
                 )
               )
+              // negate newsletters and graymail
+              or (
+                any(ml.nlu_classifier(body.current_thread.text).topics,
+                    .name in (
+                      "Newsletters and Digests",
+                      "Educational and Research",
+                      "B2B Cold Outreach"
+                    )
+                )
+              )
             )
           )
           or 
-          // invoke Link Analysis to look at the final_dom
+          // analyze the final_dom
           // if the page has been taken down, match
           strings.icontains(ml.link_analysis(., mode="aggressive").final_dom.inner_text,
                             "You can't access this item because it is in violation"
           )
           or 
-          // credential phishing indicators in form fields
+          // credential phishing indicators in shot answer form fields
           any(html.xpath(ml.link_analysis(., mode="aggressive").final_dom,
                          "/html/body/div//form/div[2]/div/div[2]/div"
               ).nodes,
+              strings.iends_with(.inner_text, "Your Answer")
               // match any variation of the word "password" in data-params tags
               // legitimate forms should never ask the user to input credentials, there is a disclaimer to that effect
-              regex.icontains(.raw,
-                              'data-params=\".*(p[a@][s$]{2}(w[o0]rd|\*{1,4})).*\"'
-              )
+              and regex.icontains(strings.replace_confusables(.inner_text), '(p[a@][s$]{2}(w[o0]rd|[\*·]{1,4}))')
           )
   )
 
