@@ -4,31 +4,34 @@ type: "rule"
 severity: "medium"
 source: |
   type.inbound
-  // sender domain in $org_domains
+  // sender domain in $org_domains and fails auth
   and (
     sender.email.domain.domain in $org_domains
-    // fails auth
     and not headers.auth_summary.dmarc.pass
   )
   // from a "no reply" sender
   and regex.icontains(sender.email.local_part,
                       'noreply|no-reply|donotreply|do-not-reply'
   )
-  // cred theft
+  and (
+    // message contains links that don't direct to org domains
+    length(body.links) > 0
+    and not any(body.links, .href_url.domain.domain in $org_domains)
+  )
+  // cred theft intent but exclude legitimate business contexts
   and (
     any(ml.nlu_classifier(body.current_thread.text).intents,
         .name == "cred_theft" and .confidence == "high"
     )
     or (
       length(body.current_thread.text) == 0
-      //
-      // This rule makes use of a beta feature and is subject to change without notice
-      // using the beta feature in custom rules is not suggested until it has been formally released
-      //
       and any(ml.nlu_classifier(beta.ocr(file.message_screenshot()).text).intents,
               .name == "cred_theft" and .confidence == "high"
       )
     )
+  )
+  and any(ml.nlu_classifier(body.current_thread.text).topics,
+          .name == "File Sharing and Cloud Services" and .confidence == "high"
   )
 
 attack_types:
