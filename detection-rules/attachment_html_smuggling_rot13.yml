@@ -14,10 +14,19 @@ source: |
           (
             .file_extension in~ ("html", "htm", "shtml", "dhtml")
             or .file_extension in~ $file_extensions_common_archives
-            or .file_type == "html"
+            or .file_type in~ ("html", "svg")
           )
           and any(file.explode(.),
-                  any(.scan.javascript.identifiers, . in~ ("rot13"))
+                  1 of (
+                      any(.scan.javascript.identifiers,
+                          . in~ ("rot13", "decodeROT13")
+                      ),
+                      any(.scan.strings.strings,
+                        // ROT13 encoded value for https & http
+                        strings.icontains(., "\"uggcf://")
+                        or strings.icontains(., "\"uggc://")
+                      )
+                  )
                   and length(.scan.javascript.identifiers) < 100
           )
   )
