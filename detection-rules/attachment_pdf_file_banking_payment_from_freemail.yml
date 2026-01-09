@@ -1,0 +1,73 @@
+name: "Attachment: PDF with banking and payment references from freemail sender"
+description: "Detects PDF attachments containing banking terminology such as SWIFT codes, account numbers, and payment references from free email providers. These attachments often contain fraudulent payment instructions or fake banking documents used in business email compromise attacks."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  // Has attachment
+  and 0 < length(attachments) < 3
+  // Short message (BEC pattern)
+  and length(body.current_thread.text) < 200
+  // pdf with these keywords
+  and any(filter(attachments, .file_extension == "pdf"),
+          any(file.explode(.),
+              .depth == 1
+              and (
+                regex.icontains(.scan.ocr.raw, "payment")
+                or regex.contains(.scan.ocr.raw, "SWIFT")
+                or regex.contains(.scan.ocr.raw, "Swift Copy")
+                or regex.icontains(.scan.ocr.raw, "bank code:")
+                or regex.icontains(.scan.ocr.raw, "account number:")
+                or regex.icontains(.scan.ocr.raw, "payment")
+              )
+          )
+  )
+  // Display name or local_part suggests executive/authority
+  and (
+    // Common executive titles
+    regex.icontains(sender.display_name,
+                    '\\b(CEO|CFO|COO|President|Chairman|Director|VP|EVP|SVP)\\b'
+    )
+    // Or looks like: firstname.lastname.company@freemail
+    or regex.count(sender.email.local_part, '\.') == 2
+    // or any defined org brands like: first.last.sublime@freemail
+    or any($org_brand_names, strings.icontains(sender.email.local_part, .))
+    // Or contains common company abbreviations
+    or regex.imatch(sender.email.local_part, '.*\\.(inc|corp|ltd|llc|co)$')
+  )
+  
+  // Financial/transaction language
+  and (
+    regex.icontains(body.current_thread.text,
+                    'transaction|lawyer|wire|transfer|bank.*account'
+    )
+    or any(ml.nlu_classifier(body.current_thread.text).topics,
+           .name == "Legal and Compliance" and .confidence == "high"
+    )
+  )
+  
+  // Urgency indicators
+  and (
+    any(ml.nlu_classifier(body.current_thread.text).entities, .name == "urgency")
+    or regex.icontains(body.current_thread.text,
+                       'urgent|asap|immediately|today|by.*(?:friday|weekend|eod|end of day)'
+    )
+  )
+  
+  // Free email provider (including Proton)
+  and sender.email.domain.root_domain in $free_email_providers
+  
+  // Unsolicited
+  and not profile.by_sender().solicited
+
+attack_types:
+  - "BEC/Fraud"
+tactics_and_techniques:
+  - "Free email provider"
+  - "PDF"
+  - "Social engineering"
+detection_methods:
+  - "File analysis"
+  - "Optical Character Recognition"
+  - "Sender analysis"
+id: "3d46be24-a640-515d-bae9-480effa2b5c8"
