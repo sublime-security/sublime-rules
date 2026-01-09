@@ -5,12 +5,16 @@ type: "rule"
 severity: "high"
 source: |
   type.inbound
-
+  
   // exclude bounce backs & read receipts
-  and not strings.like(sender.email.local_part, "*postmaster*", "*mailer-daemon*", "*administrator*")
+  and not strings.like(sender.email.local_part,
+                       "*postmaster*",
+                       "*mailer-daemon*",
+                       "*administrator*"
+  )
   and not regex.imatch(subject.subject, "(undeliverable|read:).*")
   and not any(attachments, .content_type == "message/delivery-status")
-
+  
   // if the "References" is in the body of the message, it's probably a bounce
   and not any(headers.references, strings.contains(body.html.display_text, .))
   and (
@@ -36,7 +40,7 @@ source: |
                          )
                   ) >= 3
                   or (
-
+  
                     // suspicious strings found outside of javascript, but binexplode'd file still of HTML type
                     .flavors.mime in~ ("text/html", "text/plain")
                     and 3 of (
@@ -44,16 +48,20 @@ source: |
                       any(.scan.strings.strings, strings.ilike(., "*login-form*")),
                       any(.scan.strings.strings, strings.ilike(., "*email-form*")),
                       any(.scan.strings.strings,
-                          strings.ilike(., "*Incorrect password. Please try again.*")
+                          strings.ilike(.,
+                                        "*Incorrect password. Please try again.*"
+                          )
                       ),
                       any(.scan.strings.strings,
-                          strings.ilike(., "*Password Incomplete, please try again*")
+                          strings.ilike(.,
+                                        "*Password Incomplete, please try again*"
+                          )
                       )
                     )
                   )
                   or 
-
-                  //Known phishing obfuscation
+  
+                  // Known phishing obfuscation
                   2 of (
                     // Enter password
                     any(.scan.strings.strings,
@@ -69,7 +77,9 @@ source: |
                     ),
                     // Sign in
                     any(.scan.strings.strings,
-                        strings.ilike(., "*&#83;&#105;&#103;&#110;&#32;&#105;&#110*")
+                        strings.ilike(.,
+                                      "*&#83;&#105;&#103;&#110;&#32;&#105;&#110*"
+                        )
                     )
                   )
           )
