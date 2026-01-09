@@ -5,19 +5,20 @@ severity: "medium"
 source: |
   type.inbound
   and sender.email.domain.root_domain not in $tranco_50k
+  and any(html.xpath(body.html, "//table/@class").nodes,
+          strings.count(.raw, "mc-e-") > 3
+  )
   and (
-        any(html.xpath(body.html, "//table/@class").nodes,
-            strings.count(.raw, "mc-e-") > 3
-        )
-        and (
-            strings.count(body.html.raw, "<!-- prevent Gmail on iOS font size manipulation -->") == 1
-      or (
-              strings.count(body.html.raw, "<!--") > 1
-              // If two comments then the last one should be this one
-              // thus we subtract one from the length to get the last comment 
-              and html.xpath(body.html, "//comment()").nodes[length(html.xpath(body.html, "//comment()").nodes) - 1].raw == "<!-- prevent Gmail on iOS font size manipulation -->"
-      )
+    strings.count(body.html.raw,
+                  "<!-- prevent Gmail on iOS font size manipulation -->"
+    ) == 1
+    or (
+      strings.count(body.html.raw, "<!--") > 1
+      // If two comments then the last one should be this one
+      // thus we subtract one from the length to get the last comment 
+      and html.xpath(body.html, "//comment()").nodes[length(html.xpath(body.html, "//comment()").nodes) - 1].raw == "<!-- prevent Gmail on iOS font size manipulation -->"
     )
+  )
   and (
       // If the image source doesn't start with https then flag
         not strings.starts_with(html.xpath(body.html, "//img/@src").nodes[0].raw,
