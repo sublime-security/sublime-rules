@@ -4,55 +4,15 @@ type: "rule"
 severity: "medium"
 source: |
   type.inbound
-  and any($org_vips,
-          (
-            strings.icontains(body.html.display_text,
-                            strings.concat("From: ", .display_name, " <")
-            )
-            and not strings.icontains(body.html.display_text,
-                                      strings.concat("From: ",
-                                                    .display_name,
-                                                    " <",
-                                                    .email,
-                                                    ">"
-                                      )
-            )
-          )
-          or (
-            strings.icontains(body.html.display_text,
-                               strings.concat(.display_name,
-                                              " <",
-                                              .email,
-                                              "> wrote:"
-                               )
-            )
-            and strings.icontains(body.html.display_text,
-                               strings.concat(sender.display_name,
-                                              " <",
-                                              sender.email.email,
-                                              "> wrote:"
-                               )
-            )
-          )
+  and (length(headers.references) > 0 or not headers.in_reply_to is null)
+  // org_vip as recipient in previous thread
+  and any(body.previous_threads,
+          any($org_vips, ..sender.email.email == .email)
   )
-  and any([body.current_thread.text, body.html.display_text, body.plain.raw],
-          3 of (
-            strings.icontains(., "from:"),
-            strings.icontains(., "to:"),
-            strings.icontains(., "sent:"),
-            strings.icontains(., "date:"),
-            strings.icontains(., "cc:"),
-            strings.icontains(., "subject:")
-          )
-          or strings.icontains(.,
-                               strings.concat(sender.display_name,
-                                              " <",
-                                              sender.email.email,
-                                              "> wrote:"
-                               )
-          )
-  )
-  and (length(headers.references) == 0 or headers.in_reply_to is null)
+  // org_vip as sender of previous thread
+  and any(body.previous_threads, any($org_vips, .email == ..sender.email.email))
+  // no longer in the message
+  and not any(recipients.to, any($org_vips, .email == ..email.email))
 
 attack_types:
   - "BEC/Fraud"
