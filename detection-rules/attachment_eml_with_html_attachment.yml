@@ -33,26 +33,13 @@ source: |
   and not any(attachments, .content_type == "message/delivery-status")
   // if the "References" is in the body of the message, it's probably a bounce
   and not any(headers.references, strings.contains(body.html.display_text, .))
-  // unsolicited or fails authentation
-  and (
-    (
-      profile.by_sender_email().prevalence in ("new", "outlier")
-      and not profile.by_sender_email().solicited
-    )
-    or (
-      profile.by_sender_email().any_messages_malicious_or_spam
-      and not profile.by_sender_email().any_messages_benign
-    )
-    or (
-      sender.email.domain.domain in $org_domains
-      and not coalesce(headers.auth_summary.dmarc.pass, false)
-    )
-  )
-  
   // negate highly trusted sender domains unless they fail DMARC authentication
   and (
     (
+      (
       sender.email.domain.root_domain in $high_trust_sender_root_domains
+      or sender.email.domain.root_domain in $org_domains
+      )
       and not coalesce(headers.auth_summary.dmarc.pass, false)
     )
     or sender.email.domain.root_domain not in $high_trust_sender_root_domains
@@ -71,5 +58,4 @@ detection_methods:
   - "File analysis"
   - "Header analysis"
   - "HTML analysis"
-  - "Sender analysis"
 id: "c24fd191-1685-5cb8-83ef-618225401332"
