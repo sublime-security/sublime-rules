@@ -1,0 +1,48 @@
+name: "Brand impersonation: Mimecast"
+description: "Detects messages impersonating Mimecast with malformed HTML structure, including specific DOCTYPE declarations, empty title tags, Mimecast-specific CSS classes, and suspicious logo handling that deviates from legitimate Mimecast messaging patterns."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and sender.email.domain.root_domain not in $tranco_50k
+  and any(html.xpath(body.html, "//table/@class").nodes,
+          strings.count(.raw, "mc-e-") > 3
+  )
+  and (
+    strings.count(body.html.raw,
+                  "<!-- prevent Gmail on iOS font size manipulation -->"
+    ) == 1
+    or (
+      strings.count(body.html.raw, "<!--") > 1
+      // If two comments then the last one should be this one
+      // thus we subtract one from the length to get the last comment 
+      and html.xpath(body.html, "//comment()").nodes[length(html.xpath(body.html, "//comment()").nodes) - 1].raw == "<!-- prevent Gmail on iOS font size manipulation -->"
+    )
+  )
+  and (
+    // If the image source doesn't start with https then flag
+    not strings.starts_with(html.xpath(body.html, "//img/@src").nodes[0].raw,
+                            "https://"
+    )
+    or not (
+      strings.icontains(html.xpath(body.html, "//img/@src").nodes[0].raw,
+                        "mimecast.com/"
+      )
+      or strings.icontains(html.xpath(body.html, "//img/@src").nodes[0].raw,
+                           ".mimecastcybergraph.com/v2/banners"
+      )
+    )
+  )
+
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Evasion"
+detection_methods:
+  - "HTML analysis"
+  - "Content analysis"
+id: "37df73e5-18cf-525c-a57f-ab2ea02e1d5d"
+og_id: "fde1930e-800e-530c-a11a-ffd7fee835e5"
+testing_pr: 3644
+testing_sha: 35ab3595affa568fbe93c148a65822fedcf8653f
