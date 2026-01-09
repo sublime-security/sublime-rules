@@ -9,77 +9,23 @@ source: |
     length(recipients.to) == 1
     and sender.email.email == recipients.to[0].email.email
   )
-  and length(body.current_thread.links) == 1
+  // one link that is not related to the sender via sld (to account for orgs that have multiple tlds)
+  and length(distinct(filter(body.current_thread.links,
+                             .href_url.domain.sld != sender.email.domain.sld
+                      ),
+                      .href_url.domain.sld
+             )
+  ) == 1
+  // the link ...
   and any(body.current_thread.links,
+          // display text is contained in the subject
           strings.icontains(.display_text, subject.base)
+          // path has sender elements in 
           and (
             strings.icontains(.href_url.path, sender.email.local_part)
             or strings.icontains(.href_url.path, sender.email.domain.sld)
           )
-          and (
-            .href_url.domain.tld == "ru"
-            or .href_url.domain.root_domain not in $tranco_1m
-            or .href_url.domain.domain in $free_file_hosts
-            or .href_url.domain.root_domain in $free_file_hosts
-            or .href_url.domain.root_domain in $free_subdomain_hosts
-            or .href_url.domain.domain in $url_shorteners
-            or .href_url.domain.domain in $social_landing_hosts
-            // account for URL rewrites
-            or (
-              any(.href_url.query_params_decoded["domain"],
-                  strings.parse_domain(.).tld == "ru"
-                  or strings.parse_domain(.).root_domain not in~ $tranco_1m
-                  or strings.parse_domain(.).domain in~ $free_file_hosts
-                  or strings.parse_domain(.).root_domain in~ $free_file_hosts
-                  or strings.parse_domain(.).root_domain in~ $free_subdomain_hosts
-                  or strings.parse_domain(.).domain in~ $url_shorteners
-                  or strings.parse_domain(.).domain in~ $social_landing_hosts
-              )
-            )
-            or 
-  
-            // mass mailer link, masks the actual URL
-            .href_url.domain.root_domain in (
-              "hubspotlinks.com",
-              "mandrillapp.com",
-              "sendgrid.net",
-              "rs6.net"
-            )
-  
-            // Google AMP redirect
-            or (
-              .href_url.domain.sld == "google"
-              and strings.starts_with(.href_url.path, "/amp/")
-            )
-  
-            // Recipient email address in link
-            or any(body.links,
-                   any(recipients.to,
-                       strings.icontains(..href_url.url, .email.email)
-                       and any(recipients.to, .email.domain.valid)
-                   )
-            )
-            or .href_url.domain.root_domain == "beehiiv.com"
-          )
-  
-          // exclude sources of potential FPs
-          and (
-            .href_url.domain.root_domain not in (
-              "svc.ms",
-              "sharepoint.com",
-              "1drv.ms",
-              "microsoft.com",
-              "aka.ms",
-              "msftauthimages.net",
-              "office.com",
-              "microsoftproject.com"
-            )
-            or any(body.links, .href_url.domain.domain in $free_file_hosts)
-          )
-          and .href_url.domain.root_domain not in $org_domains
-          and .href_url.domain.valid
-  ) 
-
+  )
 attack_types:
   - "Credential Phishing"
   - "BEC/Fraud"
