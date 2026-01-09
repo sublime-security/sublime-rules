@@ -42,7 +42,13 @@ source: |
     )
     or headers.return_path.domain.domain is null
   )
-  and (length(headers.references) == 0 or headers.in_reply_to is null)
+  // not mimecast secure message from internal source
+  and not (
+    strings.istarts_with(headers.message_id, '<Mimecast.')
+    and strings.iends_with(headers.message_id, '.mimecast.lan>')
+    and headers.hops[0].received.server.raw == "relay.mimecast.com"
+    and strings.icontains(headers.hops[0].received.source.raw, 'mimecast.lan')
+  )
   
   // and not solicited
   and not profile.by_sender().solicited
