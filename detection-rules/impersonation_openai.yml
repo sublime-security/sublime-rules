@@ -3,105 +3,102 @@ description: "Detects messages impersonating OpenAI through display name spoofin
 type: "rule"
 severity: "medium"
 source: |
-    type.inbound
-    and (
-      // Brand impersonation indicators
-      strings.icontains(sender.display_name, "openai")
-      or strings.icontains(sender.display_name, "chatgpt")
-      or any(ml.logo_detect(file.message_screenshot()).brands,
-             .name == "OpenAI" and .confidence not in ("low")
-      )
-      or strings.ilike(strings.replace_confusables(sender.display_name), '*openai*')
-      or strings.ilike(strings.replace_confusables(sender.display_name), '*chatgpt*')
-      or strings.ilevenshtein(strings.replace_confusables(sender.display_name), 'openai') <= 1
-      or strings.ilevenshtein(strings.replace_confusables(sender.display_name), 'chatgpt') <= 1
-      // OpenAI copyright footer
-      or (
-        strings.icontains(body.current_thread.text, '© 2025 OpenAI, L.L.C.')
-        and (
-          strings.icontains(body.current_thread.text, '3180 18th Street')
-          and strings.icontains(body.current_thread.text, 'San Francisco')
-          and strings.icontains(body.current_thread.text, 'CA 94110')
-  
-        )
-      )
-      // Typosquatting domains in links
-      or any(body.links,
-             0 < strings.ilevenshtein(.display_url.domain.root_domain, "openai.com") < 3
-             and .href_url.domain.root_domain != "openai.com"
-      )
-      or any(body.links,
-             0 < strings.ilevenshtein(.display_url.domain.root_domain, "chatgpt.com") < 3
-             and .href_url.domain.root_domain != "chatgpt.com"
+   type.inbound
+  and (
+    // Brand impersonation indicators
+    strings.icontains(sender.display_name, "openai")
+    or strings.icontains(sender.display_name, "chatgpt")
+    or any(ml.logo_detect(file.message_screenshot()).brands,
+           .name == "OpenAI" and .confidence not in ("low")
+    )
+    or strings.ilike(strings.replace_confusables(sender.display_name), '*openai*')
+    or strings.ilike(strings.replace_confusables(sender.display_name), '*chatgpt*')
+    or strings.ilevenshtein(strings.replace_confusables(sender.display_name), 'openai') <= 1
+    or strings.ilevenshtein(strings.replace_confusables(sender.display_name), 'chatgpt') <= 1
+    // OpenAI copyright footer
+    or (
+      strings.icontains(body.current_thread.text, '© 2025 OpenAI, L.L.C.')
+      and (
+        strings.icontains(body.current_thread.text, '3180 18th Street')
+        and strings.icontains(body.current_thread.text, 'San Francisco')
+        and strings.icontains(body.current_thread.text, 'CA 94110')
       )
     )
-    // Exclude observed legit domains
-    and sender.email.domain.root_domain not in~ (
-      "openai.com",
-      "chatgpt.com",
-      "andopen.co",
-      "openli.com",
-      "discoursemail.com",
-      "crunchbase.com",
-      "safebase.co",
-      "lucid.co",
-      "astronomer.io",
-      "visitly.io",
-      "rocketmoney.com"
-      )
-        and headers.auth_summary.dmarc.pass
-      )
-      // Exclude legitimate Apple App Store receipts for ChatGPT purchases
-      and not (
-        sender.email.domain.domain == "email.apple.com"
-        and sender.email.email == "no_reply@email.apple.com"
-        and headers.auth_summary.dmarc.pass
-      )
-    and (
-     // not a high trust sender root domain
-      not (
-        sender.email.domain.root_domain not in $high_trust_sender_root_domains
-        and coalesce(headers.auth_summary.dmarc.pass, false)
-      )
-      // or a hosting platforms (always suspicious) which might be in high trust
-      or sender.email.domain.root_domain in~ (
-        "firebaseapp.com",
-        "web.app",
-        "appspot.com",
-        "herokuapp.com",
-        "vercel.app",
-        "netlify.app",
-        "github.io",
-        "cloudflareaccess.com",
-        "pages.dev",
-        "repl.co"
-      )
+    // Typosquatting domains in links
+    or any(body.links,
+           0 < strings.ilevenshtein(.display_url.domain.root_domain, "openai.com") < 3
+           and .href_url.domain.root_domain != "openai.com"
     )
-    // Negate forwarded emails, replies, and legitimate threads
-    and not subject.is_forward
-    and not subject.is_reply
-    and length(body.previous_threads) == 0
-    // Exclude legitimate content types
-    and (
-      not any(ml.nlu_classifier(body.current_thread.text).topics,
-              .name in (
-                "Newsletters and Digests",
-                "Advertising and Promotions",
-                "Educational and Research",
-                "B2B Cold Outreach",
-                "Health and Wellness",
-                "Professional and Career Development",
-                "Romance",
-                "Sexually Explicit Messages",
-                "Acts of Violence",
-                "Voicemail Call and Missed Call Notifications",
-                "News and Current Events",
-                "Secure Message",
-                "Legal and Compliance"
-              )
-              and .confidence == "high"
-      )
+    or any(body.links,
+           0 < strings.ilevenshtein(.display_url.domain.root_domain, "chatgpt.com") < 3
+           and .href_url.domain.root_domain != "chatgpt.com"
     )
+  )
+  // Exclude observed legit domains
+  and sender.email.domain.root_domain not in~ (
+    "openai.com",
+    "chatgpt.com",
+    "andopen.co",
+    "openli.com",
+    "discoursemail.com",
+    "crunchbase.com",
+    "safebase.co",
+    "lucid.co",
+    "astronomer.io",
+    "visitly.io",
+    "rocketmoney.com"
+  )
+  // Exclude legitimate Apple App Store receipts for ChatGPT purchases
+  and not (
+    sender.email.domain.domain == "email.apple.com"
+    and sender.email.email == "no_reply@email.apple.com"
+    and headers.auth_summary.dmarc.pass
+  )
+  and (
+    // not a high trust sender root domain
+    not (
+      sender.email.domain.root_domain not in $high_trust_sender_root_domains
+      and coalesce(headers.auth_summary.dmarc.pass, false)
+    )
+    // or a hosting platforms (always suspicious) which might be in high trust
+    or sender.email.domain.root_domain in~ (
+      "firebaseapp.com",
+      "web.app",
+      "appspot.com",
+      "herokuapp.com",
+      "vercel.app",
+      "netlify.app",
+      "github.io",
+      "cloudflareaccess.com",
+      "pages.dev",
+      "repl.co"
+    )
+  )
+  // Negate forwarded emails, replies, and legitimate threads
+  and not subject.is_forward
+  and not subject.is_reply
+  and length(body.previous_threads) == 0
+  // Exclude legitimate content types
+  and (
+    not any(ml.nlu_classifier(body.current_thread.text).topics,
+            .name in (
+              "Newsletters and Digests",
+              "Advertising and Promotions",
+              "Educational and Research",
+              "B2B Cold Outreach",
+              "Health and Wellness",
+              "Professional and Career Development",
+              "Romance",
+              "Sexually Explicit Messages",
+              "Acts of Violence",
+              "Voicemail Call and Missed Call Notifications",
+              "News and Current Events",
+              "Secure Message",
+              "Legal and Compliance"
+            )
+            and .confidence == "high"
+    )
+  )
 attack_types:
   - "BEC/Fraud"
   - "Callback Phishing"
