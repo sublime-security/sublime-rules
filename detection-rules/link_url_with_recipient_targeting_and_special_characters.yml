@@ -7,33 +7,25 @@ source: |
   and length(recipients.to) == 1
   and recipients.to[0].email.domain.valid
   and any(body.current_thread.links,
-          // special char in the path
-          (
-            strings.icontains(.href_url.path, '!')
-            or strings.icontains(.href_url.path, '@')
-          )
           // a single path
-          and strings.count(.href_url.path, '/') == 2
+          strings.count(.href_url.path, '/') == 2
+          // special chars
           and (
             strings.icontains(.href_url.path, '/$')
             or strings.icontains(.href_url.path, '/*')
+            or strings.icontains(.href_url.url, '/#')
           )
+          // recipient email in url or path
           and (
-            (
-              strings.icontains(.href_url.path, recipients.to[0].email.email)
-              or strings.icontains(.href_url.fragment,
-                                   recipients.to[0].email.email
-              )
-              or any(strings.scan_base64(.href_url.path, ignore_padding=true),
-                     strings.icontains(., recipients.to[0].email.email)
-              )
-              or any(strings.scan_base64(.href_url.fragment, ignore_padding=true),
-                     strings.icontains(., recipients.to[0].email.email)
-              )
+            strings.icontains(.href_url.path, recipients.to[0].email.email)
+            or any(strings.scan_base64(.href_url.url,
+                                       ignore_padding=true,
+                                       format="url"
+                   ),
+                   strings.icontains(., recipients.to[0].email.email)
             )
           )
   )
-
 attack_types:
   - "Credential Phishing"
 tactics_and_techniques:
