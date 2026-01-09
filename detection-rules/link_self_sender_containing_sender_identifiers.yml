@@ -7,24 +7,27 @@ source: |
   // self sender
   and (
     length(recipients.to) == 1
+    and length(recipients.cc) == 0
+    and length(recipients.bcc) == 0
     and sender.email.email == recipients.to[0].email.email
   )
-  // one link that is not related to the sender via sld (to account for orgs that have multiple tlds)
-  and length(distinct(filter(body.current_thread.links,
-                             .href_url.domain.sld != sender.email.domain.sld
-                      ),
-                      .href_url.domain.sld
-             )
-  ) == 1
-  // the link ...
-  and any(body.current_thread.links,
-          // display text is contained in the subject
-          strings.icontains(.display_text, subject.base)
-          // path has sender elements in 
-          and (
-            strings.icontains(.href_url.path, sender.email.local_part)
-            or strings.icontains(.href_url.path, sender.email.domain.sld)
-          )
+  // first link is not related to the sender via sld (to account for orgs that have multiple tlds)
+  and (
+    body.current_thread.links[0].href_url.domain.sld != sender.email.domain.sld
+    and body.current_thread.links[0].href_url.domain.domain != 'aka.ms'
+  )
+
+  and 
+  // display text is contained in the subject
+  strings.icontains(body.current_thread.links[0].display_text, subject.base)
+  // path has sender elements in 
+  and (
+    strings.icontains(body.current_thread.links[0].href_url.path,
+                      sender.email.local_part
+    )
+    or strings.icontains(body.current_thread.links[0].href_url.path,
+                        sender.email.domain.sld
+    )
   )
 attack_types:
   - "Credential Phishing"
