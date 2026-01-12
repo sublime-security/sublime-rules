@@ -68,6 +68,8 @@ ADD_TEST_RULES_LABEL = os.getenv('ADD_TEST_RULES_LABEL', 'false').lower() == 'tr
 IN_TEST_RULES_LABEL = os.getenv('IN_TEST_RULES_LABEL', 'in-test-rules')
 # label to apply to PRs that are excluded due to author membership
 AUTHOR_MEMBERSHIP_EXCLUSION_LABEL = os.getenv('AUTHOR_MEMBERSHIP_EXCLUSION_LABEL', 'test-rules:excluded:author_membership')
+# label to apply to PRs that are manually excluded (by removing in-test-rules label)
+MANUAL_EXCLUSION_LABEL = os.getenv('MANUAL_EXCLUSION_LABEL', 'test-rules:excluded:manual')
 
 # flag to skip files containing specific text patterns
 # this is due to test-rules not supporting specific functions
@@ -570,6 +572,23 @@ def save_file(path, content):
         file.write(content)
 
 
+def pr_has_synced_files(pr_number):
+    """
+    Check if a PR has any synced files in the output folder.
+
+    Args:
+        pr_number (int): Pull request number
+
+    Returns:
+        bool: True if files exist for this PR, False otherwise
+    """
+    prefix = f"{pr_number}_"
+    for filename in os.listdir(OUTPUT_FOLDER):
+        if filename.startswith(prefix) and filename.endswith('.yml'):
+            return True
+    return False
+
+
 def clean_output_folder(valid_files):
     for filename in os.listdir(OUTPUT_FOLDER):
         file_path = os.path.join(OUTPUT_FOLDER, filename)
@@ -829,14 +848,34 @@ def handle_pr_rules(mode):
 
     for pr in pull_requests:
         # Common checks for all modes
+        # Draft PRs are skipped unless user explicitly added the in-test-rules label
         if pr['draft']:
-            print(f"Skipping draft PR #{pr['number']}: {pr['title']}")
-            continue
+            if ADD_TEST_RULES_LABEL and has_label(pr['number'], IN_TEST_RULES_LABEL):
+                print(f"Processing draft PR #{pr['number']} (has '{IN_TEST_RULES_LABEL}' label): {pr['title']}")
+            else:
+                print(f"Skipping draft PR #{pr['number']}: {pr['title']}")
+                continue
         if pr['base']['ref'] != 'main':
             print(f"Skipping non-main branch PR #{pr['number']}: {pr['title']} -- dest branch: {pr['base']['ref']}")
             continue
 
         pr_number = pr['number']
+
+        # Check for manual exclusion label (user opted out of test-rules)
+        if ADD_TEST_RULES_LABEL and has_label(pr_number, MANUAL_EXCLUSION_LABEL):
+            print(f"Skipping manually excluded PR #{pr_number}: {pr['title']}")
+            # Remove in-test-rules label if both are present (manual exclusion takes precedence)
+            if has_label(pr_number, IN_TEST_RULES_LABEL):
+                print(f"\tRemoving '{IN_TEST_RULES_LABEL}' label since manual exclusion takes precedence")
+                remove_label(pr_number, IN_TEST_RULES_LABEL)
+            continue
+
+        # Check if user removed the in-test-rules label (opt-out)
+        # If PR has synced files but no in-test-rules label, user must have removed it
+        if ADD_TEST_RULES_LABEL and pr_has_synced_files(pr_number) and not has_label(pr_number, IN_TEST_RULES_LABEL):
+            print(f"PR #{pr_number} has synced files but '{IN_TEST_RULES_LABEL}' label was removed - applying manual exclusion")
+            apply_label(pr_number, MANUAL_EXCLUSION_LABEL)
+            continue
 
         # Organization membership and comment trigger checks (for any mode if flags are set)
         process_pr = True
@@ -847,6 +886,10 @@ def handle_pr_rules(mode):
             has_comment = False
             if author_in_org:
                 print(f"\tPR #{pr['number']}: Author {pr['user']['login']} is in {ORG_NAME}")
+                # remove the label if it's present
+                if not has_label(pr_number, AUTHOR_MEMBERSHIP_EXCLUSION_LABEL):
+                    remove_label(pr_number, AUTHOR_MEMBERSHIP_EXCLUSION_LABEL)
+
             # only invoke has_trigger_comment when author_in_org is false
             if INCLUDE_PRS_WITH_COMMENT and not author_in_org:
                 has_comment = has_trigger_comment(pr['number'], ORG_NAME, COMMENT_TRIGGER)
@@ -863,7 +906,11 @@ def handle_pr_rules(mode):
                     if not has_label(pr_number, AUTHOR_MEMBERSHIP_EXCLUSION_LABEL):
                         print(f"\tPR #{pr_number} doesn't have the '{AUTHOR_MEMBERSHIP_EXCLUSION_LABEL}' label. Applying...")
                         apply_label(pr_number, AUTHOR_MEMBERSHIP_EXCLUSION_LABEL)
-                    
+
+                    # Remove in-test-rules label if previously applied
+                    if ADD_TEST_RULES_LABEL and has_label(pr_number, IN_TEST_RULES_LABEL):
+                        remove_label(pr_number, IN_TEST_RULES_LABEL)
+
                     process_pr = False
 
         if not process_pr:
@@ -878,6 +925,9 @@ def handle_pr_rules(mode):
             if not has_required_action_completed(latest_sha, REQUIRED_CHECK_NAME, REQUIRED_CHECK_CONCLUSION):
                 print(
                     f"\tSkipping PR #{pr_number}: Required check '{REQUIRED_CHECK_NAME}' has not completed with conclusion '{REQUIRED_CHECK_CONCLUSION}'")
+                # Remove in-test-rules label if previously applied
+                if ADD_TEST_RULES_LABEL and has_label(pr_number, IN_TEST_RULES_LABEL):
+                    remove_label(pr_number, IN_TEST_RULES_LABEL)
                 continue
 
         files = get_files_for_pull_request(pr_number)
@@ -887,13 +937,21 @@ def handle_pr_rules(mode):
             yaml_rule_count = count_yaml_rules_in_pr(files)
             if yaml_rule_count > MAX_RULES_PER_PR:
                 print(f"\tSkipping PR #{pr_number}: Contains {yaml_rule_count} YAML rules (max allowed: {MAX_RULES_PER_PR})")
-                
+
                 # Apply label to indicate PR was skipped due to too many rules
                 if not has_label(pr_number, BULK_PR_LABEL):
                     print(f"\tPR #{pr_number} doesn't have the '{BULK_PR_LABEL}' label. Applying...")
                     apply_label(pr_number, BULK_PR_LABEL)
-                
+
+                # Remove in-test-rules label if previously applied
+                if ADD_TEST_RULES_LABEL and has_label(pr_number, IN_TEST_RULES_LABEL):
+                    remove_label(pr_number, IN_TEST_RULES_LABEL)
+
                 continue
+            else:
+                # if it has the label, remove it.
+                if has_label(pr_number, BULK_PR_LABEL):
+                    remove_label(pr_number, BULK_PR_LABEL)
 
         # Process files in the PR
         for file in files:
@@ -931,6 +989,10 @@ def handle_pr_rules(mode):
                                 print(f"\tPR #{pr_number} doesn't have the '{label}' label. Applying...")
                                 apply_label(pr_number, label)
 
+                        # remove the IN_TEST_RULES_LABEL label as it's no longer in test-rules
+                        if has_label(pr_number, IN_TEST_RULES_LABEL):
+                            remove_label(pr_number, IN_TEST_RULES_LABEL)
+                        # skip this file and process the next one
                         continue
 
                 # Process file (common for both modes)
