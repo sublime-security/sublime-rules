@@ -23,12 +23,13 @@ source: |
                 strings.icontains(., "subject:")
               )
       )
-      and (
-        length(body.current_thread.text) + 100 < length(body.html.display_text)
+      and length(body.current_thread.text) + 100 < length(coalesce(body.html.display_text,
+                                                                   body.plain.raw
+                                                          )
       )
     )
   )
-
+  
   // negating bouncebacks
   and not any(attachments,
               .content_type in ("message/delivery-status", "message/rfc822")
@@ -41,10 +42,12 @@ source: |
     )
     or headers.return_path.domain.domain is null
   )
-  
-  and (
-    length(headers.references) == 0 
-    or headers.in_reply_to is null
+  // not mimecast secure message from internal source
+  and not (
+    strings.istarts_with(headers.message_id, '<Mimecast.')
+    and strings.iends_with(headers.message_id, '.mimecast.lan>')
+    and headers.hops[0].received.server.raw == "relay.mimecast.com"
+    and strings.icontains(headers.hops[0].received.source.raw, 'mimecast.lan')
   )
   
   // and not solicited
@@ -87,7 +90,7 @@ source: |
   
     // link display text is in all caps
     any(body.links, regex.match(.display_text, '[A-Z ]+')),
-
+  
     // link display text contains invisible characters (U+200F)
     any(body.links, strings.contains(.display_text, "\u{200F}")),
   
@@ -102,7 +105,7 @@ source: |
           or strings.ends_with(.display_text, 'pdf')
         )
     ),
-
+  
     // display name contains an email
     regex.contains(sender.display_name, '[a-z0-9]+@[a-z]+'),
   
@@ -157,7 +160,6 @@ source: |
     or sender.email.domain.root_domain not in $high_trust_sender_root_domains
   )
   and not profile.by_sender().any_messages_benign
-
 tags:
   - "Attack surface reduction"
 attack_types:
