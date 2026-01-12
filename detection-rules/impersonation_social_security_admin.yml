@@ -4,7 +4,7 @@ type: "rule"
 severity: "medium"
 source: |
   type.inbound
-  
+  and length(attachments) < 2
   // Identifies as SSA without catching strings such as "Alyssa"
   and (
     regex.contains(sender.display_name, '^SSA\b')
@@ -35,9 +35,24 @@ source: |
              )
            )
     )
+    or any(html.xpath(body.html, '//title').nodes,
+           (
+             strings.icontains(.inner_text, 'Social Security')
+             and (
+               strings.icontains(.inner_text, 'Statement')
+               or strings.icontains(.inner_text, 'Notification')
+               or strings.icontains(.inner_text, 'Document')
+               or strings.icontains(.inner_text, 'Message')
+               or strings.icontains(.inner_text, 'Important Update')
+               or strings.icontains(.inner_text, 'Benefit Amount')
+               or strings.icontains(.inner_text, 'Account')
+               or strings.icontains(.inner_text, 'Authorization')
+             )
+           )
+           or .inner_text =~ "Social Security Administration"
+           or .inner_text =~ "Social Security"
+    )
   )
-  // Contains a link
-  and length(body.links) >= 1
   
   // Not from a .gov domain
   and not (sender.email.domain.tld == "gov" and headers.auth_summary.dmarc.pass)
@@ -63,6 +78,21 @@ source: |
     or any(ml.logo_detect(file.message_screenshot()).brands,
            .name == "SSA" and .confidence == "high"
     )
+    or (
+      any(attachments,
+          .file_type in ("doc", "docx")
+          and any(file.explode(.),
+                  strings.icontains(.scan.strings.raw, "suspended")
+                  or strings.icontains(.scan.strings.raw, "fraudulent")
+                  or strings.icontains(.scan.strings.raw, "violated")
+                  or strings.icontains(.scan.strings.raw, "false identity")
+                  or regex.icontains(.scan.strings.raw,
+                                     '\+?([ilo0-9]{1}.)?\(?[ilo0-9]{3}?\)?.[ilo0-9]{3}.?[ilo0-9]{4}',
+                                     '\+?([ilo0-9]{1,2})?\s?\(?\d{3}\)?[\s\.\-⋅]{0,5}[ilo0-9]{3}[\s\.\-⋅]{0,5}[ilo0-9]{4}'
+                  )
+          )
+      )
+    )
   )
   and not any(ml.nlu_classifier(body.current_thread.text).topics,
               .name in (
@@ -85,7 +115,6 @@ source: |
     sender.email.domain.root_domain in $high_trust_sender_root_domains
     and coalesce(headers.auth_summary.dmarc.pass, false)
   )
-
 attack_types:
   - "BEC/Fraud"
   - "Credential Phishing"
