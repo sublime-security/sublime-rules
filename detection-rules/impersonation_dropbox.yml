@@ -18,7 +18,8 @@ source: |
            )
     )
     or regex.icontains(body.current_thread.text,
-                       'invited you to view the file ".*" on Dropbox'
+                       'invited you to view the file ".*" on Dropbox',
+                       'dr[o0]pb[o0]x.{0,20}share.{0,20}f[i1|][i1|l]es?'
     )
   )
   and sender.email.domain.root_domain not in~ (
@@ -32,16 +33,24 @@ source: |
         and any(file.explode(.), strings.ilike(.scan.ocr.raw, "*dropbox*"))
     )
     or any(body.links,
-           strings.ilike(.display_text,
-                         "*review*",
-                         "*sign*",
-                         "*view*",
-                         "*completed document*",
-                         "*open agreement*",
-                         "*open document*",
-                         "*open file*"
+           (
+             (
+               strings.ilike(.display_text,
+                             "*review*",
+                             "*sign*",
+                             "*view*",
+                             "*completed document*",
+                             "*open agreement*",
+                             "*open document*",
+                             "*open file*"
+               )
+               and not strings.ilike(.display_text, "*view this email in*")
+             )
+             or (
+               .display_text is null
+               and .href_url.domain.root_domain in $free_file_hosts
+             )
            )
-           and not strings.ilike(.display_text, "*view this email in*")
            and .href_url.domain.root_domain != "dropbox.com"
            and any(ml.nlu_classifier(body.current_thread.text).intents,
                    .name == "cred_theft" and .confidence in ("medium", "high")
