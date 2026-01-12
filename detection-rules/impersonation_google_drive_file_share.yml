@@ -46,6 +46,22 @@ source: |
                          "*added as an editor*",
                          "*invited you to edit*"
         )
+        // suspicious subjects
+        or (
+          (
+            regex.icontains(subject.subject, 'shared \".*\" with you')
+            and sender.email.domain.root_domain != "dropbox.com"
+          )
+          // with Google Drive terminology in body content
+          and any([body.current_thread.text, body.plain.raw],
+                  strings.ilike(.,
+                                "*Google Drive*",
+                                "*Google Doc*",
+                                "*Google Sheet*",
+                                "*Google Slide*"
+                  )
+          )
+        )
       )
       and (
         strings.ilike(subject.subject,
@@ -202,7 +218,14 @@ source: |
       strings.icontains(body.current_thread.text, 'Mountain View, CA 94043'),
     )
   )
-  and not all(body.links, .href_url.domain.root_domain in ("google.com"))
+  and not (
+    // Google Sites has been observed abused
+    all(body.links,
+        .href_url.domain.root_domain in ("google.com")
+        // allow for matches against sites.google.com, which has been observed being abused
+        and .href_url.domain.domain != "sites.google.com"
+    )
+  )
   and sender.email.domain.root_domain not in $org_domains
   and sender.email.domain.root_domain not in ("google.com")
   and not (
