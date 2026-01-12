@@ -1,0 +1,86 @@
+name: "Link: Payment advice with missing attachment and suspicious indicators"
+description: "Detects messages claiming to contain payment advice or attachments that are either missing or suspiciously small, combined with external links to domains with different registrars. The message appears to be a reply but lacks previous thread context, indicating potential thread hijacking or spoofing tactics."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and (
+    strings.ilike(subject.subject,
+                  "*payment*",
+                  "*invoice*",
+                  "*transaction*",
+                  "*remittance*"
+    )
+    or strings.ilike(body.current_thread.text,
+                     "*payment*advice*",
+                     "*payment*notification*",
+                     "*transaction*processed*",
+                     "*incoming*payment*"
+    )
+    or any(ml.nlu_classifier(body.current_thread.text).tags,
+           .name == "payment" and .confidence in ("medium", "high")
+    )
+  )
+  and any(ml.nlu_classifier(body.current_thread.text).topics,
+          .name == "Payment Information" and .confidence == "high"
+  )
+  and (
+    strings.ilike(body.current_thread.text,
+                  "*attach*advice*",
+                  "*attach*payment*",
+                  "*attached*"
+    )
+    and (
+      length(attachments) == 0
+      or all(attachments,
+             .size < 2048 // Small files only (signature images, etc.)
+             and .file_extension in~ ("png", "jpg", "gif", "ico")
+             and not strings.ilike(.file_name,
+                                   "*advice*",
+                                   "*payment*",
+                                   "*invoice*"
+             )
+      )
+    )
+  )
+  and any(filter(body.links,
+                 .href_url.domain.root_domain != sender.email.domain.root_domain
+          ),
+          network.whois(sender.email.domain).registrar_name != network.whois(.href_url.domain
+          ).registrar_name
+          and (
+            regex.icontains(.href_url.path,
+                            "payment",
+                            "invoice",
+                            "receipt",
+                            "transaction"
+            )
+            or regex.match(.href_url.path,
+                           '^/\d+/?$'
+            ) // paths like /000, /123
+            or regex.match(.href_url.path,
+                           '^/[a-z]{1,3}/?$'
+            ) // very short paths
+          )
+  )
+  and headers.in_reply_to is not null
+  and length(body.previous_threads) == 0
+  and sender.email.domain.root_domain not in $tranco_50k
+  and sender.email.domain.root_domain not in $high_trust_sender_root_domains
+attack_types:
+  - "BEC/Fraud"
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Social engineering"
+  - "Spoofing"
+detection_methods:
+  - "Content analysis"
+  - "Header analysis"
+  - "Natural Language Understanding"
+  - "Sender analysis"
+  - "URL analysis"
+  - "Whois"
+id: "4714464a-732d-5e08-9d91-85e7db03564d"
+og_id: "83e435b3-b94a-5f67-9536-7caf7606ca32"
+testing_pr: 3676
+testing_sha: 1f27cb345f9190532637ed343990b1ec092e8e2a
