@@ -16,9 +16,7 @@ source: |
       )
       and (
         sender.display_name is null
-        or strings.ilike(strings.replace_confusables(subject.base),
-                         '*sendgrid*'
-        )
+        or strings.ilike(strings.replace_confusables(subject.base), '*sendgrid*')
       )
     )
     or any(ml.logo_detect(file.message_screenshot()).brands,
@@ -29,15 +27,17 @@ source: |
   and any(headers.domains,
           strings.icontains(.domain, 'outbound-mail.sendgrid.net')
   )
-  // new senders only
-  and profile.by_sender_email().prevalence == "new"
-
+  // not common senders with valid domains
+  // this catches cases where the domain is invalid and senders become common
+  and not (
+    profile.by_sender_email().prevalence == "common" and sender.email.domain.valid
+  )
+  
   // negate legit sendgrid messages
   and not (
-      sender.email.domain.domain == "sendgrid.com"
-      and coalesce(headers.auth_summary.dmarc.pass, false)
+    sender.email.domain.domain == "sendgrid.com"
+    and coalesce(headers.auth_summary.dmarc.pass, false)
   )
-
 attack_types:
   - "Credential Phishing"
 tactics_and_techniques:
