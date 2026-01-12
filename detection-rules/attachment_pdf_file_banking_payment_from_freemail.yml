@@ -13,12 +13,12 @@ source: |
           any(file.explode(.),
               .depth == 1
               and (
-                regex.icontains(.scan.ocr.raw, "payment")
-                or regex.contains(.scan.ocr.raw, "SWIFT")
-                or regex.contains(.scan.ocr.raw, "Swift Copy")
-                or regex.icontains(.scan.ocr.raw, "bank code:")
-                or regex.icontains(.scan.ocr.raw, "account number:")
-                or regex.icontains(.scan.ocr.raw, "payment")
+                regex.icontains(.scan.ocr.raw,
+                               'swift(?: copy)?',
+                               "bank code:",
+                               "account number:",
+                               "payment"
+                )
               )
           )
   )
@@ -26,20 +26,22 @@ source: |
   and (
     // Common executive titles
     regex.icontains(sender.display_name,
-                    '\\b(CEO|CFO|COO|President|Chairman|Director|VP|EVP|SVP)\\b'
+                    // CEO, CFO, COO, President, Chairman, Director, VP, EVP, SVP
+                    '\b((?:C(?:hairman|[EFO]O)|President|Director|[ES]?VP))\b'
     )
     // Or looks like: firstname.lastname.company@freemail
     or regex.count(sender.email.local_part, '\.') == 2
     // or any defined org brands like: first.last.sublime@freemail
+    or any($org_slds, strings.icontains(sender.email.local_part, .))
     or any($org_brand_names, strings.icontains(sender.email.local_part, .))
     // Or contains common company abbreviations
-    or regex.imatch(sender.email.local_part, '.*\\.(inc|corp|ltd|llc|co)$')
+    or regex.icontains(sender.email.local_part, '\.(?:inc|corp|ltd|llc|co)$')
   )
   
   // Financial/transaction language
   and (
     regex.icontains(body.current_thread.text,
-                    'transaction|lawyer|wire|transfer|bank.*account'
+                    '(?:transaction|lawyer|wire|transfer|bank.{0.20}account)'
     )
     or any(ml.nlu_classifier(body.current_thread.text).topics,
            .name == "Legal and Compliance" and .confidence == "high"
@@ -50,7 +52,7 @@ source: |
   and (
     any(ml.nlu_classifier(body.current_thread.text).entities, .name == "urgency")
     or regex.icontains(body.current_thread.text,
-                       'urgent|asap|immediately|today|by.*(?:friday|weekend|eod|end of day)'
+                       '(?:urgent|asap|immediately|today|by.*(?:friday|weekend|eod|end of day))'
     )
   )
   
