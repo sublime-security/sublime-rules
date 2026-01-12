@@ -22,7 +22,9 @@ source: |
                           "*shared an item*",
                           "*received this email because you*",
                           "*shared a*with you*",
-                          "*automated *mail from google*drive*"
+                          "*automated *mail from google*drive*",
+                          "*added as an editor*",
+                          "*invited you to edit*"
             )
         )
         //
@@ -40,7 +42,25 @@ source: |
                          "*shared an item*",
                          "*received this email because you*",
                          "*shared a*with you*",
-                         "*automated *mail from google*drive*"
+                         "*automated *mail from google*drive*",
+                         "*added as an editor*",
+                         "*invited you to edit*"
+        )
+        // suspicious subjects
+        or (
+          (
+            regex.icontains(subject.subject, 'shared \".*\" with you')
+            and sender.email.domain.root_domain != "dropbox.com"
+          )
+          // with Google Drive terminology in body content
+          and any([body.current_thread.text, body.plain.raw],
+                  strings.ilike(.,
+                                "*Google Drive*",
+                                "*Google Doc*",
+                                "*Google Sheet*",
+                                "*Google Slide*"
+                  )
+          )
         )
       )
       and (
@@ -54,10 +74,14 @@ source: |
                strings.icontains(subject.subject, .email.domain.sld)
         )
         or strings.ilike(subject.subject, "*Docs*", "*Sheets*", "*Slides*")
-        or any(body.links, strings.icontains(.display_text, "open document"))
+        or any(body.links,
+               strings.icontains(.display_text, "open document")
+               or strings.iends_with(.display_text, ".pdf")
+        )
         or strings.ilike(sender.display_name, "*Google Drive*")
         or subject.subject is null
         or subject.subject == ""
+        or regex.icontains(body.current_thread.text, '^g.o.o.g.l.e')
       )
     )
     or any([
@@ -194,7 +218,14 @@ source: |
       strings.icontains(body.current_thread.text, 'Mountain View, CA 94043'),
     )
   )
-  and not all(body.links, .href_url.domain.root_domain in ("google.com"))
+  and not (
+    // Google Sites has been observed abused
+    all(body.links,
+        .href_url.domain.root_domain in ("google.com")
+        // allow for matches against sites.google.com, which has been observed being abused
+        and .href_url.domain.domain != "sites.google.com"
+    )
+  )
   and sender.email.domain.root_domain not in $org_domains
   and sender.email.domain.root_domain not in ("google.com")
   and not (
