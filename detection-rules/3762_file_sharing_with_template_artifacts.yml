@@ -1,0 +1,58 @@
+name: "Brand impersonation: File sharing notification with template artifacts"
+description: "Detects messages impersonating file sharing services that contain template artifacts such as placeholder comments, incomplete HTML elements, and development remnants. The message includes 'shared with you' language and exhibits multiple indicators of being generated from a malicious template including HTML comments with development terms, broken anchor tags, and filename elements that closely match the subject line."
+type: "rule"
+severity: "low"
+source: |
+  type.inbound
+  and strings.icontains(body.current_thread.text, 'shared with you')
+  and 2 of (
+    // the subject is very similar to the name of the file-name html class
+    any(html.xpath(body.html, '//span[@class="file-name"]').nodes,
+        strings.ilevenshtein(.display_text, subject.subject) < 15
+    ),
+    // we detect a href to a # implying a neglected placeholder 
+    any(html.xpath(body.html, '//a[@href="#"]').nodes, .raw is not null),
+    // we detect "ai-esque" comments
+    any(html.xpath(body.html, '//comment()').nodes,
+        regex.icontains(.raw, '(optional|section|placeholder|todo|fixme)')
+    ),
+    // we detect any logo with high confidence
+    any(ml.logo_detect(file.message_screenshot()).brands,
+        .name is not null and .confidence == "high"
+    ),
+    // recipients local part is in the body of the message
+    any(recipients.to,
+        strings.icontains(body.current_thread.text, .email.local_part)
+    ),
+    strings.icontains(body.html.raw, 'if the button does not work')
+  )
+  and any(ml.nlu_classifier(body.current_thread.text).intents,
+          .name in ("cred_theft", "bec") and .confidence == "high"
+  )
+  // and cred theft/bec high confidence
+  and any(ml.nlu_classifier(body.current_thread.text).intents,
+          .name in ("cred_theft", "bec") and .confidence == "high"
+  )
+  and (
+    // not sent from no-reply@outlook.mail.microsoft as long as auth passes
+    not (
+      sender.email.email == "no-reply@outlook.mail.microsoft"
+      and headers.auth_summary.dmarc.pass
+    )
+  )
+
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Social engineering"
+  - "Evasion"
+detection_methods:
+  - "HTML analysis"
+  - "Computer Vision"
+  - "Content analysis"
+  - "Header analysis"
+id: "a890ed3b-e0cf-5592-9a2c-8e6de6cd1d9a"
+og_id: "37d89611-e8ab-50c5-af7a-c9d5a0a785fd"
+testing_pr: 3762
+testing_sha: f7a9a104f9a2f295b422ceaa9d7ae3283dcebe34
