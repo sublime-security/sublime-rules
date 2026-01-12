@@ -114,12 +114,16 @@ jobs:
         with:
           python-version: '3.10'
 
-      - name: Checkout script from Sublime fork main
+      - name: Checkout scripts from Sublime fork main
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
         with:
           repository: sublime-security/sublime-rules
           ref: main
           path: sublime-rules-main
+
+      - name: Check for invisible characters
+        if: github.event_name != 'issue_comment'
+        run: python sublime-rules-main/scripts/check_invisible_chars.py
 
       - name: Add Rule IDs as Needed & Check for Duplicates
         if: github.event_name != 'issue_comment'
@@ -127,7 +131,13 @@ jobs:
         run: |
           pip install -r sublime-rules-main/scripts/generate-rule-ids/requirements.txt
           python sublime-rules-main/scripts/generate-rule-ids/main.py
-          
+
+      - name: Auto-format MQL
+        if: github.event_name != 'issue_comment'
+        run: |
+          pip install -q requests pyyaml
+          python sublime-rules-main/scripts/mql_format.py detection-rules/*.yml insights/**/*.yml
+
           # Delete path to prevent interference with later steps (such as git add and commit)
           rm -r sublime-rules-main
 
@@ -221,10 +231,10 @@ jobs:
             exit 0
           fi
 
-          git config user.name 'ID Generator'
+          git config user.name 'CI Bot'
           git config user.email 'hello@sublimesecurity.com'
           git add -- **/*.yml
-          git commit -m "Auto add rule ID"
+          git commit -m "Auto-format MQL and add rule IDs"
           # This will only work when running for a pull_request_target, but rather than filter we'll let this expose
           # any issues.
           git push origin "${STEPS_GET_HEAD_REF_OUTPUTS_HEAD_REF}"
