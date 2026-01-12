@@ -6,30 +6,38 @@ type: "rule"
 severity: "medium"
 source: |
   type.inbound
-
+  
   // display name is in all caps
   and regex.match(sender.display_name, '[A-Z ]+')
-
+  
   // the sender is not microsoft
-  and sender.email.domain.root_domain not in~ ('microsoft.com', 'microsoftsupport.com', 'office.com')
-
+  and sender.email.domain.root_domain not in~ (
+    'microsoft.com',
+    'microsoftsupport.com',
+    'office.com'
+  )
+  
   // logo hosted on microsoft.com
   and any(body.links,
-          regex.icontains(.display_url.url, '.{0,50}microsoft\.com\/.{0,70}logo.{0,25}\.png')
+          regex.icontains(.display_url.url,
+                          '.{0,50}microsoft\.com\/.{0,70}logo.{0,25}\.png'
+          )
   )
-
+  
   // and at least one link display text is in all caps
-  and any(body.links, regex.icontains(.display_text, '[VIEW|CLICK|DOWNLOAD|CHECK]'))
-
+  and any(body.links,
+          regex.icontains(.display_text, '[VIEW|CLICK|DOWNLOAD|CHECK]')
+  )
+  
   // request being made
   and any(ml.nlu_classifier(body.html.inner_text).entities, .name == "request")
-
+  
   // sender domain matches no body domains
   and not any(body.links,
               .href_url.domain.root_domain == sender.email.domain.root_domain
               and .href_url.domain.root_domain not in $tranco_1m
   )
-
+  
   // org domain in the subject of the message
   and any($org_domains, strings.icontains(subject.subject, .))
   and (
