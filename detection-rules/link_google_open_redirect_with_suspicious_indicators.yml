@@ -8,7 +8,10 @@ source: |
   type.inbound
   // All attachments are images or 0 attachments
   and (
-    (length(attachments) > 0 and all(attachments, .file_type in $file_types_images))
+    (
+      length(attachments) > 0
+      and all(attachments, .file_type in $file_types_images)
+    )
     or length(attachments) == 0
   )
   and sender.email.domain.root_domain not in $org_domains
@@ -55,13 +58,17 @@ source: |
       any(attachments,
           .file_type in $file_types_images
           and any(file.explode(.),
-                  any(ml.nlu_classifier(.scan.ocr.raw).intents, .name == "cred_theft")
+                  any(ml.nlu_classifier(.scan.ocr.raw).intents,
+                      .name == "cred_theft"
+                  )
           )
       )
     ),
     // Content analysis - Body - Urgency
     (
-      any(ml.nlu_classifier(body.current_thread.text).entities, .name == "urgency")
+      any(ml.nlu_classifier(body.current_thread.text).entities,
+          .name == "urgency"
+      )
     ),
   
     // White font is found in html raw
@@ -73,7 +80,9 @@ source: |
     )
   
     // domains using .app matching this pattern observed abusing google's redirect
-    or regex.icontains(sender.email.domain.domain, '[a-z]{3,}\.\d{5,}[^\.]+\.app$')
+    or regex.icontains(sender.email.domain.domain,
+                       '[a-z]{3,}\.\d{5,}[^\.]+\.app$'
+    )
   )
 attack_types:
   - "Credential Phishing"
