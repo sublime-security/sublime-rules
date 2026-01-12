@@ -4,17 +4,16 @@ type: "rule"
 severity: "medium"
 source: |
   type.inbound
-  and any(attachments,
-          .file_type == "pdf"
-          and any(file.explode(.),
-                  any(.scan.exiftool.fields, .key == "Encryption")
-                  or (
-                    .scan.entropy.entropy > 7
-                    and any(.scan.strings.strings,
-                            strings.icontains(., "/Encrypt")
-                    )
-                  )
+  and any(filter(attachments, .file_type == "pdf"),
+          any(file.explode(.),
+              any(.scan.exiftool.fields, .key == "Encryption")
+              or (
+                .scan.entropy.entropy > 7
+                and any(.scan.strings.strings, strings.icontains(., "/Encrypt"))
+              )
           )
+          // Encrypted PDFs do not have child nodes with any data
+          and all(filter(file.explode(.), .depth > 0), .size == 0)
   )
   and (
     any(ml.nlu_classifier(body.current_thread.text).intents,
@@ -26,7 +25,8 @@ source: |
     or (
       (
         regex.icontains(body.current_thread.text,
-                        'PDF\s*(?:Access|Preview|Unlock|Decrypt)\s*(?:Pass)?code'
+                        'PDF\s*(?:Access|Preview|Unlock|Decrypt)\s*(?:Pass)?code',
+                        '(Access|Preview|Unlock|Decrypt|Pass)\s*(?:word|code)\s*to?\s*PDF\s*is?\s*:'
         )
         or (
           (
@@ -35,7 +35,8 @@ source: |
           )
           and any(body.previous_threads,
                   regex.icontains(.text,
-                                  'PDF\s*(?:Access|Preview|Unlock|Decrypt)\s*(?:Pass)?code'
+                                  'PDF\s*(?:Access|Preview|Unlock|Decrypt)\s*(?:Pass)?code',
+                                  '(Access|Preview|Unlock|Decrypt|Pass)\s*(?:word|code)\s*to?\s*PDF\s*is?\s*:'
                   )
           )
         )
@@ -76,7 +77,6 @@ source: |
     )
     or sender.email.domain.root_domain not in $high_trust_sender_root_domains
   )
-
 attack_types:
   - "Credential Phishing"
 tactics_and_techniques:
