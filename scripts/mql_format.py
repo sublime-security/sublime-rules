@@ -45,6 +45,13 @@ def format_source(source: str) -> str:
         "indent": 2,
         "prefer_multi_line_root": True,
     }, timeout=30)
+
+    # Handle 500 errors gracefully - this is a known API bug with empty comment lines
+    if resp.status_code == 500:
+        error = requests.HTTPError("500 Server Error")
+        error.response = resp
+        raise error
+
     resp.raise_for_status()
     return resp.json()["source"]
 
@@ -118,12 +125,28 @@ def process_file(file_data: dict) -> dict:
             "content": content,
             "formatted_source": formatted_source,
             "changed": changed,
-            "error": None
+            "error": None,
+            "is_500": False
+        }
+    except requests.HTTPError as e:
+        # Check if this is a 500 error
+        # Note: Response object may be falsy even if it exists, so use hasattr + is not None
+        if hasattr(e, 'response') and e.response is not None and hasattr(e.response, 'status_code') and e.response.status_code == 500:
+            return {
+                "path": path,
+                "error": "500 Server Error",
+                "is_500": True
+            }
+        return {
+            "path": path,
+            "error": str(e),
+            "is_500": False
         }
     except requests.RequestException as e:
         return {
             "path": path,
-            "error": str(e)
+            "error": str(e),
+            "is_500": False
         }
 
 
@@ -182,8 +205,14 @@ def main():
             path = result["path"]
 
             if result.get("error"):
-                print(f"::error file={path}::{progress} {path.name} formatting failed: {result['error']}")
-                sys.exit(1)
+                # Handle 500 errors as warnings
+                if result.get("is_500"):
+                    print(f"::warning file={path}::{progress} {path.name} skipped - API returned 500 error", flush=True)
+                    unchanged_count += 1
+                    continue
+                else:
+                    print(f"::error file={path}::{progress} {path.name} formatting failed: {result['error']}")
+                    sys.exit(1)
 
             if result["changed"]:
                 changed_count += 1
