@@ -5,29 +5,41 @@ severity: "medium"
 source: |
   type.inbound
   and any(filter(attachments, .file_extension == "pdf"),
-          strings.icontains(beta.parse_exif(.).creator, "HeadlessChrome")
+          (
+            strings.icontains(beta.parse_exif(.).creator, "HeadlessChrome")
+            or strings.icontains(beta.parse_exif(.).creator, "Chromium")
+          )
           and beta.parse_exif(.).page_count == 1
           and (
             // MD5 filename, 32 hex chars and .html
             regex.imatch(beta.parse_exif(.).title, '^[a-f0-9]{32}\.html$')
+            or (
+              strings.istarts_with(.file_name, "bill")
+              or strings.istarts_with(.file_name, "lnv")
+              or strings.istarts_with(.file_name, "inv")
+              or regex.contains(.file_name, '^(\d{3}|\w{1})[A-Z0-9]+(.pdf)')
+            )
             or 
             // about:blank and Windows HeadlessChrome 
             (
               beta.parse_exif(.).title == "about:blank"
               and strings.istarts_with(beta.parse_exif(.).producer, "Skia/PDF")
-              and strings.icontains(beta.parse_exif(.).creator, "Windows")
+              and (
+                strings.icontains(beta.parse_exif(.).creator, "Windows")
+                or strings.icontains(beta.parse_exif(.).creator, "Chromium")
+              )
             )
+            and not strings.icontains(beta.parse_exif(.).producer, "Google Docs")
           )
-          and not strings.icontains(beta.parse_exif(.).producer, "Google Docs")
-  )
-  and not (
-    sender.email.domain.root_domain in (
-      "guardtek.net",
-      "gominis.com",
-      "aglgroup.com",
-      "truckerzoom.com"
-    )
-    and coalesce(headers.auth_summary.dmarc.pass, false)
+          and not (
+            sender.email.domain.root_domain in (
+              "guardtek.net",
+              "gominis.com",
+              "aglgroup.com",
+              "truckerzoom.com"
+            )
+            and coalesce(headers.auth_summary.dmarc.pass, false)
+          )
   )
 tags:
 - "Attack surface reduction"
