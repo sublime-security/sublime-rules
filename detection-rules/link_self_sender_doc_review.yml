@@ -1,0 +1,33 @@
+name: "Link: Self-sent message with quarterly document review request"
+description: "Detects messages sent from a user to themselves containing a link with quarterly indicators (q1_, q2_, q3_, q4_) and specific document review language requesting urgent feedback."
+type: "rule"
+severity: "critical"
+source: |
+  type.inbound
+  // self sender
+  and (
+    length(recipients.to) == 1
+    and length(recipients.cc) == 0
+    and length(recipients.bcc) == 0
+    and sender.email.email == recipients.to[0].email.email
+  )
+  // first link is not related to the sender via sld (to account for orgs that have multiple tlds)
+  and (
+    body.current_thread.links[0].href_url.domain.sld != sender.email.domain.sld
+    and body.current_thread.links[0].href_url.domain.domain != 'aka.ms'
+  )
+  and strings.ilike(body.current_thread.links[0].display_text, '*q1_*','*q2_*','*q3_*','*q4_*')
+  and strings.contains(body.current_thread.text, 'Please find the document below for your review.')
+  and strings.contains(body.current_thread.text, 'kindly review and provide your feedback as soon as possible')
+
+attack_types:
+  - "BEC/Fraud"
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Social engineering"
+  - "Evasion"
+detection_methods:
+  - "Content analysis"
+  - "Header analysis"
+  - "Sender analysis"
+  - "URL analysis"
