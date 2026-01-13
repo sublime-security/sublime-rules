@@ -7,16 +7,25 @@ source: |
   and (
     (
       strings.icontains(body.current_thread.text, 'Microsoft Teams')
-      and strings.icontains(body.current_thread.text, 'join the meeting now')
+      and strings.icontains(body.current_thread.text, 'join the meeting')
       and strings.contains(body.current_thread.text, 'Meeting ID:')
       and strings.contains(body.current_thread.text, 'Passcode:')
     )
     or (
       strings.icontains(body.current_thread.text, "teams")
+      // strings that give us confidence it's teams
       and 2 of (
         strings.icontains(body.current_thread.text, "internal"),
         strings.icontains(body.current_thread.text, "message"),
-        strings.icontains(body.current_thread.text, "meeting")
+        strings.icontains(body.current_thread.text, "meeting"),
+        strings.icontains(body.current_thread.text, "Download Teams")
+      )
+    )
+    // either the subject or sender.display name containt Microsoft Teams and Meeting
+    or (
+      any([subject.base, sender.display_name],
+          strings.icontains(., 'Microsoft Teams')
+          and strings.icontains(., 'meeting')
       )
     )
   )
@@ -24,7 +33,7 @@ source: |
   and length(headers.references) == 0
   and headers.in_reply_to is null
   // few links
-  and length(body.links) < 10
+  and length(distinct(body.links, .href_url.url)) < 10
   
   // no unsubscribe links
   // common in newsletters which link to a webinar style event
@@ -33,7 +42,8 @@ source: |
   // one of the links contains is a CTA that doesn't link to MS
   and any(body.links,
           (
-            .display_text =~ "join the meeting now"
+            .display_text =~ "join the meeting"
+            or strings.icontains(.display_text, "join the meeting")
             or strings.icontains(.display_text, "play recording")
           )
           and .href_url.domain.root_domain not in (
@@ -66,7 +76,6 @@ source: |
     )
     or sender.email.domain.root_domain not in $high_trust_sender_root_domains
   )
-
 attack_types:
   - "Credential Phishing"
 tactics_and_techniques:
