@@ -1,0 +1,47 @@
+name: "Link: Self-sent message with suspicious link containing sender identifiers"
+description: "Detects messages where the sender emails themselves with a single suspicious link that contains the sender's local part or domain in the URL path and the link display text matches the subject line."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  // self sender
+  and (
+    length(recipients.to) == 1
+    and length(recipients.cc) == 0
+    and length(recipients.bcc) == 0
+    and sender.email.email == recipients.to[0].email.email
+  )
+  // first link is not related to the sender via sld (to account for orgs that have multiple tlds)
+  and (
+    body.current_thread.links[0].href_url.domain.sld != sender.email.domain.sld
+    and body.current_thread.links[0].href_url.domain.domain != 'aka.ms'
+  )
+  // display text is contained in the subject
+  and strings.icontains(body.current_thread.links[0].display_text, subject.base)
+  // path has sender elements in it
+  and (
+    strings.icontains(body.current_thread.links[0].href_url.path,
+                      sender.email.local_part
+    )
+    or (
+      strings.icontains(body.current_thread.links[0].href_url.path,
+                        sender.email.domain.sld
+      )
+      and not strings.icontains(body.current_thread.links[0].href_url.path,
+                                'registration'
+      )
+    )
+  )
+attack_types:
+  - "Credential Phishing"
+  - "BEC/Fraud"
+tactics_and_techniques:
+  - "Social engineering"
+  - "Evasion"
+detection_methods:
+  - "URL analysis"
+  - "Sender analysis"
+id: "6025ccef-f6ca-534d-b637-0a989ec50fea"
+og_id: "4f1b23f7-65e9-580c-bde4-b7f2b780af01"
+testing_pr: 3742
+testing_sha: 3e370ac65cbd50be8baf2e5ab43a0da53cfb087f
