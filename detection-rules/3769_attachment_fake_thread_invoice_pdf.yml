@@ -1,0 +1,68 @@
+name: "Attachment: Fake forwarded thread with invoice PDF and suspicious metadata"
+description: "Detects messages with a forwarded subject line but no actual thread history, containing multiple attachments including a PDF file named starting with 'lnv' (disguised as 'inv' for invoice) and created with Chromium. The message has a reply-to address from a free email provider that differs from the sender's address, indicating a potentially fraudulent invoice scam."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  
+  // Subject
+  and subject.is_forward
+  
+  // Sender
+  and (
+      length(headers.references) == 0
+      or headers.in_reply_to is null
+  )
+  and any(
+      headers.reply_to, 
+      .email.domain.root_domain in $free_email_providers
+  )
+  and (
+      sender.email.domain.root_domain not in $high_trust_sender_root_domains
+      and sender.email.domain.root_domain not in $free_email_providers
+  )
+  and length(body.previous_threads) >= 2
+  and any(headers.reply_to,
+          .email.email != sender.email.email
+          and .email.email != headers.return_path.email
+          and .display_name == sender.display_name
+  )
+  
+  // attachments
+  and length(attachments) >= 2
+  and any(
+      attachments, 
+      //
+      // This rule makes use of a beta feature and is subject to change without notice
+      // using the beta feature in custom rules is not suggested until it has been formally released
+      //
+      any(beta.parse_exif(.).fields, .key == "Creator" and .value == "Chromium")
+  )
+  // lnv is displayed as inv (invoice)
+  and any(filter(attachments, strings.istarts_with(.file_name, "lnv")),
+      strings.iends_with(.file_name, ".pdf")
+  )
+  
+  and any(filter(attachments, .file_name == ".pdf"), 
+      any(file.explode(.), 
+      strings.contains(.scan.ocr.raw, "W=9")
+      )
+  )
+attack_types:
+  - "BEC/Fraud"
+tactics_and_techniques:
+  - "Evasion"
+  - "Free email provider"
+  - "PDF"
+  - "Social engineering"
+  - "Spoofing"
+detection_methods:
+  - "File analysis"
+  - "Header analysis"
+  - "Sender analysis"
+  - "Exif analysis"
+  - "Optical Character Recognition"
+id: "2b7b7c59-02c4-5466-9ea0-e70218e769f6"
+og_id: "c4ff6e39-5d06-55d4-b68e-99f6ca9a075c"
+testing_pr: 3769
+testing_sha: 210a8dbb818c2b3b96b12d8ba9d90e38c7dd0098
