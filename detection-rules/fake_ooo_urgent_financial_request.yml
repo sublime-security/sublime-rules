@@ -10,31 +10,25 @@ source: |
   and not subject.is_reply
   and not subject.is_forward
   
-  // Subject line exclusions for legitimate auto-replies
-  and not strings.contains(subject.subject, "Automatic reply:")
-  and not strings.contains(subject.subject, "Auto-Reply")
-  and not strings.contains(subject.subject, "EXT Automatic reply:")
-  
-  // Must be classified as out-of-office topic
+  // out-of-office topic
   and any(ml.nlu_classifier(body.current_thread.text).topics,
           .name == "Out of Office and Automatic Replies"
   )
-  
-  // Must contain the suspicious combo: urgency + financial + request
-  and length(distinct(filter(ml.nlu_classifier(body.current_thread.text).entities,
-                             .name in ("urgency", "financial", "request")
-                      ),
-                      .name
-             )
-  ) == 3
-  
-  // Specific payment/financial request patterns (the key BEC indicator)
+  // urgent and financial entities
   and (
-    strings.icontains(body.current_thread.text, "processing an expense payment")
-    or strings.icontains(body.current_thread.text, "handle the payment")
-    or strings.icontains(body.current_thread.text, "process the invoice")
-    or strings.icontains(body.current_thread.text, "expense payment")
-    or strings.icontains(body.current_thread.text, "payment during")
+    (
+      any(ml.nlu_classifier(body.current_thread.text).entities,
+          .name == "urgency"
+      )
+      and any(ml.nlu_classifier(body.current_thread.text).entities,
+              .name == "financial"
+      )
+    )
+    // or high confidence in bec/cred_theft/callback_scam
+    or any(ml.nlu_classifier(body.current_thread.text).intents,
+           .name in ("bec", "cred_theft", "callback_scam")
+           and .confidence != "low"
+    )
   )
 attack_types:
   - "BEC/Fraud"
