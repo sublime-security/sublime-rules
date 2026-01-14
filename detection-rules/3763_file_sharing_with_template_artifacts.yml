@@ -5,6 +5,10 @@ severity: "low"
 source: |
   type.inbound
   and strings.icontains(body.current_thread.text, 'shared with you')
+  // we detect a file sharing logo with high confidence
+  and any(ml.logo_detect(file.message_screenshot()).brands,
+          .name in ('Microsoft', 'Dropbox', 'Google') and .confidence == "high"
+  )
   and 2 of (
     // the subject is very similar to the name of the file-name html class
     any(html.xpath(body.html, '//span[@class="file-name"]').nodes,
@@ -15,10 +19,6 @@ source: |
     // we detect "ai-esque" comments
     any(html.xpath(body.html, '//comment()').nodes,
         regex.icontains(.raw, '(optional|section|placeholder|todo|fixme)')
-    ),
-    // we detect any logo with high confidence
-    any(ml.logo_detect(file.message_screenshot()).brands,
-        .name in ('Microsoft', 'Dropbox', 'Google') and .confidence == "high"
     ),
     // recipients local part is in the body of the message
     any(recipients.to,
@@ -52,4 +52,4 @@ detection_methods:
 id: "e929b49f-9768-57c1-9a07-af7e740d6d04"
 og_id: "37d89611-e8ab-50c5-af7a-c9d5a0a785fd"
 testing_pr: 3763
-testing_sha: 29f91729376bb0587db5c78528518d3b841ff721
+testing_sha: 8754a95822e4910085765ebb2990c301f6cbe9a1
