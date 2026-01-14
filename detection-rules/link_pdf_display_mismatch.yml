@@ -5,21 +5,21 @@ severity: "high"
 source: |
   type.inbound
 
-  // Core PDF Display Mismatch Pattern (High Confidence Indicator)
+  // Core PDF display mismatch pattern
   and any(body.links,
           // Link displays as PDF but points to HTML page
           strings.ilike(.display_text, "*.pdf")
-          and strings.icontains(.href_url.url, ".html")
+          //and strings.icontains(.href_url.url, ".html")
           // Link domain is not reputable  
           and .href_url.domain.root_domain not in $tranco_1m
           // Domain completely unrelated to sender's organization
           and .href_url.domain.root_domain != sender.email.domain.root_domain
   )
   
-  // Business Document Social Engineering Context
+  // Business document context
   and (
     // Look for business proposal/document language
-    strings.ilike(body.html.display_text,
+    strings.ilike(body.current_thread.text,
                   "*proposal*",
                   "*RFP*",
                   "*selected*",
@@ -29,7 +29,7 @@ source: |
                   "*architects*",
                   "*invited*"
     )
-    or strings.ilike(subject.subject,
+    or strings.ilike(subject.base,
                      "*proposal*",
                      "*RFP*",
                      "*document*",
@@ -40,15 +40,8 @@ source: |
   // Not from organizational domains
   and not (
     sender.email.domain.root_domain in $org_domains
-    and (
-      coalesce(headers.auth_summary.spf.pass, false)
-      and coalesce(headers.auth_summary.dmarc.pass, false)
-      and not 'fail' in~ distinct(map(headers.hops, .authentication_results.dkim))
-    )
+    and coalesce(headers.auth_summary.dmarc.pass, false)
   )
-  
-  // Not from established legitimate senders
-  and not profile.by_sender().any_messages_benign
   
   // Not legitimate document sharing services
   and not any(body.links,
@@ -59,6 +52,9 @@ source: |
                 "drive.google.com"
               )
   )
+  
+  // Not zendesk emails
+  and not strings.contains(body.html.raw, "zd_encoded_id")
 attack_types:
   - "Credential Phishing"
   - "BEC/Fraud"
