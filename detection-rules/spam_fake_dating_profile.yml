@@ -4,7 +4,17 @@ type: "rule"
 severity: "low"
 source: |
   type.inbound
-  and sender.email.domain.root_domain in $free_email_providers
+  and (
+    sender.email.domain.root_domain in $free_email_providers
+    or (
+      // Google Calendar invite
+      strings.starts_with(subject.base, "Invitation:")
+      and length(attachments) == 2
+      and all(attachments,
+              .content_type == "text/calendar" or .file_extension == "ics"
+      )
+    )
+  )
   // not a reply
   and length(headers.references) == 0
   and 0 < length(distinct(body.current_thread.links, .href_url.domain.root_domain)
@@ -13,13 +23,32 @@ source: |
           any(.href_url.query_params_decoded["email"],
               strings.parse_email(.).email in map(recipients.to, .email.email)
           )
+          or .href_url.domain.domain == "sites.google.com"
+          or strings.ilike(.href_url.path,
+                           "*Flirt*",
+                           "*Singles*",
+                           "*Dating*",
+                           "*Girls*",
+          )
   )
   and (
     any(ml.nlu_classifier(body.current_thread.text).entities,
         .name == "org"
-        and strings.ilike(.text, "*Date*", "*Dating*", "*Girls*", "*Love*")
+        and strings.ilike(.text,
+                          "*Flirt*",
+                          "*Singles*",
+                          "*Date*",
+                          "*Dating*",
+                          "*Girls*",
+                          "*Love*"
+        )
     )
     or any(ml.nlu_classifier(body.current_thread.text).topics, .name == "Romance")
+  )
+  // negate iCloud Private Message Relay
+  and not (
+    sender.email.domain.root_domain == "privaterelay.appleid.com"
+    or any(headers.hops, any(.fields, .name == "X-ICLOUD-HME"))
   )
 
 attack_types:
