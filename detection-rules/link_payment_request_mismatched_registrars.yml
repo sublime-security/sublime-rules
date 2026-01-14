@@ -30,18 +30,6 @@ source: |
                   "*attach*payment*",
                   "*attached*"
     )
-    and (
-      length(attachments) == 0
-      or all(attachments,
-             .size < 2048 // Small files only (signature images, etc.)
-             and .file_extension in~ ("png", "jpg", "gif", "ico")
-             and not strings.ilike(.file_name,
-                                   "*advice*",
-                                   "*payment*",
-                                   "*invoice*"
-             )
-      )
-    )
   )
   and any(filter(body.links,
                  .href_url.domain.root_domain != sender.email.domain.root_domain
@@ -55,18 +43,21 @@ source: |
                             "receipt",
                             "transaction"
             )
-            or regex.match(.href_url.path,
-                           '^/\d+/?$'
-            ) // paths like /000, /123
-            or regex.match(.href_url.path,
-                           '^/[a-z]{1,3}/?$'
-            ) // very short paths
+            // paths like /000, /123
+            or regex.match(.href_url.path, '^/\d+/?$')
+            // very short paths
+            or regex.match(.href_url.path, '^/[a-z]{1,3}/?$')
           )
   )
   and headers.in_reply_to is not null
   and length(body.previous_threads) == 0
-  and sender.email.domain.root_domain not in $tranco_50k
-  and sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  and not (
+    (
+      sender.email.domain.root_domain in $tranco_50k
+      or sender.email.domain.root_domain in $high_trust_sender_root_domains
+    )
+    and coalesce(headers.auth_summary.dmarc.pass, false)
+  )
 attack_types:
   - "BEC/Fraud"
   - "Credential Phishing"
