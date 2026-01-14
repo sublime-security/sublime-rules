@@ -1,0 +1,52 @@
+name: "Headers: Fake reply with payment notification and attachment reference"
+description: "Detects messages with payment-related subjects and bodies that reference attachments, appear to be replies but lack previous thread context, and come from untrusted senders without proper authentication."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and (
+    strings.ilike(subject.subject,
+                  "*payment*",
+                  "*invoice*",
+                  "*transaction*",
+                  "*remittance*"
+    )
+    or strings.ilike(body.current_thread.text,
+                     "*payment*advice*",
+                     "*payment*notification*",
+                     "*transaction*processed*",
+                     "*incoming*payment*"
+    )
+  )
+  and any(ml.nlu_classifier(body.current_thread.text).topics,
+          .name == "Payment Information" and .confidence == "high"
+  )
+  and (
+    strings.ilike(body.current_thread.text,
+                  "*attach*advice*",
+                  "*attach*payment*",
+                  "*attached*"
+    )
+  )
+  and headers.in_reply_to is not null
+  and length(body.previous_threads) == 0
+  and not (
+    (
+      sender.email.domain.root_domain in $tranco_50k
+      or sender.email.domain.root_domain in $high_trust_sender_root_domains
+    )
+    and coalesce(headers.auth_summary.dmarc.pass, false)
+  )
+
+attack_types:
+  - "BEC/Fraud"
+  - "Malware/Ransomware"
+tactics_and_techniques:
+  - "Social engineering"
+  - "Spoofing"
+  - "Evasion"
+detection_methods:
+  - "Content analysis"
+  - "Header analysis"
+  - "Natural Language Understanding"
+  - "Sender analysis"
