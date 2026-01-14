@@ -1,0 +1,120 @@
+name: "BEC: Fake thread with vendor impersonation and financial language"
+description: "Detects Business Email Compromise attacks where a sender creates a fake email thread by replying to or forwarding their own message, impersonating organizational domains or recipients while using financial, invoice, or urgency language. The rule identifies suspicious patterns where the sender appears to continue a conversation with themselves while mimicking legitimate internal or vendor communications."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and (subject.is_reply or subject.is_forward)
+  and length(headers.references) == 1
+  and length(body.previous_threads) > 1
+  // sender replying to or forwarding their own fake message thread
+  and body.previous_threads[0].sender.email.email == sender.email.email
+  // at least one thread purporting to be from an $org_domain sender
+  and any(body.previous_threads,
+          .sender.email.domain.domain in $org_domains
+          or .sender.email.domain.domain == mailbox.email.domain.domain // shared EML test
+          or .sender.email.email in map(recipients.to, .email.email)
+  )
+  // suspicious indicators in the current_thread
+  and (
+    any(ml.nlu_classifier(body.current_thread.text).intents,
+        .name == "bec" and .confidence != "low"
+    )
+    or 2 of (
+      // language attempting to engage
+      (
+        any(ml.nlu_classifier(body.current_thread.text).entities,
+            .name == "request"
+        )
+        and any(ml.nlu_classifier(body.current_thread.text).entities,
+                .name == "financial"
+        )
+      ),
+      // invoicing language
+      (
+        any(ml.nlu_classifier(body.current_thread.text).tags, .name == "invoice")
+        or any(ml.nlu_classifier(body.current_thread.text).entities,
+               .text == "invoice"
+        )
+      ),
+      // urgency request
+      (
+        any(ml.nlu_classifier(body.current_thread.text).entities,
+            .name == "urgency"
+        )
+      ),
+      // Accounts Payable terminology
+      (
+        any([body.current_thread.text, sender.display_name],
+            any(ml.nlu_classifier(.).entities,
+                .name == "recipient"
+                and strings.ilike(.text, "AP*", "*Accounts Payable*")
+            )
+        )
+      )
+    )
+  )
+  // and suspicious indicators in any of the previous_threads
+  and any(body.previous_threads,
+          any(ml.nlu_classifier(.text).intents,
+              .name == "bec" and .confidence != "low"
+          )
+          or 2 of (
+            // language attempting to engage
+            (
+              any(ml.nlu_classifier(.text).entities, .name == "request")
+              and any(ml.nlu_classifier(.text).entities, .name == "financial")
+            ),
+            // invoicing language
+            (
+              any(ml.nlu_classifier(.text).tags, .name == "invoice")
+              or any(ml.nlu_classifier(.text).entities, .text == "invoice")
+            ),
+            // urgency request
+            (
+              any(ml.nlu_classifier(.text).entities, .name == "urgency")
+            ),
+            // Accounts Payable terminology
+            (
+              any(ml.nlu_classifier(.text).entities,
+                  .name == "recipient"
+                  and strings.ilike(.text, "AP*", "*Accounts Payable*")
+              )
+            )
+          )
+  )
+  and (
+    // new sender domain
+    network.whois(sender.email.domain).days_old <= 90
+    or profile.by_sender_domain().prevalence == "new"
+    or profile.by_sender_domain().days_known < 3
+    // sender has never been emailed by anyone in the org
+    or sender.email.email not in $recipient_emails
+    // potential vendor impersonation
+    or any($sender_domains,
+           0 < strings.ilevenshtein(., sender.email.domain.root_domain) < 3
+    )
+  )
+  and not (
+    profile.by_sender_email().solicited and headers.auth_summary.dmarc.pass
+  )
+  // and the sender is not from high trust sender root domains
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and not headers.auth_summary.dmarc.pass
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+
+attack_types:
+  - "BEC/Fraud"
+tactics_and_techniques:
+  - "Social engineering"
+  - "Evasion"
+detection_methods:
+  - "Content analysis"
+  - "Header analysis"
+  - "Natural Language Understanding"
+  - "Sender analysis"
+  - "Whois"
