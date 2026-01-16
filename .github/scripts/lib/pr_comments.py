@@ -143,11 +143,15 @@ def post_exclusion_comment_if_needed(session, repo_owner, repo_name, pr_number, 
     Returns:
         bool: True if comment was added or already exists, False on error
     """
-    # Check if we've already commented
-    if has_existing_comment(session, repo_owner, repo_name, pr_number, COMMENT_MARKER, cache=cache):
-        print(f"\tPR #{pr_number} already has an exclusion comment, skipping")
-        return True
+    try:
+        # Check if we've already commented
+        if has_existing_comment(session, repo_owner, repo_name, pr_number, COMMENT_MARKER, cache=cache):
+            print(f"\tPR #{pr_number} already has an exclusion comment, skipping")
+            return True
 
-    # Generate and post the comment
-    body = generate_exclusion_comment(exclusion_type, **kwargs)
-    return add_pr_comment(session, repo_owner, repo_name, pr_number, body)
+        # Generate and post the comment
+        body = generate_exclusion_comment(exclusion_type, **kwargs)
+        return add_pr_comment(session, repo_owner, repo_name, pr_number, body)
+    except Exception as e:
+        print(f"\tError posting exclusion comment to PR #{pr_number}: {e}")
+        return False

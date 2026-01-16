@@ -492,6 +492,13 @@ if __name__ == '__main__':
         print(line)
 
     print("Running shared-samples sync...")
+
+    # Debug: Check token configuration
+    print(f"Debug: GITHUB_TOKEN is {'set' if GITHUB_TOKEN else 'NOT SET'}")
+    print(f"Debug: GITHUB_WRITE_TOKEN is {'set' if GITHUB_WRITE_TOKEN else 'NOT SET'}")
+    if GITHUB_TOKEN and GITHUB_WRITE_TOKEN:
+        print(f"Debug: Tokens are {'SAME' if GITHUB_TOKEN == GITHUB_WRITE_TOKEN else 'DIFFERENT'}")
+
     session = create_github_session(GITHUB_TOKEN)
     write_session = create_github_session(GITHUB_WRITE_TOKEN)
     handle_pr_rules(session, write_session)
