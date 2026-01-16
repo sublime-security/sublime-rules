@@ -59,15 +59,13 @@ def has_trigger_comment(session, repo_owner, repo_name, pr_number, org_name, tri
         comments = response.json()
 
     for comment in comments:
-        # Check if comment contains the trigger and author is in the organization
+        # Check if comment contains the trigger and commenter is in the organization
         if trigger_comment in comment['body']:
-            print(f"\tPR #{pr_number}: Author not in {org_name} and trigger comment found")
-            if is_user_in_org(session, comment['user']['login'], org_name, cache=cache):
-                print(f"\tPR #{pr_number}: Author not in {org_name} and trigger comment from {comment['user']['login']} is a {org_name} member")
+            commenter = comment['user']['login']
+            if is_user_in_org(session, commenter, org_name, cache=cache):
+                print(f"\tPR #{pr_number}: Found trigger comment from {commenter} ({org_name} member)")
                 return True
-            print(f"\tPR #{pr_number}: Author not in {org_name} and trigger comment from {comment['user']['login']} is NOT a {org_name} member")
-
-    print(f"\tPR #{pr_number}: Author not in {org_name} and trigger comment NOT found")
+            print(f"\tPR #{pr_number}: Found trigger comment from {commenter} (not a {org_name} member, ignoring)")
 
     return False
 
