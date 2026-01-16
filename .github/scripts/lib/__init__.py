@@ -23,6 +23,11 @@ from .constants import (
 
 from .github_client import create_github_session
 
+from .github_api import (
+    get_pull_requests,
+    get_files_for_pull_request,
+)
+
 from .labels import has_label, apply_label, remove_label
 
 from .membership import (
@@ -49,6 +54,8 @@ from .file_utils import (
     save_file,
     pr_has_synced_files,
     clean_output_folder,
+    is_detection_rule_file,
+    should_process_file,
     count_yaml_rules_in_pr,
 )
 
@@ -81,6 +88,9 @@ __all__ = [
     'DEFAULT_OPEN_PR_TAG',
     # GitHub client
     'create_github_session',
+    # GitHub API
+    'get_pull_requests',
+    'get_files_for_pull_request',
     # Labels
     'has_label',
     'apply_label',
@@ -105,6 +115,8 @@ __all__ = [
     'save_file',
     'pr_has_synced_files',
     'clean_output_folder',
+    'is_detection_rule_file',
+    'should_process_file',
     'count_yaml_rules_in_pr',
     # PR comments
     'add_pr_comment',

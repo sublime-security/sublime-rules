@@ -70,7 +70,7 @@ def add_pr_comment(session, repo_owner, repo_name, pr_number, body):
         return False
 
 
-def generate_exclusion_comment(exclusion_type, org_name=None, max_rules=None, rule_count=None, comment_trigger=None):
+def generate_exclusion_comment(exclusion_type, org_name=None, max_rules=None, rule_count=None, comment_trigger=None, environment_name='test-rules'):
     """
     Generate a user-friendly comment explaining why a PR was excluded from syncing.
 
@@ -80,6 +80,7 @@ def generate_exclusion_comment(exclusion_type, org_name=None, max_rules=None, ru
         max_rules (int, optional): Max rules limit for bulk exclusions
         rule_count (int, optional): Actual rule count for bulk exclusions
         comment_trigger (str, optional): Comment trigger text
+        environment_name (str): Name of the sync environment (only used for link_analysis)
 
     Returns:
         str: Formatted comment body with marker
@@ -89,9 +90,9 @@ def generate_exclusion_comment(exclusion_type, org_name=None, max_rules=None, ru
 
     if exclusion_type == AUTHOR_MEMBERSHIP_EXCLUSION_LABEL:
         body = f"""{COMMENT_MARKER}
-### Test Rules Sync - Action Required
+### Automatic Rule Sync - Excluded
 
-This PR was not automatically synced to test-rules because the author is not a member of the `{org_name}` organization.
+This PR was not automatically synced because the author is not a member of the `{org_name}` organization.
 
 **To enable syncing**, an organization member can comment `{comment_trigger}` on this PR.
 
@@ -99,25 +100,26 @@ Once triggered, the rules will be synced on the next scheduled run (every 10 min
 """
     elif exclusion_type == BULK_PR_LABEL:
         body = f"""{COMMENT_MARKER}
-### Test Rules Sync - Excluded
+### Automatic Rule Sync - Excluded
 
 This PR contains **{rule_count} rules**, which exceeds the maximum of **{max_rules} rules** allowed per PR for automatic syncing.
 
-This limit helps ensure the test-rules environment remains manageable. If you need to test these rules, consider:
+If you need to sync these rules, consider:
 - Splitting the PR into smaller PRs with fewer rules
-- Contacting the team to request a manual sync
+- Contacting Detection Operations to request a manual sync
 """
     elif exclusion_type == LINK_ANALYSIS_EXCLUSION_LABEL:
+        # Link analysis is test-rules specific
         body = f"""{COMMENT_MARKER}
 ### Test Rules Sync - Excluded
 
-This PR contains rules that use `ml.link_analysis`, which is not supported in the test-rules environment.
+This PR contains rules that use `ml.link_analysis`, which is not supported in the {environment_name} environment.
 
 The `hunting-required` label has been applied. These rules will need to be tested through alternative methods.
 """
     else:
         body = f"""{COMMENT_MARKER}
-### Test Rules Sync - Excluded
+### Automatic Rule Sync - Excluded
 
 This PR has been excluded from automatic syncing. Please check the applied labels for more details.
 """

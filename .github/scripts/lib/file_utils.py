@@ -80,6 +80,44 @@ def clean_output_folder(output_folder, valid_files):
             os.remove(file_path)
 
 
+def is_detection_rule_file(file):
+    """
+    Check if a file is a detection rule YAML file.
+
+    Args:
+        file (dict): File object from GitHub API with 'filename' and 'status' keys
+
+    Returns:
+        bool: True if file is a detection rule YAML in an eligible status
+    """
+    return (
+        file['status'] in ['added', 'modified', 'changed'] and
+        file['filename'].startswith('detection-rules/') and
+        file['filename'].endswith('.yml')
+    )
+
+
+def should_process_file(file, include_added=True, include_updates=True):
+    """
+    Check if a PR file should be processed as a detection rule.
+
+    Args:
+        file (dict): File object from GitHub API
+        include_added (bool): Whether to include newly added files
+        include_updates (bool): Whether to include modified/changed files
+
+    Returns:
+        bool: True if file should be processed
+    """
+    if not is_detection_rule_file(file):
+        return False
+    if file['status'] == 'added':
+        return include_added
+    if file['status'] in ['modified', 'changed']:
+        return include_updates
+    return False
+
+
 def count_yaml_rules_in_pr(files):
     """
     Count the number of YAML rule files in the PR.
@@ -90,10 +128,4 @@ def count_yaml_rules_in_pr(files):
     Returns:
         int: Number of YAML files in detection-rules directory
     """
-    yaml_count = 0
-    for file in files:
-        if (file['status'] in ['added', 'modified', 'changed'] and
-            file['filename'].startswith('detection-rules/') and
-                file['filename'].endswith('.yml')):
-            yaml_count += 1
-    return yaml_count
+    return sum(1 for file in files if is_detection_rule_file(file))

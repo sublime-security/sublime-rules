@@ -31,6 +31,8 @@ from lib import (
     DEFAULT_REQUIRED_CHECK_CONCLUSION,
     # Functions
     create_github_session,
+    get_pull_requests,
+    get_files_for_pull_request,
     apply_label,
     remove_label,
     is_user_in_org,
@@ -43,6 +45,7 @@ from lib import (
     save_file,
     pr_has_synced_files,
     clean_output_folder,
+    should_process_file,
     count_yaml_rules_in_pr,
     post_exclusion_comment_if_needed,
     # Cache
@@ -86,50 +89,6 @@ if not os.path.exists(OUTPUT_FOLDER):
     os.makedirs(OUTPUT_FOLDER)
 
 
-def get_open_pull_requests(session):
-    """Fetch all open pull requests from the repository."""
-    pull_requests = []
-    page = 1
-    per_page = 30
-
-    while True:
-        url = f'https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/pulls'
-        params = {'page': page, 'per_page': per_page, 'sort': 'updated', 'direction': 'desc'}
-        print(f"Fetching page {page} of Pull Requests")
-        response = session.get(url, params=params)
-        response.raise_for_status()
-
-        pull_requests.extend(response.json())
-
-        if 'Link' in response.headers:
-            links = response.headers['Link'].split(', ')
-            has_next = any('rel="next"' in link for link in links)
-        else:
-            has_next = False
-
-        if not has_next:
-            print(f"Fetched page {page} of Pull Requests")
-            print(f"PRs on page {page}: {len(response.json())}")
-            break
-
-        print(f"Fetched page {page} of Pull Requests")
-        print(f"PRs on page {page}: {len(response.json())}")
-        print(f"PRs found so far: {len(pull_requests)}")
-        print(f"Moving to page {page + 1}")
-        page += 1
-
-    print(f"Total PRs: {len(pull_requests)}")
-    return pull_requests
-
-
-def get_files_for_pull_request(session, pr_number):
-    """Fetch files changed in a pull request."""
-    url = f'https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/pulls/{pr_number}/files'
-    response = session.get(url)
-    response.raise_for_status()
-    return response.json()
-
-
 def handle_pr_rules(session, write_session=None):
     """
     Process open PRs to sync rules to test-rules branch.
@@ -157,7 +116,7 @@ def handle_pr_rules(session, write_session=None):
     for line in header:
         print(line)
 
-    pull_requests = get_open_pull_requests(session)
+    pull_requests = get_pull_requests(session, REPO_OWNER, REPO_NAME)
     new_files = set()
     cache = PRCache()
 
@@ -201,12 +160,8 @@ def handle_pr_rules(session, write_session=None):
                 continue
 
         for file in files:
-            if (file['status'] in ['added', 'modified', 'changed'] and
-                file['filename'].startswith('detection-rules/') and
-                    file['filename'].endswith('.yml')):
-                if (file['status'] == "added" and INCLUDE_ADDED) or \
-                   (file['status'] in ['modified', 'changed'] and INCLUDE_UPDATES):
-                    file_specs.append((file['filename'], latest_sha))
+            if should_process_file(file, INCLUDE_ADDED, INCLUDE_UPDATES):
+                file_specs.append((file['filename'], latest_sha))
 
     cache.prefetch_file_contents(session, REPO_OWNER, REPO_NAME, file_specs)
     print("Prefetch complete, processing PRs...\n")
@@ -362,84 +317,80 @@ def handle_pr_rules(session, write_session=None):
         # Process files in the PR
         for file in files:
             print(f"\tStatus of {file['filename']}: {file['status']}")
-            process_file = False
 
-            # Check file type and status
-            if (file['status'] in ['added', 'modified', 'changed'] and
-                file['filename'].startswith('detection-rules/') and
-                    file['filename'].endswith('.yml')):
-                if file['status'] == "added" and INCLUDE_ADDED:
-                    process_file = True
-                elif file['status'] in ['modified', 'changed'] and INCLUDE_UPDATES:
-                    process_file = True
+            if not should_process_file(file, INCLUDE_ADDED, INCLUDE_UPDATES):
+                # Log why file was skipped
+                if not (file['filename'].startswith('detection-rules/') and file['filename'].endswith('.yml')):
+                    print(f"\tSkipping {file['status']} file: {file['filename']} in PR #{pr_number} -- not a detection rule")
+                elif file['status'] not in ['added', 'modified', 'changed']:
+                    print(f"\tSkipping {file['status']} file: {file['filename']} in PR #{pr_number} -- unmanaged file status")
                 else:
                     print(f"\tSkipping {file['status']} file: {file['filename']} in PR #{pr_number} -- INCLUDE_UPDATES == {INCLUDE_UPDATES}, INCLUDE_ADDED == {INCLUDE_ADDED}")
-            else:
-                print(f"\tSkipping {file['status']} file: {file['filename']} in PR #{pr_number} -- unmanaged file status")
+                continue
 
-            if process_file:
-                # Fetch file content (from cache)
-                content = cache.get_file_content(
-                    session, REPO_OWNER, REPO_NAME,
-                    file['filename'], latest_sha
-                )
+            # Fetch file content (from cache)
+            content = cache.get_file_content(
+                session, REPO_OWNER, REPO_NAME,
+                file['filename'], latest_sha
+            )
 
-                # Skip files with specific text patterns
-                if SKIP_FILES_WITH_TEXT and SKIP_TEXTS:
-                    matched_texts, labels_to_apply = check_skip_texts(content, SKIP_TEXTS)
-                    if matched_texts:
-                        print(f"\tSkipping file {file['filename']}: contains texts {matched_texts}")
+            # Skip files with specific text patterns
+            if SKIP_FILES_WITH_TEXT and SKIP_TEXTS:
+                matched_texts, labels_to_apply = check_skip_texts(content, SKIP_TEXTS)
+                if matched_texts:
+                    print(f"\tSkipping file {file['filename']}: contains texts {matched_texts}")
 
-                        # Apply all associated labels
-                        for label in labels_to_apply:
-                            if not cache.has_label(session, REPO_OWNER, REPO_NAME, pr_number, label):
-                                print(f"\tPR #{pr_number} doesn't have the '{label}' label. Applying...")
-                                apply_label(write_session, REPO_OWNER, REPO_NAME, pr_number, label, cache=cache)
+                    # Apply all associated labels
+                    for label in labels_to_apply:
+                        if not cache.has_label(session, REPO_OWNER, REPO_NAME, pr_number, label):
+                            print(f"\tPR #{pr_number} doesn't have the '{label}' label. Applying...")
+                            apply_label(write_session, REPO_OWNER, REPO_NAME, pr_number, label, cache=cache)
 
-                        # Post comment for link_analysis exclusion
-                        from lib.constants import LINK_ANALYSIS_EXCLUSION_LABEL
-                        if LINK_ANALYSIS_EXCLUSION_LABEL in labels_to_apply:
-                            post_exclusion_comment_if_needed(
-                                write_session, REPO_OWNER, REPO_NAME, pr_number,
-                                LINK_ANALYSIS_EXCLUSION_LABEL,
-                                cache=cache
-                            )
+                    # Post comment for link_analysis exclusion
+                    from lib.constants import LINK_ANALYSIS_EXCLUSION_LABEL
+                    if LINK_ANALYSIS_EXCLUSION_LABEL in labels_to_apply:
+                        post_exclusion_comment_if_needed(
+                            write_session, REPO_OWNER, REPO_NAME, pr_number,
+                            LINK_ANALYSIS_EXCLUSION_LABEL,
+                            cache=cache,
+                            environment_name='test-rules'
+                        )
 
-                        # Remove in-test-rules label
-                        if cache.has_label(session, REPO_OWNER, REPO_NAME, pr_number, IN_TEST_RULES_LABEL):
-                            remove_label(write_session, REPO_OWNER, REPO_NAME, pr_number, IN_TEST_RULES_LABEL, cache=cache)
-                        continue
+                    # Remove in-test-rules label
+                    if cache.has_label(session, REPO_OWNER, REPO_NAME, pr_number, IN_TEST_RULES_LABEL):
+                        remove_label(write_session, REPO_OWNER, REPO_NAME, pr_number, IN_TEST_RULES_LABEL, cache=cache)
+                    continue
 
-                # Process the file
-                target_save_filename = f"{pr_number}_{os.path.basename(file['filename'])}"
+            # Process the file
+            target_save_filename = f"{pr_number}_{os.path.basename(file['filename'])}"
 
-                # Get modified content and original ID
-                modified_content, original_id = add_id_to_yaml(content, target_save_filename)
+            # Get modified content and original ID
+            modified_content, original_id = add_id_to_yaml(content, target_save_filename)
 
-                # Add test-rules specific fields
-                # Store the original id
-                if original_id:
-                    modified_content = modified_content.rstrip()
-                    modified_content += f'\nog_id: "{original_id}"'
-
-                # Add the PR number as testing_pr
+            # Add test-rules specific fields
+            # Store the original id
+            if original_id:
                 modified_content = modified_content.rstrip()
-                modified_content += f"\ntesting_pr: {pr_number}"
+                modified_content += f'\nog_id: "{original_id}"'
 
-                # Add the commit SHA as testing_sha
-                modified_content = modified_content.rstrip()
-                modified_content += f"\ntesting_sha: {latest_sha}"
+            # Add the PR number as testing_pr
+            modified_content = modified_content.rstrip()
+            modified_content += f"\ntesting_pr: {pr_number}"
 
-                # Save the file
-                save_file(OUTPUT_FOLDER, target_save_filename, modified_content)
-                new_files.add(target_save_filename)
-                print(f"\tSaved: {target_save_filename}")
+            # Add the commit SHA as testing_sha
+            modified_content = modified_content.rstrip()
+            modified_content += f"\ntesting_sha: {latest_sha}"
 
-                # Apply the in-test-rules label
-                if ADD_TEST_RULES_LABEL:
-                    if not cache.has_label(session, REPO_OWNER, REPO_NAME, pr_number, IN_TEST_RULES_LABEL):
-                        print(f"\tPR #{pr_number} doesn't have the '{IN_TEST_RULES_LABEL}' label. Applying...")
-                        apply_label(write_session, REPO_OWNER, REPO_NAME, pr_number, IN_TEST_RULES_LABEL, cache=cache)
+            # Save the file
+            save_file(OUTPUT_FOLDER, target_save_filename, modified_content)
+            new_files.add(target_save_filename)
+            print(f"\tSaved: {target_save_filename}")
+
+            # Apply the in-test-rules label
+            if ADD_TEST_RULES_LABEL:
+                if not cache.has_label(session, REPO_OWNER, REPO_NAME, pr_number, IN_TEST_RULES_LABEL):
+                    print(f"\tPR #{pr_number} doesn't have the '{IN_TEST_RULES_LABEL}' label. Applying...")
+                    apply_label(write_session, REPO_OWNER, REPO_NAME, pr_number, IN_TEST_RULES_LABEL, cache=cache)
 
     # Clean up files no longer in open PRs
     clean_output_folder(OUTPUT_FOLDER, new_files)
