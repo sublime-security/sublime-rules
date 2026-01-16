@@ -137,7 +137,6 @@ def post_exclusion_comment_if_needed(session, repo_owner, repo_name, pr_number, 
         bool: True if comment was added or already exists, False on error
     """
     # Check if we've already commented
-    marker = f"{COMMENT_MARKER}\n### Test Rules Sync"
     if has_existing_comment(session, repo_owner, repo_name, pr_number, COMMENT_MARKER):
         print(f"\tPR #{pr_number} already has an exclusion comment, skipping")
         return True

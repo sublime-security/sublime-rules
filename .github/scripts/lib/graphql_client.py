@@ -74,6 +74,16 @@ query GetPullRequests($owner: String!, $repo: String!, $states: [PullRequestStat
 }
 """
 
+# Mapping from GraphQL changeType to REST API status format
+_CHANGE_TYPE_MAP = {
+    'ADDED': 'added',
+    'MODIFIED': 'modified',
+    'CHANGED': 'changed',
+    'DELETED': 'deleted',
+    'RENAMED': 'renamed',
+    'COPIED': 'copied',
+}
+
 
 def create_graphql_session(token: str):
     """
@@ -159,18 +169,10 @@ def _parse_pr_node(node: dict) -> dict:
     labels = {label['name'] for label in node.get('labels', {}).get('nodes', [])}
 
     # Extract files with status mapping
-    change_type_map = {
-        'ADDED': 'added',
-        'MODIFIED': 'modified',
-        'CHANGED': 'changed',
-        'DELETED': 'deleted',
-        'RENAMED': 'renamed',
-        'COPIED': 'copied',
-    }
     files = [
         {
             'filename': f['path'],
-            'status': change_type_map.get(f['changeType'], f['changeType'].lower())
+            'status': _CHANGE_TYPE_MAP.get(f['changeType'], f['changeType'].lower())
         }
         for f in node.get('files', {}).get('nodes', [])
     ]

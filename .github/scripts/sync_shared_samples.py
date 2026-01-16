@@ -185,8 +185,7 @@ def handle_closed_prs(graphql_session):
 
         # Check delay for merged PRs
         if closed_pr.merged_at is not None:
-            merged_at_time = datetime.strptime(closed_pr.merged_at, "%Y-%m-%dT%H:%M:%SZ").replace(
-                tzinfo=timezone.utc)
+            merged_at_time = datetime.fromisoformat(closed_pr.merged_at.replace("Z", "+00:00"))
 
             if not merged_at_time <= datetime.now(tz=timezone.utc) - timedelta(days=DELETE_RULES_FROM_CLOSED_PRS_DELAY):
                 time_remaining = (merged_at_time + timedelta(days=DELETE_RULES_FROM_CLOSED_PRS_DELAY)) - datetime.now(tz=timezone.utc)
