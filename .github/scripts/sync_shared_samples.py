@@ -24,15 +24,21 @@ from lib import (
     # Constants
     DO_NOT_MERGE_LABEL,
     BULK_PR_LABEL,
+    AUTHOR_MEMBERSHIP_EXCLUSION_LABEL,
     DEFAULT_MAX_RULES_PER_PR,
     DEFAULT_DELETE_RULES_DELAY_DAYS,
     DEFAULT_AUTHOR_TAG_PREFIX,
     DEFAULT_RULE_STATUS_PREFIX,
     DEFAULT_OPEN_PR_TAG,
+    DEFAULT_ORG_NAME,
+    DEFAULT_COMMENT_TRIGGER,
     # Functions
     create_github_session,
     apply_label,
     remove_label,
+    is_user_in_org,
+    has_trigger_comment,
+    post_exclusion_comment_if_needed,
     add_id_to_yaml,
     add_block,
     rename_rules,
@@ -71,6 +77,12 @@ DELETE_RULES_FROM_CLOSED_PRS_DELAY = int(os.getenv('DELETE_RULES_FROM_CLOSED_PRS
 # Bulk PR limits
 SKIP_BULK_PRS = os.getenv('SKIP_BULK_PRS', 'true').lower() == 'true'
 MAX_RULES_PER_PR = int(os.getenv('MAX_RULES_PER_PR', str(DEFAULT_MAX_RULES_PER_PR)))
+
+# Organization membership filtering
+FILTER_BY_ORG_MEMBERSHIP = os.getenv('FILTER_BY_ORG_MEMBERSHIP', 'false').lower() == 'true'
+ORG_NAME = os.getenv('ORG_NAME', DEFAULT_ORG_NAME)
+INCLUDE_PRS_WITH_COMMENT = os.getenv('INCLUDE_PRS_WITH_COMMENT', 'true').lower() == 'true'
+COMMENT_TRIGGER = os.getenv('COMMENT_TRIGGER', DEFAULT_COMMENT_TRIGGER)
 
 # Create output folder if it doesn't exist
 if not os.path.exists(OUTPUT_FOLDER):
@@ -408,7 +420,55 @@ def handle_pr_rules(session):
             print(f"Skipping non-main branch PR #{pr_number}: {pr['title']} -- dest branch: {pr['base']['ref']}")
             continue
 
-        print(f"Processing PR #{pr_number}: {pr['title']}")
+        # Organization membership filtering
+        process_pr = True
+        if FILTER_BY_ORG_MEMBERSHIP:
+            author_in_org = is_user_in_org(session, pr['user']['login'], ORG_NAME, cache=cache)
+            has_comment = False
+
+            if author_in_org:
+                print(f"Processing PR #{pr_number}: {pr['title']}")
+                print(f"\tAuthor {pr['user']['login']} is in {ORG_NAME}")
+                # Remove exclusion label if present
+                if cache.has_label(session, REPO_OWNER, REPO_NAME, pr_number, AUTHOR_MEMBERSHIP_EXCLUSION_LABEL):
+                    remove_label(session, REPO_OWNER, REPO_NAME, pr_number, AUTHOR_MEMBERSHIP_EXCLUSION_LABEL, cache=cache)
+            else:
+                # Check for trigger comment if author not in org
+                if INCLUDE_PRS_WITH_COMMENT:
+                    has_comment = has_trigger_comment(
+                        session, REPO_OWNER, REPO_NAME, pr_number, ORG_NAME, COMMENT_TRIGGER, cache=cache
+                    )
+
+                    if has_comment:
+                        print(f"Processing PR #{pr_number}: {pr['title']}")
+                        # Remove exclusion label if present
+                        if cache.has_label(session, REPO_OWNER, REPO_NAME, pr_number, AUTHOR_MEMBERSHIP_EXCLUSION_LABEL):
+                            print(f"\tRemoving '{AUTHOR_MEMBERSHIP_EXCLUSION_LABEL}' label due to trigger comment")
+                            remove_label(session, REPO_OWNER, REPO_NAME, pr_number, AUTHOR_MEMBERSHIP_EXCLUSION_LABEL, cache=cache)
+
+                if not has_comment:
+                    print(f"Skipping PR #{pr_number}: Author {pr['user']['login']} is not in {ORG_NAME} and no trigger comment")
+
+                    # Apply exclusion label if not already present
+                    if not cache.has_label(session, REPO_OWNER, REPO_NAME, pr_number, AUTHOR_MEMBERSHIP_EXCLUSION_LABEL):
+                        print(f"\tApplying '{AUTHOR_MEMBERSHIP_EXCLUSION_LABEL}' label...")
+                        apply_label(session, REPO_OWNER, REPO_NAME, pr_number, AUTHOR_MEMBERSHIP_EXCLUSION_LABEL, cache=cache)
+                        # Post comment explaining how to enable sync
+                        post_exclusion_comment_if_needed(
+                            session, REPO_OWNER, REPO_NAME, pr_number,
+                            AUTHOR_MEMBERSHIP_EXCLUSION_LABEL,
+                            cache=cache,
+                            org_name=ORG_NAME,
+                            comment_trigger=COMMENT_TRIGGER
+                        )
+
+                    process_pr = False
+
+        if not process_pr:
+            continue
+
+        if not FILTER_BY_ORG_MEMBERSHIP:
+            print(f"Processing PR #{pr_number}: {pr['title']}")
 
         # Get the latest commit SHA
         latest_sha = pr['head']['sha']
