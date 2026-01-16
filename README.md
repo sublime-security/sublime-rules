@@ -4,5 +4,7 @@ Sublime Rules
 ==========
 by Sublime Security
 
-`test-rules` branch is used to store rules which being used for evaluation/testing. This branch isn't meant to be merged
-to `main`, and PRs should not be opened against it.
+`test-rules` branch is used to store rules which being used for evaluation/testing. 
+
+> [!CAUTION]
+> This branch isn't meant to be merged to `main`, and PRs should not be opened against it.
