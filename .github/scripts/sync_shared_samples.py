@@ -493,6 +493,6 @@ if __name__ == '__main__':
 
     print("Running shared-samples sync...")
     session = create_github_session(GITHUB_TOKEN)
-    write_session = create_github_session(GITHUB_WRITE_TOKEN) if GITHUB_WRITE_TOKEN else session
+    write_session = create_github_session(GITHUB_WRITE_TOKEN)
     handle_pr_rules(session, write_session)
     handle_closed_prs(session)
