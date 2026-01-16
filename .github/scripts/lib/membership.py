@@ -4,7 +4,7 @@ GitHub organization membership and PR checks.
 import sys
 
 
-def is_user_in_org(session, username, org_name):
+def is_user_in_org(session, username, org_name, cache=None):
     """
     Check if a user is a member of a specific organization.
 
@@ -12,10 +12,14 @@ def is_user_in_org(session, username, org_name):
         session: GitHub API session
         username (str): GitHub username
         org_name (str): Organization name
+        cache (PRCache, optional): Cache instance to use
 
     Returns:
         bool: True if user is a member, False otherwise
     """
+    if cache:
+        return cache.is_user_in_org(session, username, org_name)
+
     url = f'https://api.github.com/orgs/{org_name}/members/{username}'
     try:
         response = session.get(url)
@@ -30,7 +34,7 @@ def is_user_in_org(session, username, org_name):
         sys.exit(1)
 
 
-def has_trigger_comment(session, repo_owner, repo_name, pr_number, org_name, trigger_comment):
+def has_trigger_comment(session, repo_owner, repo_name, pr_number, org_name, trigger_comment, cache=None):
     """
     Check if a PR has a comment with the trigger text from a member of the specified org.
 
@@ -41,20 +45,24 @@ def has_trigger_comment(session, repo_owner, repo_name, pr_number, org_name, tri
         pr_number (int): Pull request number
         org_name (str): Organization name to filter commenters
         trigger_comment (str): Comment text to look for
+        cache (PRCache, optional): Cache instance to use
 
     Returns:
         bool: True if a matching comment is found, False otherwise
     """
-    url = f'https://api.github.com/repos/{repo_owner}/{repo_name}/issues/{pr_number}/comments'
-    response = session.get(url)
-    response.raise_for_status()
-    comments = response.json()
+    if cache:
+        comments = cache.get_comments(session, repo_owner, repo_name, pr_number)
+    else:
+        url = f'https://api.github.com/repos/{repo_owner}/{repo_name}/issues/{pr_number}/comments'
+        response = session.get(url)
+        response.raise_for_status()
+        comments = response.json()
 
     for comment in comments:
         # Check if comment contains the trigger and author is in the organization
         if trigger_comment in comment['body']:
             print(f"\tPR #{pr_number}: Author not in {org_name} and trigger comment found")
-            if is_user_in_org(session, comment['user']['login'], org_name):
+            if is_user_in_org(session, comment['user']['login'], org_name, cache=cache):
                 print(f"\tPR #{pr_number}: Author not in {org_name} and trigger comment from {comment['user']['login']} is a {org_name} member")
                 return True
             print(f"\tPR #{pr_number}: Author not in {org_name} and trigger comment from {comment['user']['login']} is NOT a {org_name} member")

@@ -13,7 +13,7 @@ from .constants import (
 COMMENT_MARKER = '<!-- sublime-sync-bot -->'
 
 
-def has_existing_comment(session, repo_owner, repo_name, pr_number, marker_text):
+def has_existing_comment(session, repo_owner, repo_name, pr_number, marker_text, cache=None):
     """
     Check if a PR already has a comment with the specified marker.
 
@@ -23,14 +23,18 @@ def has_existing_comment(session, repo_owner, repo_name, pr_number, marker_text)
         repo_name (str): Repository name
         pr_number (int): Pull request number
         marker_text (str): Text marker to search for
+        cache (PRCache, optional): Cache instance to use
 
     Returns:
         bool: True if comment with marker exists, False otherwise
     """
-    url = f'https://api.github.com/repos/{repo_owner}/{repo_name}/issues/{pr_number}/comments'
-    response = session.get(url)
-    response.raise_for_status()
-    comments = response.json()
+    if cache:
+        comments = cache.get_comments(session, repo_owner, repo_name, pr_number)
+    else:
+        url = f'https://api.github.com/repos/{repo_owner}/{repo_name}/issues/{pr_number}/comments'
+        response = session.get(url)
+        response.raise_for_status()
+        comments = response.json()
 
     for comment in comments:
         if marker_text in comment.get('body', ''):
@@ -121,7 +125,7 @@ This PR has been excluded from automatic syncing. Please check the applied label
     return body
 
 
-def post_exclusion_comment_if_needed(session, repo_owner, repo_name, pr_number, exclusion_type, **kwargs):
+def post_exclusion_comment_if_needed(session, repo_owner, repo_name, pr_number, exclusion_type, cache=None, **kwargs):
     """
     Post an exclusion comment to a PR if one doesn't already exist.
 
@@ -131,14 +135,14 @@ def post_exclusion_comment_if_needed(session, repo_owner, repo_name, pr_number, 
         repo_name (str): Repository name
         pr_number (int): Pull request number
         exclusion_type (str): Type of exclusion
+        cache (PRCache, optional): Cache instance to use
         **kwargs: Additional arguments passed to generate_exclusion_comment
 
     Returns:
         bool: True if comment was added or already exists, False on error
     """
     # Check if we've already commented
-    marker = f"{COMMENT_MARKER}\n### Test Rules Sync"
-    if has_existing_comment(session, repo_owner, repo_name, pr_number, COMMENT_MARKER):
+    if has_existing_comment(session, repo_owner, repo_name, pr_number, COMMENT_MARKER, cache=cache):
         print(f"\tPR #{pr_number} already has an exclusion comment, skipping")
         return True
 

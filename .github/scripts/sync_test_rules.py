@@ -31,7 +31,6 @@ from lib import (
     DEFAULT_REQUIRED_CHECK_CONCLUSION,
     # Functions
     create_github_session,
-    has_label,
     apply_label,
     remove_label,
     is_user_in_org,
@@ -46,6 +45,8 @@ from lib import (
     clean_output_folder,
     count_yaml_rules_in_pr,
     post_exclusion_comment_if_needed,
+    # Cache
+    PRCache,
 )
 
 # Configuration from environment
@@ -150,30 +151,31 @@ def handle_pr_rules(session):
 
     pull_requests = get_open_pull_requests(session)
     new_files = set()
+    cache = PRCache()
 
     for pr in pull_requests:
         pr_number = pr['number']
 
         # Check for do-not-merge label first - skip entirely if present
-        if has_label(session, REPO_OWNER, REPO_NAME, pr_number, DO_NOT_MERGE_LABEL):
+        if cache.has_label(session, REPO_OWNER, REPO_NAME, pr_number, DO_NOT_MERGE_LABEL):
             print(f"Skipping PR #{pr_number} (has '{DO_NOT_MERGE_LABEL}' label): {pr['title']}")
             continue
 
         # Draft PR handling
         if pr['draft']:
             # Process drafts if they have in-test-rules label OR trigger comment
-            has_in_test_rules = has_label(session, REPO_OWNER, REPO_NAME, pr_number, IN_TEST_RULES_LABEL)
+            has_in_test_rules = cache.has_label(session, REPO_OWNER, REPO_NAME, pr_number, IN_TEST_RULES_LABEL)
             has_comment = False
 
             if INCLUDE_PRS_WITH_COMMENT and not has_in_test_rules:
                 # Check for trigger comment from org member
                 has_comment = has_trigger_comment(
-                    session, REPO_OWNER, REPO_NAME, pr_number, ORG_NAME, COMMENT_TRIGGER
+                    session, REPO_OWNER, REPO_NAME, pr_number, ORG_NAME, COMMENT_TRIGGER, cache=cache
                 )
                 if has_comment:
                     # Apply the in-test-rules label since trigger comment was found
                     print(f"\tDraft PR #{pr_number} has trigger comment, applying '{IN_TEST_RULES_LABEL}' label")
-                    apply_label(session, REPO_OWNER, REPO_NAME, pr_number, IN_TEST_RULES_LABEL)
+                    apply_label(session, REPO_OWNER, REPO_NAME, pr_number, IN_TEST_RULES_LABEL, cache=cache)
 
             if has_in_test_rules or has_comment:
                 print(f"Processing draft PR #{pr_number} (has '{IN_TEST_RULES_LABEL}' label or trigger comment): {pr['title']}")
@@ -187,18 +189,18 @@ def handle_pr_rules(session):
             continue
 
         # Check for manual exclusion label (user opted out of test-rules)
-        if has_label(session, REPO_OWNER, REPO_NAME, pr_number, MANUAL_EXCLUSION_LABEL):
+        if cache.has_label(session, REPO_OWNER, REPO_NAME, pr_number, MANUAL_EXCLUSION_LABEL):
             print(f"Skipping manually excluded PR #{pr_number}: {pr['title']}")
             # Remove in-test-rules label if both are present (manual exclusion takes precedence)
-            if has_label(session, REPO_OWNER, REPO_NAME, pr_number, IN_TEST_RULES_LABEL):
+            if cache.has_label(session, REPO_OWNER, REPO_NAME, pr_number, IN_TEST_RULES_LABEL):
                 print(f"\tRemoving '{IN_TEST_RULES_LABEL}' label since manual exclusion takes precedence")
-                remove_label(session, REPO_OWNER, REPO_NAME, pr_number, IN_TEST_RULES_LABEL)
+                remove_label(session, REPO_OWNER, REPO_NAME, pr_number, IN_TEST_RULES_LABEL, cache=cache)
             continue
 
         # Check if user removed the in-test-rules label (opt-out)
-        if pr_has_synced_files(OUTPUT_FOLDER, pr_number) and not has_label(session, REPO_OWNER, REPO_NAME, pr_number, IN_TEST_RULES_LABEL):
+        if pr_has_synced_files(OUTPUT_FOLDER, pr_number) and not cache.has_label(session, REPO_OWNER, REPO_NAME, pr_number, IN_TEST_RULES_LABEL):
             print(f"PR #{pr_number} has synced files but '{IN_TEST_RULES_LABEL}' label was removed - applying manual exclusion")
-            apply_label(session, REPO_OWNER, REPO_NAME, pr_number, MANUAL_EXCLUSION_LABEL)
+            apply_label(session, REPO_OWNER, REPO_NAME, pr_number, MANUAL_EXCLUSION_LABEL, cache=cache)
             continue
 
         # Organization membership and comment trigger checks
@@ -206,44 +208,45 @@ def handle_pr_rules(session):
         print(f"Processing PR #{pr_number}: {pr['title']}")
 
         if FILTER_BY_ORG_MEMBERSHIP:
-            author_in_org = is_user_in_org(session, pr['user']['login'], ORG_NAME)
+            author_in_org = is_user_in_org(session, pr['user']['login'], ORG_NAME, cache=cache)
             has_comment = False
 
             if author_in_org:
                 print(f"\tPR #{pr_number}: Author {pr['user']['login']} is in {ORG_NAME}")
                 # Remove exclusion label if present
-                if has_label(session, REPO_OWNER, REPO_NAME, pr_number, AUTHOR_MEMBERSHIP_EXCLUSION_LABEL):
-                    remove_label(session, REPO_OWNER, REPO_NAME, pr_number, AUTHOR_MEMBERSHIP_EXCLUSION_LABEL)
+                if cache.has_label(session, REPO_OWNER, REPO_NAME, pr_number, AUTHOR_MEMBERSHIP_EXCLUSION_LABEL):
+                    remove_label(session, REPO_OWNER, REPO_NAME, pr_number, AUTHOR_MEMBERSHIP_EXCLUSION_LABEL, cache=cache)
             else:
                 # Check for trigger comment if author not in org
                 if INCLUDE_PRS_WITH_COMMENT:
                     has_comment = has_trigger_comment(
-                        session, REPO_OWNER, REPO_NAME, pr_number, ORG_NAME, COMMENT_TRIGGER
+                        session, REPO_OWNER, REPO_NAME, pr_number, ORG_NAME, COMMENT_TRIGGER, cache=cache
                     )
 
                     # If trigger comment was found, remove the exclusion label
-                    if has_comment and has_label(session, REPO_OWNER, REPO_NAME, pr_number, AUTHOR_MEMBERSHIP_EXCLUSION_LABEL):
+                    if has_comment and cache.has_label(session, REPO_OWNER, REPO_NAME, pr_number, AUTHOR_MEMBERSHIP_EXCLUSION_LABEL):
                         print(f"\tPR #{pr_number}: Removing '{AUTHOR_MEMBERSHIP_EXCLUSION_LABEL}' label due to trigger comment")
-                        remove_label(session, REPO_OWNER, REPO_NAME, pr_number, AUTHOR_MEMBERSHIP_EXCLUSION_LABEL)
+                        remove_label(session, REPO_OWNER, REPO_NAME, pr_number, AUTHOR_MEMBERSHIP_EXCLUSION_LABEL, cache=cache)
 
                     if not has_comment:
                         print(f"\tSkipping PR #{pr_number}: Author {pr['user']['login']} is not in {ORG_NAME} and is missing comment trigger")
 
                         # Apply exclusion label if not already present
-                        if not has_label(session, REPO_OWNER, REPO_NAME, pr_number, AUTHOR_MEMBERSHIP_EXCLUSION_LABEL):
+                        if not cache.has_label(session, REPO_OWNER, REPO_NAME, pr_number, AUTHOR_MEMBERSHIP_EXCLUSION_LABEL):
                             print(f"\tPR #{pr_number} doesn't have the '{AUTHOR_MEMBERSHIP_EXCLUSION_LABEL}' label. Applying...")
-                            apply_label(session, REPO_OWNER, REPO_NAME, pr_number, AUTHOR_MEMBERSHIP_EXCLUSION_LABEL)
+                            apply_label(session, REPO_OWNER, REPO_NAME, pr_number, AUTHOR_MEMBERSHIP_EXCLUSION_LABEL, cache=cache)
                             # Post comment explaining how to enable sync
                             post_exclusion_comment_if_needed(
                                 session, REPO_OWNER, REPO_NAME, pr_number,
                                 AUTHOR_MEMBERSHIP_EXCLUSION_LABEL,
+                                cache=cache,
                                 org_name=ORG_NAME,
                                 comment_trigger=COMMENT_TRIGGER
                             )
 
                         # Remove in-test-rules label if previously applied
-                        if has_label(session, REPO_OWNER, REPO_NAME, pr_number, IN_TEST_RULES_LABEL):
-                            remove_label(session, REPO_OWNER, REPO_NAME, pr_number, IN_TEST_RULES_LABEL)
+                        if cache.has_label(session, REPO_OWNER, REPO_NAME, pr_number, IN_TEST_RULES_LABEL):
+                            remove_label(session, REPO_OWNER, REPO_NAME, pr_number, IN_TEST_RULES_LABEL, cache=cache)
 
                         process_pr = False
 
@@ -262,8 +265,8 @@ def handle_pr_rules(session):
             ):
                 print(f"\tSkipping PR #{pr_number}: Required check '{REQUIRED_CHECK_NAME}' has not completed with conclusion '{REQUIRED_CHECK_CONCLUSION}'")
                 # Remove in-test-rules label if previously applied
-                if has_label(session, REPO_OWNER, REPO_NAME, pr_number, IN_TEST_RULES_LABEL):
-                    remove_label(session, REPO_OWNER, REPO_NAME, pr_number, IN_TEST_RULES_LABEL)
+                if cache.has_label(session, REPO_OWNER, REPO_NAME, pr_number, IN_TEST_RULES_LABEL):
+                    remove_label(session, REPO_OWNER, REPO_NAME, pr_number, IN_TEST_RULES_LABEL, cache=cache)
                 continue
 
         files = get_files_for_pull_request(session, pr_number)
@@ -275,26 +278,27 @@ def handle_pr_rules(session):
                 print(f"\tSkipping PR #{pr_number}: Contains {yaml_rule_count} YAML rules (max allowed: {MAX_RULES_PER_PR})")
 
                 # Apply label if not already present
-                if not has_label(session, REPO_OWNER, REPO_NAME, pr_number, BULK_PR_LABEL):
+                if not cache.has_label(session, REPO_OWNER, REPO_NAME, pr_number, BULK_PR_LABEL):
                     print(f"\tPR #{pr_number} doesn't have the '{BULK_PR_LABEL}' label. Applying...")
-                    apply_label(session, REPO_OWNER, REPO_NAME, pr_number, BULK_PR_LABEL)
+                    apply_label(session, REPO_OWNER, REPO_NAME, pr_number, BULK_PR_LABEL, cache=cache)
                     # Post comment explaining the limit
                     post_exclusion_comment_if_needed(
                         session, REPO_OWNER, REPO_NAME, pr_number,
                         BULK_PR_LABEL,
+                        cache=cache,
                         max_rules=MAX_RULES_PER_PR,
                         rule_count=yaml_rule_count
                     )
 
                 # Remove in-test-rules label if previously applied
-                if has_label(session, REPO_OWNER, REPO_NAME, pr_number, IN_TEST_RULES_LABEL):
-                    remove_label(session, REPO_OWNER, REPO_NAME, pr_number, IN_TEST_RULES_LABEL)
+                if cache.has_label(session, REPO_OWNER, REPO_NAME, pr_number, IN_TEST_RULES_LABEL):
+                    remove_label(session, REPO_OWNER, REPO_NAME, pr_number, IN_TEST_RULES_LABEL, cache=cache)
 
                 continue
             else:
                 # Remove bulk label if rule count is now under limit
-                if has_label(session, REPO_OWNER, REPO_NAME, pr_number, BULK_PR_LABEL):
-                    remove_label(session, REPO_OWNER, REPO_NAME, pr_number, BULK_PR_LABEL)
+                if cache.has_label(session, REPO_OWNER, REPO_NAME, pr_number, BULK_PR_LABEL):
+                    remove_label(session, REPO_OWNER, REPO_NAME, pr_number, BULK_PR_LABEL, cache=cache)
 
         # Process files in the PR
         for file in files:
@@ -329,21 +333,22 @@ def handle_pr_rules(session):
 
                         # Apply all associated labels
                         for label in labels_to_apply:
-                            if not has_label(session, REPO_OWNER, REPO_NAME, pr_number, label):
+                            if not cache.has_label(session, REPO_OWNER, REPO_NAME, pr_number, label):
                                 print(f"\tPR #{pr_number} doesn't have the '{label}' label. Applying...")
-                                apply_label(session, REPO_OWNER, REPO_NAME, pr_number, label)
+                                apply_label(session, REPO_OWNER, REPO_NAME, pr_number, label, cache=cache)
 
                         # Post comment for link_analysis exclusion
                         from lib.constants import LINK_ANALYSIS_EXCLUSION_LABEL
                         if LINK_ANALYSIS_EXCLUSION_LABEL in labels_to_apply:
                             post_exclusion_comment_if_needed(
                                 session, REPO_OWNER, REPO_NAME, pr_number,
-                                LINK_ANALYSIS_EXCLUSION_LABEL
+                                LINK_ANALYSIS_EXCLUSION_LABEL,
+                                cache=cache
                             )
 
                         # Remove in-test-rules label
-                        if has_label(session, REPO_OWNER, REPO_NAME, pr_number, IN_TEST_RULES_LABEL):
-                            remove_label(session, REPO_OWNER, REPO_NAME, pr_number, IN_TEST_RULES_LABEL)
+                        if cache.has_label(session, REPO_OWNER, REPO_NAME, pr_number, IN_TEST_RULES_LABEL):
+                            remove_label(session, REPO_OWNER, REPO_NAME, pr_number, IN_TEST_RULES_LABEL, cache=cache)
                         continue
 
                 # Process the file
@@ -373,9 +378,9 @@ def handle_pr_rules(session):
 
                 # Apply the in-test-rules label
                 if ADD_TEST_RULES_LABEL:
-                    if not has_label(session, REPO_OWNER, REPO_NAME, pr_number, IN_TEST_RULES_LABEL):
+                    if not cache.has_label(session, REPO_OWNER, REPO_NAME, pr_number, IN_TEST_RULES_LABEL):
                         print(f"\tPR #{pr_number} doesn't have the '{IN_TEST_RULES_LABEL}' label. Applying...")
-                        apply_label(session, REPO_OWNER, REPO_NAME, pr_number, IN_TEST_RULES_LABEL)
+                        apply_label(session, REPO_OWNER, REPO_NAME, pr_number, IN_TEST_RULES_LABEL, cache=cache)
 
     # Clean up files no longer in open PRs
     clean_output_folder(OUTPUT_FOLDER, new_files)

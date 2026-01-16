@@ -26,7 +26,7 @@ def has_label(session, repo_owner, repo_name, pr_number, label_name):
     return any(label['name'] == label_name for label in labels)
 
 
-def apply_label(session, repo_owner, repo_name, pr_number, label_name):
+def apply_label(session, repo_owner, repo_name, pr_number, label_name, cache=None):
     """
     Apply a label to a PR.
 
@@ -36,6 +36,7 @@ def apply_label(session, repo_owner, repo_name, pr_number, label_name):
         repo_name (str): Repository name
         pr_number (int): Pull request number
         label_name (str): Label name to apply
+        cache (PRCache, optional): Cache instance to invalidate
 
     Returns:
         bool: True if label was applied successfully, False otherwise
@@ -47,6 +48,8 @@ def apply_label(session, repo_owner, repo_name, pr_number, label_name):
         response = session.post(url, json=payload)
         response.raise_for_status()
         print(f"\tApplied label '{label_name}' to PR #{pr_number}")
+        if cache:
+            cache.invalidate_labels(pr_number)
         return True
     except Exception as e:
         print(f"\tFailed to apply label '{label_name}' to PR #{pr_number}: {e}")
@@ -54,7 +57,7 @@ def apply_label(session, repo_owner, repo_name, pr_number, label_name):
         sys.exit(1)
 
 
-def remove_label(session, repo_owner, repo_name, pr_number, label_name):
+def remove_label(session, repo_owner, repo_name, pr_number, label_name, cache=None):
     """
     Remove a label from a PR.
 
@@ -64,6 +67,7 @@ def remove_label(session, repo_owner, repo_name, pr_number, label_name):
         repo_name (str): Repository name
         pr_number (int): Pull request number
         label_name (str): Label name to remove
+        cache (PRCache, optional): Cache instance to invalidate
 
     Returns:
         bool: True if label was removed successfully, False otherwise
@@ -77,6 +81,8 @@ def remove_label(session, repo_owner, repo_name, pr_number, label_name):
             return True  # Consider it successful if the label wasn't there
         response.raise_for_status()
         print(f"\tRemoved label '{label_name}' from PR #{pr_number}")
+        if cache:
+            cache.invalidate_labels(pr_number)
         return True
     except Exception as e:
         print(f"\tFailed to remove label '{label_name}' from PR #{pr_number}: {e}")

@@ -31,7 +31,6 @@ from lib import (
     DEFAULT_OPEN_PR_TAG,
     # Functions
     create_github_session,
-    has_label,
     apply_label,
     remove_label,
     add_id_to_yaml,
@@ -41,6 +40,8 @@ from lib import (
     save_file,
     clean_output_folder,
     count_yaml_rules_in_pr,
+    # Cache
+    PRCache,
 )
 
 # Configuration from environment
@@ -348,12 +349,13 @@ def handle_pr_rules(session):
 
     pull_requests = get_open_pull_requests(session)
     new_files = set()
+    cache = PRCache()
 
     for pr in pull_requests:
         pr_number = pr['number']
 
         # Check for do-not-merge label - skip entirely if present
-        if has_label(session, REPO_OWNER, REPO_NAME, pr_number, DO_NOT_MERGE_LABEL):
+        if cache.has_label(session, REPO_OWNER, REPO_NAME, pr_number, DO_NOT_MERGE_LABEL):
             print(f"Skipping PR #{pr_number} (has '{DO_NOT_MERGE_LABEL}' label): {pr['title']}")
             continue
 
@@ -382,15 +384,15 @@ def handle_pr_rules(session):
                 print(f"\tSkipping PR #{pr_number}: Contains {yaml_rule_count} YAML rules (max allowed: {MAX_RULES_PER_PR})")
 
                 # Apply bulk label if not already present
-                if not has_label(session, REPO_OWNER, REPO_NAME, pr_number, BULK_PR_LABEL):
+                if not cache.has_label(session, REPO_OWNER, REPO_NAME, pr_number, BULK_PR_LABEL):
                     print(f"\tPR #{pr_number} doesn't have the '{BULK_PR_LABEL}' label. Applying...")
-                    apply_label(session, REPO_OWNER, REPO_NAME, pr_number, BULK_PR_LABEL)
+                    apply_label(session, REPO_OWNER, REPO_NAME, pr_number, BULK_PR_LABEL, cache=cache)
 
                 continue
             else:
                 # Remove bulk label if rule count is now under limit
-                if has_label(session, REPO_OWNER, REPO_NAME, pr_number, BULK_PR_LABEL):
-                    remove_label(session, REPO_OWNER, REPO_NAME, pr_number, BULK_PR_LABEL)
+                if cache.has_label(session, REPO_OWNER, REPO_NAME, pr_number, BULK_PR_LABEL):
+                    remove_label(session, REPO_OWNER, REPO_NAME, pr_number, BULK_PR_LABEL, cache=cache)
 
         # Process files in the PR
         for file in files:

@@ -42,6 +42,8 @@ from .yaml_utils import (
 
 from .uuid_utils import generate_deterministic_uuid
 
+from .cache import PRCache
+
 from .file_utils import (
     get_file_contents,
     save_file,
@@ -96,6 +98,8 @@ __all__ = [
     'add_block',
     # UUID utils
     'generate_deterministic_uuid',
+    # Cache
+    'PRCache',
     # File utils
     'get_file_contents',
     'save_file',
