@@ -52,6 +52,7 @@ from lib import (
 
 # Configuration from environment
 GITHUB_TOKEN = os.getenv('GITHUB_TOKEN')
+GITHUB_WRITE_TOKEN = os.getenv('GITHUB_WRITE_TOKEN', GITHUB_TOKEN)  # Falls back to GITHUB_TOKEN if not set
 SUBLIME_API_TOKEN = os.getenv('SUBLIME_API_TOKEN')
 REPO_OWNER = os.getenv('REPO_OWNER', 'sublime-security')
 REPO_NAME = os.getenv('REPO_NAME', 'sublime-rules')
@@ -338,13 +339,20 @@ def handle_closed_prs(session):
     return deleted_ids
 
 
-def handle_pr_rules(session):
+def handle_pr_rules(session, write_session=None):
     """
     Process open PRs to sync rules to shared-samples branch.
+
+    Args:
+        session: GitHub API session for read operations
+        write_session: GitHub API session for write operations (labels, comments).
+                      If None, uses session for all operations.
 
     Returns:
         set: Set of filenames that were processed
     """
+    if write_session is None:
+        write_session = session
     header = [
         ' _____                    ______      _ _   ______                           _       ',
         '|  _  |                   | ___ \\    | | |  | ___ \\                         | |      ',
@@ -431,7 +439,7 @@ def handle_pr_rules(session):
                 print(f"\tAuthor {pr['user']['login']} is in {ORG_NAME}")
                 # Remove exclusion label if present
                 if cache.has_label(session, REPO_OWNER, REPO_NAME, pr_number, AUTHOR_MEMBERSHIP_EXCLUSION_LABEL):
-                    remove_label(session, REPO_OWNER, REPO_NAME, pr_number, AUTHOR_MEMBERSHIP_EXCLUSION_LABEL, cache=cache)
+                    remove_label(write_session, REPO_OWNER, REPO_NAME, pr_number, AUTHOR_MEMBERSHIP_EXCLUSION_LABEL, cache=cache)
             else:
                 # Check for trigger comment if author not in org
                 if INCLUDE_PRS_WITH_COMMENT:
@@ -444,7 +452,7 @@ def handle_pr_rules(session):
                         # Remove exclusion label if present
                         if cache.has_label(session, REPO_OWNER, REPO_NAME, pr_number, AUTHOR_MEMBERSHIP_EXCLUSION_LABEL):
                             print(f"\tRemoving '{AUTHOR_MEMBERSHIP_EXCLUSION_LABEL}' label due to trigger comment")
-                            remove_label(session, REPO_OWNER, REPO_NAME, pr_number, AUTHOR_MEMBERSHIP_EXCLUSION_LABEL, cache=cache)
+                            remove_label(write_session, REPO_OWNER, REPO_NAME, pr_number, AUTHOR_MEMBERSHIP_EXCLUSION_LABEL, cache=cache)
 
                 if not has_comment:
                     print(f"Skipping PR #{pr_number}: Author {pr['user']['login']} is not in {ORG_NAME} and no trigger comment")
@@ -452,10 +460,10 @@ def handle_pr_rules(session):
                     # Apply exclusion label if not already present
                     if not cache.has_label(session, REPO_OWNER, REPO_NAME, pr_number, AUTHOR_MEMBERSHIP_EXCLUSION_LABEL):
                         print(f"\tApplying '{AUTHOR_MEMBERSHIP_EXCLUSION_LABEL}' label...")
-                        apply_label(session, REPO_OWNER, REPO_NAME, pr_number, AUTHOR_MEMBERSHIP_EXCLUSION_LABEL, cache=cache)
+                        apply_label(write_session, REPO_OWNER, REPO_NAME, pr_number, AUTHOR_MEMBERSHIP_EXCLUSION_LABEL, cache=cache)
                         # Post comment explaining how to enable sync
                         post_exclusion_comment_if_needed(
-                            session, REPO_OWNER, REPO_NAME, pr_number,
+                            write_session, REPO_OWNER, REPO_NAME, pr_number,
                             AUTHOR_MEMBERSHIP_EXCLUSION_LABEL,
                             cache=cache,
                             org_name=ORG_NAME,
@@ -485,13 +493,13 @@ def handle_pr_rules(session):
                 # Apply bulk label if not already present
                 if not cache.has_label(session, REPO_OWNER, REPO_NAME, pr_number, BULK_PR_LABEL):
                     print(f"\tPR #{pr_number} doesn't have the '{BULK_PR_LABEL}' label. Applying...")
-                    apply_label(session, REPO_OWNER, REPO_NAME, pr_number, BULK_PR_LABEL, cache=cache)
+                    apply_label(write_session, REPO_OWNER, REPO_NAME, pr_number, BULK_PR_LABEL, cache=cache)
 
                 continue
             else:
                 # Remove bulk label if rule count is now under limit
                 if cache.has_label(session, REPO_OWNER, REPO_NAME, pr_number, BULK_PR_LABEL):
-                    remove_label(session, REPO_OWNER, REPO_NAME, pr_number, BULK_PR_LABEL, cache=cache)
+                    remove_label(write_session, REPO_OWNER, REPO_NAME, pr_number, BULK_PR_LABEL, cache=cache)
 
         # Process files in the PR
         for file in files:
@@ -568,5 +576,6 @@ if __name__ == '__main__':
 
     print("Running shared-samples sync...")
     session = create_github_session(GITHUB_TOKEN)
-    handle_pr_rules(session)
+    write_session = create_github_session(GITHUB_WRITE_TOKEN) if GITHUB_WRITE_TOKEN != GITHUB_TOKEN else session
+    handle_pr_rules(session, write_session)
     handle_closed_prs(session)
