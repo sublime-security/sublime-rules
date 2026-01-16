@@ -23,13 +23,11 @@ from .constants import (
 
 from .github_client import create_github_session
 
-from .labels import has_label, apply_label, remove_label
+from .graphql_client import create_graphql_session, fetch_all_prs
 
-from .membership import (
-    is_user_in_org,
-    has_trigger_comment,
-    has_required_action_completed,
-)
+from .pr_data import PRData
+
+from .labels import apply_label, remove_label
 
 from .yaml_utils import (
     check_skip_texts,
@@ -77,16 +75,16 @@ __all__ = [
     'DEFAULT_AUTHOR_TAG_PREFIX',
     'DEFAULT_RULE_STATUS_PREFIX',
     'DEFAULT_OPEN_PR_TAG',
-    # GitHub client
+    # GitHub client (REST)
     'create_github_session',
-    # Labels
-    'has_label',
+    # GraphQL client
+    'create_graphql_session',
+    'fetch_all_prs',
+    # PR data model
+    'PRData',
+    # Labels (write operations only)
     'apply_label',
     'remove_label',
-    # Membership
-    'is_user_in_org',
-    'has_trigger_comment',
-    'has_required_action_completed',
     # YAML utils
     'check_skip_texts',
     'add_id_to_yaml',

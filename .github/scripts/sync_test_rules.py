@@ -5,10 +5,12 @@ Sync Test Rules Script
 Syncs detection rules from open PRs to the test-rules branch.
 This script handles test-rules specific logic including:
 - Draft PR handling with label/comment triggers
-- Organization membership filtering
+- Organization membership filtering (via authorAssociation)
 - Bulk PR limits
 - Link analysis exclusions
 - PR commenting for exclusions
+
+Uses GraphQL for bulk data fetching (~95% reduction in API calls).
 """
 import os
 import sys
@@ -29,22 +31,20 @@ from lib import (
     DEFAULT_MAX_RULES_PER_PR,
     DEFAULT_REQUIRED_CHECK_NAME,
     DEFAULT_REQUIRED_CHECK_CONCLUSION,
-    # Functions
+    # GraphQL
+    create_graphql_session,
+    fetch_all_prs,
+    # REST (for writes)
     create_github_session,
-    has_label,
     apply_label,
     remove_label,
-    is_user_in_org,
-    has_trigger_comment,
-    has_required_action_completed,
+    # Utilities
     check_skip_texts,
     add_id_to_yaml,
-    add_block,
     get_file_contents,
     save_file,
     pr_has_synced_files,
     clean_output_folder,
-    count_yaml_rules_in_pr,
     post_exclusion_comment_if_needed,
 )
 
@@ -85,57 +85,16 @@ if not os.path.exists(OUTPUT_FOLDER):
     os.makedirs(OUTPUT_FOLDER)
 
 
-def get_open_pull_requests(session):
-    """Fetch all open pull requests from the repository."""
-    pull_requests = []
-    page = 1
-    per_page = 30
-
-    while True:
-        url = f'https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/pulls'
-        params = {'page': page, 'per_page': per_page, 'sort': 'updated', 'direction': 'desc'}
-        print(f"Fetching page {page} of Pull Requests")
-        response = session.get(url, params=params)
-        response.raise_for_status()
-
-        pull_requests.extend(response.json())
-
-        if 'Link' in response.headers:
-            links = response.headers['Link'].split(', ')
-            has_next = any('rel="next"' in link for link in links)
-        else:
-            has_next = False
-
-        if not has_next:
-            print(f"Fetched page {page} of Pull Requests")
-            print(f"PRs on page {page}: {len(response.json())}")
-            break
-
-        print(f"Fetched page {page} of Pull Requests")
-        print(f"PRs on page {page}: {len(response.json())}")
-        print(f"PRs found so far: {len(pull_requests)}")
-        print(f"Moving to page {page + 1}")
-        page += 1
-
-    print(f"Total PRs: {len(pull_requests)}")
-    return pull_requests
-
-
-def get_files_for_pull_request(session, pr_number):
-    """Fetch files changed in a pull request."""
-    url = f'https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/pulls/{pr_number}/files'
-    response = session.get(url)
-    response.raise_for_status()
-    return response.json()
-
-
-def handle_pr_rules(session, write_session):
+def handle_pr_rules(graphql_session, rest_session, write_session):
     """
     Process open PRs to sync rules to test-rules branch.
 
+    Uses GraphQL for bulk data fetching, REST only for write operations.
+
     Args:
-        session: GitHub API session for read operations
-        write_session: GitHub API session for write operations (labels, comments)
+        graphql_session: GitHub GraphQL API session for bulk reads
+        rest_session: GitHub REST API session for file content reads
+        write_session: GitHub REST API session for write operations (labels, comments)
 
     Returns:
         set: Set of filenames that were processed
@@ -153,89 +112,87 @@ def handle_pr_rules(session, write_session):
     for line in header:
         print(line)
 
-    pull_requests = get_open_pull_requests(session)
+    # Fetch ALL open PRs with labels, files, comments, and checks in 1-2 API calls
+    pull_requests = fetch_all_prs(graphql_session, REPO_OWNER, REPO_NAME, states=['OPEN'])
     new_files = set()
 
     for pr in pull_requests:
-        pr_number = pr['number']
+        pr_number = pr.number
 
         # Check for do-not-merge label first - skip entirely if present
-        if has_label(session, REPO_OWNER, REPO_NAME, pr_number, DO_NOT_MERGE_LABEL):
-            print(f"Skipping PR #{pr_number} (has '{DO_NOT_MERGE_LABEL}' label): {pr['title']}")
+        if pr.has_label(DO_NOT_MERGE_LABEL):
+            print(f"Skipping PR #{pr_number} (has '{DO_NOT_MERGE_LABEL}' label): {pr.title}")
             continue
 
         # Draft PR handling
-        if pr['draft']:
+        if pr.is_draft:
             # Process drafts if they have in-test-rules label OR trigger comment
-            has_in_test_rules = has_label(session, REPO_OWNER, REPO_NAME, pr_number, IN_TEST_RULES_LABEL)
+            has_in_test_rules = pr.has_label(IN_TEST_RULES_LABEL)
             has_comment = False
 
             if INCLUDE_PRS_WITH_COMMENT and not has_in_test_rules:
-                # Check for trigger comment from org member
-                has_comment = has_trigger_comment(
-                    session, REPO_OWNER, REPO_NAME, pr_number, ORG_NAME, COMMENT_TRIGGER
-                )
+                # Check for trigger comment from org member (in-memory check)
+                has_comment = pr.has_trigger_comment(COMMENT_TRIGGER)
                 if has_comment:
                     # Apply the in-test-rules label since trigger comment was found
                     print(f"\tDraft PR #{pr_number} has trigger comment, applying '{IN_TEST_RULES_LABEL}' label")
                     apply_label(write_session, REPO_OWNER, REPO_NAME, pr_number, IN_TEST_RULES_LABEL)
 
             if has_in_test_rules or has_comment:
-                print(f"Processing draft PR #{pr_number} (has '{IN_TEST_RULES_LABEL}' label or trigger comment): {pr['title']}")
+                print(f"Processing draft PR #{pr_number} (has '{IN_TEST_RULES_LABEL}' label or trigger comment): {pr.title}")
             else:
-                print(f"Skipping draft PR #{pr_number}: {pr['title']}")
+                print(f"Skipping draft PR #{pr_number}: {pr.title}")
                 continue
 
         # Skip PRs not targeting main
-        if pr['base']['ref'] != 'main':
-            print(f"Skipping non-main branch PR #{pr_number}: {pr['title']} -- dest branch: {pr['base']['ref']}")
+        if pr.base_ref != 'main':
+            print(f"Skipping non-main branch PR #{pr_number}: {pr.title} -- dest branch: {pr.base_ref}")
             continue
 
         # Check for manual exclusion label (user opted out of test-rules)
-        if has_label(session, REPO_OWNER, REPO_NAME, pr_number, MANUAL_EXCLUSION_LABEL):
-            print(f"Skipping manually excluded PR #{pr_number}: {pr['title']}")
+        if pr.has_label(MANUAL_EXCLUSION_LABEL):
+            print(f"Skipping manually excluded PR #{pr_number}: {pr.title}")
             # Remove in-test-rules label if both are present (manual exclusion takes precedence)
-            if has_label(session, REPO_OWNER, REPO_NAME, pr_number, IN_TEST_RULES_LABEL):
+            if pr.has_label(IN_TEST_RULES_LABEL):
                 print(f"\tRemoving '{IN_TEST_RULES_LABEL}' label since manual exclusion takes precedence")
                 remove_label(write_session, REPO_OWNER, REPO_NAME, pr_number, IN_TEST_RULES_LABEL)
             continue
 
         # Check if user removed the in-test-rules label (opt-out)
-        if pr_has_synced_files(OUTPUT_FOLDER, pr_number) and not has_label(session, REPO_OWNER, REPO_NAME, pr_number, IN_TEST_RULES_LABEL):
+        if pr_has_synced_files(OUTPUT_FOLDER, pr_number) and not pr.has_label(IN_TEST_RULES_LABEL):
             print(f"PR #{pr_number} has synced files but '{IN_TEST_RULES_LABEL}' label was removed - applying manual exclusion")
             apply_label(write_session, REPO_OWNER, REPO_NAME, pr_number, MANUAL_EXCLUSION_LABEL)
             continue
 
         # Organization membership and comment trigger checks
         process_pr = True
-        print(f"Processing PR #{pr_number}: {pr['title']}")
+        print(f"Processing PR #{pr_number}: {pr.title}")
 
         if FILTER_BY_ORG_MEMBERSHIP:
-            author_in_org = is_user_in_org(session, pr['user']['login'], ORG_NAME)
+            # Use authorAssociation instead of REST API org membership check
+            author_in_org = pr.is_author_org_member()
             has_comment = False
 
             if author_in_org:
-                print(f"\tPR #{pr_number}: Author {pr['user']['login']} is in {ORG_NAME}")
+                print(f"\tPR #{pr_number}: Author {pr.author_login} is an org member (association: {pr.author_association})")
                 # Remove exclusion label if present
-                if has_label(session, REPO_OWNER, REPO_NAME, pr_number, AUTHOR_MEMBERSHIP_EXCLUSION_LABEL):
+                if pr.has_label(AUTHOR_MEMBERSHIP_EXCLUSION_LABEL):
                     remove_label(write_session, REPO_OWNER, REPO_NAME, pr_number, AUTHOR_MEMBERSHIP_EXCLUSION_LABEL)
             else:
-                # Check for trigger comment if author not in org
+                # Check for trigger comment if author not in org (in-memory check)
                 if INCLUDE_PRS_WITH_COMMENT:
-                    has_comment = has_trigger_comment(
-                        session, REPO_OWNER, REPO_NAME, pr_number, ORG_NAME, COMMENT_TRIGGER
-                    )
+                    has_comment = pr.has_trigger_comment(COMMENT_TRIGGER)
 
                     # If trigger comment was found, remove the exclusion label
-                    if has_comment and has_label(session, REPO_OWNER, REPO_NAME, pr_number, AUTHOR_MEMBERSHIP_EXCLUSION_LABEL):
+                    if has_comment and pr.has_label(AUTHOR_MEMBERSHIP_EXCLUSION_LABEL):
                         print(f"\tPR #{pr_number}: Removing '{AUTHOR_MEMBERSHIP_EXCLUSION_LABEL}' label due to trigger comment")
                         remove_label(write_session, REPO_OWNER, REPO_NAME, pr_number, AUTHOR_MEMBERSHIP_EXCLUSION_LABEL)
 
                     if not has_comment:
-                        print(f"\tSkipping PR #{pr_number}: Author {pr['user']['login']} is not in {ORG_NAME} and is missing comment trigger")
+                        print(f"\tSkipping PR #{pr_number}: Author {pr.author_login} is not an org member and is missing comment trigger")
 
                         # Apply exclusion label if not already present
-                        if not has_label(session, REPO_OWNER, REPO_NAME, pr_number, AUTHOR_MEMBERSHIP_EXCLUSION_LABEL):
+                        if not pr.has_label(AUTHOR_MEMBERSHIP_EXCLUSION_LABEL):
                             print(f"\tPR #{pr_number} doesn't have the '{AUTHOR_MEMBERSHIP_EXCLUSION_LABEL}' label. Applying...")
                             apply_label(write_session, REPO_OWNER, REPO_NAME, pr_number, AUTHOR_MEMBERSHIP_EXCLUSION_LABEL)
                             # Post comment explaining how to enable sync
@@ -247,7 +204,7 @@ def handle_pr_rules(session, write_session):
                             )
 
                         # Remove in-test-rules label if previously applied
-                        if has_label(session, REPO_OWNER, REPO_NAME, pr_number, IN_TEST_RULES_LABEL):
+                        if pr.has_label(IN_TEST_RULES_LABEL):
                             remove_label(write_session, REPO_OWNER, REPO_NAME, pr_number, IN_TEST_RULES_LABEL)
 
                         process_pr = False
@@ -256,31 +213,29 @@ def handle_pr_rules(session, write_session):
             continue
 
         # Get the latest commit SHA
-        latest_sha = pr['head']['sha']
+        latest_sha = pr.head_sha
         print(f"\tLatest commit SHA: {latest_sha}")
 
-        # Check if required checks have completed
+        # Check if required checks have completed (in-memory check)
         if CHECK_ACTION_COMPLETION:
-            if not has_required_action_completed(
-                session, REPO_OWNER, REPO_NAME, latest_sha,
-                REQUIRED_CHECK_NAME, REQUIRED_CHECK_CONCLUSION
-            ):
+            if not pr.has_required_check(REQUIRED_CHECK_NAME, REQUIRED_CHECK_CONCLUSION):
                 print(f"\tSkipping PR #{pr_number}: Required check '{REQUIRED_CHECK_NAME}' has not completed with conclusion '{REQUIRED_CHECK_CONCLUSION}'")
                 # Remove in-test-rules label if previously applied
-                if has_label(session, REPO_OWNER, REPO_NAME, pr_number, IN_TEST_RULES_LABEL):
+                if pr.has_label(IN_TEST_RULES_LABEL):
                     remove_label(write_session, REPO_OWNER, REPO_NAME, pr_number, IN_TEST_RULES_LABEL)
                 continue
 
-        files = get_files_for_pull_request(session, pr_number)
+        # Use files from GraphQL data (already fetched)
+        files = pr.files
 
         # Check if PR has too many rules
         if SKIP_BULK_PRS:
-            yaml_rule_count = count_yaml_rules_in_pr(files)
+            yaml_rule_count = pr.count_yaml_rules()
             if yaml_rule_count > MAX_RULES_PER_PR:
                 print(f"\tSkipping PR #{pr_number}: Contains {yaml_rule_count} YAML rules (max allowed: {MAX_RULES_PER_PR})")
 
                 # Apply label if not already present
-                if not has_label(session, REPO_OWNER, REPO_NAME, pr_number, BULK_PR_LABEL):
+                if not pr.has_label(BULK_PR_LABEL):
                     print(f"\tPR #{pr_number} doesn't have the '{BULK_PR_LABEL}' label. Applying...")
                     apply_label(write_session, REPO_OWNER, REPO_NAME, pr_number, BULK_PR_LABEL)
                     # Post comment explaining the limit
@@ -292,13 +247,13 @@ def handle_pr_rules(session, write_session):
                     )
 
                 # Remove in-test-rules label if previously applied
-                if has_label(session, REPO_OWNER, REPO_NAME, pr_number, IN_TEST_RULES_LABEL):
+                if pr.has_label(IN_TEST_RULES_LABEL):
                     remove_label(write_session, REPO_OWNER, REPO_NAME, pr_number, IN_TEST_RULES_LABEL)
 
                 continue
             else:
                 # Remove bulk label if rule count is now under limit
-                if has_label(session, REPO_OWNER, REPO_NAME, pr_number, BULK_PR_LABEL):
+                if pr.has_label(BULK_PR_LABEL):
                     remove_label(write_session, REPO_OWNER, REPO_NAME, pr_number, BULK_PR_LABEL)
 
         # Process files in the PR
@@ -320,9 +275,9 @@ def handle_pr_rules(session, write_session):
                 print(f"\tSkipping {file['status']} file: {file['filename']} in PR #{pr_number} -- unmanaged file status")
 
             if process_file:
-                # Fetch file content
+                # Fetch file content (still REST - only for filtered PRs)
                 content = get_file_contents(
-                    session, REPO_OWNER, REPO_NAME,
+                    rest_session, REPO_OWNER, REPO_NAME,
                     file['filename'], latest_sha
                 )
 
@@ -334,7 +289,7 @@ def handle_pr_rules(session, write_session):
 
                         # Apply all associated labels
                         for label in labels_to_apply:
-                            if not has_label(session, REPO_OWNER, REPO_NAME, pr_number, label):
+                            if not pr.has_label(label):
                                 print(f"\tPR #{pr_number} doesn't have the '{label}' label. Applying...")
                                 apply_label(write_session, REPO_OWNER, REPO_NAME, pr_number, label)
 
@@ -347,7 +302,7 @@ def handle_pr_rules(session, write_session):
                             )
 
                         # Remove in-test-rules label
-                        if has_label(session, REPO_OWNER, REPO_NAME, pr_number, IN_TEST_RULES_LABEL):
+                        if pr.has_label(IN_TEST_RULES_LABEL):
                             remove_label(write_session, REPO_OWNER, REPO_NAME, pr_number, IN_TEST_RULES_LABEL)
                         continue
 
@@ -378,7 +333,7 @@ def handle_pr_rules(session, write_session):
 
                 # Apply the in-test-rules label
                 if ADD_TEST_RULES_LABEL:
-                    if not has_label(session, REPO_OWNER, REPO_NAME, pr_number, IN_TEST_RULES_LABEL):
+                    if not pr.has_label(IN_TEST_RULES_LABEL):
                         print(f"\tPR #{pr_number} doesn't have the '{IN_TEST_RULES_LABEL}' label. Applying...")
                         apply_label(write_session, REPO_OWNER, REPO_NAME, pr_number, IN_TEST_RULES_LABEL)
 
@@ -401,6 +356,7 @@ if __name__ == '__main__':
         print(line)
 
     print("Running test-rules sync...")
-    session = create_github_session(GITHUB_TOKEN)
+    graphql_session = create_graphql_session(GITHUB_TOKEN)
+    rest_session = create_github_session(GITHUB_TOKEN)
     write_session = create_github_session(GITHUB_WRITE_TOKEN)
-    handle_pr_rules(session, write_session)
+    handle_pr_rules(graphql_session, rest_session, write_session)

@@ -9,6 +9,8 @@ This script handles:
 - Author tags and references
 - Closed PR rule deletion via Sublime API (after delay)
 - Bulk PR limits
+
+Uses GraphQL for bulk data fetching (~95% reduction in API calls).
 """
 import os
 import sys
@@ -29,18 +31,20 @@ from lib import (
     DEFAULT_AUTHOR_TAG_PREFIX,
     DEFAULT_RULE_STATUS_PREFIX,
     DEFAULT_OPEN_PR_TAG,
-    # Functions
+    # GraphQL
+    create_graphql_session,
+    fetch_all_prs,
+    # REST (for writes)
     create_github_session,
-    has_label,
     apply_label,
     remove_label,
+    # Utilities
     add_id_to_yaml,
     add_block,
     rename_rules,
     get_file_contents,
     save_file,
     clean_output_folder,
-    count_yaml_rules_in_pr,
     post_exclusion_comment_if_needed,
 )
 
@@ -136,95 +140,12 @@ def sublime_delete_rule(rule_id):
     return response.ok
 
 
-def get_open_pull_requests(session):
-    """Fetch all open pull requests from the repository."""
-    pull_requests = []
-    page = 1
-    per_page = 30
-
-    while True:
-        url = f'https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/pulls'
-        params = {'page': page, 'per_page': per_page, 'sort': 'updated', 'direction': 'desc'}
-        print(f"Fetching page {page} of Pull Requests")
-        response = session.get(url, params=params)
-        response.raise_for_status()
-
-        pull_requests.extend(response.json())
-
-        if 'Link' in response.headers:
-            links = response.headers['Link'].split(', ')
-            has_next = any('rel="next"' in link for link in links)
-        else:
-            has_next = False
-
-        if not has_next:
-            print(f"Fetched page {page} of Pull Requests")
-            print(f"PRs on page {page}: {len(response.json())}")
-            break
-
-        print(f"Fetched page {page} of Pull Requests")
-        print(f"PRs on page {page}: {len(response.json())}")
-        print(f"PRs found so far: {len(pull_requests)}")
-        print(f"Moving to page {page + 1}")
-        page += 1
-
-    print(f"Total PRs: {len(pull_requests)}")
-    return pull_requests
-
-
-def get_closed_pull_requests(session):
-    """Fetch recently closed pull requests from the repository."""
-    closed_pull_requests = []
-    page = 1
-    per_page = 30
-    max_closed = 60
-
-    while len(closed_pull_requests) <= max_closed:
-        if len(closed_pull_requests) >= max_closed:
-            print("hit max closed prs length")
-            break
-
-        url = f'https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/pulls'
-        params = {'page': page, 'per_page': per_page, 'state': 'closed', 'sort': 'updated', 'direction': 'desc'}
-        print(f"Fetching page {page} of CLOSED Pull Requests")
-        response = session.get(url, params=params)
-        response.raise_for_status()
-
-        closed_pull_requests.extend(response.json())
-
-        if 'Link' in response.headers:
-            links = response.headers['Link'].split(', ')
-            has_next = any('rel="next"' in link for link in links)
-        else:
-            has_next = False
-
-        if not has_next:
-            print(f"Fetched page {page} of Pull Requests")
-            print(f"PRs on page {page}: {len(response.json())}")
-            break
-
-        print(f"Fetched page {page} of CLOSED Pull Requests")
-        print(f"CLOSED PRs on page {page}: {len(response.json())}")
-        print(f"CLOSED PRs found so far: {len(closed_pull_requests)}")
-        print(f"Moving to page {page + 1}")
-        page += 1
-
-    print(f"Total CLOSED PRs: {len(closed_pull_requests)}")
-    return closed_pull_requests
-
-
-def get_files_for_pull_request(session, pr_number):
-    """Fetch files changed in a pull request."""
-    url = f'https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/pulls/{pr_number}/files'
-    response = session.get(url)
-    response.raise_for_status()
-    return response.json()
-
-
-def handle_closed_prs(session):
+def handle_closed_prs(graphql_session):
     """
     Handle closed PRs by deleting rules from closed PRs after a delay period.
     Uses comprehensive search by PR number pattern to catch all rules including orphaned ones.
+
+    Uses GraphQL for efficient bulk fetching of closed PRs.
 
     Returns:
         set: Set of rule IDs that were deleted
@@ -247,19 +168,25 @@ def handle_closed_prs(session):
         print(line)
 
     deleted_ids = set()
-    closed_pull_requests = get_closed_pull_requests(session)
+
+    # Fetch closed PRs via GraphQL (limit to 60 for efficiency)
+    closed_pull_requests = fetch_all_prs(
+        graphql_session, REPO_OWNER, REPO_NAME,
+        states=['CLOSED', 'MERGED'],
+        max_results=60
+    )
 
     for closed_pr in closed_pull_requests:
-        pr_number = closed_pr['number']
-        print(f"Processing CLOSED PR #{pr_number}: {closed_pr['title']}")
+        pr_number = closed_pr.number
+        print(f"Processing CLOSED PR #{pr_number}: {closed_pr.title}")
 
-        if closed_pr['base']['ref'] != "main":
-            print(f"\tSkipping non-main branch PR #{closed_pr['number']}: {closed_pr['title']} -- dest branch: {closed_pr['base']['ref']}")
+        if closed_pr.base_ref != "main":
+            print(f"\tSkipping non-main branch PR #{closed_pr.number}: {closed_pr.title} -- dest branch: {closed_pr.base_ref}")
             continue
 
         # Check delay for merged PRs
-        if closed_pr['merged_at'] is not None:
-            merged_at_time = datetime.strptime(closed_pr['merged_at'], "%Y-%m-%dT%H:%M:%SZ").replace(
+        if closed_pr.merged_at is not None:
+            merged_at_time = datetime.strptime(closed_pr.merged_at, "%Y-%m-%dT%H:%M:%SZ").replace(
                 tzinfo=timezone.utc)
 
             if not merged_at_time <= datetime.now(tz=timezone.utc) - timedelta(days=DELETE_RULES_FROM_CLOSED_PRS_DELAY):
@@ -269,7 +196,7 @@ def handle_closed_prs(session):
                 remaining_hours, remaining_remainder = divmod(time_remaining.seconds, 3600)
                 remaining_minutes, remaining_seconds = divmod(remaining_remainder, 60)
 
-                print(f"\tDELAY NOT MET: Skipping PR #{closed_pr['number']}: {closed_pr['title']}\n\tRemaining Time = {remaining_days} days, {remaining_hours} hours, {remaining_minutes} minutes, {remaining_seconds} seconds")
+                print(f"\tDELAY NOT MET: Skipping PR #{closed_pr.number}: {closed_pr.title}\n\tRemaining Time = {remaining_days} days, {remaining_hours} hours, {remaining_minutes} minutes, {remaining_seconds} seconds")
                 continue
 
         # Search for all rules with this PR number pattern
@@ -305,7 +232,7 @@ def handle_closed_prs(session):
 
             # Check for the author tag if enabled
             if ADD_AUTHOR_TAG:
-                expected_author_tag = f"{AUTHOR_TAG_PREFIX}{closed_pr['user']['login']}"
+                expected_author_tag = f"{AUTHOR_TAG_PREFIX}{closed_pr.author_login}"
                 if expected_author_tag not in rule_tags:
                     print(f"\t\tSkipping rule - missing expected author tag '{expected_author_tag}'")
                     print(f"\t\tRule tags: {rule_tags}")
@@ -327,13 +254,16 @@ def handle_closed_prs(session):
     return deleted_ids
 
 
-def handle_pr_rules(session, write_session):
+def handle_pr_rules(graphql_session, rest_session, write_session):
     """
     Process open PRs to sync rules to shared-samples branch.
 
+    Uses GraphQL for bulk data fetching, REST only for write operations.
+
     Args:
-        session: GitHub API session for read operations
-        write_session: GitHub API session for write operations (labels, comments)
+        graphql_session: GitHub GraphQL API session for bulk reads
+        rest_session: GitHub REST API session for file content reads
+        write_session: GitHub REST API session for write operations (labels, comments)
 
     Returns:
         set: Set of filenames that were processed
@@ -352,43 +282,45 @@ def handle_pr_rules(session, write_session):
     for line in header:
         print(line)
 
-    pull_requests = get_open_pull_requests(session)
+    # Fetch ALL open PRs with labels, files, comments, and checks in 1-2 API calls
+    pull_requests = fetch_all_prs(graphql_session, REPO_OWNER, REPO_NAME, states=['OPEN'])
     new_files = set()
 
     for pr in pull_requests:
-        pr_number = pr['number']
+        pr_number = pr.number
 
         # Check for do-not-merge label - skip entirely if present
-        if has_label(session, REPO_OWNER, REPO_NAME, pr_number, DO_NOT_MERGE_LABEL):
-            print(f"Skipping PR #{pr_number} (has '{DO_NOT_MERGE_LABEL}' label): {pr['title']}")
+        if pr.has_label(DO_NOT_MERGE_LABEL):
+            print(f"Skipping PR #{pr_number} (has '{DO_NOT_MERGE_LABEL}' label): {pr.title}")
             continue
 
         # Skip draft PRs
-        if pr['draft']:
-            print(f"Skipping draft PR #{pr_number}: {pr['title']}")
+        if pr.is_draft:
+            print(f"Skipping draft PR #{pr_number}: {pr.title}")
             continue
 
         # Skip non-main PRs
-        if pr['base']['ref'] != 'main':
-            print(f"Skipping non-main branch PR #{pr_number}: {pr['title']} -- dest branch: {pr['base']['ref']}")
+        if pr.base_ref != 'main':
+            print(f"Skipping non-main branch PR #{pr_number}: {pr.title} -- dest branch: {pr.base_ref}")
             continue
 
-        print(f"Processing PR #{pr_number}: {pr['title']}")
+        print(f"Processing PR #{pr_number}: {pr.title}")
 
         # Get the latest commit SHA
-        latest_sha = pr['head']['sha']
+        latest_sha = pr.head_sha
         print(f"\tLatest commit SHA: {latest_sha}")
 
-        files = get_files_for_pull_request(session, pr_number)
+        # Use files from GraphQL data (already fetched)
+        files = pr.files
 
         # Check if PR has too many rules
         if SKIP_BULK_PRS:
-            yaml_rule_count = count_yaml_rules_in_pr(files)
+            yaml_rule_count = pr.count_yaml_rules()
             if yaml_rule_count > MAX_RULES_PER_PR:
                 print(f"\tSkipping PR #{pr_number}: Contains {yaml_rule_count} YAML rules (max allowed: {MAX_RULES_PER_PR})")
 
                 # Apply bulk label if not already present
-                if not has_label(session, REPO_OWNER, REPO_NAME, pr_number, BULK_PR_LABEL):
+                if not pr.has_label(BULK_PR_LABEL):
                     print(f"\tPR #{pr_number} doesn't have the '{BULK_PR_LABEL}' label. Applying...")
                     apply_label(write_session, REPO_OWNER, REPO_NAME, pr_number, BULK_PR_LABEL)
                     # Post comment explaining the limit
@@ -402,7 +334,7 @@ def handle_pr_rules(session, write_session):
                 continue
             else:
                 # Remove bulk label if rule count is now under limit
-                if has_label(session, REPO_OWNER, REPO_NAME, pr_number, BULK_PR_LABEL):
+                if pr.has_label(BULK_PR_LABEL):
                     remove_label(write_session, REPO_OWNER, REPO_NAME, pr_number, BULK_PR_LABEL)
 
         # Process files in the PR
@@ -424,9 +356,9 @@ def handle_pr_rules(session, write_session):
                 print(f"\tSkipping {file['status']} file: {file['filename']} in PR #{pr_number} -- unmanaged file status")
 
             if process_file:
-                # Fetch file content
+                # Fetch file content (still REST - only for filtered PRs)
                 content = get_file_contents(
-                    session, REPO_OWNER, REPO_NAME,
+                    rest_session, REPO_OWNER, REPO_NAME,
                     file['filename'], latest_sha
                 )
 
@@ -438,7 +370,7 @@ def handle_pr_rules(session, write_session):
 
                 # Add author tag if enabled
                 if ADD_AUTHOR_TAG:
-                    modified_content = add_block(modified_content, 'tags', f"{AUTHOR_TAG_PREFIX}{pr['user']['login']}")
+                    modified_content = add_block(modified_content, 'tags', f"{AUTHOR_TAG_PREFIX}{pr.author_login}")
 
                 # Add open PR tag if enabled
                 if CREATE_OPEN_PR_TAG:
@@ -450,10 +382,16 @@ def handle_pr_rules(session, write_session):
 
                 # Add PR reference if enabled
                 if ADD_PR_REFERENCE:
-                    modified_content = add_block(modified_content, 'references', pr['html_url'])
+                    modified_content = add_block(modified_content, 'references', pr.url)
+
+                # Create a PR-like dict for rename_rules compatibility
+                pr_dict = {
+                    'number': pr.number,
+                    'title': pr.title,
+                }
 
                 # Always rename rules with PR# prefix (required for handle_closed_prs)
-                modified_content = rename_rules(modified_content, pr)
+                modified_content = rename_rules(modified_content, pr_dict)
 
                 # Save the file
                 save_file(OUTPUT_FOLDER, target_save_filename, modified_content)
@@ -479,7 +417,8 @@ if __name__ == '__main__':
         print(line)
 
     print("Running shared-samples sync...")
-    session = create_github_session(GITHUB_TOKEN)
+    graphql_session = create_graphql_session(GITHUB_TOKEN)
+    rest_session = create_github_session(GITHUB_TOKEN)
     write_session = create_github_session(GITHUB_WRITE_TOKEN)
-    handle_pr_rules(session, write_session)
-    handle_closed_prs(session)
+    handle_pr_rules(graphql_session, rest_session, write_session)
+    handle_closed_prs(graphql_session)
