@@ -50,7 +50,6 @@ from lib import (
 
 # Configuration from environment
 GITHUB_TOKEN = os.getenv('GITHUB_TOKEN')
-GITHUB_WRITE_TOKEN = os.getenv('GITHUB_WRITE_TOKEN')  # Separate token for write operations (labels, comments)
 SUBLIME_API_TOKEN = os.getenv('SUBLIME_API_TOKEN')
 REPO_OWNER = os.getenv('REPO_OWNER', 'sublime-security')
 REPO_NAME = os.getenv('REPO_NAME', 'sublime-rules')
@@ -254,16 +253,15 @@ def handle_closed_prs(graphql_session):
     return deleted_ids
 
 
-def handle_pr_rules(graphql_session, rest_session, write_session):
+def handle_pr_rules(graphql_session, rest_session):
     """
     Process open PRs to sync rules to shared-samples branch.
 
-    Uses GraphQL for bulk data fetching, REST only for write operations.
+    Uses GraphQL for bulk data fetching, REST for file contents and writes.
 
     Args:
         graphql_session: GitHub GraphQL API session for bulk reads
-        rest_session: GitHub REST API session for file content reads
-        write_session: GitHub REST API session for write operations (labels, comments)
+        rest_session: GitHub REST API session for file contents and write operations
 
     Returns:
         set: Set of filenames that were processed
@@ -322,10 +320,10 @@ def handle_pr_rules(graphql_session, rest_session, write_session):
                 # Apply bulk label if not already present
                 if not pr.has_label(BULK_PR_LABEL):
                     print(f"\tPR #{pr_number} doesn't have the '{BULK_PR_LABEL}' label. Applying...")
-                    apply_label(write_session, REPO_OWNER, REPO_NAME, pr_number, BULK_PR_LABEL)
+                    apply_label(rest_session, REPO_OWNER, REPO_NAME, pr_number, BULK_PR_LABEL)
                     # Post comment explaining the limit
                     post_exclusion_comment_if_needed(
-                        write_session, REPO_OWNER, REPO_NAME, pr_number,
+                        rest_session, REPO_OWNER, REPO_NAME, pr_number,
                         BULK_PR_LABEL,
                         max_rules=MAX_RULES_PER_PR,
                         rule_count=yaml_rule_count
@@ -335,7 +333,7 @@ def handle_pr_rules(graphql_session, rest_session, write_session):
             else:
                 # Remove bulk label if rule count is now under limit
                 if pr.has_label(BULK_PR_LABEL):
-                    remove_label(write_session, REPO_OWNER, REPO_NAME, pr_number, BULK_PR_LABEL)
+                    remove_label(rest_session, REPO_OWNER, REPO_NAME, pr_number, BULK_PR_LABEL)
 
         # Process files in the PR
         for file in files:
@@ -419,6 +417,5 @@ if __name__ == '__main__':
     print("Running shared-samples sync...")
     graphql_session = create_graphql_session(GITHUB_TOKEN)
     rest_session = create_github_session(GITHUB_TOKEN)
-    write_session = create_github_session(GITHUB_WRITE_TOKEN)
-    handle_pr_rules(graphql_session, rest_session, write_session)
+    handle_pr_rules(graphql_session, rest_session)
     handle_closed_prs(graphql_session)
