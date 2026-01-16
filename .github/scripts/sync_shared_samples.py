@@ -55,7 +55,7 @@ from lib import (
 
 # Configuration from environment
 GITHUB_TOKEN = os.getenv('GITHUB_TOKEN')
-GITHUB_WRITE_TOKEN = os.getenv('GITHUB_WRITE_TOKEN', GITHUB_TOKEN)  # Falls back to GITHUB_TOKEN if not set
+GITHUB_WRITE_TOKEN = os.getenv('GITHUB_WRITE_TOKEN')  # Separate token for write operations (labels, comments)
 SUBLIME_API_TOKEN = os.getenv('SUBLIME_API_TOKEN')
 REPO_OWNER = os.getenv('REPO_OWNER', 'sublime-security')
 REPO_NAME = os.getenv('REPO_NAME', 'sublime-rules')
@@ -493,6 +493,6 @@ if __name__ == '__main__':
 
     print("Running shared-samples sync...")
     session = create_github_session(GITHUB_TOKEN)
-    write_session = create_github_session(GITHUB_WRITE_TOKEN) if GITHUB_WRITE_TOKEN != GITHUB_TOKEN else session
+    write_session = create_github_session(GITHUB_WRITE_TOKEN) if GITHUB_WRITE_TOKEN else session
     handle_pr_rules(session, write_session)
     handle_closed_prs(session)
