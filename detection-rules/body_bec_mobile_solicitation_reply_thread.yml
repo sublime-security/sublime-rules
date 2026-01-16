@@ -8,7 +8,7 @@ source: |
   and length(attachments) == 0
   
   // Check previous_threads for mobile solicitation patterns
-  or any(body.previous_threads,
+  and any(body.previous_threads,
          (
            length(.text) < 500
            // ignore disclaimers in body length calculation
@@ -22,9 +22,20 @@ source: |
              )
            )
          )
-         and regex.icontains(body.current_thread.text,
-                             '(direct|confirm|re-affirm|mobile|suitable|contact|current|cell|call|another|best|immediate).{0,10}(phone|number|#|\bno)|whatsapp|\bcell|personalcell'
-         )
+  and regex.icontains(.text,
+                      '(direct|confirm|re-affirm|mobile|suitable|contact|current|cell|call|another|best|immediate).{0,10}(phone|number|#|\bno)|whatsapp|\bcell|personalcell')
+  )
+  
+  // subject line description 
+  and (
+    length(subject.subject) <= 10
+    or subject.subject == body.current_thread.text
+    or (subject.is_reply and length(body.previous_threads) == 0)
+  )
+  or not (
+    length(subject.subject) <= 10
+    or subject.subject == body.current_thread.text
+    or (subject.is_reply and length(body.previous_threads) == 0)
   )
   
   // NLU analysis on previous_threads content
@@ -50,25 +61,26 @@ source: |
       )
     )
   )
-  // Sender analysis
-  and (
-    not profile.by_sender().solicited
-    or profile.by_sender().any_messages_malicious_or_spam
-  )
-  and not profile.by_sender().any_messages_benign
-  // not high trust sender domains
-  and (
-    (
-      sender.email.domain.root_domain in $high_trust_sender_root_domains
-      and not headers.auth_summary.dmarc.pass
+    // Sender analysis
+    and (
+      not profile.by_sender().solicited
+      or profile.by_sender().any_messages_malicious_or_spam
     )
-    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
-  )
-  // Ensure this is likely a hijacked thread (sender doesn't match thread participants)
-  and (
-    length(headers.references) > 0
-    or any(headers.hops, any(.fields, strings.ilike(.name, "In-Reply-To")))
-  )
+    and not profile.by_sender().any_messages_benign
+    // not high trust sender domains
+    and (
+      (
+        sender.email.domain.root_domain in $high_trust_sender_root_domains
+        and not headers.auth_summary.dmarc.pass
+      )
+      or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+    )
+    // Ensure this is likely a hijacked thread (sender doesn't match thread participants)
+    and (
+      length(headers.references) > 0
+      or any(headers.hops, any(.fields, strings.ilike(.name, "In-Reply-To")))
+    )
+
 attack_types:
   - "BEC/Fraud"
 tactics_and_techniques:
