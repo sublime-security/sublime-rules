@@ -153,6 +153,57 @@ def handle_pr_rules(session):
     new_files = set()
     cache = PRCache()
 
+    # === PARALLEL PREFETCH PHASE ===
+    # Step 1: Prefetch all labels in parallel (needed for all PRs)
+    all_pr_numbers = [pr['number'] for pr in pull_requests]
+    cache.prefetch_labels(session, REPO_OWNER, REPO_NAME, all_pr_numbers)
+
+    # Step 2: Identify PRs that might be processed and prefetch their files
+    # This includes non-draft PRs targeting main, plus draft PRs with in-test-rules label
+    potential_prs = []
+    for pr in pull_requests:
+        pr_number = pr['number']
+        if pr['base']['ref'] != 'main':
+            continue
+        if cache.has_label(session, REPO_OWNER, REPO_NAME, pr_number, DO_NOT_MERGE_LABEL):
+            continue
+        if cache.has_label(session, REPO_OWNER, REPO_NAME, pr_number, MANUAL_EXCLUSION_LABEL):
+            continue
+        if pr['draft']:
+            # Only include drafts with in-test-rules label
+            if cache.has_label(session, REPO_OWNER, REPO_NAME, pr_number, IN_TEST_RULES_LABEL):
+                potential_prs.append(pr)
+        else:
+            potential_prs.append(pr)
+
+    potential_pr_numbers = [pr['number'] for pr in potential_prs]
+    cache.prefetch_pr_files(session, REPO_OWNER, REPO_NAME, potential_pr_numbers)
+
+    # Step 3: Collect file content specs and prefetch in parallel
+    file_specs = []
+    for pr in potential_prs:
+        pr_number = pr['number']
+        latest_sha = pr['head']['sha']
+        files = cache.get_pr_files(session, REPO_OWNER, REPO_NAME, pr_number)
+
+        # Check bulk limit
+        if SKIP_BULK_PRS:
+            yaml_rule_count = count_yaml_rules_in_pr(files)
+            if yaml_rule_count > MAX_RULES_PER_PR:
+                continue
+
+        for file in files:
+            if (file['status'] in ['added', 'modified', 'changed'] and
+                file['filename'].startswith('detection-rules/') and
+                    file['filename'].endswith('.yml')):
+                if (file['status'] == "added" and INCLUDE_ADDED) or \
+                   (file['status'] in ['modified', 'changed'] and INCLUDE_UPDATES):
+                    file_specs.append((file['filename'], latest_sha))
+
+    cache.prefetch_file_contents(session, REPO_OWNER, REPO_NAME, file_specs)
+    print("Prefetch complete, processing PRs...\n")
+
+    # === PROCESSING PHASE (using cached data) ===
     for pr in pull_requests:
         pr_number = pr['number']
 
@@ -269,7 +320,7 @@ def handle_pr_rules(session):
                     remove_label(session, REPO_OWNER, REPO_NAME, pr_number, IN_TEST_RULES_LABEL, cache=cache)
                 continue
 
-        files = get_files_for_pull_request(session, pr_number)
+        files = cache.get_pr_files(session, REPO_OWNER, REPO_NAME, pr_number)
 
         # Check if PR has too many rules
         if SKIP_BULK_PRS:
@@ -319,8 +370,8 @@ def handle_pr_rules(session):
                 print(f"\tSkipping {file['status']} file: {file['filename']} in PR #{pr_number} -- unmanaged file status")
 
             if process_file:
-                # Fetch file content
-                content = get_file_contents(
+                # Fetch file content (from cache)
+                content = cache.get_file_content(
                     session, REPO_OWNER, REPO_NAME,
                     file['filename'], latest_sha
                 )
