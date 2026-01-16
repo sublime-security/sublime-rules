@@ -360,8 +360,8 @@ def handle_pr_rules(session):
     processable_prs = []
     for pr in pull_requests:
         pr_number = pr['number']
-        # Skip drafts, non-main, and do-not-merge PRs
-        if pr['draft'] or pr['base']['ref'] != 'main':
+        # Skip non-main and do-not-merge PRs
+        if pr['base']['ref'] != 'main':
             continue
         if cache.has_label(session, REPO_OWNER, REPO_NAME, pr_number, DO_NOT_MERGE_LABEL):
             continue
@@ -401,11 +401,6 @@ def handle_pr_rules(session):
         # Check for do-not-merge label - skip entirely if present
         if cache.has_label(session, REPO_OWNER, REPO_NAME, pr_number, DO_NOT_MERGE_LABEL):
             print(f"Skipping PR #{pr_number} (has '{DO_NOT_MERGE_LABEL}' label): {pr['title']}")
-            continue
-
-        # Skip draft PRs
-        if pr['draft']:
-            print(f"Skipping draft PR #{pr_number}: {pr['title']}")
             continue
 
         # Skip non-main PRs
