@@ -1,5 +1,5 @@
-name: "Service abuse: PayPal with reply-to mismatch and suspicious indicators"
-description: "Detects potential PayPal service abuse where emails claiming to be from PayPal contain suspicious characteristics including reply-to addresses using free email providers, low-numbered invoice tickets, sender display names in subjects, or recipients using onmicrosoft.com domains."
+name: "Service abuse: PayPal invoice with suspicious indicators"
+description: "Detects potential PayPal service abuse where emails claiming to be from PayPal contain suspicious characteristics including reply-to addresses using free email providers, low-numbered invoice tickets, not including custom-vendor-information, and having suspect invoice ammounts like $399.99."
 type: "rule"
 severity: "medium"
 source: |
@@ -20,20 +20,26 @@ source: |
   and strings.icontains(body.current_thread.text,
                         "You don't have any payments with this seller in the last year."
   )
-  and 2 of (
-    // bad actor has been observed using the display name in the subject
-    strings.icontains(subject.subject, sender.display_name),
-    // bad actor has been observed using mailing lists
-    any(recipients.to, .email.domain.root_domain == "onmicrosoft.com"),
-    // bad actor has been observed using very low-numbered "tickets" in paypal
-    (
-      regex.icontains(subject.subject, '\((000?[0-9]|001[0-9])\)')
-    ),
-    (
-      regex.icontains(body.current_thread.text,
-                      'invoice\s+number\s*[\r\n\s]*(000?[0-9]|001[0-9])'
-      )
-    )
+  // uses default merchant logo AND no email found in the "seller reputation" section
+  and length(html.xpath(body.html,
+                        '//table[@id="sellerReputation"]//img[contains(@src,"default_merchant_logo_black.png")]'
+             ).nodes
+  ) > 0
+  and length(html.xpath(body.html,
+                        '//table[@id="sellerReputation"]//img[contains(@src,"seller-rep-email.png")]'
+             ).nodes
+  ) == 0
+  // Invoice number 0001-0010 via XPath
+  and any(html.xpath(body.html,
+                     '//td[contains(@style,"padding:0px 24px 20px 24px")]//span'
+          ).nodes,
+          regex.imatch(.display_text, '^000[1-9]$|^0010$')
+  )
+  // Amount in the hundreds ending in .99 (e.g., $399.99, $199.99)
+  and any(html.xpath(body.html,
+                     '//span[contains(@style,"color:#0066F5") and contains(@style,"font-weight:900")]//span'
+          ).nodes,
+          regex.imatch(.display_text, '^\$[1-9]\d{2}\.99$')
   )
 attack_types:
   - "Credential Phishing"
