@@ -8,18 +8,15 @@ source: |
   and 0 < length(attachments) < 3
   // Short message (BEC pattern)
   and length(body.current_thread.text) < 200
+  // Free email provider
+  and sender.email.domain.root_domain in $free_email_providers
   // pdf with these keywords
   and any(filter(attachments, .file_extension == "pdf"),
-          any(file.explode(.),
-              .depth == 1
-              and (
-                regex.icontains(.scan.ocr.raw,
-                                'swift(?: copy)?',
-                                "bank code:",
-                                "account number:",
-                                "payment"
-                )
-              )
+          regex.icontains(beta.ocr(.).text,
+                          'swift(?: copy)?',
+                          "bank code:",
+                          "account number:",
+                          "payment"
           )
   )
   // Display name or local_part suggests executive/authority
@@ -58,9 +55,6 @@ source: |
                        '(?:urgent|asap|immediately|today|by.*(?:friday|weekend|eod|end of day))'
     )
   )
-  
-  // Free email provider
-  and sender.email.domain.root_domain in $free_email_providers
 attack_types:
   - "BEC/Fraud"
 tactics_and_techniques:
