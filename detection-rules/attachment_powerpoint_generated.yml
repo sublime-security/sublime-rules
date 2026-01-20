@@ -4,12 +4,19 @@ type: "rule"
 severity: "high"
 source: |
   type.inbound
-  and any(filter(attachments, .file_extension in~ ("ppt", "pptx", "odt") and strings.icontains(.file_name, "empl0yment")),
+  and length(attachments) > 0
+  and any(filter(attachments,
+                 .file_extension in~ ("ppt", "pptx", "odt")
+                  and regex.icontains(.file_name, 'empl[0o]yment')
+          ),
           //
           // This rule makes use of a beta feature and is subject to change without notice
           // using the beta feature in custom rules is not suggested until it has been formally released
           //
           any(beta.parse_exif(.).fields, .value == "generated using python-pptx")
+          or any(beta.parse_exif(.).fields,
+                 .key == "LastModifiedBy" and .value == 'Steve Canny'
+          )
   )
 attack_types:
   - "Malware/Ransomware"
