@@ -46,8 +46,11 @@ source: |
   
   // event (1 required)
   and (
-    strings.icontains(body.current_thread.text, "united nations")
-    or strings.icontains(body.current_thread.text, "summit")
+    regex.icontains(body.current_thread.text,
+                    '\bpanel\b',
+                    '\bforum\b',
+                    '\bsummit\b'
+    )
     or (
       strings.icontains(body.current_thread.text, "conference")
       and not regex.icontains(body.current_thread.text, '\bconference call\b')
@@ -59,14 +62,40 @@ source: |
               .name in (
                 "Newsletters and Digests",
                 "Charity and Non-Profit",
-                "Reminders and Notifications"
+                "Reminders and Notifications",
+                "Government Services"
               )
   )
-  and not strings.icontains(body.current_thread.text, "internship")
   
-  // negate legit calendar invites
+  // keyword negations
+  and not (
+    (
+      strings.ilike(body.current_thread.text,
+                    "*internship*",
+                    "*scholarship*",
+                    "*chamber?of?commerce*",
+                    "*invoice?number*",
+                    "*payment?details*",
+                    "*balance?due*"
+      )
+      or regex.icontains(body.current_thread.text, '\bpay\b.{0,10}invoice')
+    )
+    and not strings.icontains(body.current_thread.text, "complimentary")
+  )
+  
+  // negate legit invites
   and not any(attachments,
               (.file_extension =~ "ics" or .content_type == "text/calendar")
+  )
+  and not (
+    any(body.links, .href_url.domain.root_domain == 'zoom.us')
+    and strings.ilike(body.current_thread.text, '*meeting id:*')
+    and strings.ilike(body.current_thread.text, '*passcode:*', '*password:*')
+  )
+  
+  // negate important tld's
+  and not (
+    sender.email.domain.tld in ('gov', 'edu') and headers.auth_summary.dmarc.pass
   )
   
   // negate highly trusted sender domains unless they fail DMARC authentication
