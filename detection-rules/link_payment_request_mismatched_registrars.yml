@@ -4,47 +4,21 @@ type: "rule"
 severity: "medium"
 source: |
   type.inbound
-  and (
-    strings.ilike(subject.subject,
-                  "*payment*",
-                  "*invoice*",
-                  "*transaction*",
-                  "*remittance*"
-    )
-    or strings.ilike(body.current_thread.text,
-                     "*payment*advice*",
-                     "*payment*notification*",
-                     "*transaction*processed*",
-                     "*incoming*payment*"
-    )
-    or any(ml.nlu_classifier(body.current_thread.text).tags,
-           .name == "payment" and .confidence != "low"
-    )
+  and strings.ilike(subject.subject,
+                    "*payment*",
+                    "*invoice*",
+                    "*transaction*",
+                    "*remittance*"
   )
-  and any(ml.nlu_classifier(body.current_thread.text).topics,
-          .name == "Payment Information" and .confidence == "high"
-  )
-  and (
-    strings.ilike(body.current_thread.text,
-                  "*attach*advice*",
-                  "*attach*payment*",
-                  "*attached*"
-    )
-  )
+  and (strings.ilike(body.current_thread.text, "*view*payment*details*", ))
   and any(filter(body.links,
                  .href_url.domain.root_domain != sender.email.domain.root_domain
           ),
           network.whois(sender.email.domain).registrar_name != network.whois(.href_url.domain
           ).registrar_name
           and (
-            regex.icontains(.href_url.path,
-                            "payment",
-                            "invoice",
-                            "receipt",
-                            "transaction"
-            )
             // paths like /000, /123
-            or regex.match(.href_url.path, '^/\d+/?$')
+            regex.match(.href_url.path, '^/\d+/?$')
             // very short paths
             or regex.match(.href_url.path, '^/[a-z]{1,3}/?$')
           )
