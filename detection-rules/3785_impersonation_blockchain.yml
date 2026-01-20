@@ -1,0 +1,41 @@
+name: "Brand impersonation: Blockchain[.]com"
+description: |
+  Impersonation of Blockchain[.]com, usually for credential theft.
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and (
+    regex.imatch(sender.display_name, '\bblockchain\b')
+    or strings.ilevenshtein(sender.display_name, 'blockchain') <= 1
+    or strings.ilike(sender.email.domain.domain, '*blockchain.com*')
+    or any(body.links,
+           strings.ilevenshtein(.href_url.domain.root_domain, 'blockchain') == 1
+    )
+  )
+  and not any(ml.nlu_classifier(body.current_thread.text).topics,
+              .name == "Educational and Research" and .confidence == "high"
+  )
+  and not (
+    sender.email.domain.root_domain in~ (
+      'blockchain.com',
+      'wxblockchain.com',
+      'ai-blockchain.com',
+      'envisionblockchain.com'
+    )
+    and coalesce(headers.auth_summary.dmarc.pass, false)
+  )
+  and sender.email.email not in $recipient_emails
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Lookalike domain"
+  - "Social engineering"
+detection_methods:
+  - "Header analysis"
+  - "Sender analysis"
+id: "92cc772d-28bf-5472-ae5d-6d37e21247dd"
+og_id: "0d85e555-bf7c-50a9-afba-de3c67818b6f"
+testing_pr: 3785
+testing_sha: 7a760491d6415b5eb08c70ba7f1e324bdd03b89f
