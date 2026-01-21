@@ -4,13 +4,16 @@ type: "rule"
 severity: "medium"
 source: |
   type.inbound
+  and length(attachments) == 1
   and any(filter(attachments, .file_type == "pdf"),
-          any(file.explode(.),
+          //
+          // This rule makes use of a beta feature and is subject to change without notice
+          // using the beta featuer in custom rules is not suggested until it has been formally released. 
+          //
+          any(beta.parse_exif(.).fields, strings.icontains(.value, 'password protected'))
+          and any(file.explode(.),
               any(.scan.yara.matches,
-                  .name == "pwd_protected_pdf_fake_document_1"
-              )
-              and any(.scan.exiftool.fields,
-                      strings.icontains(.value, "password protected")
+                  .name in ("pwd_protected_pdf_fake_document_1")
               )
           )
   )
