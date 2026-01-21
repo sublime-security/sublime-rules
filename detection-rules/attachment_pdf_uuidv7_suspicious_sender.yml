@@ -4,25 +4,18 @@ type: "rule"
 severity: "high"
 source: |
   type.inbound
-
-  // ULID or UUID v7 in path with /app/ structure
+  and length(filter(attachments, .file_type == "pdf")) == 1
   and any(filter(attachments, .file_extension == "pdf"),
           any(file.explode(.),
               any(.scan.url.urls,
                   // ULID pattern (26 chars)
                   regex.imatch(.path,
-                               '^/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/app/[\w?a-fA-F0-9-]+/(?:latest|view|access)$'
-                  )
-                  // Contains social engineering keywords in path
-                  and regex.icontains(.path,
-                                      'DOCUMENT|SECURE|REVIEW|SHARED|FILE|VIEW|ACCESS|MESSAGE'
+                               '^/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/app/.*$'
                   )
                   // Ends with version/action endpoint
                   and regex.imatch(.path,
-                                   '.*/(?:latest|current|view|access|open|v[0-9]+)$'
+                                   '.*/(?:latest|current|access|open|v[0-9]+)$'
                   )
-                  // Not legitimate file sharing services
-                  and not .domain.root_domain in $free_file_hosts
               )
           )
   )
