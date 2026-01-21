@@ -4,12 +4,11 @@ type: "rule"
 severity: "high"
 source: |
   type.inbound
-  
+
   // Core PDF display mismatch pattern
   and any(body.links,
           // Link displays as PDF but points to HTML page
           strings.ilike(.display_text, "*.pdf")
-          // and strings.icontains(.href_url.url, ".html")
           // Link domain is not reputable  
           and .href_url.domain.root_domain not in $tranco_1m
           // Domain completely unrelated to sender's organization
@@ -23,11 +22,8 @@ source: |
                   "*proposal*",
                   "*RFP*",
                   "*selected*",
-                  "*document*",
                   "*preview*",
-                  "*review*",
                   "*architects*",
-                  "*invited*"
     )
     or strings.ilike(subject.base,
                      "*proposal*",
@@ -44,7 +40,7 @@ source: |
   )
   
   // Not legitimate document sharing services
-  and not any(body.links,
+  and not any(body.current_thread.links,
               strings.ilike(.display_text, "*.pdf")
               and .href_url.domain.root_domain in (
                 "dropbox.com",
@@ -52,9 +48,6 @@ source: |
                 "drive.google.com"
               )
   )
-  
-  // Not zendesk emails
-  and not strings.contains(body.html.raw, "zd_encoded_id")
 attack_types:
   - "Credential Phishing"
   - "BEC/Fraud"
