@@ -4,28 +4,18 @@ type: "rule"
 severity: "medium"
 source: |
   type.inbound
+  and strings.icontains(body.current_thread.text, "authentisign")
   and (
-    strings.icontains(body.current_thread.text, "authentisign")
-    and (
-      regex.icontains(body.current_thread.text,
-                      '\b(?:s[\s\W_]*i[\s\W_]*g[\s\W_]*n[\s\W_]*i[\s\W_]*n[\s\W_]*g[\s\W_]) (?:p[\s\W_]*a[\s\W_]*r[\s\W_]*t[\s\W_]*y)\b',
-      )
-      or regex.icontains(body.current_thread.text, 'signing (?name|party)')
-      or strings.ilike(sender.display_name, '*authentisign*')
-      or strings.ilevenshtein(sender.display_name, 'authentisign') <= 1
-      or strings.ilike(sender.email.domain.domain, '*authentisign*')
-    )
-    and (
-      sender.email.domain.root_domain != "authentisign.com"
-      or (
-        sender.email.domain.root_domain == "authentisign.com"
-        and not (headers.auth_summary.spf.pass or headers.auth_summary.dmarc.pass)
-      )
-    )
-    // negate legitimate conversations
-    and not (
-      (subject.is_forward or subject.is_reply)
-      and (length(headers.references) != 0 or headers.in_reply_to is not null)
+    regex.icontains(body.current_thread.text, 'signing (?:name|party)')
+    or strings.ilike(sender.display_name, '*authentisign*')
+    or strings.ilevenshtein(sender.display_name, 'authentisign') <= 1
+    or strings.ilike(sender.email.domain.domain, '*authentisign*')
+  )
+  and (
+    sender.email.domain.root_domain != "authentisign.com"
+    or (
+      sender.email.domain.root_domain == "authentisign.com"
+      and not (headers.auth_summary.spf.pass or headers.auth_summary.dmarc.pass)
     )
   )
 
