@@ -1,0 +1,50 @@
+name: "Attachment: Fake lawyer payment document with suspicious banking details"
+description: "Detects messages from free email providers that impersonate lawyer communications with attached documents containing suspicious banking payment instructions and account details."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and sender.email.domain.root_domain in $free_email_providers
+  and (
+    strings.icontains(body.current_thread.text, "lawyer")
+    and strings.icontains(body.current_thread.text, "before")
+    and strings.icontains(body.current_thread.text, "attached")
+  )
+  and length(attachments) == 1
+  and (
+    any(filter(attachments, .file_extension == "docx"),
+        any([
+              "payment to lawyer:",
+              "bank code:",
+              "account number:",
+              "please send swift copy"
+            ],
+            any(file.explode(..),
+                strings.icontains(.scan.strings.raw, ..)
+            )
+        )
+    )
+    or any(filter(attachments, .file_extension == "pdf"),
+           any([
+                 "payment to lawyer:",
+                 "bank code:",
+                 "account number:",
+                 "please send swift copy"
+               ],
+               strings.icontains(beta.ocr(..).text, .)
+           )
+    )
+  )
+
+attack_types:
+  - "BEC/Fraud"
+tactics_and_techniques:
+  - "Free email provider"
+  - "Impersonation: Employee"
+  - "Social engineering"
+  - "PDF"
+detection_methods:
+  - "Content analysis"
+  - "File analysis"
+  - "Optical Character Recognition"
+  - "Sender analysis"
