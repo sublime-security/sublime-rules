@@ -4,27 +4,38 @@ type: "rule"
 severity: "high"
 source: |
   type.inbound
-  and length(attachments) == 1
   and sender.email.domain.root_domain in $free_email_providers
   and (
     strings.icontains(body.current_thread.text, "lawyer")
     and strings.icontains(body.current_thread.text, "before")
     and strings.icontains(body.current_thread.text, "attached")
   )
-  and (
-    all([
-          "payment to lawyer:",
-          "bank code:",
-          "account number:",
-          "please send swift copy"
-        ],
-        any(filter(attachments, .file_type == "docx"),
-            any(file.explode(.), strings.icontains(.scan.strings.raw, ...))
-        )
-        or any(filter(attachments, .file_type == "pdf"),
-               strings.icontains(beta.ocr(.).text, ..)
-        )
-    )
+  and length(attachments) == 1
+  and length(filter(attachments,
+                    .file_type in ("docx", "pdf")
+                    or .file_extension in ("docx", "pdf")
+             )
+  ) == 1
+  and any(attachments,
+          any([
+                "payment to lawyer:",
+                "bank code:",
+                "account number:",
+                "please send swift copy"
+              ],
+              // use file.explode for docx
+              (
+                (..file_extension == "docx" or ..file_type == "docx")
+                and any(file.explode(..),
+                        strings.icontains(.scan.strings.raw, ..)
+                )
+              )
+              // use ocr for PDF
+              or (
+                (..file_extension == "pdf" or ..file_type == "pdf")
+                and strings.icontains(beta.ocr(..).text, .)
+              )
+          )
   )
 attack_types:
   - "BEC/Fraud"
@@ -41,4 +52,4 @@ detection_methods:
 id: "e7a2717d-77e7-5164-9171-216f017342c6"
 og_id: "75aa34b3-9a77-5992-9722-9283405e9c49"
 testing_pr: 3809
-testing_sha: 4d37f8f9b9dc28c24eff13472285e2af13d80b19
+testing_sha: 34a1dd97313d62542b9fc316246fed8c54f15976
