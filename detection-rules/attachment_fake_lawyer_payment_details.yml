@@ -4,27 +4,38 @@ type: "rule"
 severity: "high"
 source: |
   type.inbound
-  and length(attachments) == 1
   and sender.email.domain.root_domain in $free_email_providers
   and (
     strings.icontains(body.current_thread.text, "lawyer")
     and strings.icontains(body.current_thread.text, "before")
     and strings.icontains(body.current_thread.text, "attached")
   )
-  and (
-    all([
-          "payment to lawyer:",
-          "bank code:",
-          "account number:",
-          "please send swift copy"
-        ],
-        any(filter(attachments, .file_type == "docx"),
-            any(file.explode(.), strings.icontains(.scan.strings.raw, ...))
-        )
-        or any(filter(attachments, .file_type == "pdf"),
-               strings.icontains(beta.ocr(.).text, ..)
-        )
-    )
+  and length(attachments) == 1
+  and length(filter(attachments,
+                    .file_type in ("docx", "pdf")
+                    or .file_extension in ("docx", "pdf")
+             )
+  ) == 1
+  and any(attachments,
+          any([
+                "payment to lawyer:",
+                "bank code:",
+                "account number:",
+                "please send swift copy"
+              ],
+              // use file.explode for docx
+              (
+                (..file_extension == "docx" or ..file_type == "docx")
+                and any(file.explode(..),
+                        strings.icontains(.scan.strings.raw, ..)
+                )
+              )
+              // use ocr for PDF
+              or (
+                (..file_extension == "pdf" or ..file_type == "pdf")
+                and strings.icontains(beta.ocr(..).text, .)
+              )
+          )
   )
 attack_types:
   - "BEC/Fraud"
