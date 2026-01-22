@@ -1,0 +1,39 @@
+name: "Brand impersonation: Marriott"
+description: "Detects messages impersonating Marriott hotels through display name or subject line matching, excluding legitimate senders with proper DMARC authentication and event-related communications."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and (
+    strings.icontains(subject.base, "marriott")
+    or strings.icontains(sender.display_name, "marriott")
+    or strings.ilevenshtein(sender.display_name, 'marriott') <= 2
+  )
+  and not subject.is_reply
+  and not any(ml.nlu_classifier(body.current_thread.text).topics,
+              .name == "Events and Webinars" and .confidence == "high"
+  )
+  and not (
+    sender.email.domain.root_domain in~ (
+      "email-marriott.com",
+      "feedback-marriott.com",
+      "marriotthotels.se",
+      "bookonline.com"
+    )
+    and coalesce(headers.auth_summary.dmarc.pass, false)
+  )
+
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Header analysis"
+  - "Natural Language Understanding"
+  - "Sender analysis"
+id: "0ed7a6ae-d087-514b-b345-1089ffaa3fc0"
+og_id: "39b32b97-80bc-5033-902e-312377cab6e2"
+testing_pr: 3820
+testing_sha: 0aba13dbcb5cda0419e5e39e1c7e9d1f87e3707e
