@@ -8,31 +8,43 @@ severity: "medium"
 source: |
   type.inbound
   and (
-    (
-      length(attachments) >= 1
-      and any(attachments,
-              (
-                regex.icontains(file.parse_html(.).raw,
-                                "const (?:urlParts|fakeEvent|progressBar|segments)"
-                )
-                or any([file.parse_html(.).raw],
-                       strings.icontains(., "impact?")
-                       or regex.contains(., '\d(/impact)')
-                )
-              )
-      )
+    // attached html/svg
+    any(filter(attachments, .file_type in ("html", "svg")),
+        regex.icontains(file.parse_text(.).text,
+                        "const (?:urlParts|fakeEvent|progressBar|segments)"
+        )
+        or any([file.parse_text(.).text],
+               strings.icontains(., "impact?") or regex.contains(., '\d(/impact)')
+        )
     )
-    or (
-      any(body.links,
-          (
-            strings.icontains(.href_url.url, "impact?")
-            or strings.icontains(.href_url.url, "/impact")
-          )
-          and (
-            strings.icontains(.href_url.url, ":8443")
-            or strings.icontains(.href_url.url, ":2087")
-          )
-      )
+  
+    // attached EMLs with html/svg attachments
+    or any(filter(attachments,
+                  .content_type == "message/rfc822" or .file_extension == "eml"
+           ),
+           any(filter(file.parse_eml(.).attachments,
+                      .file_type in ("html", "svg")
+               ),
+               regex.icontains(file.parse_text(.).text,
+                               "const (?:urlParts|fakeEvent|progressBar|segments)"
+               )
+               or any([file.parse_text(.).text],
+                      strings.icontains(., "impact?")
+                      or regex.contains(., '\d(/impact)')
+               )
+           )
+    )
+  
+    // direct body links
+    or any(body.links,
+           (
+             strings.icontains(.href_url.url, "impact?")
+             or strings.icontains(.href_url.url, "/impact")
+           )
+           and (
+             strings.icontains(.href_url.url, ":8443")
+             or strings.icontains(.href_url.url, ":2087")
+           )
     )
   )
 attack_types:
