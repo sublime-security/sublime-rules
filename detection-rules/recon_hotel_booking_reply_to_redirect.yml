@@ -4,43 +4,52 @@ type: "rule"
 severity: "medium"
 source: |
   type.inbound
-  and length(headers.reply_to) > 0
-  and length(body.current_thread.text) < 600
-  and all(recipients.to,
-          .email.domain.root_domain != headers.from.email.domain.root_domain
-  )
   and any(headers.reply_to,
           .email.domain.root_domain in $free_email_providers
-          and .email.domain.root_domain != headers.from.email.domain.root_domain
   )
+  and sender.email.domain.root_domain not in $free_email_providers
+  and all(recipients.to,
+          .email.domain.root_domain != sender.email.domain.root_domain
+  )
+  and length(body.links) == 0
+  and length(attachments) == 0
+  and length(body.current_thread.text) < 600
   and not (subject.is_reply or subject.is_forward)
-  
-  // hotel/booking themed OR generic subject
-  and regex.icontains(subject.subject,
-                      'hotel|booking|reservation|accommodation|check-in|reserving|parking|room|suite|view|facilities',
-                      '^subject\d*$|^re:\s*$|^inquiry$|(?:request|question|inquiry) (?:for|about|regarding|to)'
-  )
-  
-  // generic hotel staff addressing OR booking intent OR service questions
   and (
-    regex.icontains(body.current_thread.text,
-                    'dear (?:reception|duty manager|front desk|concierge|staff|hotel (?:management|administration|leadership|manager|operations|staff (?:office|members|team))|hotel\s*,)|(?:greetings|to) (?:the )?(?:artisans of hospitality|guardians of comfort|your reception team)|head of hotel|(?:person )?in charge of the hotel|your (?:future|upcoming) (?:client|guest)'
-    )
-    or (
-      regex.icontains(body.current_thread.text,
-                      '(?:intend|would like|I.d like|wish|hoping|eager) to (?:make a booking|book|reserve|secure)|want to book|(?:looking|seeking) to (?:book|reserve)|interested in (?:booking|reserving)|(?:can you |could you )?accommodate a booking|(?:I|we) can book|(?:organizing|planning|arranging).+(?:holiday|vacation)|love to stay'
+    (
+      any(ml.nlu_classifier(body.current_thread.text).topics,
+          .name == "Travel and Transportation"
+          and .confidence in ("medium", "high")
       )
-      and regex.icontains(body.current_thread.text,
-                          'room|hotel|suite|accommodation|your (?:booking|online).+(?:system|tool|page)|your (?:site|website|option)'
+      and any(ml.nlu_classifier(body.current_thread.text).entities,
+              .name == "request"
       )
     )
-    or (
-      regex.icontains(body.current_thread.text,
-                      '(?:can|could|do|does|are|is).+(?:your hotel|the hotel|your (?:restaurant|fitness center|facility|facilities|room))|(?:good morning|dear (?:sir|madam|sir or madam)|to the office)'
-      )
-      and regex.icontains(body.current_thread.text,
-                          'hotel|(?:wheelchair|disabilit|accessib|pet|payment|check-in|parking|welcome package|chronic illness)'
-      )
+    or strings.ilike(body.current_thread.text,
+                     '*hotel*', 
+                     '*booking*', 
+                     '*to book*', 
+                     '*book a *',
+                     '*reserv*',
+                     '*your property*', 
+                     '*room*', 
+                     '*suite*',
+                     '*guest services*', 
+                     '*reception*', 
+                     '*front desk*',
+                     '*accommodation*', 
+                     '*availability*',
+                     '*check-in*', 
+                     '*pet friendly*'
+    )
+    or strings.ilike(subject.subject,
+                     '*hotel*', 
+                     '*booking*', 
+                     '*reserv*',
+                     '*room*', 
+                     '*suite*', 
+                     '*accommodation*', 
+                     '*property*'
     )
   )
 
