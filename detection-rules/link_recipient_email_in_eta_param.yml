@@ -1,0 +1,24 @@
+name: "Link: Recipient email address in 'eta' parameter"
+description: "Detects links containing the recipient's email address in the 'eta' query parameter, a technique commonly used to personalize malicious links and track targets."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and length(recipients.to) >= 1
+  and length(body.links) >= 1
+  and any(body.links,
+          'eta' in keys(.href_url.query_params_decoded)
+          and any(recipients.to,
+                  any(..href_url.query_params_decoded["eta"],
+                      strings.icontains(., ..email.email)
+                  )
+          )
+  )
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Social engineering"
+  - "Evasion"
+detection_methods:
+  - "URL analysis"
+  - "Content analysis"
