@@ -10,12 +10,16 @@ source: |
   and (
     // attached html/svg
     any(filter(attachments, .file_type in ("html", "svg")),
-        regex.icontains(file.parse_text(.).text,
-                        "const (?:urlParts|fakeEvent|progressBar|segments)"
+        regex.count(file.parse_text(.).text,
+                    'const (?:urlParts|fakeEvent|progressBar|progressInterval|segments|statusText|statusText|securityNotice|statusMessages|challengeForm|challengeRunning|challengeSuccess|successText|verifyingText|encodedTarget|baseDomain|newDynamicParam|statusElement)\s*='
+        ) >= 3
+        or (
+          strings.icontains(file.parse_text(.).text, 'const baseDomain')
+          and strings.icontains(file.parse_text(.).text, 'const port')
+          and strings.icontains(file.parse_text(.).text, 'const path')
         )
-        or any([file.parse_text(.).text],
-               strings.icontains(., "impact?") or regex.contains(., '\d(/impact)')
-        )
+        or strings.icontains(file.parse_text(.).text, 'impact?')
+        or regex.contains(file.parse_text(.).text, '\d/impact')
     )
   
     // attached EMLs with html/svg attachments
@@ -25,20 +29,23 @@ source: |
            any(filter(file.parse_eml(.).attachments,
                       .file_type in ("html", "svg")
                ),
-               regex.icontains(file.parse_text(.).text,
-                               "const (?:urlParts|fakeEvent|progressBar|segments)"
+               regex.count(file.parse_text(.).text,
+                           'const (?:urlParts|fakeEvent|progressBar|progressInterval|segments|statusText|statusText|securityNotice|statusMessages|challengeForm|challengeRunning|challengeSuccess|successText|verifyingText|encodedTarget|baseDomain|newDynamicParam|statusElement)\s*='
+               ) >= 3
+               or (
+                 strings.icontains(file.parse_text(.).text, 'const baseDomain')
+                 and strings.icontains(file.parse_text(.).text, 'const port')
+                 and strings.icontains(file.parse_text(.).text, 'const path')
                )
-               or any([file.parse_text(.).text],
-                      strings.icontains(., "impact?")
-                      or regex.contains(., '\d(/impact)')
-               )
+               or strings.icontains(file.parse_text(.).text, 'impact?')
+               or regex.contains(file.parse_text(.).text, '\d/impact')
            )
     )
   
     // direct body links
     or any(body.links,
            (
-             strings.icontains(.href_url.url, "impact?")
+             strings.icontains(.href_url.url, "impact?session_")
              or strings.icontains(.href_url.url, "/impact")
            )
            and (
@@ -56,4 +63,4 @@ detection_methods:
 id: "6e46247f-f5cb-508c-be05-e79218644b60"
 og_id: "4d197faf-31bc-5f09-bf60-9f6a52f913a9"
 testing_pr: 3755
-testing_sha: c07dda975ecec4e1adf3a83f77778864536c91bb
+testing_sha: 53c052f4abe00b30fab2548079de6e4c46063bb4
