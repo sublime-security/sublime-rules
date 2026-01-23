@@ -4,14 +4,21 @@ type: "rule"
 severity: "high"
 source: |
   type.inbound
-  and length(recipients.to) >= 1
-  and length(body.links) >= 1
+  and length(recipients.to) == 1
   and any(body.links,
-          'eta' in keys(.href_url.query_params_decoded)
-          and any(recipients.to,
-                  any(..href_url.query_params_decoded["eta"],
-                      strings.icontains(., ..email.email)
-                  )
+          // eta is the only key
+          length(keys(.href_url.query_params_decoded)) == 1
+          and (
+            // the recpieints email domain is in the value
+            // we've seen cases where `.` in the local part are not in the value, thus we rely on domain only
+            strings.icontains(.href_url.query_params_decoded["eta"][0],
+                              recipients.to[0].email.domain.domain
+            )
+            // support base64 form as well
+            or strings.icontains(strings.decode_base64(.href_url.query_params_decoded["eta"][0]
+                                 ),
+                                 recipients.to[0].email.domain.domain
+            )
           )
   )
 attack_types:
