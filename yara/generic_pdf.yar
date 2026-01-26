@@ -43,3 +43,24 @@ rule invoice_pdf_01 {
         $header at 0
         and any of ($jpg_*) 
 }
+
+rule view_document_pdf_characteristics
+{
+    meta:
+        author = "kyle eaton"
+        description = "PDF contains generic lure image characteristics. 'VIEW DOCUMENT HERE' with blurred document image present."
+    strings:
+        $header = {25 50 44 46 2D 31 2E}
+        $image_w = "/Width 1200"
+        $image_h = "/Height 1067"
+        $uri = "/URI"
+        $mb = "/MediaBox [0 0 612 792]"
+        $prod = "/Producer"
+    condition:
+        $header at 0
+        and $mb
+        and $prod
+        and $uri
+        and @image_h == @image_w + 12
+
+}
