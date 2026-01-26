@@ -7,16 +7,37 @@ source: |
   and length(recipients.to) == 1
   and recipients.to[0].email.domain.valid
   and any(body.links,
-          // special char in the path
           (
-            strings.icontains(.href_url.path, '!')
-            or strings.icontains(.href_url.path, '@')
+            // special char in the path
+            (
+              strings.icontains(.href_url.path, '!')
+              or strings.icontains(.href_url.path, '@')
+            )
+            // a single path
+            and strings.count(.href_url.path, '/') == 2
+            and (
+              strings.icontains(.href_url.path, '/$')
+              or strings.icontains(.href_url.path, '/*')
+            )
+            // ensure expected ordering
+            and regex.icontains(.href_url.url, '[!@].*[$*]')
           )
-          // a single path
-          and strings.count(.href_url.path, '/') == 2
-          and (
-            strings.icontains(.href_url.path, '/$')
-            or strings.icontains(.href_url.path, '/*')
+          or 
+          (
+            // a single path
+            strings.count(.href_url.path, '/') == 2
+            and (
+              strings.icontains(.href_url.path, '/$')
+              or strings.icontains(.href_url.path, '/*')
+            )
+            // subdomain should contain num{3}alpha or alphanum{3}
+            and regex.icontains(.href_url.domain.subdomain,
+                                '^(?:[a-z]+[0-9]{3}|[0-9]{3}[a-z]+)$'
+            )
+            // url path should contain num{3}alpha or alphanum{3}
+            and regex.icontains(.href_url.path,
+                                '\/(?:[a-z]+[0-9]{3}|[0-9]{3}[a-z]+)\/'
+            )
           )
           and (
             (
@@ -33,7 +54,6 @@ source: |
             )
           )
   )
-
 attack_types:
   - "Credential Phishing"
 tactics_and_techniques:
