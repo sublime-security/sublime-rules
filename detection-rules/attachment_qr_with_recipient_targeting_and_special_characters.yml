@@ -8,16 +8,41 @@ source: |
   and recipients.to[0].email.domain.valid
   and any(attachments,
           any(file.explode(.),
-              // special char in the path
               (
-                strings.icontains(.scan.qr.url.path, '!')
-                or strings.icontains(.scan.qr.url.path, '@')
+                // a single path
+                strings.count(.scan.qr.url.path, '/') == 2
+                and (
+                  strings.icontains(.scan.qr.url.path, '/$')
+                  or strings.icontains(.scan.qr.url.path, '/*')
+                )
+                // subdomain should contain num{3}alpha or alphanum{3}
+                and regex.icontains(.scan.qr.url.domain.subdomain,
+                                    '^(?:[a-z]+[0-9]{3}|[0-9]{3}[a-z]+)$'
+                )
+                // url path should contain num{3}alpha or alphanum{3}
+                and regex.icontains(.scan.qr.url.path,
+                                    '\/(?:[a-z]+[0-9]{3}|[0-9]{3}[a-z]+)\/'
+                )
               )
-              // a single path
-              and strings.count(.scan.qr.url.path, '/') == 2
-              and (
-                strings.icontains(.scan.qr.url.path, '/$')
-                or strings.icontains(.scan.qr.url.path, '/*')
+              or 
+              (
+                // special char in the path
+                (
+                  strings.icontains(.scan.qr.url.path, '!')
+                  or strings.icontains(.scan.qr.url.path, '@')
+                )
+                // a single path
+                and strings.count(.scan.qr.url.path, '/') == 2
+                and (
+                  strings.icontains(.scan.qr.url.path, '/$')
+                  or strings.icontains(.scan.qr.url.path, '/*')
+                  // hex dollar sign
+                  or strings.icontains(.scan.qr.url.path, '%24')
+                  // hex star
+                  or strings.icontains(.scan.qr.url.path, '%2A')
+                )
+                // ensure expected ordering
+                and regex.icontains(.scan.qr.url.url, '[!@].*(?:[$*]|%2[A4])')
               )
               and (
                 (
