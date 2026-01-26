@@ -8,7 +8,13 @@ source: |
           .display_text == "Join with Google Meet"
           and not strings.contains(.href_url.url, "meet.google.com")
           // ignore protection domains
-          and not any(["mimecastprotect.com"], ..href_url.domain.root_domain == .)
+          and not any(["mimecastprotect.com", "proofpointessentials.com", "emailprotection.link"], ..href_url.domain.root_domain == .)
+  )
+  // finding the "Guests"/"Join by phone" tables missing seems to be a good indicator of these.
+  and length(html.xpath(body.html, '//table/tbody/tr/td/h2[contains(@style, "color:rgb(60,64,67)")]').nodes) == 0
+  // sometimes the html is a bit different, so this just helps filter those emails too. 
+  and not any(distinct(map(html.xpath(body.html, '//table//h2').nodes, .inner_text)),
+      . in ("Meeting link", "Join by phone", "Guests")
   )
 attack_types:
   - "Credential Phishing"
