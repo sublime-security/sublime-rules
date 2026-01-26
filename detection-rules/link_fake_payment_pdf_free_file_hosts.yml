@@ -7,27 +7,8 @@ source: |
   // At least 1 link and less than 10
   and 1 <= length(body.links) < 10
   
-  // ACH/Wire payment notification language
-  and (
-    // Subject line contains payment notification language
-    regex.icontains(subject.subject, '(ACH|wire|EFT).{0,20}payment')
-    or regex.icontains(subject.subject,
-                       'payment.{0,15}(issued|receipt|confirmation|notification)'
-    )
-    or regex.icontains(subject.subject, '(transaction|remittance).{0,15}receipt')
-    // Or body contains payment notification language
-    or 2 of (
-      regex.icontains(body.current_thread.text, '(ACH|wire|EFT).{0,20}payment'),
-      strings.icontains(body.current_thread.text, "bank account ending"),
-      regex.icontains(body.current_thread.text,
-                      'payment.{0,10}(details|id|amount|summary)'
-      ),
-      strings.icontains(body.current_thread.text, "remittance"),
-    )
-  )
-  
   // PDF-named link to self-service platform
-  and any(body.links,
+  and any(body.current_thread.links,
           // Link display text looks like a PDF file
           strings.iends_with(.display_text, ".pdf")
           // But the URL goes to a self-service platform (not an actual PDF)
@@ -50,27 +31,20 @@ source: |
   
   // Additional suspicious indicators (any one)
   and (
-    // BEC intent detected
-    any(ml.nlu_classifier(body.current_thread.text).intents, .name == "bec")
     // High confidence for payment request
-    or any(ml.nlu_classifier(body.current_thread.text).topics,
-           .name == "Payment Information" and .confidence == "high"
+    any(ml.nlu_classifier(body.current_thread.text).topics,
+        .name == "Payment Information" and .confidence == "high"
     )
     // Or suspicious subdomain pattern (financial-themed)
-    or any(body.links,
+    or any(body.current_thread.links,
            regex.icontains(.href_url.domain.subdomain,
                            'account|payable|payment|invoice|billing'
            )
-    )
-    // Or generic/impersonal greeting
-    or regex.icontains(body.current_thread.text,
-                       'dear (sir|madam|customer|valued|supplier)'
     )
   )
   
   // False positive reduction
   and not sender.email.domain.root_domain in $org_domains
-
 attack_types:
   - "BEC/Fraud"
 tactics_and_techniques:
