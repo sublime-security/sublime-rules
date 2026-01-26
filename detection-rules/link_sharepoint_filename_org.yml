@@ -13,7 +13,7 @@ source: |
   and not strings.ilike(body.current_thread.text, "invited you to edit")
   and (
     // use the display text of the link to determine the name of the file
-    any(filter(body.links,
+    any(filter(body.current_thread.links,
                .href_url.domain.domain not in $tenant_domains
                and (
                  .href_url.domain.root_domain == "sharepoint.com"
@@ -30,7 +30,7 @@ source: |
         ),
   
         // the document name is the same as the org name
-        // as determined by the footer 
+        // as determined by the footer
         (
           strings.icontains(body.current_thread.text,
                             strings.concat('This email is generated through ',
@@ -44,6 +44,30 @@ source: |
           )
         )
         or .display_text =~ sender.email.domain.sld
+        // or extract the org name from the footer and check if display_text starts or ends with it
+        or (
+          length(regex.extract(body.current_thread.text,
+                               "generated through ([^']+)'s use"
+                 )
+          ) > 0
+          and strings.icontains(body.current_thread.text,
+                                "may contain content that is controlled by"
+          )
+          and (
+            strings.istarts_with(.display_text,
+                                 regex.extract(body.current_thread.text,
+                                               "generated through ([^']+)'s use"
+                                 )[0].groups[0]
+            )
+            or (
+              strings.iends_with(.display_text,
+                                 regex.extract(body.current_thread.text,
+                                               "generated through ([^']+)'s use"
+                                 )[0].groups[0]
+              )
+            )
+          )
+        )
     )
   )
 attack_types:
