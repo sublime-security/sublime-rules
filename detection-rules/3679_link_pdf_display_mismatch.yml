@@ -4,12 +4,15 @@ type: "rule"
 severity: "high"
 source: |
   type.inbound
-
+  and length(body.current_thread.text) < 1600
+  and length(body.current_thread.links) <= 5
+  and length(recipients.to) <= 5
+  
   // Core PDF display mismatch pattern
   and any(body.current_thread.links,
           // Link displays as PDF but points to HTML page
           strings.ilike(.display_text, "*.pdf")
-          // Link domain is not reputable  
+          // Link domain is not reputable
           and .href_url.domain.root_domain not in $tranco_1m
           // Domain completely unrelated to sender's organization
           and .href_url.domain.root_domain != sender.email.domain.root_domain
@@ -47,6 +50,12 @@ source: |
                 "drive.google.com"
               )
   )
+  
+  // negations
+  and not strings.ilike(body.current_thread.text,
+                        "*budget*update*",
+                        "*new*document*"
+  )
 attack_types:
   - "Credential Phishing"
   - "BEC/Fraud"
@@ -61,4 +70,4 @@ detection_methods:
 id: "813c4820-6d55-5c33-8ee0-86d6de9c042f"
 og_id: "901c1dd0-d557-57cf-b520-a287ad6e8be7"
 testing_pr: 3679
-testing_sha: 843027a7f89eca1bbcdfc1bc24074a6804b38ea6
+testing_sha: 61142ff71325fb483120005938cad2708ef0d847
