@@ -1,7 +1,7 @@
-name: "Brand impersonation: Marriott"
-description: "Detects messages impersonating Marriott hotels through display name or subject line matching, excluding legitimate senders with proper DMARC authentication and event-related communications."
+name: "Brand impersonation: Marriott with gift language"
+description: "Detects messages impersonating Marriott brand that contain gift-related language such as 'appreciation gift', 'thank you gift', or 'something special' from senders not associated with legitimate Marriott domains."
 type: "rule"
-severity: "medium"
+severity: ""
 source: |
   type.inbound
   and (
@@ -9,16 +9,20 @@ source: |
     or strings.icontains(sender.display_name, "marriott")
     or strings.ilevenshtein(sender.display_name, 'marriott') <= 2
   )
+  and any([body.current_thread.text, subject.base],
+          regex.icontains(.,
+                          '(?:appreciation|thank)(?:\s|-)?(you)?\s+gift',
+                          'something special',
+                          'special.{0,10}thank(?:\s|-)you'
+          )
+  )
   and not subject.is_reply
   and not any(ml.nlu_classifier(body.current_thread.text).topics,
               .name == "Events and Webinars" and .confidence == "high"
   )
   and not (
     sender.email.domain.root_domain in~ (
-      "marriott.com",
       "email-marriott.com",
-      "res-marriott.com",
-      "hotels.com",
       "feedback-marriott.com",
       "marriotthotels.se",
       "bookonline.com"
@@ -34,6 +38,4 @@ tactics_and_techniques:
 detection_methods:
   - "Content analysis"
   - "Header analysis"
-  - "Natural Language Understanding"
   - "Sender analysis"
-id: "39b32b97-80bc-5033-902e-312377cab6e2"
