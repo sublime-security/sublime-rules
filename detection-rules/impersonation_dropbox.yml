@@ -18,8 +18,14 @@ source: |
            )
     )
     or regex.icontains(body.current_thread.text,
-                       'invited you to view the file ".*" on Dropbox'
+                       'invited you to view the file ".*" on Dropbox',
+                       'dr[o0]pb[o0]x.{0,20}share.{0,20}f[i1|][i1|l]es?'
     )
+    // dropbox style button
+    or length(html.xpath(body.html,
+                         "//a[contains(@style, 'background-color: #0070e0') and contains(@style, 'color: white') and contains(@style, 'width: 210px')  and contains(@style, 'max-width: 210px') and contains(@style, 'border-radius: 4px') and contains(@style, 'text-align: center') and contains(@style, 'font-size: 15px')]"
+              ).nodes
+    ) == 1
   )
   and sender.email.domain.root_domain not in~ (
     'dropbox.com',
@@ -32,16 +38,24 @@ source: |
         and any(file.explode(.), strings.ilike(.scan.ocr.raw, "*dropbox*"))
     )
     or any(body.links,
-           strings.ilike(.display_text,
-                         "*review*",
-                         "*sign*",
-                         "*view*",
-                         "*completed document*",
-                         "*open agreement*",
-                         "*open document*",
-                         "*open file*"
+           (
+             (
+               strings.ilike(.display_text,
+                             "*review*",
+                             "*sign*",
+                             "*view*",
+                             "*completed document*",
+                             "*open agreement*",
+                             "*open document*",
+                             "*open file*"
+               )
+               and not strings.ilike(.display_text, "*view this email in*")
+             )
+             or (
+               .display_text is null
+               and .href_url.domain.root_domain in $free_file_hosts
+             )
            )
-           and not strings.ilike(.display_text, "*view this email in*")
            and .href_url.domain.root_domain != "dropbox.com"
            and any(ml.nlu_classifier(body.current_thread.text).intents,
                    .name == "cred_theft" and .confidence in ("medium", "high")
@@ -55,16 +69,16 @@ source: |
     )
   )
   and sender.email.email not in $recipient_emails
-  
+
   // negate dropbox fax (aka hellofax)
   and not sender.email.domain.root_domain == 'hellofax.com'
-  
+
   // negate iCloud Private Message Relay
   and not (
     sender.email.domain.root_domain == "privaterelay.appleid.com"
     or any(headers.hops, any(.fields, .name == "X-ICLOUD-HME"))
   )
-  
+
   // negate highly trusted sender domains unless they fail DMARC authentication
   and (
     (
@@ -73,7 +87,6 @@ source: |
     )
     or sender.email.domain.root_domain not in $high_trust_sender_root_domains
   )
-
 attack_types:
   - "Credential Phishing"
 tactics_and_techniques:
