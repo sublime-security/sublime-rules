@@ -4,11 +4,9 @@ type: "rule"
 severity: "medium"
 source: |
   type.inbound
-  
   // no links
   and (
     length(body.links) == 0
-  
     // or 1 link, but link doesn't match the sender's domain
     or (
       length(body.links) == 1
@@ -18,29 +16,42 @@ source: |
       )
     )
   )
-  
   // no attachments
   and length(attachments) == 0
-  
-  // honorific 
-  and regex.icontains(sender.display_name,
-                      '(?:Mr|Mrs|Ms|Miss|Dr|Prof|Sir|Lady|Rev)\.?[ \t]+'
-  )
-  
-  // And an email is found in the body, and a freemail domain is found also
   and (
-    regex.contains(body.current_thread.text,
-                   "[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}"
+    (
+      // honorific
+      regex.icontains(sender.display_name,
+                      '(?:Mr|Mrs|Ms|Miss|Dr|Prof|Sir|Lady|Rev)\.?[ \t]+'
+      )
+      // And an email is found in the body, and a freemail domain is found also
+      and regex.contains(body.current_thread.text,
+                         "[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}"
+      )
+      and any($free_email_providers,
+              strings.icontains(body.current_thread.text, .)
+      )
+      // scammy phrases
+      and regex.icontains(body.current_thread.text,
+                          '(?:I am|My name is) .* (?:from|staying in) .+\.',
+                          '(?:years old|cm|kg).*\.',
+                          '(?:photo|pictures|sexy).*\.',
+                          '(?:email|contact me|write to me|reply to me) at .*@.*\.'
+      )
     )
-    and any($free_email_providers, strings.icontains(body.current_thread.text, .))
-  )
-  
-  // common scammy phrases
-  and regex.icontains(body.current_thread.text,
-                      "(I am|My name is) .* (from|staying in) .+\\.",
-                      ".*(years old|cm|kg).*\\.",
-                      ".*(photo|pictures|sexy).*\\.",
-                      ".*(email|contact me|write to me|reply to me) at .*@.*\\."
+    or (
+      // simple firstname lastname from freemail
+      sender.email.domain.root_domain in $free_email_providers
+      and regex.match(sender.display_name, '[A-Z][a-z]+ [A-Z][a-z]+')
+      // short message
+      and length(body.current_thread.text) < 200
+      and regex.icontains(body.current_thread.text,
+                          "(?:I am|My name is) [^.!?]{1,30} from [^.!?]{1,50}[.!?,]"
+      )
+      and regex.icontains(body.current_thread.text,
+                          '(?:can I|please) (?:talk to|contact|meet|chat with) (?:you|me)'
+      )
+    )
   )
   and (
     (

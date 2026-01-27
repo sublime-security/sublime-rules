@@ -19,7 +19,7 @@ source: |
         )
         and (
           sender.display_name is null
-          or strings.ilike(strings.replace_confusables(subject.subject),
+          or strings.ilike(strings.replace_confusables(subject.base),
                            '*sendgrid*'
           )
         )
@@ -40,9 +40,7 @@ source: |
         )
         and (
           sender.display_name is null
-          or strings.ilike(strings.replace_confusables(subject.subject),
-                           '*twilio*'
-          )
+          or strings.ilike(strings.replace_confusables(subject.base), '*twilio*')
         )
       )
     )
@@ -60,7 +58,7 @@ source: |
         (
           (
             strings.icontains(body.current_thread.text, "sendgrid")
-            or strings.icontains(subject.subject, "sendgrid")
+            or strings.icontains(subject.base, "sendgrid")
           )
           and 3 of (
             strings.icontains(body.current_thread.text, "webhook"),
@@ -111,11 +109,18 @@ source: |
     or any(ml.nlu_classifier(beta.ocr(file.message_screenshot()).text).intents,
            .name == "cred_theft" and .confidence == "high"
     )
+  
+    // any capacity or limits mentioned
+    or any([subject.base, body.current_thread.text],
+           (strings.icontains(., "capacity") or strings.icontains(., "limit"))
+           and regex.icontains(., '\breach(?:\b|ed)')
+    )
   )
   
   // and the sender is not in org_domains or from sendgrid domains and passes auth
   and not (
-    (
+    sender.email.domain.valid
+    and (
       sender.email.domain.root_domain in $org_domains
       or (
         sender.email.domain.root_domain in (
@@ -138,7 +143,6 @@ source: |
     or sender.email.domain.root_domain not in $high_trust_sender_root_domains
   )
   and not profile.by_sender().solicited
-
 attack_types:
   - "BEC/Fraud"
   - "Credential Phishing"
