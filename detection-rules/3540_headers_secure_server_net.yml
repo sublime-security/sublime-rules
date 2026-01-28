@@ -1,0 +1,40 @@
+name: "PR# 3540 - Headers: GoDaddy SecureServer return-path with untrusted sender"
+description: "Detects messages with a GoDaddy SecureServer return-path from untrusted or DMARC-failing sender domains that are unsolicited."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and strings.icontains(headers.return_path.email, 'secureserver.net')
+  
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and not headers.auth_summary.dmarc.pass
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+  and sender.email.domain.root_domain not in $alexa_1m
+  
+  // only flag unsolicited messages
+  and (
+    not profile.by_sender().any_messages_benign
+    and not profile.by_sender().solicited
+  )
+tags:
+  - "Attack surface reduction"
+  - pr_author_brycampbell
+  - created_from_open_prs
+  - rule_status_added
+attack_types:
+  - "Spam"
+tactics_and_techniques:
+  - "Spoofing"
+  - "Evasion"
+detection_methods:
+  - "Header analysis"
+  - "Sender analysis"
+  - "Threat intelligence"
+id: "413329d2-e4d7-5605-bd70-5a96f7123040"
+references:
+  - https://github.com/sublime-security/sublime-rules/pull/3540
