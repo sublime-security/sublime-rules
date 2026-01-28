@@ -1,0 +1,126 @@
+name: "PR# 3751 - Brand impersonation: TikTok"
+description: "Detects messages impersonating TikTok through similar display names or logo detection, combined with security-themed content and authentication failures. Excludes legitimate TikTok communications and trusted senders."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and (
+    // TikTok Brand Detection
+    (
+      // display name contains tiktok
+      strings.ilike(strings.replace_confusables(sender.display_name), '*tiktok*')
+      // levenshtein distance similar to tiktok
+      or strings.ilevenshtein(strings.replace_confusables(sender.display_name),
+                              'tiktok'
+      ) <= 1
+      or (
+        length(ml.logo_detect(file.message_screenshot()).brands) == 1
+        and any(ml.logo_detect(file.message_screenshot()).brands,
+                .name == "TikTok" and .confidence == "high"
+        )
+      )
+      // hyphenated sender domain contains tiktok
+      or strings.iends_with(sender.email.domain.root_domain, "-tiktok.com")
+    )
+    // OR TikTok verification language
+    or (
+      strings.icontains(body.current_thread.text, "tiktok")
+      and (
+        strings.icontains(body.current_thread.text, "verified badge")
+        or strings.icontains(body.current_thread.text, "verification badge")
+        or strings.icontains(body.current_thread.text, "verification criteria")
+        or strings.icontains(body.current_thread.text, "activate badge")
+        or strings.icontains(body.current_thread.text, "verification complete")
+        or strings.icontains(body.current_thread.text, "almost verified")
+        or strings.icontains(body.current_thread.text, "review complete")
+        or strings.icontains(body.current_thread.text, "verify profile")
+        or any(body.links,
+               strings.icontains(.display_text, "badge")
+               and (
+                 .href_url.domain.root_domain in $free_file_hosts
+                 or .href_url.domain.domain == "share.google"
+               )
+        )
+      )
+    )
+  )
+  and (
+    // ML Topic Analysis and Credential Theft Detection
+    any(ml.nlu_classifier(body.current_thread.text).topics,
+        .name in (
+          "Security and Authentication",
+          "Secure Message",
+          "Reminders and Notifications"
+        )
+        and .confidence in ("medium", "high")
+    )
+    or any(ml.nlu_classifier(beta.ocr(file.message_screenshot()).text).topics,
+           .name in (
+             "Security and Authentication",
+             "Secure Message",
+             "Reminders and Notifications"
+           )
+           and .confidence in ("medium", "high")
+           and beta.ocr(file.message_screenshot()).text != ""
+    )
+    or any(ml.nlu_classifier(body.current_thread.text).intents,
+           .name == "cred_theft" and .confidence == "high"
+    )
+    or any(ml.nlu_classifier(beta.ocr(file.message_screenshot()).text).intents,
+           .name == "cred_theft" and .confidence == "high"
+    )
+  )
+  // Not from legitimate TikTok or Google domains with DMARC pass
+  and not (
+    sender.email.domain.root_domain in $org_domains
+    or (
+      sender.email.domain.root_domain in (
+        "tiktok.com",
+        "tiktokglobalshop.com",
+        "tiktokusds.com",
+        "bytedance.com",
+        "tiktokacademy.com",
+        "webassessor.com" // used for this https://ads.tiktok.com/business/en-US/academy/tiktok-certification
+      )
+      and headers.auth_summary.dmarc.pass
+    )
+  )
+  // negate iCloud Private Message Relay
+  and not (
+    sender.email.domain.root_domain == "privaterelay.appleid.com"
+    or any(headers.hops, any(.fields, .name == "X-ICLOUD-HME"))
+  )
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and not headers.auth_summary.dmarc.pass
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+  and not profile.by_sender().solicited
+  // negate legitimate security awareness/fraud warning emails
+  and not (
+    strings.icontains(body.current_thread.text, "pretending to be")
+    or strings.icontains(body.current_thread.text, "avoid scams")
+  )
+
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Social engineering"
+detection_methods:
+  - "Computer Vision"
+  - "Content analysis"
+  - "Header analysis"
+  - "Natural Language Understanding"
+  - "Optical Character Recognition"
+  - "Sender analysis"
+id: "1912e0ff-0525-571a-9727-e2dfde78cbb7"
+tags:
+  - created_from_open_prs
+  - rule_status_modified
+  - pr_author_JFarina5
+references:
+  - https://github.com/sublime-security/sublime-rules/pull/3751
