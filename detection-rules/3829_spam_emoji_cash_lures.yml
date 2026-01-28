@@ -1,0 +1,34 @@
+name: "PR# 3829 - Display Name Emoji with Financial Symbols"
+description: "Detects messages where the sender's display name contains emoji characters alongside financial symbols ($ £ € ¥ ₿) in the subject line. The sender's domain is not present in the Alexa top 1 million sites and has DMARC authentication issues."
+type: "rule"
+severity: "low"
+source: |
+  type.inbound
+  // Check for emoji in sender display name using Unicode ranges
+  and regex.contains(sender.display_name,
+                     '[\x{1F600}-\x{1F64F}]|[\x{1F300}-\x{1F5FF}]|[\x{1F680}-\x{1F6FF}]|[\x{1F1E0}-\x{1F1FF}]|[\x{2600}-\x{26FF}]|[\x{2700}-\x{27BF}]'
+  )
+  // Check for financial symbols in subject
+  and regex.contains(subject.subject, '[\$£€¥₿]')
+  and (
+    headers.auth_summary.dmarc.pass is null
+    or headers.auth_summary.dmarc.pass == false
+  )
+  and sender.email.domain.root_domain not in $tranco_1m
+attack_types:
+  - "BEC/Fraud"
+  - "Callback Phishing"
+tactics_and_techniques:
+  - "Social engineering"
+  - "Evasion"
+detection_methods:
+  - "Content analysis"
+  - "Header analysis"
+  - "Sender analysis"
+id: "fd63251b-4589-564a-98d4-f670eb179343"
+tags:
+  - created_from_open_prs
+  - rule_status_modified
+  - pr_author_aidenmitchell
+references:
+  - https://github.com/sublime-security/sublime-rules/pull/3829
