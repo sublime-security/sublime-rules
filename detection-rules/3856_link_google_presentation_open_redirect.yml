@@ -1,0 +1,149 @@
+name: "PR# 3856 - Google presentation open redirect phishing"
+description: "Detects emails containing links to Google Document Presentations that either have a single page with a single external link, have been removed for Terms of Service violations, or have been deleted."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and not strings.icontains(body.current_thread.text, 'invited you to edit')
+  and any(body.links,
+          // body link is to a google doc presentation
+          .href_url.domain.domain == "docs.google.com"
+          and strings.istarts_with(.href_url.path, '/presentation/')
+  
+          // prefilter some to avoid clicking on _every_ google presentation link
+          and ( 
+            ( 
+              // make sure the display text is in the current thread and not a previous one.
+              strings.icontains(body.current_thread.text, .display_text)
+              // the display_text ends with a word that is 4-10 long
+              and regex.icontains(.display_text, '[[:punct:]\s][a-z0-9]{5,9}$')
+              // that word has to include a letter AND a number
+              and regex.icontains(.display_text,
+                                  '[[:punct:]\s](?:[a-z0-9]*[a-z][0-9][a-z0-9]*|[a-z0-9]*[0-9][a-z][a-z0-9]*)$'
+              )
+              and strings.iends_with(.href_url.path, '/pub')
+            )
+            or 
+            // finally send the link to link analysis that presentation...
+            (
+              // contains a single link
+              length(ml.link_analysis(., mode="aggressive").final_dom.links) == 1
+  
+              // cannot be edited via link provided
+              and strings.contains(ml.link_analysis(., mode="aggressive").final_dom.raw,
+                                   'canEdit:  false'
+              )
+  
+              // and a single page
+              and strings.contains(ml.link_analysis(., mode="aggressive").final_dom.raw,
+                                   'slidePageCount:  1.0'
+              )
+  
+              // where we have links which have been written via a google open redirect
+              and any(ml.link_analysis(., mode="aggressive").final_dom.links,
+                      // links are not in thhe org_domains
+                      .href_url.domain.domain not in $org_domains
+                      and (
+                        (
+                          // don't include high rep domains
+                          .href_url.domain.domain not in $tranco_1m
+                          and .href_url.domain.domain not in $umbrella_1m
+                        )
+                        // if it's in Tranco or Umbrella, still include it if it's one of these
+                        or .href_url.domain.domain in $free_file_hosts
+                        or .href_url.domain.root_domain in $free_file_hosts
+                        or .href_url.domain.root_domain in $free_subdomain_hosts
+                        // or it's a url shortner
+                        or .href_url.domain.root_domain in $url_shorteners
+                        or .href_url.domain.root_domain in $social_landing_hosts
+                      )
+                      // which have been "unrolled" by the google_open_redirect rule
+                      and any(.href_url.rewrite.encoders,
+                              . == "google_open_redirect"
+                      )
+              )
+            )
+            // or the presentation has been removed for violation of terms of service
+            or strings.icontains(ml.link_analysis(., mode="aggressive").final_dom.display_text,
+                                 "We're sorry. You can't access this item because it is in violation of our Terms of Service."
+            )
+          )
+  )
+  // when the sender is not google, the sender should not be a common prevalence
+  and (
+    ( // the message is not from google actual
+      sender.email.email not in (
+        'comments-noreply@docs.google.com',
+        'drive-shares-dm-noreply@google.com',
+        'drive-shares-noreply@google.com',
+        'calendar-notification@google.com'
+      )
+    )
+    // or the message is from google actual
+    or (
+      sender.email.email in (
+        'comments-noreply@docs.google.com',
+        'drive-shares-dm-noreply@google.com',
+        'drive-shares-noreply@google.com',
+        'calendar-notification@google.com'
+      )
+    )
+  )
+  
+  // not where the sender display name of the message is within org_display_names
+  and not (
+    // the message is from google actual
+    sender.email.email in (
+      'comments-noreply@docs.google.com',
+      'drive-shares-dm-noreply@google.com',
+      'drive-shares-noreply@google.com',
+      'calendar-notification@google.com'
+    )
+    and headers.auth_summary.dmarc.pass
+  
+    // but the sender display name is within org_display_names
+    and any($org_display_names,
+            strings.istarts_with(sender.display_name,
+                                 strings.concat(., " (via Google ")
+            )
+            or strings.istarts_with(sender.display_name,
+                                    strings.concat(., " (Google ")
+            )
+    )
+  )
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  // but ignore high_trust if the sender is one of the google actual senders
+  and (
+    (
+      (
+        sender.email.domain.root_domain in $high_trust_sender_root_domains
+        and not headers.auth_summary.dmarc.pass
+      )
+      or (
+        sender.email.domain.root_domain in $high_trust_sender_root_domains
+        and sender.email.email in (
+          'comments-noreply@docs.google.com',
+          'drive-shares-dm-noreply@google.com',
+          'drive-shares-noreply@google.com',
+          'calendar-notification@google.com'
+        )
+      )
+      or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+    )
+  )
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Evasion"
+  - "Open redirect"
+  - "Social engineering"
+detection_methods:
+  - "URL analysis"
+  - "HTML analysis"
+id: "608ebb10-97ae-53f6-8206-63c5bffe7a1c"
+tags:
+  - created_from_open_prs
+  - rule_status_modified
+  - pr_author_MSAdministrator
+references:
+  - https://github.com/sublime-security/sublime-rules/pull/3856
