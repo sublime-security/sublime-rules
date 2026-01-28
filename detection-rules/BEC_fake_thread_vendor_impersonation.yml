@@ -7,7 +7,9 @@ source: |
   and (subject.is_reply or subject.is_forward)
   and length(headers.references) == 1
   and length(body.previous_threads) > 1
-  // sender replying to or forwarding their own fake message thread
+  // sender has never been emailed by anyone in the org
+  and sender.email.email not in $recipient_emails
+  // sender replying to or forwarding their own message thread
   and body.previous_threads[0].sender.email.email == sender.email.email
   // at least one thread purporting to be from an $org_domain sender
   and any(body.previous_threads,
@@ -15,84 +17,49 @@ source: |
           or .sender.email.domain.domain == mailbox.email.domain.domain // shared EML test
           or .sender.email.email in map(recipients.to, .email.email)
   )
-  // suspicious indicators in the current_thread
   and (
-    any(ml.nlu_classifier(body.current_thread.text).intents,
-        .name == "bec" and .confidence != "low"
-    )
-    or 2 of (
-      // language attempting to engage
-      (
-        any(ml.nlu_classifier(body.current_thread.text).entities,
-            .name == "request"
-        )
-        and any(ml.nlu_classifier(body.current_thread.text).entities,
-                .name == "financial"
-        )
-      ),
-      // invoicing language
-      (
+    (
+      // current_thread references a dollar amount
+      regex.icontains(body.current_thread.text, '[$€£]\d{2,3}[.,]\d{3}')
+      // NLU invoice indicator
+      and (
         any(ml.nlu_classifier(body.current_thread.text).tags, .name == "invoice")
-        or any(ml.nlu_classifier(body.current_thread.text).entities,
-               .text == "invoice"
-        )
-      ),
-      // urgency request
-      (
-        any(ml.nlu_classifier(body.current_thread.text).entities,
-            .name == "urgency"
-        )
-      ),
-      // Accounts Payable terminology
-      (
-        any([body.current_thread.text, sender.display_name],
-            any(ml.nlu_classifier(.).entities,
-                .name == "recipient"
-                and strings.ilike(.text, "AP*", "*Accounts Payable*")
-            )
+        or (
+          any(ml.nlu_classifier(body.current_thread.text).entities,
+              .text == "invoice"
+          )
+          // NLU Accounts Payable indicator
+          or any(ml.nlu_classifier(body.current_thread.text).entities,
+                 .name == "recipient"
+                 and strings.ilike(.text, "*AP*", "*Accounts Payable*")
+          )
         )
       )
-    )
-  )
-  // and suspicious indicators in any of the previous_threads
-  and any(body.previous_threads,
-          any(ml.nlu_classifier(.text).intents,
+      // NLU BEC intent
+      and any(ml.nlu_classifier(body.current_thread.text).intents,
               .name == "bec" and .confidence != "low"
-          )
-          or 2 of (
-            // language attempting to engage
-            (
-              any(ml.nlu_classifier(.text).entities, .name == "request")
-              and any(ml.nlu_classifier(.text).entities, .name == "financial")
-            ),
-            // invoicing language
-            (
-              any(ml.nlu_classifier(.text).tags, .name == "invoice")
-              or any(ml.nlu_classifier(.text).entities, .text == "invoice")
-            ),
-            // urgency request
-            (
-              any(ml.nlu_classifier(.text).entities, .name == "urgency")
-            ),
-            // Accounts Payable terminology
-            (
-              any(ml.nlu_classifier(.text).entities,
-                  .name == "recipient"
-                  and strings.ilike(.text, "AP*", "*Accounts Payable*")
-              )
+      )
+    )
+    // or the sender is following up on a previous thread
+    or (
+      any(body.previous_threads,
+          .sender.email.email == sender.email.email
+          and regex.icontains(.text, '[$€£]\d{2,3}[.,]\d{3}')
+          // NLU invoice indicator
+          and (
+            any(ml.nlu_classifier(.text).tags, .name == "invoice")
+            or any(ml.nlu_classifier(.text).entities, .text == "invoice")
+            // NLU Accounts Payable indicator
+            or any(ml.nlu_classifier(.text).entities,
+                   .name == "recipient"
+                   and strings.ilike(.text, "*AP*", "*Accounts Payable*")
             )
           )
-  )
-  and (
-    // new sender domain
-    network.whois(sender.email.domain).days_old <= 90
-    or profile.by_sender_domain().prevalence == "new"
-    or profile.by_sender_domain().days_known < 3
-    // sender has never been emailed by anyone in the org
-    or sender.email.email not in $recipient_emails
-    // potential vendor impersonation
-    or any($sender_domains,
-           0 < strings.ilevenshtein(., sender.email.domain.root_domain) < 3
+          // NLU BEC intent
+          and any(ml.nlu_classifier(.text).intents,
+                  .name == "bec" and .confidence != "low"
+          )
+      )
     )
   )
   and not (
