@@ -1,0 +1,55 @@
+name: "PR# 3838 - Hidden narrative content with substantial text volume"
+description: "Detects messages containing large amounts of hidden narrative prose content using CSS styling techniques such as display:none, visibility:hidden, max-height:0, or opacity:0. The hidden content includes first-person storytelling patterns, scene-setting descriptions, and sensory narrative elements, potentially used to evade content filtering while delivering malicious payloads."
+type: "rule"
+severity: "low"
+source: |
+  type.inbound
+  and any(html.xpath(body.html,
+                     '//*[contains(@style,"display:none") or contains(@style,"visibility:hidden") or contains(@style,"max-height:0") or contains(@style,"opacity:0")]'
+          ).nodes,
+  
+          // substantial count of hidden text
+          length(.raw) > 1000
+  
+          // narrative prose indicators
+          and (
+            // first-person narrative patterns (story-like)
+            regex.icontains(.raw,
+                            '\. I (sat|stood|walked|thought|watched|remembered|felt|heard|saw|noticed|decided|began|looked|wondered)\b'
+            )
+  
+            // scene-setting prose
+            or regex.icontains(.raw,
+                               '\b(morning|afternoon|evening) (light|sun|air|breeze|sky)\b'
+            )
+  
+            // sensory/descriptive narrative
+            or regex.icontains(.raw, '\b(the (smell|sound|taste|feel) of)\b')
+  
+            // reflective first-person
+            or regex.icontains(.raw, '\bIt reminded me of\b')
+            or regex.icontains(.raw, '\bI (could|would) (almost|nearly)\b')
+          )
+  
+          // observed fps from responsive email patterns
+          and not regex.icontains(.raw,
+                                  '\b(smallScreen|mobileVersion|mobile-version|small-screen|mobileOnly|mobile-only)\b'
+          )
+  )
+attack_types:
+  - "Credential Phishing"
+  - "Malware/Ransomware"
+  - "Spam"
+tactics_and_techniques:
+  - "Evasion"
+  - "HTML smuggling"
+detection_methods:
+  - "Content analysis"
+  - "HTML analysis"
+id: "99aa9e2c-94ac-57b5-b5ff-935026093733"
+tags:
+  - created_from_open_prs
+  - rule_status_added
+  - pr_author_IndiaAce
+references:
+  - https://github.com/sublime-security/sublime-rules/pull/3838
