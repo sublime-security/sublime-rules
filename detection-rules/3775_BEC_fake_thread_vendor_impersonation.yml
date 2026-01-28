@@ -1,0 +1,94 @@
+name: "PR# 3775 - BEC: Fake thread with vendor impersonation and financial language"
+description: "Detects Business Email Compromise attacks where a sender creates a fake email thread by replying to or forwarding their own message, impersonating organizational domains or recipients while using financial, invoice, or urgency language. The rule identifies suspicious patterns where the sender appears to continue a conversation with themselves while mimicking legitimate internal or vendor communications."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and (subject.is_reply or subject.is_forward)
+  and length(headers.references) == 1
+  and length(body.previous_threads) > 1
+  // sender has never been emailed by anyone in the org
+  and sender.email.email not in $recipient_emails
+  // sender replying to or forwarding their own message thread
+  and body.previous_threads[0].sender.email.email == sender.email.email
+  // at least one thread purporting to be from an $org_domain sender
+  and any(body.previous_threads,
+          .sender.email.domain.domain in $org_domains
+          or .sender.email.domain.domain == mailbox.email.domain.domain // shared EML test
+          or .sender.email.email in map(recipients.to, .email.email)
+  )
+  and (
+    (
+      // current_thread references a dollar amount
+      regex.icontains(body.current_thread.text, '[$€£]\d{2,3}[.,]\d{3}')
+      // NLU invoice indicator
+      and (
+        any(ml.nlu_classifier(body.current_thread.text).tags, .name == "invoice")
+        or (
+          any(ml.nlu_classifier(body.current_thread.text).entities,
+              .text == "invoice"
+          )
+          // NLU Accounts Payable indicator
+          or any(ml.nlu_classifier(body.current_thread.text).entities,
+                 .name == "recipient"
+                 and strings.ilike(.text, "*AP*", "*Accounts Payable*")
+          )
+        )
+      )
+      // NLU BEC intent
+      and any(ml.nlu_classifier(body.current_thread.text).intents,
+              .name == "bec" and .confidence != "low"
+      )
+    )
+    // or the sender is following up on a previous thread
+    or (
+      any(body.previous_threads,
+          .sender.email.email == sender.email.email
+          and regex.icontains(.text, '[$€£]\d{2,3}[.,]\d{3}')
+          // NLU invoice indicator
+          and (
+            any(ml.nlu_classifier(.text).tags, .name == "invoice")
+            or any(ml.nlu_classifier(.text).entities, .text == "invoice")
+            // NLU Accounts Payable indicator
+            or any(ml.nlu_classifier(.text).entities,
+                   .name == "recipient"
+                   and strings.ilike(.text, "*AP*", "*Accounts Payable*")
+            )
+          )
+          // NLU BEC intent
+          and any(ml.nlu_classifier(.text).intents,
+                  .name == "bec" and .confidence != "low"
+          )
+      )
+    )
+  )
+  and not (
+    profile.by_sender_email().solicited and headers.auth_summary.dmarc.pass
+  )
+  // and the sender is not from high trust sender root domains
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and not headers.auth_summary.dmarc.pass
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+
+attack_types:
+  - "BEC/Fraud"
+tactics_and_techniques:
+  - "Social engineering"
+  - "Evasion"
+detection_methods:
+  - "Content analysis"
+  - "Header analysis"
+  - "Natural Language Understanding"
+  - "Sender analysis"
+  - "Whois"
+id: "425a4d9e-ea32-5f2a-b091-e6c113945821"
+tags:
+  - created_from_open_prs
+  - rule_status_added
+  - pr_author_peterdj45
+references:
+  - https://github.com/sublime-security/sublime-rules/pull/3775
