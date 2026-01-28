@@ -28,10 +28,11 @@ source: |
                )
                and .display_text != "Open"
         ),
+        .display_text =~ sender.email.domain.sld
   
-        // the document name is the same as the org name
-        // as determined by the footer
-        (
+        // the document name is the same as the org name as determined by the footer
+        // this checks that the display_text starts with the org_name
+        or (
           strings.icontains(body.current_thread.text,
                             strings.concat('This email is generated through ',
                                            .display_text
@@ -43,33 +44,23 @@ source: |
                                 )
           )
         )
-        or .display_text =~ sender.email.domain.sld
-        // or extract the org name from the footer and check if display_text starts or ends with it
-        or (
-          length(regex.extract(body.current_thread.text,
-                               "generated through ([^']+)'s use"
-                 )
-          ) > 0
-          and strings.icontains(body.current_thread.text,
-                                "may contain content that is controlled by"
-          )
-          and (
-            strings.istarts_with(.display_text,
-                                 regex.extract(body.current_thread.text,
-                                               "generated through ([^']+)'s use"
-                                 )[0].groups[0]
-            )
-            or (
-              strings.iends_with(.display_text,
-                                 regex.extract(body.current_thread.text,
-                                               "generated through ([^']+)'s use"
-                                 )[0].groups[0]
-              )
-            )
-          )
+        // this checks that the org_name is a substring of the display_text
+        // it is in effect the "reverse" of the above check
+        or strings.istarts_with(.display_text,
+                                regex.extract(body.current_thread.text,
+                                              "generated through ([^']+)'s use"
+                                )[0].groups[0]
+        )
+  
+        // ends_with variant
+        or strings.iends_with(.display_text,
+                              regex.extract(body.current_thread.text,
+                                            "generated through ([^']+)'s use"
+                              )[0].groups[0]
         )
     )
   )
+
 attack_types:
   - "Credential Phishing"
 tactics_and_techniques:
@@ -81,4 +72,4 @@ detection_methods:
 id: "dedc922b-deab-5c7a-abcc-3d78bd3579f5"
 og_id: "cb954726-12ac-5956-b4d1-55fcf3b4bd95"
 testing_pr: 3842
-testing_sha: 0515e71b52a9b686c618e6010002f35dc5250ace
+testing_sha: 48157d281809683c192fa8f3f71a707247a78b67
