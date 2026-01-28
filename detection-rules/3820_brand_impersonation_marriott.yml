@@ -1,0 +1,49 @@
+name: "PR# 3820 - Brand impersonation: Marriott with gift language"
+description: "Detects messages impersonating Marriott brand that contain gift-related language such as 'appreciation gift', 'thank you gift', or 'something special' from senders not associated with legitimate Marriott domains."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and (
+    strings.icontains(subject.base, "marriott")
+    or strings.icontains(sender.display_name, "marriott")
+    or strings.ilevenshtein(sender.display_name, 'marriott') <= 2
+  )
+  and any([body.current_thread.text, subject.base],
+          regex.icontains(.,
+                          '(?:appreciation|thank)(?:\s|-)?(you)?\s+gift',
+                          'something special',
+                          'special.{0,10}thank(?:\s|-)you'
+          )
+  )
+  and not subject.is_reply
+  and not any(ml.nlu_classifier(body.current_thread.text).topics,
+              .name == "Events and Webinars" and .confidence == "high"
+  )
+  and not (
+    sender.email.domain.root_domain in~ (
+      "marriott.com",
+      "res-marriott.com",
+      "email-marriott.com",
+      "feedback-marriott.com",
+      "marriotthotels.se",
+      "bookonline.com"
+    )
+    and coalesce(headers.auth_summary.dmarc.pass, false)
+  )
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Header analysis"
+  - "Sender analysis"
+id: "0ed7a6ae-d087-514b-b345-1089ffaa3fc0"
+tags:
+  - created_from_open_prs
+  - rule_status_added
+  - pr_author_markmsublime
+references:
+  - https://github.com/sublime-security/sublime-rules/pull/3820
