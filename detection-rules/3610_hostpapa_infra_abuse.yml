@@ -1,0 +1,43 @@
+name: "PR# 3610 - Service abuse: HostPapa infrastructure"
+description: "Detects messages originating from HostPapa's IP range (192.3.0.0/16), with suspicious indicators. Observed in credential phishing and spam campaigns."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  // message originates from HostPapa CIDR block (192.3.0.0/16)
+  and any(headers.ips, regex.match(.ip, '192\.3\.\d{1,3}\.\d{1,3}'))
+  and sender.email.domain.root_domain != "hostpapa.com"
+  // negate benign newsletters and customer outreach campaigns
+  and not (
+    any(ml.nlu_classifier(body.current_thread.text).topics,
+        .name in ("Advertising and Promotions", "Newsletters and Digests")
+        and .confidence in ("medium", "high")
+    )
+    and any(ml.nlu_classifier(body.current_thread.text).intents,
+            .name == "benign" and .confidence == "high"
+    )
+  )
+  // Exclude high trust domains with valid auth
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and not headers.auth_summary.dmarc.pass
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+attack_types:
+  - "Credential Phishing"
+  - "Spam"
+tactics_and_techniques:
+  - "Evasion"
+detection_methods:
+  - "Header analysis"
+  - "Natural Language Understanding"
+  - "Sender analysis"
+id: "d4af26c9-ee82-57a1-9b36-46bdfc0603cc"
+tags:
+  - created_from_open_prs
+  - rule_status_added
+  - pr_author_peterdj45
+references:
+  - https://github.com/sublime-security/sublime-rules/pull/3610
