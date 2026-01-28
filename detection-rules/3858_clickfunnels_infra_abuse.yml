@@ -1,0 +1,131 @@
+name: "PR# 3858 - ClickFunnels link infrastructure abuse"
+description: "Email contains a ClickFunnels (mass mailing platform) tracking link but does not originate from ClickFunnels sending infrastructure. The myclickfunnels.com domain has been abused by threat actors to attempt credential phishing."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and (
+    (
+      length(body.links) < 15
+      and any(body.links, .href_url.domain.root_domain == "myclickfunnels.com")
+    )
+    or (
+      length(attachments) <= 3
+      and (
+        any(attachments,
+            (.file_type in $file_types_images or .file_type == "pdf")
+            and any(file.explode(.),
+                    .scan.qr.type is not null
+                    and .scan.qr.url.domain.root_domain == "myclickfunnels.com"
+                    // exclude images taken with mobile cameras and screenshots from android
+                    and not any(.scan.exiftool.fields,
+                                .key == "Model"
+                                or (
+                                  .key == "Software"
+                                  and strings.starts_with(.value, "Android")
+                                )
+                    )
+                    // exclude images taken with mobile cameras and screenshots from Apple
+                    and not any(.scan.exiftool.fields,
+                                .key == "DeviceManufacturer"
+                                and .value == "Apple Computer Inc."
+                    )
+            )
+        )
+        or (
+          length(attachments) == 0
+          //
+          // This rule makes use of a beta feature and is subject to change without notice
+          // using the beta feature in custom rules is not suggested until it has been formally released
+          //
+          and beta.parse_exif(file.message_screenshot()).image_height < 2000
+          and beta.parse_exif(file.message_screenshot()).image_width < 2000
+          and any(beta.scan_qr(file.message_screenshot()).items,
+                  .type is not null
+                  and .url.domain.root_domain == "myclickfunnels.com"
+          )
+        )
+      )
+    )
+    or (
+      length(attachments) <= 3
+      and (
+        any(attachments,
+            (
+              .file_type in ("pdf")
+              or .file_extension in ("pdf", "eml")
+              or .file_extension in $file_extensions_macros
+              or (
+                .content_type in ("message/rfc822") or .file_extension in ('eml')
+              )
+            )
+            and any(file.explode(.),
+                    any(.scan.url.urls,
+                        .domain.root_domain == "myclickfunnels.com"
+                    )
+            )
+        )
+      )
+    )
+  )
+  and not (
+    any(headers.domains, strings.ends_with(.domain, "mailer.myclickfunnels.com"))
+    or (
+      (
+        any(headers.hops,
+            .index == 0
+            and any(.authentication_results.dkim_details,
+                    .domain == "mailer.myclickfunnels.com"
+            )
+        )
+      )
+      and any(distinct(headers.hops, .authentication_results.dmarc is not null),
+              .index == 0
+              and strings.ilike(.authentication_results.dmarc, "*pass")
+      )
+    )
+  )
+  // negating legit replies
+  and not (
+    (
+      strings.istarts_with(subject.subject, "RE:")
+      or strings.istarts_with(subject.subject, "FW:")
+      or strings.istarts_with(subject.subject, "FWD:")
+      or strings.istarts_with(subject.subject, "Automatic reply:")
+    )
+    and (
+      length(headers.references) > 0
+      and any(headers.hops, any(.fields, strings.ilike(.name, "In-Reply-To")))
+    )
+  )
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and (
+        any(distinct(headers.hops, .authentication_results.dmarc is not null),
+            strings.ilike(.authentication_results.dmarc, "*fail")
+        )
+      )
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Free email provider"
+  - "Free subdomain host"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Header analysis"
+  - "QR code analysis"
+  - "Sender analysis"
+  - "URL analysis"
+id: "96acaac9-ef5c-509d-a9c6-0f14649c4c6c"
+tags:
+  - created_from_open_prs
+  - rule_status_modified
+  - pr_author_MSAdministrator
+references:
+  - https://github.com/sublime-security/sublime-rules/pull/3858
