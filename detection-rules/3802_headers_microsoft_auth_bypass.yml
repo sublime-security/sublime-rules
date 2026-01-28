@@ -1,0 +1,55 @@
+name: "PR# 3802 - Headers: Microsoft 365 authentication bypass with suspicious error codes"
+description: "Detects messages that failed DMARC or SPF authentication in Microsoft 365 with specific error codes indicating potential bypass attempts through on-premises Exchange environments or third-party services."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and any(filter(headers.hops, .index == 1),
+          any(.fields,
+              .name == "Authentication-Results"
+              and (
+                regex.contains(.value, 'dmarc=(fail|none)\saction=none')
+                or regex.contains(.value,
+                                  'spf=(fail|softfail|temperror)\s\(sender\sIP\sis\s'
+                )
+              )
+              and (
+                // MX record points to on-premises Exchange environment or a third-party service before reaching Microsoft 365
+                strings.contains(.value, 'reason=905')
+                // Same but message delivered to spam folder
+                or strings.contains(.value, 'reason=451')
+                // tried to impersonate within same domain but failed authentication
+                or strings.contains(.value, "reason=601")
+                // or no reason given
+                or not strings.contains(.value, "reason=")
+              )
+              and not (
+                // exclude passes
+                regex.contains(.value, 'spf=(pass)\s\(sender\sIP\sis\s')
+                // ignore proper action type when dmarc fails
+                or regex.contains(.value, 'dmarc=fail\saction=oreject')
+                // excluding properly configured dmarc failures
+                // failed explicit email authentication
+                or strings.contains(.value, 'reason=000')
+                // failed implicit email authenticaton
+                or strings.contains(.value, 'reason=001')
+              )
+          )
+  )
+
+attack_types:
+  - "BEC/Fraud"
+  - "Credential Phishing"
+  - "Malware/Ransomware"
+tactics_and_techniques:
+  - "Evasion"
+  - "Spoofing"
+detection_methods:
+  - "Header analysis"
+id: "cb0a01bd-4363-542f-96f6-f552c2b65cb9"
+tags:
+  - created_from_open_prs
+  - rule_status_added
+  - pr_author_MSAdministrator
+references:
+  - https://github.com/sublime-security/sublime-rules/pull/3802
