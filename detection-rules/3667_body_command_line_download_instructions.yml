@@ -1,0 +1,38 @@
+name: "PR# 3667 - Body: Command-line download and execution instructions"
+description: "Detects messages containing PowerShell commands or system utilities (curl, wget, certutil, etc.) followed by domain names, which may indicate malicious script execution or file download instructions."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and regex.icontains(body.current_thread.text,
+                      '\b(powershell|pwsh|curl|wget|bitsadmin|certutil|mshta|wscript|cscript|rundll32|regsvr32|msiexec|invoke-webrequest|invoke-restmethod|start-bitstransfer|invoke-expression)\b.{0,50}?([a-z0-9-]+\.)+[a-z]{2,4}\b'
+  )
+  
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and not (
+    sender.email.domain.root_domain in $high_trust_sender_root_domains
+    or (
+      sender.email.domain.root_domain in~ (
+        "github.com",
+        "atlassian.net",
+        "zendesk.com",
+        "figma.com"
+      )
+      and (coalesce(headers.auth_summary.dmarc.pass, false))
+    )
+  )
+tags:
+  - "Attack surface reduction"
+  - pr_author_morriscode
+  - created_from_open_prs
+  - rule_status_added
+attack_types:
+  - "Malware/Ransomware"
+tactics_and_techniques:
+  - "Scripting"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+id: "2170332f-ba8d-5d03-adda-8d7fb5917474"
+references:
+  - https://github.com/sublime-security/sublime-rules/pull/3667
