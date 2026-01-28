@@ -1,0 +1,37 @@
+name: "PR# 3651 - VIP impersonation: Fake thread with display name match, email mismatch"
+description: "This rule is intended to detect fake threads that are impersonating a VIP. It looks for a matching $org_vips display name and checks the email address following it does not match what is in the $org_vips list."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and not (
+    sender.email.domain.root_domain in $high_trust_sender_root_domains
+    and coalesce(headers.auth_summary.dmarc.pass, false)
+  )
+  and (length(headers.references) > 0 or not headers.in_reply_to is null)
+  // org_vip as recipient in previous thread
+  and any(body.previous_threads, any($org_vips, ..sender.email.email == .email))
+  // org_vip as sender of previous thread
+  and any(body.previous_threads, any($org_vips, .email == ..sender.email.email))
+  // no longer in the message
+  and not any(recipients.to, any($org_vips, .email == ..email.email))
+  and (network.whois(sender.email.domain).days_old < 90)
+attack_types:
+  - "BEC/Fraud"
+tactics_and_techniques:
+  - "Evasion"
+  - "Impersonation: VIP"
+  - "Social engineering"
+  - "Spoofing"
+detection_methods:
+  - "Content analysis"
+  - "Header analysis"
+  - "Sender analysis"
+  - "Whois"
+id: "acd1360d-00c8-5872-bc11-01f319311d2a"
+tags:
+  - created_from_open_prs
+  - rule_status_modified
+  - pr_author_MSAdministrator
+references:
+  - https://github.com/sublime-security/sublime-rules/pull/3651
