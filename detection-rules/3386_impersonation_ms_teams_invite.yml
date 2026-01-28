@@ -1,0 +1,97 @@
+name: "PR# 3386 - Brand impersonation: Microsoft Teams invitation"
+description: "Detects messages impersonating a Microsoft Teams invites by matching known invite text patterns while containing join links that do not resolve to Microsoft domains. Additional verification includes checking for absent phone dial-in options and missing standard Teams help text or HTML meeting components."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and strings.icontains(body.current_thread.text, 'Microsoft Teams')
+  and regex.icontains(body.current_thread.text, 'join .{0,10}meeting')
+  and (
+    strings.contains(body.current_thread.text, 'Meeting ID:')
+    or strings.contains(body.current_thread.text, 'Organizer:')
+    or strings.contains(body.current_thread.text, 'Passcode:')
+  )
+  
+  // not a reply
+  and length(headers.references) == 0
+  and headers.in_reply_to is null
+  // few links
+  and length(body.links) < 10
+  
+  // no unsubscribe links
+  // common in newsletters which link to a webinar style event
+  and not any(body.links, strings.icontains(.display_text, "unsub"))
+  
+  // FP negation
+  and not any(body.links,
+              strings.icontains(.display_text, "Join Zoom Meeting")
+              or .href_url.domain.root_domain == "zoom.us"
+  )
+  
+  // one of the links contains "join the meeting now"
+  and any(body.links, regex.icontains(.display_text, "join .{0,10}meeting"))
+  
+  // the "join the meeting now" link does not go to microsoft
+  and all(filter(body.current_thread.links,
+                 regex.icontains(.display_text, "join .{0,10}meeting")
+          ),
+          (
+            .href_url.domain.root_domain not in (
+              "microsoft.com",
+              "microsoft.us",
+              "live.com"
+            )
+            and not any(.href_url.query_params_decoded['domain'],
+                        . in ("teams.microsoft.com", "teams.live.com")
+            )
+            // when Mimecast doesn't give us the domain
+            and not (
+              .href_url.domain.root_domain == "mimecastprotect.com"
+              and length(.href_url.query_params_decoded['domain']) == 0
+            )
+          )
+  
+          // rewriters often abstract the link
+          and .href_url.domain.root_domain not in $bulk_mailer_url_root_domains
+  )
+  // missing the dial by phone element
+  and not strings.icontains(body.current_thread.text, 'Dial in by phone')
+  
+  // any of these suspicious elements from the body
+  and (
+    // malicious samples leveraged recipient domain branding here
+    not strings.icontains(body.current_thread.text, 'Microsoft Teams Need help?')
+    // malicious samples contained unique html elements not present in legit ones
+    or strings.icontains(body.html.raw, '<div class="meeting-title">')
+    or strings.icontains(body.html.raw, '<div class="meeting-time">')
+    or strings.icontains(body.html.raw, '<div class="meeting-location">')
+    or strings.icontains(body.html.raw, '<span class="conflict-badge">')
+    or strings.icontains(body.html.raw, 'class="join-button"')
+  )
+  
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and not headers.auth_summary.dmarc.pass
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Header analysis"
+  - "HTML analysis"
+  - "URL analysis"
+id: "4370e649-af47-5978-a1fa-9b0fbfebe3f3"
+tags:
+  - created_from_open_prs
+  - rule_status_modified
+  - pr_author_markmsublime
+references:
+  - https://github.com/sublime-security/sublime-rules/pull/3386
