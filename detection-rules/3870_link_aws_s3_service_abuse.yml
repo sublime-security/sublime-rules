@@ -1,0 +1,100 @@
+name: "PR# 3870 - Suspicious link to Amazon S3"
+description: "Detects messages containing AWS S3 links from senders not associated with legitimate AWS or organizational domains, excluding newsletters and bulk mailers."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and any(body.links,
+          // Check root domain first
+          .href_url.domain.root_domain in ("amazonaws.com")
+          // Check for the specific s3.amazonaws.com subdomain pattern
+          and strings.icontains(.href_url.domain.domain, "s3")
+  )
+  // negate emails with unsubscribe links
+  and not any(body.links,
+              strings.icontains(.href_url.url, "unsubscribe")
+              or strings.icontains(.display_text, "unsubscribe")
+  )
+  // negate bulk mailer domains
+  and not any(body.links,
+              .href_url.domain.root_domain in $bulk_mailer_url_root_domains
+  )
+  // negate replies and forwards
+  and not (
+    (subject.is_reply or subject.is_forward) and length(headers.references) > 0
+  )
+  and not (
+    any(ml.nlu_classifier(body.current_thread.text).topics,
+        .name in (
+          "Newsletters and Digests",
+          "Advertising and Promotions",
+          "Educational and Research",
+          "B2B Cold Outreach",
+          "Health and Wellness",
+          "Professional and Career Development",
+          "Romance",
+          "Sexually Explicit Messages",
+          "Software and App Updates",
+          "Acts of Violence",
+          "Voicemail Call and Missed Call Notifications"
+        )
+        and .confidence == "high"
+    )
+  )
+  // Not from legitimate AWS domains
+  // there was a DMARC check here, but a lot of users send AWS notifications to groups/mailing lists that breaks DMARC
+  and not (
+    sender.email.domain.root_domain in $org_domains
+    or sender.email.domain.root_domain in (
+      "amazon.com",
+      "amazonaws.com",
+      "amazonses.com",
+      "awsevents.com",
+      "aws-experience.com",
+      "marketplace.aws",
+      "aws.com",
+      "amazonaws.cn",
+      "repost.aws",
+      "awscustomercouncil.com",
+      "airtableemail.com", // used for re:Invent
+      "nmls.org", // "state examination system", realtor software
+      "mktgcampaigns.com", // Elastic + AWS co-marketing emails
+      "awseducate.com",
+      "awsacademy.com"
+    )
+    or sender.email.domain.tld == "local"
+  )
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and not headers.auth_summary.dmarc.pass
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+  and (
+    not profile.by_sender().solicited
+    or (
+      profile.by_sender().any_messages_malicious_or_spam
+      and not profile.by_sender().any_messages_benign
+    )
+  )
+  and not profile.by_sender().any_messages_benign
+
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Free subdomain host"
+detection_methods:
+  - "Content analysis"
+  - "Header analysis"
+  - "Natural Language Understanding"
+  - "Sender analysis"
+  - "URL analysis"
+id: "3d731e33-8cae-5230-aa90-02d9c9ace917"
+tags:
+  - created_from_open_prs
+  - rule_status_added
+  - pr_author_peterdj45
+references:
+  - https://github.com/sublime-security/sublime-rules/pull/3870
