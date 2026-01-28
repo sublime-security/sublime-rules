@@ -1,0 +1,49 @@
+name: "PR# 3738 - BEC with VIP impersonation and mismatched reply-to"
+description: "Detects Business Email Compromise attacks that include VIP names in PDF attachments while using mismatched From and Reply-to headers from high-confidence BEC language analysis."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  // mismatched From and Reply-to 
+  and (
+    length(headers.reply_to) > 0
+    and all(headers.reply_to,
+            .email.domain.root_domain != sender.email.domain.root_domain
+    )
+  )
+  // has an attachment
+  and length(filter(attachments, .file_type == "pdf")) > 0
+  // contains vip name in the contents of a pdf (like a bill)
+  and any(attachments,
+          .file_type == "pdf"
+          and any(file.explode(.),
+                  .scan.ocr.raw is not null
+                  and any($org_vips,
+                          strings.icontains(..scan.ocr.raw, .display_name)
+                  )
+          )
+  )
+  and any(ml.nlu_classifier(body.current_thread.text).intents,
+          .name in ("bec") and .confidence == "high"
+  )
+
+attack_types:
+  - "BEC/Fraud"
+tactics_and_techniques:
+  - "Impersonation: VIP"
+  - "PDF"
+  - "Social engineering"
+  - "Evasion"
+detection_methods:
+  - "Content analysis"
+  - "File analysis"
+  - "Header analysis"
+  - "Natural Language Understanding"
+  - "Optical Character Recognition"
+id: "482af189-b346-5309-bd30-bcebaf66bacd"
+tags:
+  - created_from_open_prs
+  - rule_status_added
+  - pr_author_IndiaAce
+references:
+  - https://github.com/sublime-security/sublime-rules/pull/3738
