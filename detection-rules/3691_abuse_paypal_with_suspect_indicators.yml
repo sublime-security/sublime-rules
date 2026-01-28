@@ -1,0 +1,60 @@
+name: "PR# 3691 - Service abuse: PayPal invoice with suspicious indicators"
+description: "Detects potential PayPal service abuse where emails claiming to be from PayPal contain suspicious characteristics including reply-to addresses using free email providers, low-numbered invoice tickets, not including custom-vendor-information, and having suspect invoice ammounts like $399.99."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and headers.from.email.domain.domain == "paypal.com"
+  and strings.icontains(subject.subject, "invoice")
+  and (
+    (
+      length(headers.reply_to) > 0
+      and any(headers.reply_to,
+              .email.domain.root_domain in $free_email_providers
+              and not .email.email in $sender_emails
+              and not .email.email in $recipient_emails
+      )
+    )
+    or length(headers.reply_to) == 0
+  )
+  and strings.icontains(body.current_thread.text,
+                        "You don't have any payments with this seller in the last year."
+  )
+  // uses default merchant logo AND no email found in the "seller reputation" section
+  and length(html.xpath(body.html,
+                        '//table[@id="sellerReputation"]//img[contains(@src,"default_merchant_logo_black.png")]'
+             ).nodes
+  ) > 0
+  and length(html.xpath(body.html,
+                        '//table[@id="sellerReputation"]//img[contains(@src,"seller-rep-email.png")]'
+             ).nodes
+  ) == 0
+  // Invoice number 0001-0010 via XPath
+  and any(html.xpath(body.html,
+                     '//td[contains(@style,"padding:0px 24px 20px 24px")]//span'
+          ).nodes,
+          regex.imatch(.display_text, '^000[1-9]$|^0010$')
+  )
+  // Amount in the hundreds ending in .99 (e.g., $399.99, $199.99)
+  and any(html.xpath(body.html,
+                     '//span[contains(@style,"color:#0066F5") and contains(@style,"font-weight:900")]//span'
+          ).nodes,
+          regex.imatch(.display_text, '^\$[1-9]\d{2}\.99$')
+  )
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Free email provider"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Header analysis"
+  - "Sender analysis"
+id: "fdd8a4d1-566d-5a1d-b59f-4b7f2aba15c5"
+tags:
+  - created_from_open_prs
+  - rule_status_added
+  - pr_author_IndiaAce
+references:
+  - https://github.com/sublime-security/sublime-rules/pull/3691
