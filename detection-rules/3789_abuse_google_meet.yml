@@ -1,0 +1,54 @@
+name: "PR# 3789 - Service abuse: Suspicious Google Meet invitation"
+description: "Detects calendar invitations containing Google Meet links that include suspicious product offers, pricing details, partnership language, or links to messaging platforms like Telegram or WhatsApp. These invitations may be used to lure recipients into fraudulent business discussions or social engineering attacks through trusted calendar services."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and strings.starts_with(subject.base, "Invitation:")
+  and length(attachments) == 2
+  and all(attachments,
+          .content_type == "text/calendar" or .file_extension == "ics"
+  )
+  // Google Meet indicators
+  and (
+    any(body.links,
+        .display_text == "Join with Google Meet"
+        and .href_url.domain.domain == "meet.google.com"
+    )
+  )
+  and (
+    any(html.xpath(body.html,
+                   "//div[@class='primary-text' and @role='presentation'][1]/span"
+        ).nodes,
+        strings.icontains(.display_text, "product offer")
+        or strings.icontains(.display_text, "pricing detail")
+        or (
+          length(.display_text) < 500
+          and regex.icontains(.display_text,
+                              '(?:potential|long([[:punct:]]|\s)term) partner'
+          )
+        )
+        or any(.links,
+               .href_url.domain.domain in $url_shorteners
+               or .href_url.domain.domain in ("t.me", "wa.me")
+        )
+    )
+  )
+  
+
+attack_types:
+  - "BEC/Fraud"
+tactics_and_techniques:
+  - "Social engineering"
+  - "Out of band pivot"
+detection_methods:
+  - "Content analysis"
+  - "HTML analysis"
+  - "URL analysis"
+id: "671a8181-de1c-5829-94e8-5b611b749096"
+tags:
+  - created_from_open_prs
+  - rule_status_added
+  - pr_author_peterdj45
+references:
+  - https://github.com/sublime-security/sublime-rules/pull/3789
