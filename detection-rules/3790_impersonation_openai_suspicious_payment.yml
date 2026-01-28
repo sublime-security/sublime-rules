@@ -1,0 +1,52 @@
+name: "PR# 3790 - Brand impersonation: OpenAI with payment issues and suspicious links"
+description: "Detects messages impersonating OpenAI or ChatGPT with payment-related subjects containing urgent language and links that either lead to credential phishing sites or domains other than legitimate OpenAI domains."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  // sender checks
+  and (
+    strings.icontains(sender.display_name, 'chatgpt')
+    or strings.icontains(sender.display_name, "openai")
+    or // Typosquatting domains in links
+   (
+      0 < strings.ilevenshtein(sender.display_name, "openai.com") < 3
+      or 0 < strings.ilevenshtein(sender.display_name, "chatgpt.com") < 3 
+    )
+  )
+  // subject checks suggesting error with payment
+  and (
+    regex.icontains(subject.subject, '(payment|subscription|plan|account)')
+    and regex.icontains(subject.subject, 'due|fail|error|problem|unable|new')
+  )
+  // urls
+  and any(filter(body.links,
+                 regex.icontains(.display_text,
+                                 'manage|subscription|chatgpt|payment|reset|update|process'
+                 )
+          ),
+          // it's credphishing or does not go to openAI
+          (
+            ml.link_analysis(.).credphish.disposition == "phishing"
+            or .href_url.domain.root_domain not in ('openai.com', 'chatgpt.com')
+            or strings.icontains(.href_url.url, 'hxxps') 
+          )
+  )
+
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Lookalike domain"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Sender analysis"
+  - "URL analysis"
+id: "0b283335-a0c3-56bd-a931-85f06ad8c6a9"
+tags:
+  - created_from_open_prs
+  - rule_status_added
+  - pr_author_brycampbell
+references:
+  - https://github.com/sublime-security/sublime-rules/pull/3790
