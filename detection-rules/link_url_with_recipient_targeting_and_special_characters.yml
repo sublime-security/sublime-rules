@@ -13,27 +13,33 @@ source: |
             or strings.icontains(.href_url.path, '@')
           )
           // a single path
-          and strings.count(.href_url.path, '/') == 2
+          strings.count(.href_url.path, '/') == 2
+          // special chars
           and (
             strings.icontains(.href_url.path, '/$')
             or strings.icontains(.href_url.path, '/*')
+            or strings.icontains(.href_url.url, '/#')
           )
+          // and not where the # is within a directory structure
+          // which is followed by url query params (the ? or = )
+          // had some fps based on an unsual use of this char within paths where url query param
+          and not regex.icontains(.href_url.url, '\/[^\/]*#[^\/]*\/[^$]*\?', )
+          
+          // also not where it's #! or #, which causes the fragment to start with punctuation unless that puncutation is a ?
+          // we use coalesce to account for where there is no fragment and the regex.icontains returns null
+          and not coalesce(regex.icontains(.href_url.fragment, '^[!,]'), false)
+  
+          // recipient email in url or path
           and (
-            (
-              strings.icontains(.href_url.path, recipients.to[0].email.email)
-              or strings.icontains(.href_url.fragment,
-                                   recipients.to[0].email.email
-              )
-              or any(strings.scan_base64(.href_url.path, ignore_padding=true),
-                     strings.icontains(., recipients.to[0].email.email)
-              )
-              or any(strings.scan_base64(.href_url.fragment, ignore_padding=true),
-                     strings.icontains(., recipients.to[0].email.email)
-              )
+            strings.icontains(.href_url.path, recipients.to[0].email.email)
+            or any(strings.scan_base64(.href_url.url,
+                                       ignore_padding=true,
+                                       format="url"
+                   ),
+                   strings.icontains(., recipients.to[0].email.email)
             )
           )
   )
-
 attack_types:
   - "Credential Phishing"
 tactics_and_techniques:
