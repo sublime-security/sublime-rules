@@ -10,31 +10,57 @@ authors:
 source: |
   type.inbound
   and (
-    regex.icontains(strings.replace_confusables(sender.display_name),
-                    '[nm]etf[li][il]x'
+    // obfuscated sender display name
+    (
+      sender.display_name is not null
+      and (
+        regex.icontains(strings.replace_confusables(sender.display_name),
+                        '[nm]etf[li][il]x'
+        )
+        or strings.ilevenshtein(strings.replace_confusables(sender.display_name),
+                                'netflix'
+        ) <= 1
+        or regex.icontains(strings.replace_confusables(sender.display_name),
+                           'n.{0,3}e.{0,3}t.{0,3}f.{0,3}l.{0,3}i.{0,3}x.{0,3}'
+        )
+      )
     )
-    or strings.ilevenshtein(strings.replace_confusables(sender.display_name),
-                            'netflix'
-    ) <= 1
+    // obfuscated sender email domain
     or regex.icontains(strings.replace_confusables(sender.email.domain.domain),
                        '[nm]etf[li][il]x'
     )
-    or regex.icontains(strings.replace_confusables(sender.display_name),
-                       'n.{0,3}e.{0,3}t.{0,3}f.{0,3}l.{0,3}i.{0,3}x.{0,3}'
-    )
+    // logo detection on message screenshot (no link analysis)
     or (
       any(ml.logo_detect(file.message_screenshot()).brands,
           .name == "Netflix" and .confidence in ("medium", "high")
       )
-      and regex.icontains(beta.ocr(file.message_screenshot()).text,
-                          'suspen(?:ded|sion)'
+      and (
+        // non NLU based keywords on the screenshot
+        regex.icontains(beta.ocr(file.message_screenshot()).text,
+                        'suspen(?:ded|sion)'
+        )
+        or 
+        // combo of NLU cred_theft + financial + Customer Service and Support
+        (
+          any(ml.nlu_classifier(body.current_thread.text).intents,
+              .name == "cred_theft"
+          )
+          and any(ml.nlu_classifier(body.current_thread.text).entities,
+                  .name == "financial"
+          )
+          and any(ml.nlu_classifier(body.current_thread.text).topics,
+                  .name == "Customer Service and Support"
+          )
+        )
       )
     )
+    // Address Detection
     or 2 of (
       strings.icontains(body.current_thread.text, 'Netflix, Inc'),
       strings.icontains(body.current_thread.text, '100 Winchester Circle'),
       strings.icontains(body.current_thread.text, 'Los Gatos, CA 95032')
     )
+    // unusual recipient pattern + logo detect + credphish dispoistion
     or (
       (
         length(recipients.to) == 0
@@ -43,39 +69,45 @@ source: |
           and all(recipients.cc, .email.domain.valid == false)
         )
       )
+      and any(ml.logo_detect(file.message_screenshot()).brands,
+              .name == "Netflix" and .confidence in ("medium", "high")
+      )
       and (
-        any(ml.logo_detect(file.message_screenshot()).brands,
-            .name == "Netflix" and .confidence in ("medium", "high")
-        )
-        and (
-          any(body.links,
-              ml.link_analysis(.).credphish.disposition == "phishing"
-              and ml.link_analysis(.).credphish.confidence in ("medium", "high")
-          )
+        any(body.links,
+            ml.link_analysis(.).credphish.disposition == "phishing"
+            and ml.link_analysis(.).credphish.confidence in ("medium", "high")
         )
       )
     )
   )
-  and sender.email.domain.root_domain not in (
-    'netflix.com',
-    'dvd.com',
-    'netflixfamily.com',
-    'netflixpreviewclub.com',
-    'netflixanimation.com',
-    'envoy.com',
-    'lexisnexis.com',
-    'netflix.shop',
-    'netflixcontractors.com', // owned by netflix
-    'netflixevents.com', // owned by netflix
-    'netelixir.com', // unrelated marketing
-    'netflixhouse.com', // owned by netflix
-    'instagram.com',
-    'netflix.net'
+  // negation of legit domains
+  and not (
+    sender.email.domain.root_domain in (
+      'netflix.com',
+      'dvd.com',
+      'netflixfamily.com',
+      'netflixpreviewclub.com',
+      'netflixanimation.com',
+      'envoy.com',
+      'lexisnexis.com',
+      'netflix.shop',
+      'netflixcontractors.com', // owned by netflix
+      'netflixevents.com', // owned by netflix
+      'netelixir.com', // unrelated marketing
+      'netflixhouse.com', // owned by netflix
+      'instagram.com',
+      'netflix.net',
+      'netflixshopsupport.com' // owned by netflix
+    )
+    and coalesce(headers.auth_summary.dmarc.pass, false)
   )
-  and sender.email.domain.domain not in (
-    'netflix.zendesk.com' // netflix actual support
+  and not (
+    sender.email.domain.domain in (
+      'netflix.zendesk.com' // netflix actual support
+    )
+    and coalesce(headers.auth_summary.dmarc.pass, false)
   )
-  and sender.email.email not in $recipient_emails
+  and not profile.by_sender_email().solicited
 attack_types:
   - "Credential Phishing"
 tactics_and_techniques:
