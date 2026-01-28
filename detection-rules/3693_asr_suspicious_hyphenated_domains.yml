@@ -1,0 +1,37 @@
+name: "PR# 3693 - Suspicious sender domain with hyphenated security terms"
+description: "Detects messages from domains containing hyphens and security-related terms like 'noreply', 'notification', or 'secure' with short domain names, commonly used in typosquatting attacks."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+
+  // Contains security/notification related terms
+  and regex.icontains(sender.email.domain.domain,
+                      '(?:noreply|no-reply|notify|notification|message|secure)'
+  )
+  and strings.icount(sender.email.domain.domain, "-") >= 1
+  and not strings.contains(sender.display_name, "™")
+  
+  // Short domain name (often used in phishing)
+  and length(sender.email.domain.sld) < 12
+  and not (
+    sender.email.domain.root_domain in $high_trust_sender_root_domains
+    and coalesce(headers.auth_summary.dmarc.pass, false)
+  )
+tags:
+  - "Attack surface reduction"
+  - pr_author_MSAdministrator
+  - created_from_open_prs
+  - rule_status_added
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Lookalike domain"
+  - "Social engineering"
+detection_methods:
+  - "Header analysis"
+  - "Sender analysis"
+  - "URL analysis"
+id: "a5c5e49d-2100-5f78-b9bc-837dc2c486fb"
+references:
+  - https://github.com/sublime-security/sublime-rules/pull/3693
