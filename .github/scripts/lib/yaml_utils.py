@@ -88,7 +88,7 @@ def extract_rule_name(content):
     for line in lines:
         if 'name:' in line:
             # replace the quotes and spaces to create a clean filename
-            current_name = line.replace('name: ', '').strip()
+            current_name = line.replace('name: ', '', 1).strip()
             break
 
     return current_name
