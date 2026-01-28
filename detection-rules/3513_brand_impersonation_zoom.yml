@@ -1,0 +1,142 @@
+name: "PR# 3513 - Brand impersonation: Zoom"
+description: "Detects messages impersonating Zoom through social footers, webinar links, and suspicious domain pattern matching. The rule looks for specific combinations of social media links, redirects, and content analysis to identify inauthentic Zoom-branded messages not originating from legitimate Zoom domains."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and (
+    // the social links in the footer
+    3 of (
+      any(body.links, strings.icontains(.href_url.url, "twitter.com/zoom")),
+      any(body.links,
+          strings.icontains(.href_url.url,
+                            "linkedin.com/company/zoom-video-communications"
+          )
+      ),
+      any(body.links, strings.icontains(.href_url.url, "blog.zoom.us")),
+      strings.ilike(body.html.raw,
+                    '*https://go.pardot.com/l/84442/*/*/84442/*/twitter.png*'
+      ),
+      strings.ilike(body.html.raw,
+                    '*https://go.pardot.com/l/84442/*/*/84442/*/linkedin.png*'
+      ),
+      strings.ilike(body.html.raw,
+                    '*https://go.pardot.com/l/84442/*/*/84442/*/zoomblog.png*'
+      )
+    )
+    or (
+      strings.ilike(body.html.raw,
+                    '*https://st1.zoom.us/homepage/publish/_nuxt/social_icons_footer*.png*'
+      )
+    )
+    or (
+      length(beta.ml_topic(body.html.display_text).topics) == 1
+      and all(beta.ml_topic(body.html.display_text).topics,
+              .name in ("Events and Webinars", "Software and App Updates")
+              and .confidence != "low"
+      )
+      and any(ml.logo_detect(file.message_screenshot()).brands,
+              .name == "Zoom" and .confidence == "high"
+      )
+      and any(body.links,
+              any(ml.nlu_classifier(.display_text).intents,
+                  .name == "cred_theft" and .confidence == "high"
+              )
+      )
+    )
+    or (
+      any(body.links,
+          // link claims to go to a Zoom domain, but does not
+          (
+            .display_url.domain.root_domain in ("zoom.us", "zoom.com")
+            or strings.icontains(.display_text, "zoom.us")
+            or strings.icontains(.display_text, "zoom.com")
+            // Zoom domain in URL path
+            or strings.icontains(.href_url.path, "zoom.us")
+          )
+          and .href_url.domain.root_domain not in ("zoom.us", "zoom.com")
+          and (
+            .href_url.domain.tld in $suspicious_tlds
+            // country code second-level domain
+            or strings.istarts_with(.href_url.domain.tld, "com.")
+            or (
+              (
+                length(ml.link_analysis(.).files_downloaded) > 0
+                // Zoom logo on page
+                or ml.link_analysis(.).credphish.brand.name == "Zoom"
+                // blocked by a Cloudflare CAPTCHA
+                or strings.icontains(ml.link_analysis(.).final_dom.raw,
+                                     'https://challenges.cloudflare.com/turnstile/',
+                )
+              )
+              and ml.link_analysis(.).effective_url.domain.root_domain not in (
+                "zoom.us",
+                "zoom.com"
+              )
+            )
+            // suspicious sender indicators
+            or (
+              not sender.email.domain.valid
+              or sender.email.domain.root_domain in $free_email_providers
+            )
+          )
+      )
+    )
+  )
+  // negate auto-generated meeting summaries 
+  and not (
+    strings.icontains(body.current_thread.text, "meeting summary")
+    and strings.icontains(body.current_thread.text,
+                          "AI-generated content may be inaccurate or misleading."
+    )
+  )
+  and not (
+    (
+      strings.istarts_with(subject.subject, "RE:")
+      or strings.istarts_with(subject.subject, "R:")
+      or strings.istarts_with(subject.subject, "ODG:")
+      or strings.istarts_with(subject.subject, "答复:")
+      or strings.istarts_with(subject.subject, "AW:")
+      or strings.istarts_with(subject.subject, "TR:")
+      or strings.istarts_with(subject.subject, "FWD:")
+      or regex.imatch(subject.subject, '(\[[^\]]+\]\s?){0,3}(re|fwd?)\s?:')
+      or regex.imatch(subject.subject,
+                      '^\[?(EXT|EXTERNAL)\]?[: ]\s*(RE|FWD?|FW|AW|TR|ODG|答复):.*'
+      )
+    )
+    and (
+      length(headers.references) > 0
+      or any(headers.hops, any(.fields, strings.ilike(.name, "In-Reply-To")))
+    )
+  )
+  // Not from a legitimate Zoom domain
+  and not (
+    sender.email.domain.root_domain in (
+      "zoom.us",
+      "zuora.com",
+      "zoomgov.com",
+      "zoom.com",
+      "zoom-x.de"
+    )
+    and headers.auth_summary.dmarc.pass
+  )
+
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Social engineering"
+  - "Evasion"
+detection_methods:
+  - "Computer Vision"
+  - "Content analysis"
+  - "HTML analysis"
+  - "Natural Language Understanding"
+  - "URL analysis"
+id: "054ad697-55ef-5d81-a14b-e2dbcfbf7e9e"
+tags:
+  - created_from_open_prs
+  - rule_status_modified
+  - pr_author_peterdj45
+references:
+  - https://github.com/sublime-security/sublime-rules/pull/3513
