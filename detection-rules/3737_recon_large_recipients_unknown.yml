@@ -1,0 +1,97 @@
+name: "PR# 3737 - Reconnaissance: Large unknown recipient list"
+description: |
+  Recon messages, a form of deliverability testing, are used to validate whether a recipient address is valid or not, potentially preceding an attack.
+
+  There's a large number of recipients that are unknown to the organization, no links or attachments, and a short body and subject from an unknown sender.
+type: "rule"
+severity: "low"
+source: |
+ type.inbound
+ and (
+   length(recipients.to) > 10
+   and length(filter(recipients.to,
+                     .email.domain.domain not in $org_domains
+                     and .email.email not in $recipient_emails
+                     and (
+                       .email.domain.valid
+                       or strings.icontains(.display_name, "undisclosed")
+                     )
+              )
+   ) >= 10
+ )
+ and (
+   length(subject.subject) <= 10
+   or subject.subject == body.current_thread.text
+   or (subject.is_reply and length(body.previous_threads) == 0)
+ )
+ or not (
+   length(subject.subject) <= 10
+   or subject.subject == body.current_thread.text
+   or (subject.is_reply and length(body.previous_threads) == 0)
+ )
+ and (
+   length(body.links) == 0
+   or length(filter(body.links,
+                    (
+                      .display_text is null
+                      and .display_url.url == sender.email.domain.root_domain
+                    )
+                    or .href_url.domain.domain == "aka.ms"
+                    or network.whois(.display_url.domain).days_old < 30
+             )
+   ) == length(body.links)
+ )
+ and (
+   length(attachments) == 0
+   or (
+     length(attachments) == 1
+     and any(attachments,
+             .file_type in ("pdf", "png", "jpg", "tif", "heif", "doc", "docx")
+             and any(file.explode(.),
+                     length(.scan.ocr.raw) < 20
+                     or length(.scan.strings.strings) == 1
+             )
+     )
+   )
+ )
+ and (
+   body.current_thread.text is null
+   or length(body.current_thread.text) < 50
+   // body length without disclaimer is shorter than 50 characters
+   or (
+     any(map(filter(ml.nlu_classifier(body.current_thread.text).entities,
+                    .name == "disclaimer"
+             ),
+             .text
+         ),
+         (length(body.current_thread.text) - length(.)) < 50
+     )
+   )
+ )
+ and profile.by_sender().prevalence != "common"
+ and not profile.by_sender().solicited
+ and not profile.by_sender().any_messages_benign
+ 
+ // negate highly trusted sender domains unless they fail DMARC authentication
+ and (
+   (
+     sender.email.domain.root_domain in $high_trust_sender_root_domains
+     and not headers.auth_summary.dmarc.pass
+   )
+   or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+ )
+tags:
+  - "Attack surface reduction"
+  - "Deliverability testing"
+  - pr_author_cybher0808
+  - created_from_open_prs
+  - rule_status_modified
+attack_types:
+  - "Reconnaissance"
+detection_methods:
+  - "Content analysis"
+  - "Header analysis"
+  - "Sender analysis"
+id: "436c0821-b70c-53ba-aa73-e177a69309bb"
+references:
+  - https://github.com/sublime-security/sublime-rules/pull/3737
