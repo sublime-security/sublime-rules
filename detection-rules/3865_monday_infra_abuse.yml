@@ -1,0 +1,143 @@
+name: "PR# 3865 - Service abuse: Monday.com infrastructure with phishing intent"
+description: "Detects unauthorized use of Monday.com tracking links in messages, attachments, or QR codes from unusual senders who lack proper authentication. Excludes legitimate replies and messages from trusted domains with valid DMARC."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and (
+    (
+      length(body.links) < 15
+      and any(body.links,
+              'monday_tracker' in .href_url.rewrite.encoders
+              and .href_url.scheme != "mailto"
+      )
+    )
+    or (
+      length(attachments) <= 3
+      and (
+        any(attachments,
+            (.file_type in $file_types_images or .file_type == "pdf")
+            //
+            // This rule makes use of a beta feature and is subject to change without notice
+            // using the beta feature in custom rules is not suggested until it has been formally released
+            //
+            and any(beta.scan_qr(.).items,
+                    .type is not null
+                    and 'monday_tracker' in .url.rewrite.encoders
+                    and .url.scheme != "mailto"
+            )
+            //
+            // This rule makes use of a beta feature and is subject to change without notice
+            // using the beta feature in custom rules is not suggested until it has been formally released
+            //
+            // exclude images taken with mobile cameras and screenshots from android
+            and not any(beta.parse_exif(.).fields,
+                        .key == "Model"
+                        or (
+                          .key == "Software"
+                          and strings.starts_with(.value, "Android")
+                        )
+            )
+            // exclude images taken with mobile cameras and screenshots from Apple
+            and not any(beta.parse_exif(.).fields,
+                        .key == "DeviceManufacturer"
+                        and .value == "Apple Computer Inc."
+            )
+        )
+      )
+    )
+    or (
+      length(attachments) == 0
+      and (
+        //
+        // This rule makes use of a beta feature and is subject to change without notice
+        // using the beta feature in custom rules is not suggested until it has been formally released
+        //
+        beta.parse_exif(file.message_screenshot()).image_height < 2000
+        and beta.parse_exif(file.message_screenshot()).image_width < 2000
+        and beta.scan_qr(file.message_screenshot()).found
+        and any(beta.scan_qr(file.message_screenshot()).items,
+                .type is not null
+                and 'monday_tracker' in .url.rewrite.encoders
+                and .url.scheme != "mailto"
+        )
+      )
+    )
+    or (
+      length(attachments) <= 3
+      and (
+        any(attachments,
+            (
+              .file_type in ("pdf")
+              or .file_extension in ("pdf", "eml")
+              or .file_extension in $file_extensions_macros
+              or .content_type in ("message/rfc822")
+            )
+            and any(file.explode(.),
+                    any(.scan.url.urls, 'monday_tracker' in .rewrite.encoders)
+            )
+        )
+      )
+    )
+  )
+  and not any(headers.domains, strings.ends_with(.domain, "mail.monday.com"))
+  and not (
+    headers.auth_summary.dmarc.details.from.root_domain == "monday.com"
+    and headers.auth_summary.spf.pass
+    and headers.auth_summary.dmarc.pass
+  )
+  and any(ml.nlu_classifier(body.current_thread.text).intents,
+          .name != "benign" and .confidence in ("medium", "high")
+  )
+  // negating legit replies
+  and not (
+    (subject.is_reply or subject.is_forward)
+    and (length(headers.references) > 0 and headers.in_reply_to is not null)
+  )
+  // negate graymail and newsletters
+  and not (
+    any(ml.nlu_classifier(body.current_thread.text).topics,
+        .name in~ (
+          "Advertising and Promotions",
+          "B2B Cold Outreach",
+          "Newsletters and Digests",
+          "Events and Webinars"
+        )
+        and .confidence != "low"
+    )
+  )
+  
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and (
+    (
+      (
+        (
+          sender.email.domain.root_domain in $high_trust_sender_root_domains
+          and not headers.auth_summary.dmarc.pass
+        )
+        or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+      )
+    )
+    // salesforce has been abused to send phishing campaigns leveraging monday.com infrastructure abuse 
+    or sender.email.domain.root_domain == "salesforce.com"
+  )
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Evasion"
+  - "Social engineering"
+  - "QR code"
+detection_methods:
+  - "Content analysis"
+  - "File analysis"
+  - "Header analysis"
+  - "QR code analysis"
+  - "Sender analysis"
+  - "URL analysis"
+id: "68800364-8b28-53d5-94a0-17a3d4e4f455"
+tags:
+  - created_from_open_prs
+  - rule_status_modified
+  - pr_author_MSAdministrator
+references:
+  - https://github.com/sublime-security/sublime-rules/pull/3865
