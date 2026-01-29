@@ -1,0 +1,55 @@
+name: "PR# 3897 - Service abuse: Adobe Behance with deceptive project names"
+description: "Detects messages with 'proposal' in the subject that link to Adobe Behance projects using deceptive creator display names like 'Shared File', 'Secured Document', or 'Others', or where the project name matches the email subject line. This pattern indicates potential abuse of the legitimate Behance platform for malicious purposes."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and strings.icontains(subject.subject, 'proposal')
+  and any(body.links, .href_url.domain.root_domain == 'behance.net')
+  and any(body.links,
+          // check if the behance project creator name matches known suspicious patterns
+          any(html.xpath(ml.link_analysis(.).final_dom,
+                         "//script[@id='beconfig-store_state']"
+              ).nodes,
+              strings.parse_json(regex.extract(.raw,
+                                               '<script type="application/json" id="beconfig-store_state">(?P<beconfig_store_state>.*)\s*</script>'
+                                 )[0].named_groups["beconfig_store_state"]
+              )["project"]["project"]["creator"]["displayName"] in (
+                "Shared File",
+                "Secured Document",
+                "Others"
+              )
+          )
+          or 
+          // check if the behance project name appears in the email subject, indicating templated lure content
+          .href_url.domain.root_domain == 'behance.net'
+          and any(html.xpath(ml.link_analysis(.).final_dom,
+                             "//script[@id='beconfig-store_state']"
+                  ).nodes,
+                  strings.icontains(subject.base,
+                                    strings.parse_json(regex.extract(.raw,
+                                                                     '<script type="application/json" id="beconfig-store_state">(?P<beconfig_store_state>.*)\s*</script>'
+                                                       )[0].named_groups["beconfig_store_state"]
+                                    )["project"]["project"]["name"]
+                  )
+          )
+  )
+
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Social engineering"
+  - "Free file host"
+detection_methods:
+  - "Content analysis"
+  - "URL analysis"
+  - "HTML analysis"
+  - "Javascript analysis"
+id: "e2b9c2a3-3512-5003-81f2-2507b49458e6"
+tags:
+  - created_from_open_prs
+  - rule_status_added
+  - pr_author_IndiaAce
+references:
+  - https://github.com/sublime-security/sublime-rules/pull/3897
