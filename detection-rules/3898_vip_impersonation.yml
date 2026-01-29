@@ -1,0 +1,83 @@
+name: "PR# 3898 - VIP / Executive impersonation (strict match, untrusted)"
+description: |
+  Sender display name matches the display name of a user in the $org_vips list, and the sender has never been seen before.
+
+  The $org_vips list must first be manually connected to a VIP group of your upstream provider (Google Workspace and Microsoft 365 only) in order for this rule to work.
+  Once connected, the list will be automatically synced and kept up-to-date. For more information, see the $org_vips documentation: https://docs.sublimesecurity.com/docs/configure-org_vips-list
+
+  This rule is recommended to be used on a relatively small list of VIPs, and is meant to reduce attack surface by detecting *any* message that matches the protected list of display names from a first-time or unsolicited sender.
+
+  Additional rule logic can be added to look for suspicious subjects, suspicious links, etc.
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and (
+    // the display name matches a name on the orgs vip list
+    any($org_vips, .display_name =~ sender.display_name)
+    // or the display name starts with the name on the orgs vip list
+    or (
+      any($org_vips,
+          strings.istarts_with(sender.display_name, .display_name)
+          // and it is longer than just their name (eg. John Doe CEO)
+          and length(sender.display_name) > length(.display_name)
+      )
+      // and we have confidence it's BEC
+      and any(ml.nlu_classifier(body.current_thread.text).intents,
+              .name == "bec" and .confidence == "high"
+      )
+    )
+  )
+  and (
+    // ignore personal <> work emails
+    // where the sender and mailbox's display name are the same
+    length(recipients.to) > 0
+    or length(recipients.cc) > 0
+    or sender.display_name != mailbox.display_name
+  )
+  // bounce-back negations
+  and not strings.like(sender.email.local_part,
+                       "*postmaster*",
+                       "*mailer-daemon*",
+                       "*administrator*"
+  )
+  and not any(attachments,
+              .content_type in (
+                "message/rfc822",
+                "message/delivery-status",
+                "text/calendar"
+              )
+  )
+  and (
+    (
+      profile.by_sender_email().prevalence in ("new", "outlier")
+      and not profile.by_sender_email().solicited
+    )
+    or (
+      profile.by_sender_email().any_messages_malicious_or_spam
+      and not profile.by_sender_email().any_messages_benign
+    )
+  )
+  and (
+    (
+      sender.email.domain.root_domain in $org_domains
+      and not headers.auth_summary.dmarc.pass
+    )
+    or sender.email.domain.root_domain not in $org_domains
+  )
+  and not profile.by_sender_email().any_messages_benign
+tags:
+  - "Attack surface reduction"
+  - pr_author_zoomequipd
+  - created_from_open_prs
+  - rule_status_modified
+attack_types:
+  - "BEC/Fraud"
+tactics_and_techniques:
+  - "Impersonation: VIP"
+detection_methods:
+  - "Header analysis"
+  - "Sender analysis"
+id: "f06d30d4-b317-5229-903f-06df8cf8a7b6"
+references:
+  - https://github.com/sublime-security/sublime-rules/pull/3898
