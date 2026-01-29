@@ -57,6 +57,16 @@ source: |
       profile.by_sender_email().any_messages_malicious_or_spam
       and not profile.by_sender_email().any_messages_benign
     )
+    // mismatched reply-to with unsoliticed reply-to address
+    or (
+      length(headers.reply_to) > 0
+      and (sender.email.email not in map(headers.reply_to, .email.email))
+      //
+      // This rule makes use of a beta feature and is subject to change without notice
+      // using the beta feature in custom rules is not suggested until it has been formally released
+      //
+      and not beta.profile.by_reply_to().solicited
+    )
   )
   and (
     (
@@ -66,6 +76,7 @@ source: |
     or sender.email.domain.root_domain not in $org_domains
   )
   and not profile.by_sender_email().any_messages_benign
+
 tags:
   - "Attack surface reduction"
   - pr_author_zoomequipd
