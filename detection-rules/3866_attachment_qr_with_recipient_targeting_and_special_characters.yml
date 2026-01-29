@@ -7,62 +7,120 @@ source: |
   and length(recipients.to) == 1
   and recipients.to[0].email.domain.valid
   and any(attachments,
-          any(file.explode(.),
-              (
-                // a single path
-                strings.count(.scan.qr.url.path, '/') == 2
-                and (
-                  strings.icontains(.scan.qr.url.path, '/$')
-                  or strings.icontains(.scan.qr.url.path, '/*')
-                )
-                // subdomain should contain num{3}alpha or alphanum{3}
-                and regex.icontains(.scan.qr.url.domain.subdomain,
-                                    '^(?:[a-z]+[0-9]{3}|[0-9]{3}[a-z]+)$'
-                )
-                // url path should contain num{3}alpha or alphanum{3}
-                and regex.icontains(.scan.qr.url.path,
-                                    '\/(?:[a-z]+[0-9]{3}|[0-9]{3}[a-z]+)\/'
-                )
-              )
-              or (
-                // special char in the path
-                (
-                  strings.icontains(.scan.qr.url.path, '!')
-                  or strings.icontains(.scan.qr.url.path, '@')
-                )
-                // a single path
-                and strings.count(.scan.qr.url.path, '/') == 2
-                and (
-                  strings.icontains(.scan.qr.url.path, '/$')
-                  or strings.icontains(.scan.qr.url.path, '/*')
-                  // hex dollar sign
-                  or strings.icontains(.scan.qr.url.path, '%24')
-                  // hex star
-                  or strings.icontains(.scan.qr.url.path, '%2A')
-                )
-                // ensure expected ordering
-                and regex.icontains(.scan.qr.url.url, '[!@].*(?:[$*]|%2[A4])')
-              )
-              and (
-                (
-                  strings.icontains(.scan.qr.url.path,
-                                    recipients.to[0].email.email
-                  )
-                  or strings.icontains(.scan.qr.url.fragment,
-                                       recipients.to[0].email.email
-                  )
-                  or any(strings.scan_base64(.scan.qr.url.path,
-                                             ignore_padding=true
-                         ),
-                         strings.icontains(., recipients.to[0].email.email)
-                  )
-                  or any(strings.scan_base64(.scan.qr.url.fragment,
-                                             ignore_padding=true
-                         ),
-                         strings.icontains(., recipients.to[0].email.email)
-                  )
-                )
-              )
+          (
+            // Office documents
+            .file_extension in $file_extensions_macros
+            and any(file.explode(.),
+                    .scan.qr.type == "url"
+                    // QR code URL contains recipient's email (targeting indicator)
+                    and any(recipients.to,
+                            .email.domain.valid
+                            and (
+                              // Plaintext email address in URL
+                              strings.icontains(..scan.qr.url.url, .email.email)
+                              // OR base64 encoded email address
+                              or any(strings.scan_base64(..scan.qr.url.url,
+                                                         format="url",
+                                                         ignore_padding=true
+                                     ),
+                                     strings.icontains(., ..email.email)
+                              )
+                            )
+                    )
+                    // a single path
+                    and strings.count(.scan.qr.url.path, '/') == 2
+                    and (
+                      (
+                        (
+                          strings.contains(.scan.qr.url.path, '/$')
+                          or strings.contains(.scan.qr.url.path, '/*')
+                          or strings.contains(.scan.qr.url.path, '/#')
+                        )
+                        // subdomain should contain num{3}alpha or alphanum{3}
+                        and regex.icontains(.scan.qr.url.domain.subdomain,
+                                            '^(?:[a-z]+[0-9]{3}|[0-9]{3}[a-z]+)$'
+                        )
+                        // url path should contain num{3}alpha or alphanum{3}
+                        and regex.icontains(.scan.qr.url.path,
+                                            '\/(?:[a-z]+[0-9]{3}|[0-9]{3}[a-z]+)\/'
+                        )
+                      )
+                      or (
+                        // special char in the path
+                        (
+                          strings.contains(.scan.qr.url.path, '!')
+                          or strings.contains(.scan.qr.url.path, '@')
+                        )
+                        and (
+                          strings.contains(.scan.qr.url.path, '/$')
+                          or strings.contains(.scan.qr.url.path, '/*')
+                          or strings.contains(.scan.qr.url.path, '/#')
+                          // hex dollar sign
+                          or strings.icontains(.scan.qr.url.path, '%24')
+                          // hex star
+                          or strings.icontains(.scan.qr.url.path, '%2A')
+                          // hex pound
+                          or strings.icontains(.scan.qr.url.path, '%23')
+                        )
+                        // ensure expected ordering
+                        and regex.icontains(.scan.qr.url.url,
+                                            '[!@].*(?:[$*]|%2[A43])'
+                        )
+                      )
+                    )
+            )
+          )
+          or (
+            // pdf or images
+            (
+              .file_type == "pdf" or .file_type in $file_types_images
+            )
+            //
+            // This rule makes use of a beta feature and is subject to change without notice
+            // using the beta feature in custom rules is not suggested until it has been formally released
+            //
+            and any(beta.scan_qr(.).items,
+                    .type is not null
+                    // a single path
+                    and strings.count(.url.path, '/') == 2
+                    and (
+                      (
+                        (
+                          strings.contains(.url.path, '/$')
+                          or strings.contains(.url.path, '/*')
+                          or strings.contains(.url.path, '/#')
+                        )
+                        // subdomain should contain num{3}alpha or alphanum{3}
+                        and regex.icontains(.url.domain.subdomain,
+                                            '^(?:[a-z]+[0-9]{3}|[0-9]{3}[a-z]+)$'
+                        )
+                        // url path should contain num{3}alpha or alphanum{3}
+                        and regex.icontains(.url.path,
+                                            '\/(?:[a-z]+[0-9]{3}|[0-9]{3}[a-z]+)\/'
+                        )
+                      )
+                      or (
+                        // special char in the path
+                        (
+                          strings.contains(.url.path, '!')
+                          or strings.contains(.url.path, '@')
+                        )
+                        and (
+                          strings.contains(.url.path, '/$')
+                          or strings.contains(.url.path, '/*')
+                          or strings.contains(.url.path, '/#')
+                          // hex dollar sign
+                          or strings.icontains(.url.path, '%24')
+                          // hex star
+                          or strings.icontains(.url.path, '%2A')
+                          // hex pound
+                          or strings.icontains(.url.path, '%23')
+                        )
+                        // ensure expected ordering
+                        and regex.icontains(.url.url, '[!@].*(?:[$*]|%2[A43])')
+                      )
+                    )
+            )
           )
   )
 attack_types:
@@ -79,4 +137,4 @@ detection_methods:
 id: "d37a3f2c-6e15-59eb-b6ce-4eccc730232c"
 og_id: "fc9e1c09-4691-5cde-94d1-ccd953f1b63a"
 testing_pr: 3866
-testing_sha: 1beecd368388bf7c00362addfb2cbc413cdbfe03
+testing_sha: 29e1a8066b342e94bda0a668e4520cb16206d62e
