@@ -46,6 +46,22 @@ source: |
     or regex.icontains(body.current_thread.text,
                        '(Chase|J\.?\s?P\.?\sMorgan)\s(Privacy|Treasury)\sOperations|(Privacy|Treasury)\sOperations\s(Chase|J\.?\s?P\.?\sMorgan)'
     )
+    or (
+      (
+        strings.ilike(sender.email.local_part, "chase")
+        or regex.icontains(sender.email.local_part, '[^pur]chase')
+      )
+      and (
+        any([subject.base, sender.display_name],
+            regex.icontains(., 'online ((banking|business|system)|.*alert)')
+        )
+        or strings.ilike(body.current_thread.text,
+                         "*secure message*",
+                         "*secure login*",
+                         "*wire transfer*"
+        )
+      )
+    )
   )
   and not (
     sender.display_name is not null and sender.display_name in~ ("chaser", "case")
@@ -63,6 +79,8 @@ source: |
       profile.by_sender().any_messages_malicious_or_spam
       and not profile.by_sender().any_messages_benign
     )
+    // bypass sender profile checks if the message was sent via Mailgun
+    or any(headers.hops, any(.fields, strings.starts_with(.name, "X-Mailgun")))
   )
   
   // negate highly trusted sender domains unless they fail DMARC authentication
