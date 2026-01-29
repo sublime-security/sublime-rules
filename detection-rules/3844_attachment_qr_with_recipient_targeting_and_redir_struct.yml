@@ -6,33 +6,47 @@ source: |
   type.inbound
   // QR code detection in attachments
   and any(attachments,
-          // Office documents, PDFs, or image files
           (
-            .file_type in $file_types_images
-            or .file_extension in $file_extensions_macros
-            or .file_type == "pdf"
-          )
-          and any(file.explode(.),
-                  .scan.qr.type == "url"
-                  // QR code URL contains recipient's email (targeting indicator)
-                  and any(recipients.to,
-                          .email.domain.valid
-                          and (
-                            // Plaintext email address in URL
-                            strings.icontains(..scan.qr.url.url, .email.email)
-                            // OR base64 encoded email address
-                            or any(beta.scan_base64(..scan.qr.url.url,
-                                                    format="url",
-                                                    ignore_padding=true
-                                   ),
-                                   strings.icontains(., ..email.email)
+            // Office documents
+            .file_extension in $file_extensions_macros
+            and any(file.explode(.),
+                    .scan.qr.type == "url"
+                    // QR code URL contains recipient's email (targeting indicator)
+                    and any(recipients.to,
+                            .email.domain.valid
+                            and (
+                              // Plaintext email address in URL
+                              strings.icontains(..scan.qr.url.url, .email.email)
+                              // OR base64 encoded email address
+                              or any(strings.scan_base64(..scan.qr.url.url,
+                                                         format="url",
+                                                         ignore_padding=true
+                                     ),
+                                     strings.icontains(., ..email.email)
+                              )
                             )
-                          )
-                  )
-                  // URI Struct for Common Kratos/SneakyLog Redir
-                  and regex.contains(.scan.qr.url.url,
-                                     '\.(?:c(?:ompany|you)|sbs)(?:[$#]|\?a=)'
-                  )
+                    )
+                    // URI Struct for Common Kratos/SneakyLog Redir
+                    and regex.contains(.scan.qr.url.url,
+                                       '\.(?:c(?:ompany|you)|sbs)(?:[$#]|\?a=)'
+                    )
+            )
+          )
+          or (
+            // pdf or images
+            (
+              .file_type == "pdf" or .file_type in $file_types_images
+            )
+            //
+            // This rule makes use of a beta feature and is subject to change without notice
+            // using the beta feature in custom rules is not suggested until it has been formally released
+            //
+            and any(beta.scan_qr(.).items,
+                    .type is not null
+                    and regex.contains(.url.url,
+                                       '\.(?:c(?:ompany|you)|sbs)(?:[$#]|\?a=)'
+                    )
+            )
           )
   )
 attack_types:
@@ -50,4 +64,4 @@ detection_methods:
 id: "bccd2aeb-851d-519a-b053-10d44251fe2b"
 og_id: "5d51e565-ea18-501e-87a6-37cdda705631"
 testing_pr: 3844
-testing_sha: 26552df96a613a0c96c777687477561fdf5daded
+testing_sha: 8923feca9884ac055ce3c0c9201d8dec647f1d84
