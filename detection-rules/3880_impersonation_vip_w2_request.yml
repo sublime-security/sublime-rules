@@ -5,12 +5,9 @@ severity: "high"
 source: |
   type.inbound
   and any($org_vips, strings.contains(sender.display_name, .display_name))
-  and (
-    (
-      sender.email.domain.domain in $org_domains
-      and not coalesce(headers.auth_summary.dmarc.pass, false)
-    )
-    or sender.email.domain.domain not in $org_domains
+  and not (
+    sender.email.domain.domain in $org_domains
+    and coalesce(headers.auth_summary.dmarc.pass, false)
   )
   
   // W-2 Language with a request
@@ -25,12 +22,9 @@ source: |
   and sender.email.email not in map(headers.reply_to, .email.email)
   
   // negate highly trusted sender domains unless they fail DMARC authentication
-  and (
-    (
-      sender.email.domain.root_domain in $high_trust_sender_root_domains
-      and not headers.auth_summary.dmarc.pass
-    )
-    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  and not (
+    sender.email.domain.root_domain in $high_trust_sender_root_domains
+    and coalesce(headers.auth_summary.dmarc.pass, false)
   )
 attack_types:
   - "BEC/Fraud"
@@ -43,4 +37,4 @@ detection_methods:
 id: "97a1a357-2136-5156-95d9-3efc223a9f8b"
 og_id: "e7e73fad-6ce6-51f9-9b52-40eaef71f5a1"
 testing_pr: 3880
-testing_sha: 6308690d800716b78053b49f7432da82bf5ca7df
+testing_sha: 244330ef34aa3433cbd38af90d00e34953d9dc15
