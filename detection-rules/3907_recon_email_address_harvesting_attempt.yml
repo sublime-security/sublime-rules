@@ -1,0 +1,44 @@
+name: "PR# 3907 - Reconnaissance: Email address harvesting attempt"
+description: |
+  Detects potential email harvesting or credential phishing attempts where short messages contain email addresses in the body text. These messages often try to extract contact information or validate email addresses for future attacks.
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and length(subject.base) <= 15
+  // detect email addresses in body text
+  and (
+    regex.imatch(body.current_thread.text,
+                 '[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}'
+    )
+  )
+  // external freemail sender
+  and sender.email.domain.root_domain in $free_email_providers
+  // no attachments but allow one link
+  and length(attachments) == 0
+  and length(body.current_thread.links) == 1
+  // negate if auth is failing
+  and not (
+    coalesce(headers.auth_summary.dmarc.pass, false)
+    or coalesce(headers.auth_summary.spf.pass, false)
+  )
+tags:
+  - "Attack surface reduction"
+  - pr_author_MSAdministrator
+  - created_from_open_prs
+  - rule_status_modified
+attack_types:
+  - "BEC/Fraud"
+  - "Credential Phishing"
+  - "Spam"
+tactics_and_techniques:
+  - "Free email provider"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Header analysis"
+  - "Sender analysis"
+  - "URL analysis"
+id: "a3aa0800-5fda-5641-9f3c-d7f741be246b"
+references:
+  - https://github.com/sublime-security/sublime-rules/pull/3907
