@@ -1,0 +1,152 @@
+name: "PR# 3909 - Brand impersonation: Microsoft"
+description: |
+  Impersonation of the Microsoft brand.
+references:
+  - "https://www.itproportal.com/news/cybercriminals-launch-targeted-phishing-attacks-against-microsoft-365-users/"
+  - "https://cofense.com/blog/office-365-phishing-variant/"
+  - "https://www.helpnetsecurity.com/2020/05/04/fake-microsoft-teams-notification/"
+  - https://github.com/sublime-security/sublime-rules/pull/3909
+type: "rule"
+severity: "high"
+authors:
+  - twitter: "amitchell516"
+source: |
+  type.inbound
+  and (
+    length(body.links) < 30
+    or sender.email.local_part == "newsletter" and length(body.links) < 5
+  )
+  and (
+    (
+      strings.ilike(subject.subject, '*Microsoft 365*')
+      and strings.ilike(subject.subject, '*is expired*')
+    )
+    or (
+      // should catch any instance of the word "expired"
+      strings.ilike(body.current_thread.text, "*expir*")
+      and strings.ilike(body.current_thread.text, "*password*")
+      and strings.ilike(body.current_thread.text, "*microsoft*")
+    )
+    or regex.icontains(body.current_thread.text,
+                       ".*reach you.{0,20}Microsoft Teams"
+    )
+    or strings.icontains(body.current_thread.text, "microsoft account team")
+    or strings.ilike(sender.display_name, '*new activity in Teams*')
+    or strings.icontains(strings.replace_confusables(sender.display_name),
+                         'microsoft advertising support'
+    )
+    or subject.subject =~ 'Offline Message in Teams'
+    or strings.ilike(subject.subject, '*Teams Sent A Message')
+    or sender.display_name in~ (
+      'Microsoft Partner Network',
+      'Microsoft Advertising',
+      'Microsoft',
+      'Microsoft Feedback',
+      'Microsoft account team',
+      'Microsoft Support',
+      'Microsoft 365 Message center',
+      'Microsoft Azure'
+    )
+    or regex.icontains(sender.display_name,
+                       "[MḾṀṂⱮМḿṁṃᵯⱮ𝐌𝑀][iíìîïīĭĩįıɪɨᵢⁱ𝐢𝑖][cćĉċčçƈȼ𝐜𝑐][rŕŗřȑȓɾᵣⁿʳ𝐫𝑟][oóòôõöøōŏőɵₒᵒº𝐨𝑜][sśŝšșşʂᵴˢˢ𝐬𝑠][oóòôõöøōŏőɵₒᵒº𝐨𝑜][fḟƒᵮᶠ𝐟𝑓][tťțţᵵₜᵗᵗ𝐭𝑡]"
+    )
+    or regex.icontains(sender.display_name,
+                       "[MḾṀṂⱮМḿṁṃᵯⱮ𝐌𝑀][iíìîïīĭĩįıɪɨᵢⁱ𝐢𝑖][rŕŗřȑȓɾᵣⁿʳ𝐫𝑟][cćĉċčçƈȼ𝐜𝑐][oóòôõöøōŏőɵₒᵒº𝐨𝑜][sśŝšșşʂᵴˢˢ𝐬𝑠][oóòôõöøōŏőɵₒᵒº𝐨𝑜][fḟƒᵮᶠ𝐟𝑓][tťțţᵵₜᵗᵗ𝐭𝑡]" // [sic]
+    )
+  )
+  and not (
+    sender.email.domain.root_domain in~ (
+      'microsoft.com',
+      'microsoftstoreemail.com',
+      'microsoftsupport.com',
+      'office.com',
+      'teams-events.com',
+      'qualtrics-research.com',
+      'skype.com',
+      'azureadnotifications.us',
+      'microsoftonline.us',
+      'mail.microsoft',
+      'office365.com',
+      'microsoftadvertising.com'
+    )
+    and headers.auth_summary.dmarc.pass
+  )
+  and not (
+    sender.email.domain.domain in~ (
+      'microsoft.regsvc.com',
+      'microsoft.onmicrosoft.com'
+    )
+    and headers.auth_summary.dmarc.pass
+  )
+  and (
+    profile.by_sender().prevalence in ("new", "outlier")
+    or (
+      profile.by_sender().any_messages_malicious_or_spam
+      and not profile.by_sender().any_messages_benign
+    )
+  )
+  
+  // negate legitimate Office 365 bouncebacks
+  and not (
+    all(attachments,
+        .content_type in ("message/delivery-status", "message/rfc822")
+    )
+    and (
+      sender.email.local_part in ('postmaster', 'mailer-daemon')
+      or strings.starts_with(sender.email.local_part, 'microsoftexchange')
+    )
+    and (
+      strings.contains(subject.subject, 'Undeliverable:')
+      or strings.contains(subject.subject, 'Blocked:')
+      or strings.contains(subject.subject, 'Não é possível entregar:')
+    )
+  )
+  
+  // negate other legitimate MS notifications
+  and not (
+    length(body.links) > 0
+    and all(body.links,
+            .href_url.domain.root_domain in (
+              "aka.ms",
+              "microsoftonline.com",
+              "microsoft.com"
+            )
+            or .href_url.domain.tld == "microsoft"
+    )
+    and headers.auth_summary.dmarc.pass
+  )
+  
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and not headers.auth_summary.dmarc.pass
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+  // not a newsletter or advertisement
+  and not (
+    any(ml.nlu_classifier(body.current_thread.text).topics,
+        .name in ("Newsletters and Digests") and .confidence == "high"
+    )
+    and (
+      any(body.links,
+          strings.icontains(.display_text, "unsubscribe")
+          and (strings.icontains(.href_url.path, "unsubscribe"))
+      )
+    )
+  )
+
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Sender analysis"
+id: "fc05ea24-5db4-58ae-aa9b-4c825f191598"
+tags:
+  - created_from_open_prs
+  - rule_status_modified
+  - pr_author_markmsublime
