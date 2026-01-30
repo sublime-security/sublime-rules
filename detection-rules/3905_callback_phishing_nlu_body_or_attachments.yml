@@ -1,0 +1,126 @@
+name: "Callback phishing in body or attachment (untrusted sender)"
+description: |
+  Detects callback scams by analyzing text within images of receipts or invoices from untrusted senders.
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and length(attachments) < 5
+  and (
+    any(attachments,
+        (.file_type in $file_types_images or .file_type in ("pdf", "xlsx"))
+        and (
+          any(ml.nlu_classifier(beta.ocr(.).text).intents,
+              .name == "callback_scam" and .confidence in ("medium", "high")
+          )
+          or any(file.explode(.),
+  
+                 // exclude images taken with mobile cameras and screenshots from android
+                 not any(.scan.exiftool.fields,
+                         .key == "Model"
+                         or (
+                           .key == "Software"
+                           and strings.starts_with(.value, "Android")
+                         )
+                         or (.key == "UserComment" and .value == "Screenshot")
+                 )
+                 and any(ml.nlu_classifier(.scan.ocr.raw).intents,
+                         .name == "callback_scam"
+                         and .confidence in ("medium", "high")
+                 )
+          )
+        )
+        and (
+          // negate noreply unless a logo is found in the attachment
+          (
+            sender.email.local_part in ("no_reply", "noreply")
+            and any(ml.logo_detect(.).brands,
+                    .name in ("PayPal", "Norton", "GeekSquad", "Ebay", "McAfee")
+            )
+          )
+          or sender.email.local_part not in ("no_reply", "noreply")
+        )
+    )
+    or (
+      any(ml.nlu_classifier(body.current_thread.text).intents,
+          .name in ("callback_scam") and .confidence in ("medium", "high")
+      )
+      and (
+        (
+          270 < length(body.current_thread.text) < 1750
+          or (
+            75 < length(body.current_thread.text) < 1750
+            and (
+              strings.ilike(body.current_thread.text,
+                            "*PayPal*",
+                            "*Norton*",
+                            "*GeekSquad*",
+                            "*Ebay*",
+                            "*McAfee*",
+                            "*=1"
+              )
+              // phone number regex
+              or regex.icontains(body.current_thread.text,
+                                 '\+?([ilo0-9]{1}.)?\(?[ilo0-9]{3}?\)?.[ilo0-9]{3}.?[ilo0-9]{4}',
+                                 '\+?([ilo0-9]{1,2})?\s?\(?\d{3}\)?[\s\.\-⋅]{0,5}[ilo0-9]{3}[\s\.\-⋅]{0,5}[ilo0-9]{4}'
+              )
+              or 1 of (
+                strings.icontains(beta.ocr(file.message_screenshot()).text,
+                                  "geek squad"
+                ),
+                strings.icontains(beta.ocr(file.message_screenshot()).text,
+                                  "lifelock"
+                ),
+                strings.icontains(beta.ocr(file.message_screenshot()).text,
+                                  "best buy"
+                ),
+                strings.icontains(beta.ocr(file.message_screenshot()).text,
+                                  "mcafee"
+                ),
+                strings.icontains(beta.ocr(file.message_screenshot()).text,
+                                  "norton"
+                ),
+                strings.icontains(beta.ocr(file.message_screenshot()).text,
+                                  "ebay"
+                ),
+                strings.icontains(beta.ocr(file.message_screenshot()).text,
+                                  "paypal"
+                ),
+                strings.icontains(beta.ocr(file.message_screenshot()).text,
+                                  "virus"
+                ),
+              )
+            )
+          )
+        )
+      )
+    )
+  )
+  and not (
+    any(headers.domains, .domain == "smtp-out.gcp.bigcommerce.net")
+    and strings.icontains(body.html.raw, "bigcommerce.com")
+  )
+  
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and not headers.auth_summary.dmarc.pass
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+attack_types:
+  - "Callback Phishing"
+tactics_and_techniques:
+  - "Out of band pivot"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "File analysis"
+  - "Optical Character Recognition"
+  - "Natural Language Understanding"
+  - "Sender analysis"
+id: "cd5a0cec-eb1e-53f4-aee6-39be87f0d6d8"
+og_id: "b93c6f94-c9a3-587a-8eb5-6856754f8222"
+testing_pr: 3905
+testing_sha: f6d186eab5b194ccf8d644b199d02c979bbf11a6
