@@ -4,22 +4,14 @@ type: "rule"
 severity: "high"
 source: |
   type.inbound
+  and strings.icontains(body.current_thread.text, 'Microsoft Teams')
+  and regex.icontains(body.current_thread.text, 'join .{0,10}meeting')
   and (
-    (
-      strings.icontains(body.current_thread.text, 'Microsoft Teams')
-      and strings.icontains(body.current_thread.text, 'join the meeting now')
-      and strings.contains(body.current_thread.text, 'Meeting ID:')
-      and strings.contains(body.current_thread.text, 'Passcode:')
-    )
-    or (
-      strings.icontains(body.current_thread.text, "teams")
-      and 2 of (
-        strings.icontains(body.current_thread.text, "internal"),
-        strings.icontains(body.current_thread.text, "message"),
-        strings.icontains(body.current_thread.text, "meeting")
-      )
-    )
+    strings.contains(body.current_thread.text, 'Meeting ID:')
+    or strings.contains(body.current_thread.text, 'Organizer:')
+    or strings.contains(body.current_thread.text, 'Passcode:')
   )
+  
   // not a reply
   and length(headers.references) == 0
   and headers.in_reply_to is null
@@ -30,16 +22,35 @@ source: |
   // common in newsletters which link to a webinar style event
   and not any(body.links, strings.icontains(.display_text, "unsub"))
   
-  // one of the links contains is a CTA that doesn't link to MS
-  and any(body.links,
+  // FP negation
+  and not any(body.links,
+              strings.icontains(.display_text, "Join Zoom Meeting")
+              or .href_url.domain.root_domain == "zoom.us"
+  )
+  
+  // one of the links contains "join the meeting now"
+  and any(body.links, regex.icontains(.display_text, "join .{0,10}meeting"))
+  
+  // the "join the meeting now" link does not go to microsoft
+  and all(filter(body.current_thread.links,
+                 regex.icontains(.display_text, "join .{0,10}meeting")
+          ),
           (
-            .display_text =~ "join the meeting now"
-            or strings.icontains(.display_text, "play recording")
+            .href_url.domain.root_domain not in (
+              "microsoft.com",
+              "microsoft.us",
+              "live.com"
+            )
+            and not any(.href_url.query_params_decoded['domain'],
+                        . in ("teams.microsoft.com", "teams.live.com")
+            )
+            // when Mimecast doesn't give us the domain
+            and not (
+              .href_url.domain.root_domain == "mimecastprotect.com"
+              and length(.href_url.query_params_decoded['domain']) == 0
+            )
           )
-          and .href_url.domain.root_domain not in (
-            "microsoft.com",
-            "microsoft.us"
-          )
+  
           // rewriters often abstract the link
           and .href_url.domain.root_domain not in $bulk_mailer_url_root_domains
   )
