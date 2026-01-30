@@ -10,7 +10,7 @@ source: |
     or regex.contains(body.html.display_text, 'USPS\s*\.\s*COM')
   )
   and length(body.links) > 0
-  and 2 of (
+  and 3 of (
     any(body.links,
         strings.ilike(.display_text,
                       "*check now*",
@@ -31,7 +31,10 @@ source: |
     any(ml.nlu_classifier(body.current_thread.text).entities,
         .name == "recipient" and .text =~ "Customer"
     ),
-    not all(body.links, .href_url.domain.root_domain == "usps.com")
+    // free email sender
+    sender.email.domain.root_domain in $free_email_providers,
+    // contains link to recently registered domain
+    any(body.links, network.whois(.href_url.domain).days_old < 15)
   )
   and (
     sender.email.domain.root_domain not in (
@@ -55,6 +58,8 @@ source: |
            .name == "Newsletters and Digests"
     )
   )
+  // not all links to usps.com
+  and not all(body.links, .href_url.domain.root_domain == "usps.com")
   // negate legit forwards and replies
   and not (
     (subject.is_reply or subject.is_forward)
