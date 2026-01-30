@@ -1,0 +1,180 @@
+name: "PR# 3912 - PayPal invoice abuse"
+description: |
+  A fraudulent invoice/receipt found in the body of the message sent by exploiting Paypal's invoicing service.
+  Callback Phishing is an attempt by an attacker to solicit the victim (recipient) to call a phone number. 
+  The resulting interaction could lead to a multitude of attacks ranging from Financial theft, Remote Access Trojan (RAT) Installation or Ransomware Deployment.
+type: "rule"
+references:
+  - "https://anderegg.ca/2023/02/01/a-novel-paypal-scam"
+  - https://github.com/sublime-security/sublime-rules/pull/3912
+severity: "medium"
+source: |
+  type.inbound
+  and length(attachments) == 0
+  and sender.email.domain.root_domain in (
+    "paypal.com",
+    "paypal.com.mx",
+    "paypal.com.br",
+    "paypal.com.ar",
+    "paypal.co.uk"
+  )
+  and any(filter(html.xpath(body.html,
+                            // all the tables, which don't have descendant tables, after the first image and before a hr with a footerDivider class that appears after the current table.
+                            // using //text()[normalize-space()] allows us to split each table up by line breaks, so each line can be inspected uniquely
+                            '//img[@alt="PayPal"]/following::table[not(descendant::table) and count(following::hr[@class="footerDivider"]) > 0]//text()[normalize-space()]'
+                 ).nodes,
+                 (
+                   // icontains a phone number
+                   (
+                     regex.icontains(strings.replace_confusables(.display_text),
+                                     '\b\+?([ilo0-9]{1}.)?\(?[ilo0-9]{3}?\)?.[ilo0-9]{3}.?[ilo0-9]{4}\b'
+                     )
+                     or regex.icontains(strings.replace_confusables(.display_text),
+                                        '\+[ilo0-9]{1,3}[ilo0-9]{10}'
+                     )
+                     or // +12028001238
+   regex.icontains(strings.replace_confusables(.display_text),
+                   '[ilo0-9]{3}\.[ilo0-9]{3}\.[ilo0-9]{4}'
+                     )
+                     or // 202-800-1238
+   regex.icontains(strings.replace_confusables(.display_text),
+                   '[ilo0-9]{3}-[ilo0-9]{3}-[ilo0-9]{4}'
+                     )
+                     // (202) 800-1238
+                     // (202) -800 -1238
+                     // (202) 800 1238
+                     // (202)-800-1238
+                     or regex.icontains(strings.replace_confusables(.display_text),
+                                        '\([ilo0-9]{3}\)[\s-]+[ilo0-9]{3}[\s-]+[ilo0-9]{4}'
+                     )
+                     or // (202)-800-1238
+   regex.icontains(strings.replace_confusables(.display_text),
+                   '\([ilo0-9]{3}\)-[ilo0-9]{3}-[ilo0-9]{4}'
+                     )
+                     or ( // 8123456789
+                       regex.icontains(strings.replace_confusables(.display_text),
+                                       '8[ilo0-9]{9}'
+                       )
+                       and regex.icontains(strings.replace_confusables(.display_text
+                                           ),
+                                           '\+[1l]'
+                       )
+                     )
+                   )
+                 )
+                 // filter out elements which contain non actor controlled details
+                 // this often wording from paypal templates that might contain phone numbers
+                 // but are not elements that are actor controlled.
+  
+                 // main customer service number
+                 and not strings.icontains(.display_text, '888-221-1161')
+                 // credit services number
+                 and not strings.icontains(.display_text, '844-896-4937')
+                 // pay in 4 number
+                 and not strings.icontains(.display_text, '(800) 504-7534')
+                 // debt collection for pay later
+                 and not strings.icontains(.display_text, '877-589-5171')
+                 // debt collections for PayPal
+                 and not strings.icontains(.display_text, '866-380-1798')
+                 // card activation
+                 and not strings.icontains(.display_text, '800-314-8298')
+                 // often the transcation id looks like a phone number and matches the regex
+                 and not regex.icontains(.display_text, "Transaction (date|ID)\n")
+                 // this segment can include phone numbers, but the wording is not actor controlled and shows up "under the fold" in the templates
+                 and not strings.istarts_with(.display_text,
+                                              "If you have any questions about this payment, you can"
+                 )
+          ),
+          strings.icontains(.display_text, "you did not")
+          or strings.icontains(.display_text, "Critical Alert")
+          or strings.icontains(.display_text, "is not for")
+          or strings.icontains(.display_text, "done by you")
+          or regex.icontains(.display_text, "don['’]t recognize")
+          or regex.icontains(.display_text, "didn['’]t (?:ma[kd]e|place) this")
+          or regex.icontains(.display_text, "[wh]as.*placed by you")
+          or strings.icontains(.display_text, "issue with")
+          or regex.icontains(.display_text, "was.*made by you")
+          or (
+            strings.icontains(.display_text, "Fraud")
+            and strings.icontains(.display_text, "Alert")
+          )
+          or strings.icontains(.display_text, "fraudulent")
+          or strings.icontains(.display_text, "using your PayPal")
+          or strings.icontains(.display_text, "subscription")
+          or strings.icontains(.display_text, "antivirus")
+          or strings.icontains(.display_text, "support")
+          or strings.icontains(.display_text, "sincerely apologize")
+          or strings.icontains(.display_text, "receipt")
+          // pull in common wording from transaction types from paypal
+          // this wording should be part of the template and not actor controlled
+          // but is generally prepended or appended with actor controlled elements
+          // such as using the business name to deliver callback details
+          // when a phone number is present
+          or strings.icontains(.display_text, "sent you an invoice")
+          or strings.icontains(.display_text, "a money request")
+          or strings.icontains(.display_text, "invited you as a developer")
+  
+          //
+          or strings.icontains(.display_text, "Purchase")
+          or strings.icontains(.display_text, "Market*Value")
+          or strings.icontains(.display_text, "BTC")
+          or strings.icontains(.display_text, "Etherium (ETH)")
+          or strings.icontains(.display_text, "get in touch with our")
+          or strings.icontains(.display_text, "quickly inform")
+          or strings.icontains(.display_text, "quickly reach ")
+          or strings.icontains(.display_text, "detected unusual transactions")
+          or strings.icontains(.display_text, "without your authorization")
+          or strings.icontains(.display_text, "unauthorized activitiy")
+          or strings.icontains(.display_text, "unauthorized transaction")
+          or strings.icontains(.display_text, "cancel")
+          or strings.icontains(.display_text, "renew")
+          or strings.icontains(.display_text, "refund")
+          or regex.icontains(.display_text, 'help.{0,3}desk')
+          or strings.icontains(.display_text, " your funds")
+          or strings.icontains(.display_text, " your checking")
+          or strings.icontains(.display_text, " your saving")
+          or strings.icontains(.display_text, "secure your account")
+          or strings.icontains(.display_text, "recover your")
+          or strings.icontains(.display_text, "unusual activity")
+          or strings.icontains(.display_text, "suspicious transaction")
+          or strings.icontains(.display_text, "transaction history")
+          or strings.icontains(.display_text, "please ignore this")
+          or strings.icontains(.display_text, "will be approved")
+          or strings.icontains(.display_text, "report activity")
+  
+          // Unicode confusables words obfuscated in note
+          or regex.icontains(.display_text,
+                             '\+𝟭|𝗽𝗮𝘆𝗺𝗲𝗻𝘁|𝗛𝗲𝗹𝗽 𝗗𝗲𝘀𝗸|𝗿𝗲𝗳𝘂𝗻𝗱|𝗮𝗻𝘁𝗶𝘃𝗶𝗿𝘂𝘀|𝗰𝗮𝗹𝗹|𝗰𝗮𝗻𝗰𝗲𝗹|𝗰𝗼𝗻𝘁𝗮𝗰𝘁|cᴀʟʟ'
+          )
+          or strings.icontains(.display_text, "kindly")
+          or regex.icontains(strings.replace_confusables(.display_text),
+                             '(?:call|cᴀʟʟ|reach|contact|get in touch|\binform\b|let us know|coɴᴛᴀcᴛ)'
+          )
+          or any(ml.nlu_classifier(.display_text).intents,
+                 .name == "callback_scam" and .confidence == "high"
+          )
+  )
+  // Handle emails for class action settlement refunds. Not official PayPal communications but a common-enough thing where a small refund is sent from a court-appointed settlement administrator
+  and not (
+    strings.icontains(body.html.display_text, "settlement")
+    and (
+      strings.icontains(body.html.display_text, "court")
+      or strings.icontains(body.html.display_text, "FTC")
+      or strings.icontains(body.html.display_text, "administrator")
+    )
+  )
+attack_types:
+  - "BEC/Fraud"
+  - "Callback Phishing"
+tactics_and_techniques:
+  - "Evasion"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Header analysis"
+  - "Sender analysis"
+id: "b23900d4-4127-5390-a3c8-ae884dd0a098"
+tags:
+  - created_from_open_prs
+  - rule_status_modified
+  - pr_author_markmsublime
