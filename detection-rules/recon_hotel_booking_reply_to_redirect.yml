@@ -4,6 +4,18 @@ type: "rule"
 severity: "medium"
 source: |
   type.inbound
+  and (
+    any(headers.reply_to,
+        .email.domain.root_domain in $free_email_providers
+        and .email.domain.root_domain != sender.email.domain.root_domain
+    )
+    or (
+      sender.email.domain.root_domain in $free_email_providers
+      and strings.ilevenshtein(sender.display_name, sender.email.local_part) > 8
+      and profile.by_sender().prevalence == "new"
+      
+    )
+  )
   and all(recipients.to,
           .email.domain.root_domain != sender.email.domain.root_domain
   )
