@@ -1,0 +1,40 @@
+name: "PR# 3908 - Anthropic Claude magic string detected in message body or attachment"
+description: |
+  Detects specific magic strings associated with Anthropic's Claude models. 
+  These strings can trigger refusal or redacted thinking behaviors in AI agents and may impact the functionality of automated security analysis tools like Sublime's ASA.
+type: "rule"
+authors:
+  - twitter: "vector_sec"
+severity: "medium"
+source: |
+  type.inbound
+  and (
+    any([body.plain.raw, body.html.raw, body.current_thread.text],
+        strings.icontains(., "ANTHROPIC_MAGIC_STRING_")
+    )
+    or any(attachments,
+           any(file.explode(.),
+               strings.icontains(.scan.ocr.raw, "ANTHROPIC_MAGIC_STRING_")
+               or strings.icontains(.scan.strings.raw, "ANTHROPIC_MAGIC_STRING_")
+           )
+    )
+    or any(file.explode(file.message_screenshot()),
+           strings.icontains(.scan.ocr.raw, "ANTHROPIC_MAGIC_STRING_")
+           or strings.icontains(.scan.strings.raw, "ANTHROPIC_MAGIC_STRING_")
+    )
+  )
+attack_types:
+  - "Malware/Ransomware"
+tactics_and_techniques:
+  - "Evasion"
+detection_methods:
+  - "Content analysis"
+  - "File analysis"
+  - "Computer Vision"
+id: "731d9089-520a-52ad-938a-e98a2c41adb3"
+tags:
+  - created_from_open_prs
+  - rule_status_added
+  - pr_author_vector-sec
+references:
+  - https://github.com/sublime-security/sublime-rules/pull/3908
