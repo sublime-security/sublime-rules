@@ -1,0 +1,66 @@
+name: "Reconnaissance: Short generic greeting message"
+description: |
+  Detects potential reconnaissance messages with very short, generic content like 'Hi' or 'Hello' from external senders. These messages are often used to validate email addresses and test deliverability before launching larger attacks.
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  // detect generic greetings
+  and length(body.current_thread.text) <= 20
+  and length(subject.base) <= 15
+  // exclude messages with previous thread context (forwards/replies)
+  and length(body.previous_threads) == 0
+  and (
+    any(ml.nlu_classifier(body.current_thread.text).entities, .name == "greeting")
+    or strings.ilike(body.current_thread.text, "*hi*", "*hello*", "*hey*")
+    or length(body.current_thread.text) <= 5
+    or regex.match(body.current_thread.text, '\d+')
+  )
+  // external freemail sender
+  and sender.email.domain.root_domain in $free_email_providers
+  and sender.email.domain.root_domain not in (
+    recipients.to[0].email.domain.root_domain
+  )
+  and (
+    length(recipients.cc) == 0
+    or (
+      length(recipients.cc) > 0
+      and all(recipients.cc,
+              .email.domain.root_domain != sender.email.domain.root_domain
+      )
+    )
+  )
+  and (
+    length(recipients.bcc) == 0
+    or (
+      length(recipients.bcc) > 0
+      and all(recipients.bcc,
+              .email.domain.root_domain != sender.email.domain.root_domain
+      )
+    )
+  )
+  // no attachments or links
+  and length(attachments) == 0
+  and length(body.current_thread.links) == 0
+  // negate if auth is failing
+  and (
+    coalesce(headers.auth_summary.dmarc.pass, false)
+    or coalesce(headers.auth_summary.spf.pass, false)
+  )
+tags:
+ - "Attack surface reduction"
+attack_types:
+  - "BEC/Fraud"
+  - "Callback Phishing"
+tactics_and_techniques:
+  - "Social engineering"
+  - "Free email provider"
+detection_methods:
+  - "Content analysis"
+  - "Header analysis"
+  - "Natural Language Understanding"
+  - "Sender analysis"
+id: "bc3be222-849c-56e2-ad31-f76d578fb3e9"
+og_id: "c67dedab-91f5-5bbe-af81-f9895a02c065"
+testing_pr: 3903
+testing_sha: fb33d89e436a0e7c6fe9b33d18fdbb2978e240f0
