@@ -381,20 +381,11 @@ source: |
     )
   )
   
-  // sender profile is new or outlier
+  // negate if auth is failing
   and (
-    profile.by_sender_email().any_messages_malicious_or_spam
-    or (
-      sender.email.domain.domain in $org_domains
-      and not coalesce(headers.auth_summary.dmarc.pass, false)
-    )
-    or (
-      profile.by_sender_email().prevalence in ("new", "outlier")
-      and not profile.by_sender_email().solicited
-    )
+    not coalesce(headers.auth_summary.dmarc.pass, false)
   )
-  and not profile.by_sender_email().any_messages_benign
-  // negate highly trusted sender domains unless they fail DMARC authentication
+  // negate if sender domain is highly trusted and auth is passing
   and not (
     sender.email.domain.root_domain in $high_trust_sender_root_domains
     and coalesce(headers.auth_summary.dmarc.pass, false)
