@@ -1,0 +1,94 @@
+name: "Tax Form: W-8BEN solicitation"
+description: "Detects messages containing references to W-8BEN tax forms, commonly used in tax-related fraud schemes targeting individuals and businesses."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and (
+    (
+      // few links
+      0 < length(body.links) < 20
+      and any(body.links, network.whois(.href_url.domain).days_old <= 30)
+      or any(body.links, network.whois(.href_url.domain).days_old <= 60)
+      // fewer unique root domain links
+      and length(distinct(body.links, .href_url.domain.root_domain)) < 10
+      // sender domain matches no body domains
+      and all(body.links,
+              .href_url.domain.root_domain != sender.email.domain.root_domain
+      )
+    )
+  )
+  
+  // sender domain and return path are the same
+  and (
+    sender.email.domain.root_domain == headers.return_path.domain.domain
+    or sender.email.domain.root_domain != headers.return_path.domain.domain
+  )
+  and (
+    regex.icontains(subject.subject, ".*Foreign Tax*")
+    or regex.icontains(subject.subject, ".*W-8BEN*")
+  )
+  and any([body.current_thread.text],
+          regex.icontains(.,
+                          'tax form',
+                          'W-8BEN',
+                          'tax return',
+                          'tax preparation',
+                          'tax documentation',
+                          'regulatory',
+                          'withholding',
+                          'approve',
+                          'non-US tax',
+                          'treaty',
+                          'Official Documentation Update System',
+                          'Renew Documentation',
+                          'Secure link',
+                          'Update',
+                          'Dear Client'
+          )
+  )
+  
+  // Registrant domain registered to China
+  and (
+    any(body.links,
+        network.whois(.href_url.domain).registrant_country_code =~ "CN"
+    )
+    or any(body.links,
+           strings.icontains(network.whois(.href_url.domain).registrant_country,
+                             "china"
+           )
+    )
+  )
+  
+  // Alibaba Cloud nameservers
+  and length(network.whois(sender.email.domain).name_servers) > 0
+  and all(network.whois(sender.email.domain).name_servers,
+          .root_domain == "hichina.com"
+  )
+  
+  // Suspicious link patterns
+  and any(body.links,
+          not .href_url.domain.root_domain in $high_trust_sender_root_domains
+  )
+  
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and not headers.auth_summary.dmarc.pass
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+attack_types:
+  - "BEC/Fraud"
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Header analysis"
+  - "URL analysis"
+id: "fda606ef-d217-56e0-a7fd-ddfa1d4fa06d"
+og_id: "a64edb69-4913-5330-84cf-2d2561967acf"
+testing_pr: 3887
+testing_sha: 57a6a2a41ab19af1145f997888e9deebd83dc1f4
