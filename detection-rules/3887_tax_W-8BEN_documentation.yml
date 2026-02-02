@@ -18,6 +18,12 @@ source: |
       )
     )
   )
+  
+  // sender domain and return path are the same
+  and (
+    sender.email.domain.root_domain == headers.return_path.domain.domain
+    or sender.email.domain.root_domain != headers.return_path.domain.domain
+  )
   and (
     regex.icontains(subject.subject, ".*Foreign Tax*")
     or regex.icontains(subject.subject, ".*W-8BEN*")
@@ -40,6 +46,24 @@ source: |
                           'Update',
                           'Dear Client'
           )
+  )
+  
+  // Registrant domain registered to China
+  and (
+    any(body.links,
+        network.whois(.href_url.domain).registrant_country_code =~ "CN"
+    )
+    or any(body.links,
+           strings.icontains(network.whois(.href_url.domain).registrant_country,
+                             "china"
+           )
+    )
+  )
+  
+  // Alibaba Cloud nameservers
+  and length(network.whois(sender.email.domain).name_servers) > 0
+  and all(network.whois(sender.email.domain).name_servers,
+          .root_domain == "hichina.com"
   )
   
   // Suspicious link patterns
