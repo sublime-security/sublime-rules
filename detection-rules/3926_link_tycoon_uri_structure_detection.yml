@@ -1,0 +1,51 @@
+name: "PR# 3926 - Link: Tycoon kit URI structure detection"
+description: "Detects links containing Tycoon phishing kit URI patterns with specific alphanumeric sequences separated by exclamation marks or at symbols from unsolicited senders."
+type: "rule"
+severity: "high"
+source: |
+    type.inbound
+    and 0 < length(body.links) < 30
+    and not profile.by_sender().solicited
+    and any(body.links,
+            (
+              // full tycoon uri struct
+              regex.contains(ml.link_analysis(.).final_dom.raw,
+                             'https:\/\/[^/]+\/[a-zA-Z0-9]{0,30}[!@][a-zA-Z0-9]{0,30}\/'
+              )
+              or (
+                // partial tycoon uri struct
+                regex.contains(ml.link_analysis(.).final_dom.raw,
+                               '\/[a-zA-Z0-9]{0,30}[!@][a-zA-Z0-9]{0,30}\/'
+                )
+                // thanks cloudflare
+                and strings.contains(ml.link_analysis(.).final_dom.raw,
+                                     'challenges.cloudflare.com'
+                )
+              )
+            )
+            // negate folders like /@support/
+            and not regex.contains(ml.link_analysis(.).final_dom.raw,
+                                   '\/[!@][a-zA-Z]{4,30}\/'
+            )
+            // negate links w/ www.
+            and not strings.contains(ml.link_analysis(.).final_dom.raw,
+                                     'https://www.'
+            )
+    )
+
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Evasion"
+  - "Social engineering"
+detection_methods:
+  - "Sender analysis"
+  - "URL analysis"
+  - "URL screenshot"
+id: "4cdd1861-9361-5580-9673-a164d421a565"
+tags:
+  - created_from_open_prs
+  - rule_status_added
+  - pr_author_hadojae
+references:
+  - https://github.com/sublime-security/sublime-rules/pull/3926
