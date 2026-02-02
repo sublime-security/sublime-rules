@@ -1,0 +1,46 @@
+name: "PR# 3919 - Callback phishing via calendar invite"
+description: "Detects calendar invites containing callback phishing language in the DESCRIPTION of the invite."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and length(attachments) > 0
+  and all(attachments, .content_type in ("text/calendar", "application/ics"))
+  and any(attachments,
+          // extract the calendar invite description and use NLU against it
+          any(file.explode(.),
+              any(.scan.ics.calendars,
+                  any(.components,
+                      any(ml.nlu_classifier(.description).intents,
+                          .name == "callback_scam"
+                      )
+                  )
+              )
+          )
+  )
+  
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and not headers.auth_summary.dmarc.pass
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+attack_types:
+  - "Callback Phishing"
+tactics_and_techniques:
+  - "Social engineering"
+  - "Evasion"
+detection_methods:
+  - "File analysis"
+  - "Header analysis"
+  - "Natural Language Understanding"
+  - "Sender analysis"
+id: "4c1430ff-14fb-5ef9-b1e2-a1f4987a275e"
+tags:
+  - created_from_open_prs
+  - rule_status_modified
+  - pr_author_MSAdministrator
+references:
+  - https://github.com/sublime-security/sublime-rules/pull/3919
