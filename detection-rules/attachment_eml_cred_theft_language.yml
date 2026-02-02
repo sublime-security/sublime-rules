@@ -31,20 +31,27 @@ source: |
                         "message/feedback-report"
                       )
           )
-          // negate Mimecast Attachment Protection
-          and not (
-            any(attachments,
-                .file_name == 'We sent you safe versions of your files'
-            )
-            and strings.contains(body.current_thread.text,
-                                 'Mimecast Attachment Protection has deemed this file to be safe, but always exercise caution when opening files.'
-            )
-          )
           // negate Microsoft Dynamic Delivery
           and not (
             length(file.parse_eml(.).attachments) == 0
             and strings.icontains(file.parse_eml(.).body.current_thread.text,
                                   "Your attachments are currently being scanned by Safe Attachments"
+            )
+          )
+          // Mimecast Protection attached EMLs when replacing attachments
+          and not (
+            (
+              strings.iends_with(.file_name, 'was removed from this message')
+              or .file_name == "We found suspicious links"
+              or .file_name == 'We sent you safe versions of your files'
+            )
+            and length(file.parse_eml(.).headers.hops) == 1
+            and any(file.parse_eml(.).headers.hops[0].fields,
+                    .name == "X-MC-System"
+            )
+            and any(file.parse_eml(.).headers.hops[0].fields,
+                    .name == "Content-Type"
+                    and strings.contains(.value, '; boundary="MCBoundary=_')
             )
           )
   )
@@ -69,14 +76,14 @@ source: |
       profile.by_sender_email().any_messages_malicious_or_spam
       and not profile.by_sender_email().any_messages_benign
     )
-    // sender address listed as a recipient 
+    // sender address listed as a recipient
     or (
       length(recipients.to) == 1
       and sender.email.email in map(recipients.to, .email.email)
     )
   )
   and not profile.by_sender_email().any_messages_benign
-  // negate instances where proofpoint sends a review of a reported message via analyzer 
+  // negate instances where proofpoint sends a review of a reported message via analyzer
   and not (
     sender.email.email == "analyzer@analyzer.securityeducation.com"
     and any(headers.domains, .root_domain == "pphosted.com")
