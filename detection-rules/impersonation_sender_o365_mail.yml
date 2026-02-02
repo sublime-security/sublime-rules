@@ -1,11 +1,32 @@
 name: "Brand impersonation: Office 365 mail service"
 description: "Detects messages from domains containing both 'o365' and 'mail' in the second-level domain, commonly used to impersonate legitimate Microsoft Office 365 mail services."
 type: "rule"
-severity: "high"
+severity: "medium"
+false_positives:
+  - "It is possible for this to match in benign domains.  For recurring benign senders, apply sender exclusions to prevent unnecessary matches."
 source: |
   type.inbound
-  and strings.icontains(sender.email.domain.sld, 'o365') 
-  and strings.icontains(sender.email.domain.sld, 'mail') 
+  and (
+    strings.icontains(sender.email.domain.sld, 'o365')
+    or strings.icontains(sender.email.domain.sld, 'outlook')
+    or strings.icontains(sender.email.domain.sld, 'office')
+  )
+  and strings.icontains(sender.email.domain.sld, 'mail')
+  // not benign use cases
+  and not (
+    sender.email.domain.root_domain in (
+      "agentofficemail.com", // mandrill app addon
+      "mdofficemail.com", // doctor office
+      "medofficemail.com", // doctor office
+      "officemailbox.fr", // bulk mail provider
+      "mail-office.fr", // bulk mail provider
+      "officedepot-mail.co.kr", // office depot in kr
+      "emailmarketdataoutlook.com", // email mrkting 
+      "officelabsmail.co.uk" // company in the uk
+    )
+    and headers.auth_summary.dmarc.pass
+  )
+  and not profile.by_sender_domain().any_messages_benign
 
 attack_types:
   - "Credential Phishing"

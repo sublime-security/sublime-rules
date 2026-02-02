@@ -13,14 +13,20 @@ source: |
            strings.ilevenshtein(.href_url.domain.root_domain, 'blockchain') == 1
     )
   )
-  and not headers.auth_summary.spf.pass
-  and sender.email.domain.root_domain not in~ (
-    'blockchain.com',
-    'wxblockchain.com',
-    'ai-blockchain.com',
-    'envisionblockchain.com'
+  and not any(ml.nlu_classifier(body.current_thread.text).topics,
+              .name in ("Educational and Research", "Advertising and Promotions")
+              and .confidence == "high"
   )
-  and sender.email.email not in $recipient_emails
+  and not (
+    sender.email.domain.root_domain in~ (
+      'blockchain.com',
+      'wxblockchain.com',
+      'ai-blockchain.com',
+      'envisionblockchain.com'
+    )
+    and coalesce(headers.auth_summary.dmarc.pass, false)
+  )
+  and not profile.by_sender_email().solicited
 attack_types:
   - "Credential Phishing"
 tactics_and_techniques:
