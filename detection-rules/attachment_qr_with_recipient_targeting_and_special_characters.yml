@@ -1,0 +1,55 @@
+name: "Attachment: QR code with recipient targeting and special characters"
+description: "Detects messages with QR code in attachments containing special characters in the path that include the recipient's email address in either the URL path or fragment, potentially encoded in base64. The URLs have a simple path structure and may end with suspicious patterns."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and length(recipients.to) == 1
+  and recipients.to[0].email.domain.valid
+  and any(attachments,
+          any(file.explode(.),
+              // special char in the path
+              (
+                strings.icontains(.scan.qr.url.path, '!')
+                or strings.icontains(.scan.qr.url.path, '@')
+              )
+              // a single path
+              and strings.count(.scan.qr.url.path, '/') == 2
+              and (
+                strings.icontains(.scan.qr.url.path, '/$')
+                or strings.icontains(.scan.qr.url.path, '/*')
+              )
+              and (
+                (
+                  strings.icontains(.scan.qr.url.path,
+                                    recipients.to[0].email.email
+                  )
+                  or strings.icontains(.scan.qr.url.fragment,
+                                       recipients.to[0].email.email
+                  )
+                  or any(strings.scan_base64(.scan.qr.url.path,
+                                             ignore_padding=true
+                         ),
+                         strings.icontains(., recipients.to[0].email.email)
+                  )
+                  or any(strings.scan_base64(.scan.qr.url.fragment,
+                                             ignore_padding=true
+                         ),
+                         strings.icontains(., recipients.to[0].email.email)
+                  )
+                )
+              )
+          )
+  )
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "QR code"
+  - "Social engineering"
+  - "Evasion"
+detection_methods:
+  - "File analysis"
+  - "QR code analysis"
+  - "URL analysis"
+  - "Computer Vision"
+id: "fc9e1c09-4691-5cde-94d1-ccd953f1b63a"

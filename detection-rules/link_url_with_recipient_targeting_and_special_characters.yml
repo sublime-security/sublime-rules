@@ -6,34 +6,47 @@ source: |
   type.inbound
   and length(recipients.to) == 1
   and recipients.to[0].email.domain.valid
-  and any(body.current_thread.links,
-          // special char in the path
-          (
-            strings.icontains(.href_url.path, '!')
-            or strings.icontains(.href_url.path, '@')
-          )
+  and any(body.links,
           // a single path
-          and strings.count(.href_url.path, '/') == 2
+          strings.count(.href_url.path, '/') == 2
           and (
             strings.icontains(.href_url.path, '/$')
             or strings.icontains(.href_url.path, '/*')
+            or strings.icontains(.href_url.url, '/#')
           )
           and (
+            // special char in the path
             (
-              strings.icontains(.href_url.path, recipients.to[0].email.email)
-              or strings.icontains(.href_url.fragment,
-                                   recipients.to[0].email.email
+              (
+                strings.icontains(.href_url.path, '!')
+                or strings.icontains(.href_url.path, '@')
               )
-              or any(strings.scan_base64(.href_url.path, ignore_padding=true),
-                     strings.icontains(., recipients.to[0].email.email)
+
+              // ensure expected ordering
+              and regex.icontains(.href_url.url, '[!@].*\/[$\*#]')
+            )
+            // num{3}alpha or alphanum{3}
+            or (
+              // in subdomain
+              regex.icontains(.href_url.domain.subdomain,
+                              '^(?:[a-z]+[0-9]{3}|[0-9]{3}[a-z]+)$'
               )
-              or any(strings.scan_base64(.href_url.fragment, ignore_padding=true),
-                     strings.icontains(., recipients.to[0].email.email)
+              // url path
+              and regex.icontains(.href_url.path,
+                                  '\/(?:[a-z]+[0-9]{3}|[0-9]{3}[a-z]+)\/'
               )
             )
           )
+          and (
+            strings.icontains(.href_url.path, recipients.to[0].email.email)
+            or any(strings.scan_base64(.href_url.url,
+                                       ignore_padding=true,
+                                       format="url"
+                   ),
+                   strings.icontains(., recipients.to[0].email.email)
+            )
+          )
   )
-
 attack_types:
   - "Credential Phishing"
 tactics_and_techniques:
