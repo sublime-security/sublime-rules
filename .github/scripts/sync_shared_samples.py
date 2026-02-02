@@ -26,11 +26,14 @@ from lib import (
     # Constants
     DO_NOT_MERGE_LABEL,
     BULK_PR_LABEL,
+    AUTHOR_MEMBERSHIP_EXCLUSION_LABEL,
     DEFAULT_MAX_RULES_PER_PR,
     DEFAULT_DELETE_RULES_DELAY_DAYS,
     DEFAULT_AUTHOR_TAG_PREFIX,
     DEFAULT_RULE_STATUS_PREFIX,
     DEFAULT_OPEN_PR_TAG,
+    DEFAULT_ORG_NAME,
+    DEFAULT_COMMENT_TRIGGER,
     # GraphQL
     create_graphql_session,
     fetch_all_prs,
@@ -75,6 +78,15 @@ DELETE_RULES_FROM_CLOSED_PRS_DELAY = int(os.getenv('DELETE_RULES_FROM_CLOSED_PRS
 # Bulk PR limits
 SKIP_BULK_PRS = os.getenv('SKIP_BULK_PRS', 'true').lower() == 'true'
 MAX_RULES_PER_PR = int(os.getenv('MAX_RULES_PER_PR', str(DEFAULT_MAX_RULES_PER_PR)))
+
+# Draft PR handling
+SKIP_DRAFT_PRS = os.getenv('SKIP_DRAFT_PRS', 'false').lower() == 'true'
+
+# Organization membership filtering
+FILTER_BY_ORG_MEMBERSHIP = os.getenv('FILTER_BY_ORG_MEMBERSHIP', 'false').lower() == 'true'
+ORG_NAME = os.getenv('ORG_NAME', DEFAULT_ORG_NAME)
+INCLUDE_PRS_WITH_COMMENT = os.getenv('INCLUDE_PRS_WITH_COMMENT', 'true').lower() == 'true'
+COMMENT_TRIGGER = os.getenv('COMMENT_TRIGGER', DEFAULT_COMMENT_TRIGGER)
 
 # Create output folder if it doesn't exist
 if not os.path.exists(OUTPUT_FOLDER):
@@ -291,8 +303,8 @@ def handle_pr_rules(graphql_session, rest_session):
             print(f"Skipping PR #{pr_number} (has '{DO_NOT_MERGE_LABEL}' label): {pr.title}")
             continue
 
-        # Skip draft PRs
-        if pr.is_draft:
+        # Skip draft PRs if configured
+        if SKIP_DRAFT_PRS and pr.is_draft:
             print(f"Skipping draft PR #{pr_number}: {pr.title}")
             continue
 
@@ -301,7 +313,52 @@ def handle_pr_rules(graphql_session, rest_session):
             print(f"Skipping non-main branch PR #{pr_number}: {pr.title} -- dest branch: {pr.base_ref}")
             continue
 
+        # Organization membership and comment trigger checks
+        process_pr = True
         print(f"Processing PR #{pr_number}: {pr.title}")
+
+        if FILTER_BY_ORG_MEMBERSHIP:
+            author_in_org = pr.is_author_org_member()
+            has_comment = False
+
+            if author_in_org:
+                print(f"\tPR #{pr_number}: Author {pr.author_login} is in {ORG_NAME}")
+                # Remove exclusion label if present
+                if pr.has_label(AUTHOR_MEMBERSHIP_EXCLUSION_LABEL):
+                    remove_label(rest_session, REPO_OWNER, REPO_NAME, pr_number, AUTHOR_MEMBERSHIP_EXCLUSION_LABEL)
+            else:
+                # Check for trigger comment if author not in org
+                if INCLUDE_PRS_WITH_COMMENT:
+                    has_comment = pr.has_trigger_comment(COMMENT_TRIGGER)
+
+                    # If trigger comment was found, remove the exclusion label
+                    if has_comment and pr.has_label(AUTHOR_MEMBERSHIP_EXCLUSION_LABEL):
+                        print(f"\tPR #{pr_number}: Removing '{AUTHOR_MEMBERSHIP_EXCLUSION_LABEL}' label due to trigger comment")
+                        remove_label(rest_session, REPO_OWNER, REPO_NAME, pr_number, AUTHOR_MEMBERSHIP_EXCLUSION_LABEL)
+
+                    if not has_comment:
+                        print(f"\tSkipping PR #{pr_number}: Author {pr.author_login} is not in {ORG_NAME} and is missing comment trigger")
+
+                        # Apply exclusion label if not already present
+                        if not pr.has_label(AUTHOR_MEMBERSHIP_EXCLUSION_LABEL):
+                            print(f"\tPR #{pr_number} doesn't have the '{AUTHOR_MEMBERSHIP_EXCLUSION_LABEL}' label. Applying...")
+                            apply_label(rest_session, REPO_OWNER, REPO_NAME, pr_number, AUTHOR_MEMBERSHIP_EXCLUSION_LABEL)
+                            # Post comment explaining how to enable sync
+                            post_exclusion_comment_if_needed(
+                                rest_session, REPO_OWNER, REPO_NAME, pr_number,
+                                AUTHOR_MEMBERSHIP_EXCLUSION_LABEL,
+                                org_name=ORG_NAME,
+                                comment_trigger=COMMENT_TRIGGER
+                            )
+
+                        process_pr = False
+                else:
+                    # Comment triggers disabled - exclude all non-org authors
+                    print(f"\tSkipping PR #{pr_number}: Author {pr.author_login} is not in {ORG_NAME}")
+                    process_pr = False
+
+        if not process_pr:
+            continue
 
         # Get the latest commit SHA
         latest_sha = pr.head_sha
