@@ -1,0 +1,134 @@
+name: "PR# 3953 - Attachment: Legal themed message or PDF with suspicious indicators"
+description: "Detects messages with short body content or emoji containing PDF attachments from suspicious creators that include legal and compliance language with embedded malicious links, URL shorteners, or newly registered domains."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  // short body or contains emoji
+  and (
+    length(body.current_thread.text) < 1500
+    or regex.contains(body.plain.raw,
+                      '[\x{1F300}-\x{1F5FF}\x{1F600}-\x{1F64F}\x{1F680}-\x{1F6FF}\x{1F700}-\x{1F77F}\x{1F780}-\x{1F7FF}\x{1F900}-\x{1F9FF}\x{2600}-\x{26FF}\x{2700}-\x{27BF}\x{2300}-\x{23FF}]'
+    )
+    or regex.contains(subject.base,
+                      '[\x{1F300}-\x{1F5FF}\x{1F600}-\x{1F64F}\x{1F680}-\x{1F6FF}\x{1F700}-\x{1F77F}\x{1F780}-\x{1F7FF}\x{1F900}-\x{1F9FF}\x{2600}-\x{26FF}\x{2700}-\x{27BF}\x{2300}-\x{23FF}]'
+    )
+  )
+  
+  // is not a reply
+  and length(headers.references) == 0
+  and headers.in_reply_to is null
+  and (
+    ( // only one attachment
+      length(attachments) == 1
+      // or, any 2 attachments share the ~same file name
+      or any(attachments,
+             any(regex.extract(.file_name,
+                               // the regex extracts the file name, discarding the file extention and any numbers in parens
+                               // "test.txt" and "test (1).pdf" become "test"
+                               '(?P<file_name>.*?)(?:\s*\([^)]+\))*\.[^.]+$'
+                 ),
+                 length(filter(attachments,
+                               strings.istarts_with(.file_name,
+                                                    ..named_groups["file_name"]
+                               )
+                        )
+                 ) > 1
+             )
+      )
+    )
+    // suspicious creator
+    and any(attachments,
+            (.file_extension == "pdf" or .file_type == "pdf")
+            and any(file.explode(.),
+                    strings.ilike(.scan.exiftool.producer,
+                                  "*Google Docs Renderer*",
+                                  "*Skia/PDF*",
+                                  "*Neevia Document Converter*"
+                    )
+            )
+    )
+  )
+  and (
+    // legal language in body with suspicious link in attachment
+    (
+      any(ml.nlu_classifier(body.current_thread.text).topics,
+          .name == "Legal and Compliance" and .confidence in ("medium", "high")
+      )
+      and any(attachments,
+              (.file_extension == "pdf" or .file_type == "pdf")
+              and any(file.explode(.),
+                      0 < length(.scan.pdf.urls) < 5
+                      and (
+                        any(.scan.pdf.urls,
+                            // with links that are URL shortners
+                            .domain.root_domain in $url_shorteners
+                            or .domain.domain in $url_shorteners
+                            or network.whois(.domain).days_old < 14
+                            // when visiting those links, the link it is sus
+                            or ml.link_analysis(.).effective_url.domain.tld in $suspicious_tlds
+                            or ml.link_analysis(.).credphish.contains_captcha
+                            or ml.link_analysis(.).credphish.disposition == "phishing"
+                            or strings.icontains(ml.link_analysis(.).final_dom.display_text,
+                                                 "I'm Human"
+                            )
+                        )
+                      )
+              )
+      )
+    )
+    // no body text, legal language in attachment
+    or (
+      length(body.current_thread.text) < 50
+      and any(attachments,
+              (.file_extension == "pdf" or .file_type == "pdf")
+              and any(file.explode(.),
+                      (
+                        length(ml.nlu_classifier(.scan.ocr.raw).topics) == 1
+                        and any(ml.nlu_classifier(.scan.ocr.raw).topics,
+                                .name == "Legal and Compliance"
+                                and .confidence in ("medium", "high")
+                        )
+                        and not any(ml.nlu_classifier(.scan.ocr.raw).entities,
+                                    .name == "sender"
+                                    and .text =~ sender.display_name
+                        )
+                      )
+                      // foreign language indicators
+                      or regex.icontains(.scan.ocr.raw,
+                                         'pornograph(y|ie)',
+                                         'interpol\b',
+                                         'europol',
+                                         'dissuade',
+                                         // French indicators, seen in threatening language
+                                         'ce jeu en ligne',
+                                         'vraie vie'
+                      )
+              )
+      )
+    )
+  )
+attack_types:
+  - "Credential Phishing"
+  - "Extortion"
+  - "BEC/Fraud"
+tactics_and_techniques:
+  - "Evasion"
+  - "PDF"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "File analysis"
+  - "Natural Language Understanding"
+  - "Optical Character Recognition"
+  - "URL analysis"
+  - "Whois"
+  - "Header analysis"
+  - "Exif analysis"
+id: "61fdaf8b-c790-59e6-af9c-5719ec718d2c"
+tags:
+  - created_from_open_prs
+  - rule_status_modified
+  - pr_author_zoomequipd
+references:
+  - https://github.com/sublime-security/sublime-rules/pull/3953
