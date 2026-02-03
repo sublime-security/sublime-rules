@@ -29,34 +29,28 @@ source: |
                and .display_text != "Open"
         ),
         .display_text =~ sender.email.domain.sld
+        or any(regex.extract(body.current_thread.text,
+                             "generated through (?P<org_name>[^']+)'s use"
+               ),
+               // the document name is the same as the org name as determined by the footer
+               // this checks that the display_text starts with the org_name
+               strings.istarts_with(.named_groups["org_name"], ..display_text)
   
-        // the document name is the same as the org name as determined by the footer
-        // this checks that the display_text starts with the org_name
-        or (
-          strings.icontains(body.current_thread.text,
-                            strings.concat('This email is generated through ',
-                                           .display_text
-                            )
-          )
-          and strings.icontains(body.current_thread.text,
-                                strings.concat("\'s use of Microsoft 365 and may contain content that is controlled by ",
-                                               .display_text
-                                )
-          )
-        )
-        // this checks that the org_name is a substring of the display_text
-        // it is in effect the "reverse" of the above check
-        or strings.istarts_with(.display_text,
-                                regex.extract(body.current_thread.text,
-                                              "generated through ([^']+)'s use"
-                                )[0].groups[0]
-        )
-  
-        // ends_with variant
-        or strings.iends_with(.display_text,
-                              regex.extract(body.current_thread.text,
-                                            "generated through ([^']+)'s use"
-                              )[0].groups[0]
+               // this checks that the org_name is a substring of the display_text
+               // it is in effect the "reverse" of the above check
+               or (
+                 (
+                   strings.istarts_with(..display_text, .named_groups["org_name"])
+                   or strings.iends_with(..display_text,
+                                         .named_groups["org_name"]
+                   )
+                 )
+                 and (
+                   length(.named_groups["org_name"]) / (
+                     length(..display_text) * 1.0
+                   )
+                 ) > 0.45
+               )
         )
     )
   )
