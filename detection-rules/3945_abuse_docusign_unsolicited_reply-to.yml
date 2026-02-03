@@ -1,0 +1,36 @@
+name: "PR# 3945 - Service abuse: DocuSign share from an unsolicited reply-to address"
+description: "DocuSign shares which contain a reply-to address or domain that has not been previously observed by the recipient organization."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  
+  // message is from docusign actual
+  and sender.email.domain.root_domain == 'docusign.net'
+  and not any(headers.reply_to, .email.domain.domain == 'docusign.com')
+  and (headers.auth_summary.spf.pass or headers.auth_summary.dmarc.pass)
+  
+  // not a completed DocuSign
+  // reminders are sent automatically and can be just as malicious as the initial
+  // users often decline malicious ones
+  and not strings.istarts_with(subject.subject, "Completed: ")
+  and not strings.istarts_with(subject.subject, "Here is your signed document: ")
+  and not strings.istarts_with(subject.subject, "Voided: ")
+tags:
+  - "Attack surface reduction"
+  - pr_author_MSAdministrator
+  - created_from_open_prs
+  - rule_status_modified
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Evasion"
+  - "Free file host"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Header analysis"
+  - "Sender analysis"
+id: "8145eebf-4ced-597a-bc0c-0be0787691bc"
+references:
+  - https://github.com/sublime-security/sublime-rules/pull/3945
