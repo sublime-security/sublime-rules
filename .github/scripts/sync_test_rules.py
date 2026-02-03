@@ -218,9 +218,13 @@ def handle_pr_rules(graphql_session, rest_session):
         if CHECK_ACTION_COMPLETION:
             if not pr.has_required_check(REQUIRED_CHECK_NAME, REQUIRED_CHECK_CONCLUSION):
                 print(f"\tSkipping PR #{pr_number}: Required check '{REQUIRED_CHECK_NAME}' has not completed with conclusion '{REQUIRED_CHECK_CONCLUSION}'")
-                # Remove in-test-rules label if previously applied
-                if pr.has_label(IN_TEST_RULES_LABEL):
-                    remove_label(rest_session, REPO_OWNER, REPO_NAME, pr_number, IN_TEST_RULES_LABEL)
+                # Preserve existing synced files from previous passing commits
+                # Don't remove in-test-rules label since the rule is still in test-rules (older version)
+                prefix = f"{pr_number}_"
+                for filename in os.listdir(OUTPUT_FOLDER):
+                    if filename.startswith(prefix) and filename.endswith('.yml'):
+                        print(f"\tPreserving existing file: {filename}")
+                        new_files.add(filename)
                 continue
 
         # Use files from GraphQL data (already fetched)
