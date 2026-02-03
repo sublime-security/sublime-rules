@@ -1,0 +1,73 @@
+name: "Reconnaissance: Hotel booking reply-to redirect"
+description: "Detects messages impersonating hotel booking inquiries by identifying common hotel-related language patterns from senders where the reply-to is a free email provider and differs from the sender domain in an effort to validate whether a recipient address is valid or not, potentially preceding an attack."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and (
+    any(headers.reply_to,
+        .email.domain.root_domain in $free_email_providers
+        and .email.domain.root_domain != sender.email.domain.root_domain
+    )
+    or (
+      sender.email.domain.root_domain in $free_email_providers
+      and strings.ilevenshtein(sender.display_name, sender.email.local_part) > 7
+    )
+  )
+  and all(recipients.to,
+          .email.domain.root_domain != sender.email.domain.root_domain
+  )
+  and length(body.links) == 0
+  and length(attachments) == 0
+  and length(body.current_thread.text) < 600
+  and not (
+    (subject.is_reply or subject.is_forward)
+    and (length(headers.references) > 0 or headers.in_reply_to is not null)
+  )
+  and (
+    (
+      strings.ilike(body.current_thread.text,
+                    '*hotel*',
+                    '*your property*',
+                    '*accommodation*',
+                    '*guest services*',
+                    '*reception*',
+                    '*front desk*'
+      )
+      and strings.ilike(body.current_thread.text,
+                        '*booking*',
+                        '*to book*',
+                        '*book a *',
+                        '*reserv*',
+                        '*room*',
+                        '*suite*',
+                        '*availability*',
+                        '*check-in*',
+                        '*available dates*',
+                        '*family trip*',
+                        '*deluxe accommodation*',
+                        '*two children*',
+                        '*hotel manager*'
+      )
+    )
+    or strings.ilike(subject.base,
+                     '*hotel*',
+                     '*room reserv*',
+                     '*room inquiry*',
+                     '*room availability*'
+    )
+    or regex.icontains(subject.base, '\bsuite')
+  )
+attack_types:
+  - "BEC/Fraud"
+tactics_and_techniques:
+  - "Free email provider"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Header analysis"
+  - "Sender analysis"
+id: "706f270e-ce63-59c9-9061-b9cdb875a429"
+og_id: "08c36035-dc50-5169-808c-c8a6d2f64932"
+testing_pr: 3882
+testing_sha: a774b8a48949352b14c566a9e1c4bacc294e2256
