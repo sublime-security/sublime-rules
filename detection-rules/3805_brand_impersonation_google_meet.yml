@@ -1,0 +1,34 @@
+name: "Brand impersonation: Google Meet with malicious link"
+description: "Detects messages with 'Join with Google Meet' display text that redirects to domains other than meet.google.com."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and any(body.current_thread.links,
+          .display_text == "Join with Google Meet"
+          and not strings.contains(.href_url.domain.domain, "meet.google.com")
+  )
+  // finding the "Guests"/"Join by phone" tables missing seems to be a good indicator of these.
+  and length(html.xpath(body.html,
+                        '//table/tbody/tr/td/h2[contains(@style, "color:rgb(60,64,67)")]'
+             ).nodes
+  ) == 0
+  // sometimes the html is a bit different, so this just helps filter those emails too.
+  and not any(distinct(map(html.xpath(body.html, '//table//h2').nodes,
+                           .inner_text
+                       )
+              ),
+              . in ("Meeting link", "Join by phone", "Guests")
+  )
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "URL analysis"
+id: "558ab5ed-01fc-532a-b8c9-2a636e6defae"
+og_id: "d488d85a-fb02-5b40-a902-03ba0784ad35"
+testing_pr: 3805
+testing_sha: 396e8970c6b02472d8f250b3c52f419ee76484e5
