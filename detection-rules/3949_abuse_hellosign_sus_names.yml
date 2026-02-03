@@ -1,0 +1,158 @@
+name: "Service Abuse: HelloSign share with suspicious sender or document name"
+description: "The detection rule is designed to identify messages sent from HelloSign that notify recipients about a shared file and contain suspicious content either in the document or the sender's display name."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  
+  // Legitimate Dropbox sending infrastructure
+  and sender.email.email == "noreply@mail.hellosign.com"
+  and headers.auth_summary.spf.pass
+  and headers.auth_summary.dmarc.pass
+  and (
+    strings.icontains(subject.subject, ' - Signature Requested')
+    or (
+      strings.icontains(subject.subject, 'Reminder: ')
+      and strings.icontains(subject.subject, 'awaiting your signature')
+    )
+  )
+  and not strings.icontains(subject.subject, 'You just signed')
+  // negate CDP Esign which reuses hellosign
+  and not strings.contains(body.current_thread.text, '@cdpesign.com')
+  // negate messages where the "on_behalf_of_email" is within the org_domains
+  and not any(headers.hops,
+              any(.fields,
+                  .name == "X-Mailgun-Variables"
+                  and strings.icontains(.value, 'on_behalf_of_email')
+                  and all(regex.iextract(.value,
+                                         '\"on_behalf_of_email": \"(?P<sender_email>[^\"]+@(?P<sender_domain>[^\"]+))\",'
+                          ),
+                          .named_groups["sender_domain"] in $org_domains
+                  )
+              )
+  )
+  // sometimes there isn't an on_behalf_of_email, so in those cases we can use the body to extract the sender
+  and not (
+    regex.icontains(body.html.raw,
+                    '<th class="action-item--action[^\>]+\>\s*[^\<]*\((?P<sender_email>[^\)]+)\).*?</th>'
+    )
+    // check that the sender email has not been observed previously
+    and all(regex.iextract(body.html.raw,
+                           '<th class="action-item--action[^\>]+\>\s*[^\<]*\((?P<sender_email>[^\"]+@(?P<sender_domain>[^\"]+))\).*?</th>'
+            ),
+            .named_groups["sender_domain"] in $org_domains
+    )
+  )
+  and (
+    // contains the word dropbox
+    // the subject is in the format of "<actor controlled title>(?: - Signature Requested by| is awaiting your signature) <actor controlled name>"
+    (
+      strings.icontains(subject.subject, 'dropbox')
+      // negate where the sender is dropbox
+      and not any(headers.hops,
+                  any(.fields,
+                      .name == "X-Mailgun-Variables"
+                      and regex.contains(.value,
+                                         '\"on_behalf_of_email": \"[^\"]+@dropbox.com\"'
+                      )
+                  )
+      )
+    )
+    or strings.icontains(subject.subject, 'sharefile')
+    or strings.icontains(subject.subject, 'helloshare')
+  
+    // sender names part of the subject
+    or (
+      // Signature Terms in the Sender Display Name
+      strings.icontains(sender.display_name, 'Signature Requ')
+      // Billing Accounting
+      or regex.icontains(sender.display_name,
+                         'Accounts? (?:Payable|Receivable)',
+      )
+      or strings.icontains(sender.display_name, 'Billing Support')
+  
+      // HR/Payroll/Legal/etc
+      or strings.icontains(sender.display_name, 'Compliance HR')
+      or regex.icontains(sender.display_name,
+                         '(?:Compliance|Executive|\bHR\b|Human Resources|\bHR\b|\bIT\b|Legal|Payroll|Purchasing|Operations|Security|Support).*(?:Department|Dept|Team|Desk)?'
+      )
+      or strings.icontains(sender.display_name, 'Corporate Communications')
+      or strings.icontains(sender.display_name, 'Employee Relations')
+      or strings.icontains(sender.display_name, 'Office Manager')
+      or strings.icontains(sender.display_name, 'Risk Management')
+      or regex.icontains(sender.display_name, 'Payroll Admin(?:istrator)?')
+  
+      // IT related
+      or regex.icontains(sender.display_name,
+                         'IT Support',
+                         'Information Technology',
+                         '(?:Network|System) Admin(?:istrator)?',
+                         'Help Desk',
+                         'Tech(?:nical) Support'
+      )
+    )
+  
+    // NLU/Logo Detection on message from the sender/message body
+    or any(html.xpath(body.html,
+                      '//table[not(@class)]/tbody/tr/th[2]/p[@class="subhead"][2]/parent::th'
+           ).nodes,
+           any(ml.nlu_classifier(.display_text).intents,
+               .name == "callback_scam" and .confidence == "high"
+           )
+    )
+    // callback logos
+    or any(ml.logo_detect(file.message_screenshot()).brands,
+           .name in ("PayPal", "Norton", "GeekSquad", "Ebay", "McAfee", "AT&T")
+    )
+  
+    // filename analysis
+    // the filename is also contianed in the subject line
+    or (
+      // scanner themed
+      regex.icontains(subject.subject,
+                      'scanne[rd].*(?: - Signature Requested by| is awaiting your signature)'
+      )
+      // image theme
+      or regex.icontains(subject.subject,
+                         '_IMG_.*(?: - Signature Requested by| is awaiting your signature)',
+                         'IMG[_-](?:\d|\W)+.*(?: - Signature Requested by| is awaiting your signature)'
+      )
+      // Invoice Themes
+      or regex.icontains(subject.subject,
+                         '(INV\b|\bACH\b|Wire Confirmation|P[O0]\W+?\d+\"|P[O0](?:\W+?|\d+)|Purchase Order|Past Due|Remit(?:tance)?).*(?: - Signature Requested by| is awaiting your signature)'
+      )
+      // Payment Themes
+      or regex.icontains(subject.subject,
+                         '(?:payment.*(?:complete|confirmation|approved|recent|processing)|(complete|confirmation|approved|recent|processing).*payment).*(?: - Signature Requested by| is awaiting your signature)'
+      )
+  
+      // Payroll/HR
+      or regex.icontains(subject.subject,
+                         '(?:Payroll|Employee Pay\b|Salary|Benefit Enrollment|Payment.*Benefit|Benefit.*Update|Employee Handbook|Reimbursement Approved).*(?: - Signature Requested by| is awaiting your signature)'
+      )
+  
+      // shared files/extenstion/urgency/CTA
+      or regex.icontains(subject.subject,
+                         '(?:Urgent|Important|Immediate|Secure|Encrypt|shared|\bsent\b|protected|Validate|Final Notice|Review(?:and |& )?Sign|Download PDF).*(?: - Signature Requested by| is awaiting your signature)'
+      )
+  
+      // MFA theme
+      or regex.icontains(subject.subject,
+                         '(?:Verification Code|\bMFA\b).*(?: - Signature Requested by| is awaiting your signature)'
+      )
+    )
+  )
+attack_types:
+  - "Callback Phishing"
+  - "BEC/Fraud"
+tactics_and_techniques:
+  - "Evasion"
+  - "Social engineering"
+detection_methods:
+  - "Sender analysis"
+  - "Header analysis"
+  - "Content analysis"
+id: "7f3ba197-d1f1-5efa-bdd2-910a1faae258"
+og_id: "464d98f3-38b4-5a72-b0d5-e3a148f88025"
+testing_pr: 3949
+testing_sha: b25a6ed7f69bbd936f67a55216b65f3375c4a208
