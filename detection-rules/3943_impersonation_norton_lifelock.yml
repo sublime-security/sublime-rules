@@ -1,0 +1,59 @@
+name: "PR# 3943 - Brand impersonation: Norton"
+description: |
+  Scans files to detect Norton (Lifelock|360|Security) impersonation.
+references:
+  - "https://techaeris.com/2021/10/23/psa-watch-out-for-norton-lifelock-phishing-emails/"
+  - "https://playground.sublimesecurity.com?id=31310ef5-8725-49b8-9c33-6b18ecdb5ba0"
+  - "https://playground.sublimesecurity.com?id=a67bc61c-28f0-4904-a046-4584e706697d"
+  - "https://playground.sublimesecurity.com?id=3f5809c9-43cf-4f0c-a709-6f9e3912dbb4"
+  - https://github.com/sublime-security/sublime-rules/pull/3943
+type: "rule"
+severity: "low"
+source: |
+  type.inbound
+  and (
+    strings.icontains(sender.display_name, "norton")
+    or regex.icontains(subject.base,
+                       "norton.{0,5}(?:lifelock|subscription|renewal)"
+    )
+    or any(attachments,
+           (.file_type in $file_types_images or .file_type == "pdf")
+           and (
+             (
+               strings.ilike(.file_name, "*norton*")
+               and not (
+                 any(recipients.to, strings.iends_with(.display_name, "Norton"))
+               )
+             )
+             or any(file.explode(.),
+                    regex.icontains(.scan.ocr.raw,
+                                    ".*norton.?60.*",
+                                    ".*lifelock.*",
+                                    ".*norton.?security.*",
+                                    ".*norton.?anti.?virus.*",
+                                    ".*norton.{2,3}subscription.*"
+                    )
+             )
+           )
+    )
+  )
+  and not (
+    sender.email.domain.root_domain in~ ("norton.com")
+    and coalesce(headers.auth_summary.dmarc.pass, false)
+  )
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Free email provider"
+  - "Impersonation: Brand"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "File analysis"
+  - "Header analysis"
+  - "Sender analysis"
+id: "49d673e7-9bef-5426-888e-18ecc6e9d820"
+tags:
+  - created_from_open_prs
+  - rule_status_modified
+  - pr_author_markmsublime
