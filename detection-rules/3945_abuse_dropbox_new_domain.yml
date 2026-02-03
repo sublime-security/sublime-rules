@@ -1,0 +1,37 @@
+name: "Service abuse: Dropbox share from new domain"
+description: "This Attack Surface Reduction (ASR) rule matches on Dropbox notifications with recently registered reply-to domains."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  
+  //  Dropbox actual sending infrastructure
+  and sender.email.email == "no-reply@dropbox.com"
+  and headers.auth_summary.spf.pass
+  and headers.auth_summary.dmarc.pass
+  and strings.ends_with(headers.auth_summary.spf.details.designator,
+                        '.dropbox.com'
+  )
+  
+  // the message needs to have a reply-to address
+  and length(headers.reply_to) > 0
+
+  // new reply-to domain
+  and any(headers.reply_to, network.whois(.email.domain).days_old < 30)
+tags:
+ - "Attack surface reduction"
+attack_types:
+  - "Callback Phishing"
+  - "Credential Phishing"
+  - "BEC/Fraud"
+tactics_and_techniques:
+  - "Evasion"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Sender analysis"
+  - "Header analysis"
+id: "800366b6-4681-5fed-b5a7-d69145583188"
+og_id: "0e664bd9-c3dd-53ca-a912-bb1a627e22ae"
+testing_pr: 3945
+testing_sha: 987d221daef5da77f257d0d4beae7799ccb538cf
