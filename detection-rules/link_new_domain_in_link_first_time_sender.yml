@@ -4,17 +4,21 @@ description: |
 type: "rule"
 severity: "medium"
 source: |
-  type.inbound
-  and length(body.links) > 0
-  and any(body.links, network.whois(.href_url.domain).days_old <= 10)
-  and (
-    (
-      profile.by_sender().prevalence in ("new", "outlier")
-      and not profile.by_sender().solicited
-    )
-    or profile.by_sender().any_messages_malicious_or_spam
+type.inbound
+and length(body.links) > 0
+and any(body.links, network.whois(.href_url.domain).days_old <= 10)
+and (
+  (
+    profile.by_sender().prevalence in ("new", "outlier")
+    and not profile.by_sender().solicited
   )
-  and not profile.by_sender().any_messages_benign
+  or profile.by_sender().any_messages_malicious_or_spam
+)
+// negate senders which have had previous messages marked as benign which pass auth
+and not (
+    profile.by_sender().any_messages_benign
+    and profile.by_sender().auth_failed == false
+)
 tags:
   - "Attack surface reduction"
 attack_types:
