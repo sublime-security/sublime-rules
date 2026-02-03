@@ -1,0 +1,92 @@
+name: "Reconnaissance: All recipients cc/bcc'd or undisclosed"
+description: |
+  Recon messages, a form of deliverability testing, are used to validate whether a recipient address is valid or not, potentially preceding an attack.
+
+  All recipients are bcc'd or undisclosed, with no links or attachments, and a short body and subject from an unknown sender.
+type: "rule"
+severity: "low"
+source: |
+  type.inbound
+  and (
+    length(recipients.bcc) > 0
+    or length(recipients.cc) > 0
+    or any(recipients.to, strings.ilike(.display_name, "undisclosed?recipients"))
+  )
+  and (
+    length(subject.base) <= 10
+    or (
+      (
+        strings.ilike(subject.base, "*checking*", "*testing*")
+        or subject.base == body.current_thread.text
+      )
+      and length(subject.base) <= 25
+    )
+  )
+  and length(attachments) == 0
+  // and there are no links. Or all the links are to aka.ms or an extraction from a warning banner that match the senders domain
+  and (
+    length(body.links) == 0
+    or length(filter(body.links,
+                     (
+                       .display_text is null
+                       and .display_url.url == sender.email.domain.root_domain
+                     )
+                     or .href_url.domain.domain == "aka.ms"
+              )
+    ) == length(body.links)
+  )
+  and (
+    body.current_thread.text is null
+    or length(body.current_thread.text) < 50
+    or (
+      length(body.current_thread.text) < 900
+      // or body is most likely all warning banner ending with a generic greeting
+      and regex.imatch(body.current_thread.text, '.*(hi|hello)')
+    )
+    // body length without disclaimer is shorter than 50 characters
+    or (
+      any(map(filter(ml.nlu_classifier(body.current_thread.text).entities,
+                     .name == "disclaimer"
+              ),
+              .text
+          ),
+          (length(body.current_thread.text) - length(.)) < 50
+      )
+    )
+    // matching nlu_classifier 'bec' to smaller messages less than 200
+    or (
+      any(ml.nlu_classifier(body.current_thread.text).intents,
+          .name == "bec" and .confidence in ("high", "medium")
+      )
+      and length(body.current_thread.text) < 200
+      and not regex.icontains(body.html.raw,
+                              '(?:<div data-smartmail=|gmail_signature(?:_[^"]*)?)'
+      ) // not condition to exclude smaller messages with a legitimate email signature
+      and length(body.previous_threads) == 0 // excluding messages with simple responses to other threads
+    )
+  )
+  and profile.by_sender().prevalence != "common"
+  and not profile.by_sender().solicited
+  and not profile.by_sender().any_messages_benign
+  
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and not headers.auth_summary.dmarc.pass
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+tags:
+  - "Attack surface reduction"
+  - "Deliverability testing"
+attack_types:
+  - "Reconnaissance"
+detection_methods:
+  - "Content analysis"
+  - "Header analysis"
+  - "Sender analysis"
+id: "d2878aae-6a5f-5c08-8a1c-e68db8e0e323"
+og_id: "420f60d3-5d10-5384-9253-9521a758e799"
+testing_pr: 3940
+testing_sha: 9541c7ecac8def8ea09143a95aea0f42cacd125c
