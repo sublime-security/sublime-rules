@@ -4,11 +4,43 @@ type: "rule"
 severity: "medium"
 source: |
   type.inbound
+  and length(distinct(filter(body.links,
+                                 .href_url.domain.root_domain != "amazonaws.com"
+                          ),
+                          .href_url.domain.root_domain
+                 ),
+  ) <= 3
   and any(body.links,
           // Check root domain first
           .href_url.domain.root_domain in ("amazonaws.com")
           // Check for the specific s3.amazonaws.com subdomain pattern
           and strings.icontains(.href_url.domain.domain, "s3")
+          // Additional suspicious indicator
+          and (
+            // linking directly to the root folder
+            (
+              .href_url.path == "/" or .href_url.path is null
+            )
+            or (
+              strings.ilike(.href_url.path, "/index.html")
+              and .href_url.query_params is null
+            )
+            // target file doesn't have an extension (could also lead to a folder)
+            or not regex.imatch(.href_url.path, '\.\w{2,4}$')
+            // suspicious keywords in bucket name or URL path
+            or (
+              any([.href_url.path, .href_url.domain.domain],
+                  strings.ilike(., "*facebook*", "*sharepoint*", "*broker*")
+              )
+            )
+            // recipient email in URL fragment
+            or (
+              .href_url.fragment is not null
+              and any(recipients.to,
+                      strings.icontains(.email.email, ..href_url.fragment)
+              )
+            )
+          )
   )
   // negate emails with unsubscribe links
   and not any(body.links,
@@ -72,6 +104,7 @@ source: |
     )
     or sender.email.domain.root_domain not in $high_trust_sender_root_domains
   )
+  and profile.by_sender().prevalence in ("new", "outlier")
   and (
     not profile.by_sender().solicited
     or (
