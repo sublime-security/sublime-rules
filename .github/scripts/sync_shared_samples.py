@@ -31,6 +31,8 @@ from lib import (
     DEFAULT_AUTHOR_TAG_PREFIX,
     DEFAULT_RULE_STATUS_PREFIX,
     DEFAULT_OPEN_PR_TAG,
+    DEFAULT_REQUIRED_CHECK_NAME,
+    DEFAULT_REQUIRED_CHECK_CONCLUSION,
     # GraphQL
     create_graphql_session,
     fetch_all_prs,
@@ -75,6 +77,11 @@ DELETE_RULES_FROM_CLOSED_PRS_DELAY = int(os.getenv('DELETE_RULES_FROM_CLOSED_PRS
 # Bulk PR limits
 SKIP_BULK_PRS = os.getenv('SKIP_BULK_PRS', 'true').lower() == 'true'
 MAX_RULES_PER_PR = int(os.getenv('MAX_RULES_PER_PR', str(DEFAULT_MAX_RULES_PER_PR)))
+
+# Action completion checks
+CHECK_ACTION_COMPLETION = os.getenv('CHECK_ACTION_COMPLETION', 'true').lower() == 'true'
+REQUIRED_CHECK_NAME = os.getenv('REQUIRED_CHECK_NAME', DEFAULT_REQUIRED_CHECK_NAME)
+REQUIRED_CHECK_CONCLUSION = os.getenv('REQUIRED_CHECK_CONCLUSION', DEFAULT_REQUIRED_CHECK_CONCLUSION)
 
 # Create output folder if it doesn't exist
 if not os.path.exists(OUTPUT_FOLDER):
@@ -306,6 +313,18 @@ def handle_pr_rules(graphql_session, rest_session):
         # Get the latest commit SHA
         latest_sha = pr.head_sha
         print(f"\tLatest commit SHA: {latest_sha}")
+
+        # Check if required checks have completed (in-memory check)
+        if CHECK_ACTION_COMPLETION:
+            if not pr.has_required_check(REQUIRED_CHECK_NAME, REQUIRED_CHECK_CONCLUSION):
+                print(f"\tSkipping PR #{pr_number}: Required check '{REQUIRED_CHECK_NAME}' has not completed with conclusion '{REQUIRED_CHECK_CONCLUSION}'")
+                # Preserve existing synced files from previous passing commits
+                prefix = f"{pr_number}_"
+                for filename in os.listdir(OUTPUT_FOLDER):
+                    if filename.startswith(prefix) and filename.endswith('.yml'):
+                        print(f"\tPreserving existing file: {filename}")
+                        new_files.add(filename)
+                continue
 
         # Use files from GraphQL data (already fetched)
         files = pr.files
