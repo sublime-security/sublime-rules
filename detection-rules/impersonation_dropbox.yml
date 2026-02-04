@@ -19,7 +19,8 @@ source: |
     )
     or regex.icontains(body.current_thread.text,
                        'invited you to view the file ".*" on Dropbox',
-                       'dr[o0]pb[o0]x.{0,20}share.{0,20}f[i1|][i1|l]es?'
+                       'dr[o0]pb[o0]x.{0,20}share.{0,20}f[i1|][i1|l]es?',
+                       'dropbox sign (?:account|team)'
     )
     // dropbox style button
     or length(html.xpath(body.html,
@@ -56,9 +57,11 @@ source: |
                and .href_url.domain.root_domain in $free_file_hosts
              )
            )
-           and .href_url.domain.root_domain != "dropbox.com"
-           and any(ml.nlu_classifier(body.current_thread.text).intents,
-                   .name == "cred_theft" and .confidence in ("medium", "high")
+           and (
+             .href_url.domain.root_domain != "dropbox.com"
+             and any(ml.nlu_classifier(body.current_thread.text).intents,
+                     .name == "cred_theft" and .confidence in ("medium", "high")
+             )
            )
     )
     or (
@@ -69,16 +72,16 @@ source: |
     )
   )
   and sender.email.email not in $recipient_emails
-
+  
   // negate dropbox fax (aka hellofax)
   and not sender.email.domain.root_domain == 'hellofax.com'
-
+  
   // negate iCloud Private Message Relay
   and not (
     sender.email.domain.root_domain == "privaterelay.appleid.com"
     or any(headers.hops, any(.fields, .name == "X-ICLOUD-HME"))
   )
-
+  
   // negate highly trusted sender domains unless they fail DMARC authentication
   and (
     (

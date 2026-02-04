@@ -18,7 +18,7 @@ rule ShellExplorer1_LNK_OLE
 rule ShellExplorer1_LNK_RTF
 {
     strings:
-        $rtf_magic = "{\\rtf" ascii
+        $rtf_magic = "{\\rt" ascii
 
         // Shell.Explorer.1 CLSID - hex-encoded (first 8 bytes)
         $clsid_hex = "c32ab2eac130cf11" ascii nocase
