@@ -1,0 +1,51 @@
+name: "Brand impersonation: Venmo"
+description: |
+  Impersonation of Venmo
+references:
+  - "https://whnt.com/taking-action/bbb-consumer-alerts/new-venmo-scam-tricks-users/"
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and (
+    strings.ilike(sender.display_name, '*venmo*')
+    or strings.ilevenshtein(sender.display_name, 'venmo') <= 1
+  )
+  and sender.email.domain.root_domain not in~ (
+    'venmo.com',
+    'synchronybank.com',
+    'venmocreditsurvey.com',
+    'venmo-experience.com',
+    'synchrony.com'
+  )
+  
+  // and not if the sender.display.name contains "via" and dmarc pass from venmo.com
+  and not (
+    (
+      headers.auth_summary.dmarc.pass
+      and headers.auth_summary.dmarc.details.from.root_domain == "venmo.com"
+    )
+    and strings.contains(sender.display_name, "via")
+  )
+  
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and not headers.auth_summary.dmarc.pass
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Lookalike domain"
+  - "Social engineering"
+detection_methods:
+  - "Sender analysis"
+id: "23468c00-931a-5da8-941f-28b5357da4fa"
+og_id: "0ab15d4f-865f-518c-b54d-81043399e6f2"
+testing_pr: 3936
+testing_sha: 330317149355f987e8c7328543238a271c93e891
