@@ -11,7 +11,18 @@ source: |
   and any(body.links,
           (
             strings.icontains(.href_url.path, "/.well-known/")
-            and regex.icontains(.href_url.path, '\/\.well-known\/[^\/]+\/')
+            and (
+              // well-known with a directory behind it
+              (
+                regex.icontains(.href_url.path, '\/\.well-known\/[^\/]+\/')
+                // doesn't contain anything after /pki-validation/ or contains godaddy.html after (which is their location for the validation)
+                and not regex.imatch(.href_url.path,
+                                     '/.well-known/pki-validation/(?:godaddy.html)?'
+                )
+              )
+              // or a fragment in the url
+              or .href_url.fragment is not null
+            )
           )
           or strings.icontains(.href_url.path, "/.js/")
           or strings.icontains(.href_url.path, "/.env/")
@@ -25,6 +36,7 @@ source: |
           or strings.icontains(.href_url.path, "/.bashrc/")
           or strings.icontains(.href_url.path, "/.zshrc/")
           or strings.icontains(.href_url.path, "/.profile/")
+          or strings.icontains(.href_url.path, "/.wp/")
   )
   // negate highly trusted sender domains unless they fail DMARC authentication
   and (
