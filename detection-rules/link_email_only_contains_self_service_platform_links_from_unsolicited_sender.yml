@@ -1,0 +1,50 @@
+name: "Link: Self-service platform links from untrusted sender"
+description: "Detects unsolicited messages containing links exclusively to self-service creation platforms from senders that are not highly trusted or fail DMARC authentication. This rule helps identify potential abuse of legitimate platforms for malicious purposes while excluding common benign content categories."
+type: "rule"
+severity: "low"
+source: |
+  type.inbound
+  // email has at least one link
+  and 0 < length(body.links)
+  // email is unsolicited
+  and not profile.by_sender().solicited
+  // email recipient is valid domain
+  and recipients.to[0].email.domain.valid
+  // all links in email are self service creation platform domains
+  and all(body.links, .href_url.domain.root_domain in $self_service_creation_platform_domains)
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and (
+    coalesce(sender.email.domain.root_domain in $high_trust_sender_root_domains
+             and not headers.auth_summary.dmarc.pass,
+             false
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+  //negate classifications we're not interested in
+  and not (
+    any(ml.nlu_classifier(body.current_thread.text).topics,
+        .name in (
+          "Newsletters and Digests",
+          "Advertising and Promotions",
+          "Educational and Research",
+          "Health and Wellness",
+          "Romance",
+          "Sexually Explicit Messages",
+          "Software and App Updates",
+          "Acts of Violence"
+        )
+        and .confidence == "high"
+    )
+  )
+
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Free subdomain host"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Header analysis"
+  - "Natural Language Understanding"
+  - "Sender analysis"
+  - "URL analysis"
