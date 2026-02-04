@@ -4,8 +4,21 @@ type: "rule"
 severity: "medium"
 source: |
   type.inbound
+  and (
+    sender.email.domain.root_domain in $free_email_providers
+    or sender.display_name == "noreply"
+    or length(recipients.to) < 1
+    or any(recipients.to, .display_name == "Undisclosed recipients")
+    or any(headers.reply_to,
+           .email.domain.root_domain in $free_email_providers
+           or coalesce(.display_name, "") == ""
+    )
+  )
   and any(body.links,
-          strings.icontains(.display_url.url, '/hotel/')
+          (
+            strings.icontains(.display_url.url, '/hotel/')
+            or strings.icontains(.display_url.url, 'booking.com')
+          )
           and not strings.icontains(.href_url.url,
                                     .display_url.domain.root_domain
           )
