@@ -1,0 +1,128 @@
+name: "Canva infrastructure abuse"
+description: "A fraudulent invoice/receipt found in the body of the message sent by exploiting Canva's design sharing feature."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and length(attachments) <= 1
+  and sender.email.domain.root_domain in ("canva.com")
+  and (
+    strings.ilike(body.html.display_text, "*take a look at the design*")
+    or regex.icontains(body.current_thread.text, 'invited.{0,10}(?:class|school)')
+    or strings.icontains(body.current_thread.text, "no longer have access")
+  )
+  and (
+    (
+      // icontains a phone number
+      (
+        regex.icontains(strings.replace_confusables(body.current_thread.text),
+                        '.*\+?([ilo0-9]{1}.)?\(?[ilo0-9]{3}?\)?.[ilo0-9]{3}.?[ilo0-9]{4}.*\n'
+        )
+        or regex.icontains(strings.replace_confusables(body.current_thread.text),
+                           '.*\+[ilo0-9]{1,3}[ilo0-9]{10}.*\n'
+        )
+        or // +12028001238
+   regex.icontains(strings.replace_confusables(body.current_thread.text),
+                   '.*[ilo0-9]{3}\.[ilo0-9]{3}\.[ilo0-9]{4}.*\n'
+        )
+        or // 202-800-1238
+   regex.icontains(strings.replace_confusables(body.current_thread.text),
+                   '.*[ilo0-9]{3}-[ilo0-9]{3}-[ilo0-9]{4}.*\n'
+        )
+        or // (202) 800-1238
+   regex.icontains(strings.replace_confusables(body.current_thread.text),
+                   '.*\([ilo0-9]{3}\)[\s-]+[ilo0-9]{3}[\s-]+[ilo0-9]{4}.*\n'
+        )
+        or // (202)-800-1238
+   regex.icontains(strings.replace_confusables(body.current_thread.text),
+                   '.*\([ilo0-9]{3}\)-[ilo0-9]{3}-[ilo0-9]{4}.*\n'
+        )
+        or ( // 8123456789
+          regex.icontains(strings.replace_confusables(body.current_thread.text),
+                          '.*8[ilo0-9]{9}.*\n'
+          )
+          and regex.icontains(strings.replace_confusables(body.current_thread.text
+                              ),
+                              '\+[1l]'
+          )
+        )
+      )
+      and (
+        (
+          4 of (
+            strings.ilike(body.html.inner_text, '*you did not*'),
+            strings.ilike(body.html.inner_text, '*is not for*'),
+            strings.ilike(body.html.inner_text, '*done by you*'),
+            regex.icontains(body.html.inner_text, "didn\'t ma[kd]e this"),
+            strings.ilike(body.html.inner_text, '*Fruad Alert*'),
+            strings.ilike(body.html.inner_text, '*Fraud Alert*'),
+            strings.ilike(body.html.inner_text, '*fraudulent*'),
+            strings.ilike(body.html.inner_text, '*using your PayPal*'),
+            strings.ilike(body.html.inner_text, '*subscription*'),
+            strings.ilike(body.html.inner_text, '*antivirus*'),
+            strings.ilike(body.html.inner_text, '*order*'),
+            strings.ilike(body.html.inner_text, '*support*'),
+            strings.ilike(body.html.inner_text, '*sincerely apologize*'),
+            strings.ilike(body.html.inner_text, '*receipt*'),
+            strings.ilike(body.html.inner_text, '*invoice*'),
+            strings.ilike(body.html.inner_text, '*Purchase*'),
+            strings.ilike(body.html.inner_text, '*transaction*'),
+            strings.ilike(body.html.inner_text, '*Market*Value*'),
+            strings.ilike(body.html.inner_text, '*BTC*'),
+            strings.ilike(body.html.inner_text, '*call*'),
+            strings.ilike(body.html.inner_text, '*get in touch with our*'),
+            strings.ilike(body.html.inner_text, '*quickly inform*'),
+            strings.ilike(body.html.inner_text, '*quickly reach *'),
+            strings.ilike(body.html.inner_text, '*detected unusual transactions*'),
+            strings.ilike(body.html.inner_text, '*without your authorization*'),
+            strings.ilike(body.html.inner_text, '*cancel*'),
+            strings.ilike(body.html.inner_text, '*renew*'),
+            strings.ilike(body.html.inner_text, '*refund*'),
+            strings.ilike(body.html.inner_text, '*+1*'),
+            regex.icontains(body.html.inner_text, 'help.{0,3}desk'),
+            strings.ilike(body.html.inner_text, '* your funds*'),
+            strings.ilike(body.html.inner_text, '* your checking*'),
+            strings.ilike(body.html.inner_text, '* your saving*'),
+            strings.ilike(body.html.inner_text, '*transfer*'),
+            strings.ilike(body.html.inner_text, '*secure your account*'),
+            strings.ilike(body.html.inner_text, '*recover your*'),
+            strings.ilike(body.html.inner_text, '*unusual activity*'),
+            strings.ilike(body.html.inner_text, '*suspicious transaction*'),
+            strings.ilike(body.html.inner_text, '*transaction history*'),
+            strings.ilike(body.html.inner_text, '*please ignore this*'),
+            strings.ilike(body.html.inner_text, '*report activity*'),
+          )
+        )
+        or regex.icontains(body.current_thread.text,
+                           'note from.{0,50}(?:call|reach|contact|paypal)'
+        )
+        or any(ml.nlu_classifier(body.current_thread.text).intents,
+               .name == "callback_scam"
+        )
+        or (
+          // Unicode confusables words obfuscated in note
+          regex.icontains(body.html.inner_text,
+                          '\+𝟭|𝗽𝗮𝘆𝗺𝗲𝗻𝘁|𝗛𝗲𝗹𝗽 𝗗𝗲𝘀𝗸|𝗿𝗲𝗳𝘂𝗻𝗱|𝗮𝗻𝘁𝗶𝘃𝗶𝗿𝘂𝘀|𝗰𝗮𝗹𝗹|𝗰𝗮𝗻𝗰𝗲𝗹'
+          )
+        )
+        or strings.ilike(body.html.inner_text, '*kindly*')
+      )
+    )
+  )
+
+attack_types:
+  - "BEC/Fraud"
+  - "Callback Phishing"
+tactics_and_techniques:
+  - "Social engineering"
+  - "Impersonation: Brand"
+  - "Impersonation: Employee"
+  - "Free email provider"
+detection_methods:
+  - "Natural Language Understanding"
+  - "Sender analysis"
+  - "Content analysis"
+id: "f7023788-8d9a-56a5-9920-5b09f694fcf9"
+og_id: "b69fdb5c-e0c2-5c77-9280-2e473500b915"
+testing_pr: 3963
+testing_sha: 73dc86c0d425e3c837ec194be9447fd6e4677f71
