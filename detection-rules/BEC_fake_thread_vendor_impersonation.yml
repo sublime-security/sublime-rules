@@ -1,5 +1,5 @@
-name: "BEC: Fake thread with vendor impersonation and financial language"
-description: "Detects Business Email Compromise attacks where a sender creates a fake email thread by replying to or forwarding their own message, impersonating organizational domains or recipients while using financial, invoice, or urgency language. The rule identifies suspicious patterns where the sender appears to continue a conversation with themselves while mimicking legitimate internal or vendor communications."
+name: "Body: Thread hijacking with font mismatch"
+description: "Detects Business Email Compromise attacks where a sender creates a legitimate email thread by replying to or forwarding their own message containing a fake thread." 
 type: "rule"
 severity: "high"
 source: |
@@ -13,65 +13,22 @@ source: |
   and body.previous_threads[0].sender.email.email == sender.email.email
   // at least one thread purporting to be from an $org_domain sender
   and any(body.previous_threads,
-          .sender.email.domain.domain in $org_domains
-          or .sender.email.domain.domain == mailbox.email.domain.domain // shared EML test
-          or .sender.email.email in map(recipients.to, .email.email)
-  )
-  and (
-    (
-      // current_thread references a dollar amount
-      regex.icontains(body.current_thread.text, '[$€£]\d{2,3}[.,]\d{3}')
-      // NLU invoice indicator
-      and (
-        any(ml.nlu_classifier(body.current_thread.text).tags, .name == "invoice")
-        or (
-          any(ml.nlu_classifier(body.current_thread.text).entities,
-              .text == "invoice"
-          )
-          // NLU Accounts Payable indicator
-          or any(ml.nlu_classifier(body.current_thread.text).entities,
-                 .name == "recipient"
-                 and strings.ilike(.text, "*AP*", "*Accounts Payable*")
-          )
-        )
-      )
-      // NLU BEC intent
-      and any(ml.nlu_classifier(body.current_thread.text).intents,
-              .name == "bec" and .confidence != "low"
-      )
-    )
-    // or the sender is following up on a previous thread
-    or (
-      any(body.previous_threads,
-          .sender.email.email == sender.email.email
-          and regex.icontains(.text, '[$€£]\d{2,3}[.,]\d{3}')
-          // NLU invoice indicator
+          .index != 0
           and (
-            any(ml.nlu_classifier(.text).tags, .name == "invoice")
-            or any(ml.nlu_classifier(.text).entities, .text == "invoice")
-            // NLU Accounts Payable indicator
-            or any(ml.nlu_classifier(.text).entities,
-                   .name == "recipient"
-                   and strings.ilike(.text, "*AP*", "*Accounts Payable*")
-            )
+            .sender.email.domain.domain in $org_domains
+          //   or .sender.email.domain.domain == mailbox.email.domain.domain // shared EML test
           )
-          // NLU BEC intent
-          and any(ml.nlu_classifier(.text).intents,
-                  .name == "bec" and .confidence != "low"
-          )
-      )
-    )
   )
-  and not (
-    profile.by_sender_email().solicited and headers.auth_summary.dmarc.pass
-  )
-  // and the sender is not from high trust sender root domains
+  // suspicious font mismatch in thread preamble
   and (
-    (
-      sender.email.domain.root_domain in $high_trust_sender_root_domains
-      and not headers.auth_summary.dmarc.pass
+    any(regex.iextract(body.html.raw,
+                       '<span style.*?font-family:(?P<primary_fonts>[^;"]+)[;"]+.*?>.{0,20}?((?:From|To|Subject|Date|CC)\:).*?<span style.*?font-family:(?P<secondary_fonts>[^;"]+)[;"]>'
+        ),
+        // allow for a levenshtein difference of 1 to account for parsing misses
+        strings.ilevenshtein(.named_groups["primary_fonts"],
+                             .named_groups["secondary_fonts"]
+        ) > 1
     )
-    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
   )
 
 attack_types:
