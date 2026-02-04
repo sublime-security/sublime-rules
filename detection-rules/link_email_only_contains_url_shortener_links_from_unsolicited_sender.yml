@@ -1,0 +1,51 @@
+name: "Link: URL shorteners from unsolicited sender"
+description: "Message contains only URL shortener links from an unsolicited sender with valid recipient domain, excluding trusted senders with DMARC authentication and filtering out benign content topics."
+type: "rule"
+severity: "low"
+source: |
+  type.inbound
+  // email has at least one link
+  and 0 < length(body.links)
+  // email is unsolicited
+  and not profile.by_sender().solicited
+  // email recipient is valid domain
+  and recipients.to[0].email.domain.valid
+  // all links in email are shorteners
+  and all(body.links, .href_url.domain.root_domain in $url_shorteners)
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and (
+    coalesce(sender.email.domain.root_domain in $high_trust_sender_root_domains
+             and not headers.auth_summary.dmarc.pass,
+             false
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+  //negate classifications we're not interested in
+  and not (
+    any(ml.nlu_classifier(body.current_thread.text).topics,
+        .name in (
+          "Newsletters and Digests",
+          "Advertising and Promotions",
+          "Educational and Research",
+          "Health and Wellness",
+          "Romance",
+          "Sexually Explicit Messages",
+          "Software and App Updates",
+          "Acts of Violence",
+          "B2B Cold Outreach",
+          "Travel and Transportation"
+        )
+        and .confidence in ("high", "medium")
+    )
+  )
+
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Evasion"
+  - "Social engineering"
+detection_methods:
+  - "Sender analysis"
+  - "URL analysis"
+  - "Natural Language Understanding"
+  - "Header analysis"
