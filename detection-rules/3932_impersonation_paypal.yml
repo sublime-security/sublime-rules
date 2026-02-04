@@ -1,0 +1,122 @@
+name: "Brand Impersonation: PayPal"
+description: |
+  Impersonation of PayPal.
+references:
+  - "https://www.welivesecurity.com/2019/12/20/scam-wants-more-than-paypal-logins/"
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and (
+    strings.replace_confusables(sender.display_name) =~ "paypal"
+    or strings.ilevenshtein(strings.replace_confusables(sender.display_name),
+                            'paypal'
+    ) <= 1
+    or strings.ilike(strings.replace_confusables(sender.display_name), '*paypal*')
+    or strings.icontains(body.current_thread.text, "paypal billing team")
+    or strings.icontains(body.current_thread.text, "paypal account services")
+    or any(attachments,
+           (.file_type in $file_types_images or .file_type == "pdf")
+           and any(ml.logo_detect(.).brands, .name == "PayPal")
+           and any(file.explode(.),
+                   // exclude images taken with mobile cameras and screenshots from android
+                   not any(.scan.exiftool.fields,
+                           .key == "Model"
+                           or (
+                             .key == "Software"
+                             and strings.starts_with(.value, "Android")
+                           )
+                   )
+                   // exclude images taken with mobile cameras and screenshots from Apple
+                   and not any(.scan.exiftool.fields,
+                               .key == "DeviceManufacturer"
+                               and .value == "Apple Computer Inc."
+                   )
+                   and strings.ilike(.scan.ocr.raw, "*PayPal*")
+                   and strings.ilike(.scan.ocr.raw,
+                                     "*invoice*",
+                                     "*transaction*",
+                                     "*bitcoin*",
+                                     "*dear customer*",
+                                     "*suspicious activity*"
+                   )
+           )
+    )
+    or (
+      any(ml.logo_detect(file.message_screenshot()).brands, .name == "PayPal")
+      and strings.ilike(body.current_thread.text, "*PayPal*")
+      and strings.ilike(body.current_thread.text,
+                        "*invoice*",
+                        "*transaction*",
+                        "*bitcoin*",
+                        "*dear customer*",
+                        "*suspicious activity*"
+      )
+    )
+  )
+  and not any(ml.nlu_classifier(body.current_thread.text).topics,
+              .name in~ (
+                "Professional and Career Development",
+                "Government Services"
+              )
+  )
+  and sender.email.domain.root_domain not in (
+    'google.com',
+    'paypal-brandsfeedback.com',
+    'paypal-creditsurvey.com',
+    'paypal-customerfeedback.com',
+    'paypal-experience.com',
+    'paypal-prepaid.com',
+    'paypal.at',
+    'paypal.be',
+    'paypal.ca',
+    'paypal.ch',
+    'paypal.co.br',
+    'paypal.co.il',
+    'paypal.co.uk',
+    'paypal.com',
+    'paypal.com.au',
+    'paypal.com.mx',
+    'paypal.com.sg',
+    'paypal.de',
+    'paypal.dk',
+    'paypal.es',
+    'paypal.fr',
+    'paypal.hk',
+    'paypal.it',
+    'paypal.nl',
+    'paypal.pl',
+    'paypal.se',
+    'paypalcorp.com',
+    'q4inc.com',
+    'synchrony.com',
+    'synchronybank.com',
+    'synchronyfinancial.com',
+    'xoom.com',
+    'zettle.com'
+  )
+  
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and not headers.auth_summary.dmarc.pass
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Lookalike domain"
+  - "Social engineering"
+detection_methods:
+  - "Computer Vision"
+  - "Content analysis"
+  - "File analysis"
+  - "Header analysis"
+  - "Sender analysis"
+id: "5a34ac26-e196-5c58-9fd5-495ee92dfc09"
+og_id: "a6b2ceee-ea57-594d-8437-698fad55c9bf"
+testing_pr: 3932
+testing_sha: 816d3c781787ea1ef4c77d3b88d6d2731581b91c
