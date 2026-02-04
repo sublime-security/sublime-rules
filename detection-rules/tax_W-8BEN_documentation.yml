@@ -4,61 +4,60 @@ type: "rule"
 severity: "medium"
 source: |
    type.inbound
-  and (
-    // few links
-    0 < length(body.links) < 20
-    and any(body.links, network.whois(.href_url.domain).days_old <= 60)
-    // fewer unique root domain links
-    and length(distinct(body.links, .href_url.domain.root_domain)) < 10
-    // sender domain matches no body domains
-    and all(body.links,
-            .href_url.domain.root_domain != sender.email.domain.root_domain
-    )
-  )
-  
-  // sender domain and return path are the same
-  and (sender.email.domain.root_domain == headers.return_path.domain.domain)
-  and not (sender.email.domain.root_domain != headers.return_path.domain.domain)
-  and (
-    regex.icontains(subject.subject, ".*Foreign Tax*")
-    or regex.icontains(subject.subject, ".*W-8BEN*")
-  )
-  // or any([body.current_thread.text, body.html.display_text, body.plain.raw],
-  and any([body.current_thread.text],
-          regex.icontains(.,
-                          'tax form',
-                          'W-8BEN',
-                          'Foreign Tax',
-                          'tax return',
-                          'tax preparation',
-                          'tax documentation',
-                          'regulatory',
-                          'withholding',
-                          'approve',
-                          'non-US tax',
-                          'treaty',
-                          'Renew Documentation',
-                          'Dear Client'
-          )
-  )
-  
-  // Registrant domain registered to China
-  and (
-    any(body.links,
-        network.whois(.href_url.domain).registrant_country_code =~ "CN"
-    )
-    or any(body.links,
-           strings.icontains(network.whois(.href_url.domain).registrant_country,
-                             "china"
+   and (
+     // few links
+     0 < length(body.links) < 20
+     and any(body.links, network.whois(.href_url.domain).days_old <= 60)
+     // fewer unique root domain links
+     and length(distinct(body.links, .href_url.domain.root_domain)) < 10
+     // sender domain matches no body domains
+     and all(body.links,
+             .href_url.domain.root_domain != sender.email.domain.root_domain
+     )
+   )
+   
+   // sender domain and return path are the same
+   and (sender.email.domain.root_domain == headers.return_path.domain.domain)
+   and not (sender.email.domain.root_domain != headers.return_path.domain.domain)
+   and (
+     regex.icontains(subject.subject, ".*Foreign Tax*")
+     or regex.icontains(subject.subject, ".*W-8BEN*")
+   )
+   // or any([body.current_thread.text, body.html.display_text, body.plain.raw],
+   and any([body.current_thread.text],
+           regex.icontains(.,
+                           'tax form',
+                           'W-8BEN',
+                           'Foreign Tax',
+                           'tax return',
+                           'tax preparation',
+                           'tax documentation',
+                           'regulatory',
+                           'withholding',
+                           'approve',
+                           'non-US tax',
+                           'treaty',
+                           'Renew Documentation',
+                           'Dear Client'
            )
-    )
-  )
-  
-  // Alibaba Cloud nameservers
-  and all(network.whois(sender.email.domain).name_servers,
-          .root_domain == "hichina.com"
-  )
-
+   )
+   
+   // Registrant domain registered to China
+   and (
+     any(body.links,
+         network.whois(.href_url.domain).registrant_country_code =~ "CN"
+     )
+     or any(body.links,
+            strings.icontains(network.whois(.href_url.domain).registrant_country,
+                              "china"
+            )
+     )
+   )
+   
+   // Alibaba Cloud nameservers
+   and all(network.whois(sender.email.domain).name_servers,
+           .root_domain == "hichina.com"
+   )
 
 attack_types:
   - "BEC/Fraud"
