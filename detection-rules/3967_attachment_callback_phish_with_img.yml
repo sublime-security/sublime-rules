@@ -1,0 +1,110 @@
+name: "Attachment: Callback phishing solicitation via image file"
+description: |
+  A fraudulent invoice/receipt found in an image attachment.
+  Callback Phishing is an attempt by an attacker to solicit the victim (recipient) to call a phone number. 
+  The resulting interaction could lead to a multitude of attacks ranging from Financial theft, Remote Access Trojan (RAT) Installation or Ransomware Deployment.
+type: "rule"
+authors:
+  - twitter: "vector_sec"
+severity: "high"
+source: |
+  type.inbound
+  and not (subject.is_reply and headers.in_reply_to is not null)
+  and (
+    sender.email.domain.root_domain in $free_email_providers
+    or sender.email.domain.root_domain in ("onmicrosoft.com")
+    or (
+      (
+        length(recipients.to) == 0
+        or all(recipients.to, .display_name == "Undisclosed recipients")
+      )
+      and length(recipients.cc) == 0
+      and length(recipients.bcc) == 0
+    )
+  )
+  and any(attachments,
+          // exclude images taken with mobile cameras and screenshots from android
+          .file_type in $file_types_images
+          and (
+            any(file.explode(.),
+                not any(.scan.exiftool.fields,
+                        .key == "Model"
+                        or (
+                          .key == "Software"
+                          and strings.starts_with(.value, "Android")
+                        )
+                )
+                // exclude images taken with mobile cameras and screenshots from Apple
+                and not any(.scan.exiftool.fields,
+                            .key == "DeviceManufacturer"
+                            and .value == "Apple Computer Inc."
+                )
+                and not any(.scan.exiftool.fields,
+                            .key == "UserComment" and .value == "Screenshot"
+                )
+                // 4 of the following strings are found        
+                and 4 of (
+                  // this section is synced with attachment_callback_phish_with_pdf.yml and body_callback_phishing_no_attachment.yml
+                  strings.icontains(.scan.ocr.raw, "purchase"),
+                  strings.icontains(.scan.ocr.raw, "payment"),
+                  strings.icontains(.scan.ocr.raw, "transaction"),
+                  strings.icontains(.scan.ocr.raw, "subscription"),
+                  strings.icontains(.scan.ocr.raw, "antivirus"),
+                  strings.icontains(.scan.ocr.raw, "order"),
+                  strings.icontains(.scan.ocr.raw, "support"),
+                  strings.icontains(.scan.ocr.raw, "help line"),
+                  strings.icontains(.scan.ocr.raw, "receipt"),
+                  strings.icontains(.scan.ocr.raw, "invoice"),
+                  strings.icontains(.scan.ocr.raw, "call"),
+                  strings.icontains(.scan.ocr.raw, "helpdesk"),
+                  strings.icontains(.scan.ocr.raw, "cancel"),
+                  strings.icontains(.scan.ocr.raw, "renew"),
+                  strings.icontains(.scan.ocr.raw, "refund"),
+                  regex.icontains(.scan.ocr.raw, "(?:reach|contact) us at"),
+                  strings.icontains(.scan.ocr.raw, "+1"),
+                  strings.icontains(.scan.ocr.raw, "amount"),
+                  strings.icontains(.scan.ocr.raw, "charged"),
+                  strings.icontains(.scan.ocr.raw, "crypto"),
+                  strings.icontains(.scan.ocr.raw, "wallet address"),
+                  regex.icontains(.scan.ocr.raw, '\$\d{3}\.\d{2}\b'),
+                  regex.icontains(.scan.ocr.raw,
+                                  '\+?([ilo0-9]{1}.)?\(?[ilo0-9]{3}?\)?.[ilo0-9]{3}.?[ilo0-9]{4}',
+                                  '\+?([ilo0-9]{1,2})?\s?\(?\d{3}\)?[\s\.\-⋅]{0,5}[ilo0-9]{3}[\s\.\-⋅]{0,5}[ilo0-9]{4}'
+                  ),
+                )
+                // this section is synced with attachment_callback_phish_with_pdf.yml and body_callback_phishing_no_attachment.yml
+                and regex.icontains(.scan.ocr.raw,
+                                    '(p.{0,3}a.{0,3}y.{0,3}p.{0,3}a.{0,3}l|ma?c.?fee|n[o0]rt[o0]n|geek.{0,5}squad|ebay|symantec|best buy|lifel[o0]c|secure anywhere|starz|utilities premium|pc security|at&t)'
+                )
+            )
+            // this section is synced with attachment_callback_phish_with_pdf.yml and body_callback_phishing_no_attachment.yml
+            or any(ml.logo_detect(.).brands,
+                   .name in (
+                     "PayPal",
+                     "Norton",
+                     "GeekSquad",
+                     "Ebay",
+                     "McAfee",
+                     "AT&T"
+                   )
+            )
+          )
+  )
+attack_types:
+  - "Callback Phishing"
+tactics_and_techniques:
+  - "Evasion"
+  - "Free email provider"
+  - "Out of band pivot"
+  - "Social engineering"
+  - "Image as content"
+detection_methods:
+  - "Content analysis"
+  - "Optical Character Recognition"
+  - "Sender analysis"
+  - "URL analysis"
+  - "Computer Vision"
+id: "4739b265-4eff-52a7-b5ec-f1ac6f8fb88b"
+og_id: "60acbb36-8ed1-562e-8027-260c2fdf0f04"
+testing_pr: 3967
+testing_sha: b11439395d9f63f18c7981b37c3a71678973145f
