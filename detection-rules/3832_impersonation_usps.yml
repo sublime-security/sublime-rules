@@ -8,6 +8,12 @@ source: |
     any(ml.logo_detect(file.message_screenshot()).brands, .name == "USPS")
     or strings.icontains(sender.display_name, "USPS")
     or regex.contains(body.html.display_text, 'USPS\s*\.\s*COM')
+    or (
+      any(ml.nlu_classifier(body.current_thread.text).topics,
+          .name in ("Shipping and Package", ) and .confidence == "high"
+      )
+      and strings.icontains(body.html.display_text, 'usps')
+    )
   )
   and length(body.links) > 0
   and 3 of (
@@ -25,7 +31,8 @@ source: |
                   '*USPS promotions*',
                   '*review your package*',
                   '*receiver address*',
-                  '*sorry tolet*'
+                  '*sorry tolet*',
+                  '*Due to an incorrect*'
     ),
     // impersonal greeting
     any(ml.nlu_classifier(body.current_thread.text).entities,
@@ -34,7 +41,15 @@ source: |
     // free email sender
     sender.email.domain.root_domain in $free_email_providers,
     // contains link to recently registered domain
-    any(body.links, network.whois(.href_url.domain).days_old < 15)
+    any(body.links, network.whois(.href_url.domain).days_old < 15),
+    (
+      regex.icontains(strings.replace_confusables(body.html.display_text),
+                      '\b(?:u.?s.?p.?s|shipping|delivery)\b'
+      )
+      and not regex.icontains(body.html.display_text,
+                              '\b(?:usps|shipping|delivery)\b'
+      )
+    )
   )
   and (
     sender.email.domain.root_domain not in (
@@ -92,4 +107,4 @@ detection_methods:
 id: "bc739548-055a-524b-8d96-f6b20c9fc105"
 og_id: "28b9130a-d8e0-50af-97c9-c1b8f4c46d68"
 testing_pr: 3832
-testing_sha: 4e728a2f920aca1651f155ee31a9804c0af67850
+testing_sha: 1ac915226029354d72636f9bb5306b16fc278002
