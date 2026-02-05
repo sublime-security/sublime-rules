@@ -1,0 +1,181 @@
+name: "PR# 3967 - Attachment: Callback phishing solicitation via pdf file"
+description: |
+  A fraudulent invoice/receipt found in a pdf attachment.
+  Callback Phishing is an attempt by an attacker to solicit the victim (recipient) to call a phone number. 
+  The resulting interaction could lead to a multitude of attacks ranging from Financial theft, Remote Access Trojan (RAT) Installation or Ransomware Deployment.
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  
+  // single attachment
+  and length(attachments) == 1
+  
+  // sender is freemail
+  and (
+    sender.email.domain.root_domain in $free_email_providers
+    // the sender is a common service, which has likely been sent through a DL
+    or (
+      sender.email.domain.root_domain in $tranco_50k
+      and all(recipients.to, .email.domain.domain not in $org_domains)
+    )
+  )
+  // the attachment is a pdf with less than 3 pages, and at least 60 ocr chars
+  and any(attachments,
+          (
+            .file_extension == "pdf"
+            // get the length of the attached pdf
+            and any(file.explode(.),
+                    .depth == 0
+                    and .scan.exiftool.page_count < 3
+                    and (
+                      not (
+                        strings.istarts_with(.scan.exiftool.producer,
+                                             "Aspose.Words for Java"
+                        )
+                        and (
+                          .scan.exiftool.creator == "Anusha T"
+                          or any(.scan.exiftool.fields,
+                                 .key == "Author" and .value == "Anusha T"
+                          )
+                        )
+                      )
+                      or .scan.exiftool.producer is null
+                      or .scan.exiftool.creator is null
+                    )
+            )
+            // negate ML matches to "Professional and Career Development" - tuning resume FPs
+            and not (
+              any(beta.ml_topic(coalesce(body.html.display_text, body.plain.raw)).topics,
+                  .name == "Professional and Career Development"
+                  and .confidence == "high"
+              )
+              or (
+                (
+                  any(attachments,
+                      .file_type == 'pdf'
+                      and any(file.explode(.),
+                              any(beta.ml_topic(.scan.ocr.raw).topics,
+                                  .name == "Professional and Career Development"
+                                  and .confidence == "high"
+                              )
+                      )
+                  )
+                )
+              )
+            )
+            // check that any _single_ result in the file.explode matches these conditions
+            // a second file.explode is required because the OCR is generated at a different depth within 
+            // the file.explode results
+            and (
+              any(file.explode(.),
+                  length(.scan.ocr.raw) > 60
+                  // 4 of the following strings are found        
+                  and 4 of (
+                    // this section is synced with attachment_callback_phish_with_pdf.yml and body_callback_phishing_no_attachment.yml
+                    strings.icontains(.scan.ocr.raw, "purchase"),
+                    strings.icontains(.scan.ocr.raw, "payment"),
+                    strings.icontains(.scan.ocr.raw, "transaction"),
+                    strings.icontains(.scan.ocr.raw, "subscription"),
+                    strings.icontains(.scan.ocr.raw, "antivirus"),
+                    strings.icontains(.scan.ocr.raw, "order"),
+                    strings.icontains(.scan.ocr.raw, "support"),
+                    strings.icontains(.scan.ocr.raw, "help line"),
+                    strings.icontains(.scan.ocr.raw, "receipt"),
+                    strings.icontains(.scan.ocr.raw, "invoice"),
+                    strings.icontains(.scan.ocr.raw, "call"),
+                    strings.icontains(.scan.ocr.raw, "helpdesk"),
+                    strings.icontains(.scan.ocr.raw, "cancel"),
+                    strings.icontains(.scan.ocr.raw, "renew"),
+                    strings.icontains(.scan.ocr.raw, "refund"),
+                    regex.icontains(.scan.ocr.raw, "(?:reach|contact) us at"),
+                    strings.icontains(.scan.ocr.raw, "+1"),
+                    strings.icontains(.scan.ocr.raw, "amount"),
+                    strings.icontains(.scan.ocr.raw, "charged"),
+                    strings.icontains(.scan.ocr.raw, "crypto"),
+                    strings.icontains(.scan.ocr.raw, "wallet address"),
+                    regex.icontains(.scan.ocr.raw, '\$\d{3}\.\d{2}\b'),
+                    regex.icontains(.scan.ocr.raw,
+                                    '(\+[ilo0-9]|1.(\()?[ilo0-9]{3}(\))?\D[ilo0-9]{3}\D[ilo0-9]{4})',
+                                    '\+?([ilo0-9]{1,2})?\s?\(?\d{3}\)?[\s\.\-⋅]{0,5}[ilo0-9]{3}[\s\.\-⋅]{0,5}[ilo0-9]{4}'
+                    ),
+                  )
+                  and (
+                    // this section is synced with attachment_callback_phish_with_img.yml and body_callback_phishing_no_attachment.yml
+                    regex.icontains(.scan.ocr.raw,
+                                    '(p.{0,3}a.{0,3}y.{0,3}p.{0,3}a.{0,3}l|ma?c.?fee|n[o0]rt[o0]n|geek.{0,5}squad|ebay|symantec|best buy|lifel[o0]c|secure anywhere|starz|utilities premium|pc security|at&t)'
+                    )
+                    // suspicious attachment name from the attachment object not file.explode() output
+                    or regex.icontains(..file_name, 'INV(?:_|\s)?\d+(.pdf)$')
+                  )
+                  // Negate bank statements
+                  and not (
+                    2 of (
+                      strings.icontains(.scan.ocr.raw, "opening balance"),
+                      strings.icontains(.scan.ocr.raw, "closing balance"),
+                      strings.icontains(.scan.ocr.raw, "direct debit"),
+                      strings.icontains(.scan.ocr.raw, "interest"),
+                      strings.icontains(.scan.ocr.raw, "account balance"),
+                    )
+                  )
+              )
+              // this section is synced with attachment_callback_phish_with_img.yml and body_callback_phishing_no_attachment.yml
+              or any(ml.logo_detect(.).brands,
+                     .name in (
+                       "PayPal",
+                       "Norton",
+                       "GeekSquad",
+                       "Ebay",
+                       "McAfee",
+                       "AT&T"
+                     )
+              )
+            )
+          )
+  )
+  and (
+    (
+      (
+        length(headers.references) > 0
+        or not any(headers.hops,
+                   any(.fields, strings.ilike(.name, "In-Reply-To"))
+        )
+      )
+      and not (
+        (
+          strings.istarts_with(subject.subject, "RE:")
+          or strings.istarts_with(subject.subject, "RES:")
+          or strings.istarts_with(subject.subject, "R:")
+          or strings.istarts_with(subject.subject, "ODG:")
+          or strings.istarts_with(subject.subject, "答复:")
+          or strings.istarts_with(subject.subject, "AW:")
+          or strings.istarts_with(subject.subject, "TR:")
+          or strings.istarts_with(subject.subject, "FWD:")
+          or regex.imatch(subject.subject,
+                          '(\[[^\]]+\]\s?){0,3}(re|fwd?|automat.*)\s?:.*'
+          )
+        )
+      )
+    )
+    or (length(headers.references) == 0 or length(body.current_thread.text) < 10)
+  )
+attack_types:
+  - "Callback Phishing"
+tactics_and_techniques:
+  - "Evasion"
+  - "Free email provider"
+  - "Out of band pivot"
+  - "PDF"
+  - "Social engineering"
+detection_methods:
+  - "Exif analysis"
+  - "File analysis"
+  - "Optical Character Recognition"
+  - "Sender analysis"
+id: "5e97bb55-b096-5327-baf3-b74d79bf4256"
+tags:
+  - created_from_open_prs
+  - rule_status_modified
+  - pr_author_MSAdministrator
+references:
+  - https://github.com/sublime-security/sublime-rules/pull/3967
