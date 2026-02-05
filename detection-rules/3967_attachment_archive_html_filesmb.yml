@@ -1,0 +1,37 @@
+name: "PR# 3967 - Attachment: Archive containing HTML file with file scheme link"
+description: "Attached archive contains an HTLM file with a file:// link, likely pointing to an SMB server. This technique can be used to steal NTLM hashes of users who open the HTML file. Known technique of TA577."
+references:
+  - "https://www.bleepingcomputer.com/news/security/hackers-steal-windows-ntlm-authentication-hashes-in-phishing-attacks/"
+  - https://github.com/sublime-security/sublime-rules/pull/3967
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and any(attachments,
+          .file_extension in $file_extensions_common_archives
+          and any(file.explode(.),
+                  (
+                    .file_extension in~ ("html", "htm", "shtml", "dhtml")
+                    or .flavors.mime == "text/html"
+                    or any(.flavors.yara, . == "html_file")
+                  )
+                  and any(.scan.url.urls, .scheme == "file")
+          )
+  )
+
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Evasion"
+  - "Exploit"
+  - "HTML smuggling"
+  - "Social engineering"
+detection_methods:
+  - "Archive analysis"
+  - "File analysis"
+  - "HTML analysis"
+id: "e8532385-08b1-5010-b9fd-957cf6805dc4"
+tags:
+  - created_from_open_prs
+  - rule_status_modified
+  - pr_author_MSAdministrator
