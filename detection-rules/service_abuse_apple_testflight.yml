@@ -1,0 +1,50 @@
+name: "Service abuse: Apple TestFlight with suspicious developer reference"
+description: "Detects legitimate Apple TestFlight emails that reference potentially suspicious developers or apps, including variations of OpenAI, ChatGPT, or Meta in the app description or developer name fields."
+references:
+  - "https://sublime.security/blog/fake-meta-ads-manager-in-app-store-and-testflight-used-to-phish-meta-ad-accounts/"
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  // appears to be form apple (don't care it being legit from apple, appearing is fine)
+  and sender.email.domain.domain == "email.apple.com"
+  // has a link
+  and any(body.current_thread.links,
+          .href_url.domain.domain in ('testflight.apple.com')
+  )
+  and (
+    // get the app descriptoin
+    any(html.xpath(body.html,
+                   '//h2[contains(text(), "App Description")]/ancestor::tr/following-sibling::tr//pre'
+        ).nodes,
+        any(ml.nlu_classifier(.display_text).entities,
+            .name == "org"
+            and any(["openai", "openal", "open ai", "open al", "chatgpt", "meta"],
+                    strings.icontains(..text, .)
+            )
+        )
+    )
+  
+    // parse out the template to get the app and org name
+    or any(html.xpath(body.html, '//h2[@aria-label]').nodes,
+           any(regex.iextract(.display_text,
+                              '(?P<app_name>[^\r\n]+)[\r\n]+By (?P<dev_name>.*) for IOS.$'
+               ),
+               any(["openai", "openal", "open ai", "open al", "chatgpt", "meta"],
+                   strings.icontains(..named_groups["dev_name"], .)
+                   or strings.icontains(..named_groups["app_name"], .)
+               )
+           )
+    )
+  )
+
+attack_types:
+  - "Spam"
+tactics_and_techniques:
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "HTML analysis"
+  - "Natural Language Understanding"
+  - "Sender analysis"
+  - "URL analysis"
