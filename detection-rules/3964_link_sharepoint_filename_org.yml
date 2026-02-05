@@ -1,0 +1,72 @@
+name: "PR# 3964 - Link: SharePoint filename matches org name"
+description: "Detects when a SharePoint or OneDrive shared file link contains suspicious filename patterns that match organizational naming patterns, indicating potential impersonation.  This has been observed in conjuction with native Microsoft Sharepoint share verification via email and One Time Password. "
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and strings.ilike(subject.subject, "*shared*", "*invit*")
+  and strings.ilike(body.current_thread.text,
+                    "*shared a file with you*",
+                    "*shared with you*",
+                    "*invited you to access a file*"
+  )
+  and not strings.ilike(body.current_thread.text, "invited you to edit")
+  and (
+    // use the display text of the link to determine the name of the file
+    any(filter(body.current_thread.links,
+               .href_url.domain.domain not in $tenant_domains
+               and (
+                 .href_url.domain.root_domain == "sharepoint.com"
+                 or .href_url.domain.root_domain == "1drv.ms"
+                 // handle urls with mimecast rewriting
+                 or (
+                   .href_url.domain.root_domain == 'mimecastprotect.com'
+                   and strings.icontains(.href_url.query_params,
+                                         '.sharepoint.com'
+                   )
+                 )
+               )
+               and .display_text != "Open"
+        ),
+        .display_text =~ sender.email.domain.sld
+        or any(regex.extract(body.current_thread.text,
+                             "generated through (?P<org_name>[^']+)'s use"
+               ),
+               // the document name is the same as the org name as determined by the footer
+               // this checks that the display_text starts with the org_name
+               strings.istarts_with(.named_groups["org_name"], ..display_text)
+  
+               // this checks that the org_name is a substring of the display_text
+               // it is in effect the "reverse" of the above check
+               or (
+                 (
+                   strings.istarts_with(..display_text, .named_groups["org_name"])
+                   or strings.iends_with(..display_text,
+                                         .named_groups["org_name"]
+                   )
+                 )
+                 and (
+                   length(.named_groups["org_name"]) / (
+                     length(..display_text) * 1.0
+                   )
+                 ) > 0.45
+               )
+        )
+    )
+  )
+
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Impersonation: Employee"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "URL analysis"
+id: "2f06b949-d577-5433-ac10-efa0e631c6e4"
+tags:
+  - created_from_open_prs
+  - rule_status_modified
+  - pr_author_IndiaAce
+references:
+  - https://github.com/sublime-security/sublime-rules/pull/3964
