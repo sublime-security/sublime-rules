@@ -1,0 +1,94 @@
+name: "Attachment: Callback phishing solicitation via text-based file"
+description: "Callback Phishing via a text-based file attachment and a short body and subject from an unknown sender."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and length(subject.subject) <= 10
+  // there are no links, all the links are to aka.ms, or an extraction from a warning banner that match the senders domain
+  and (
+    length(body.links) == 0
+    or length(filter(body.links,
+                     (
+                       .display_text is null
+                       and .display_url.url == sender.email.domain.root_domain
+                     )
+                     or .href_url.domain.domain == "aka.ms"
+                     or network.whois(.display_url.domain).days_old < 30
+              )
+    ) == length(body.links)
+  )
+  and (body.current_thread.text is null or length(body.current_thread.text) < 50)
+  and 0 < length(attachments) < 4
+  and any(attachments,
+          (
+            .content_type == "text/plain"
+            or .file_type in ("doc", "docx", "xls", "xlsx")
+          )
+          and any(file.explode(.),
+                  (.depth == 0 or .flavors.mime == "text/plain")
+                  // 4 of the following strings are found        
+                  and 4 of (
+                    // this section is synced with attachment_callback_phish_with_pdf.yml and body_callback_phishing_no_attachment.yml
+                    strings.icontains(.scan.strings.raw, "purchase"),
+                    strings.icontains(.scan.strings.raw, "payment"),
+                    strings.icontains(.scan.strings.raw, "transaction"),
+                    strings.icontains(.scan.strings.raw, "subscription"),
+                    strings.icontains(.scan.strings.raw, "antivirus"),
+                    strings.icontains(.scan.strings.raw, "order"),
+                    strings.icontains(.scan.strings.raw, "support"),
+                    strings.icontains(.scan.strings.raw, "help line"),
+                    strings.icontains(.scan.strings.raw, "receipt"),
+                    strings.icontains(.scan.strings.raw, "invoice"),
+                    strings.icontains(.scan.strings.raw, "call"),
+                    strings.icontains(.scan.strings.raw, "helpdesk"),
+                    strings.icontains(.scan.strings.raw, "cancel"),
+                    strings.icontains(.scan.strings.raw, "renew"),
+                    strings.icontains(.scan.strings.raw, "refund"),
+                    regex.icontains(.scan.strings.raw, "(?:reach|contact) us at"),
+                    strings.icontains(.scan.strings.raw, "+1"),
+                    strings.icontains(.scan.strings.raw, "amount"),
+                    strings.icontains(.scan.strings.raw, "charged"),
+                    strings.icontains(.scan.strings.raw, "crypto"),
+                    strings.icontains(.scan.strings.raw, "wallet address"),
+                    regex.icontains(.scan.strings.raw, '\$\d{3}\.\d{2}\b'),
+                    regex.icontains(.scan.strings.raw,
+                                    '\+?([ilo0-9]{1}.)?\(?[ilo0-9]{3}?\)?.[ilo0-9]{3}.?[ilo0-9]{4}',
+                                    '\+?([ilo0-9]{1,2})?\s?\(?\d{3}\)?[\s\.\-⋅]{0,5}[ilo0-9]{3}[\s\.\-⋅]{0,5}[ilo0-9]{4}'
+                    ),
+                  )
+                  // this section is synced with attachment_callback_phish_with_pdf.yml and body_callback_phishing_no_attachment.yml
+                  and regex.icontains(.scan.strings.raw,
+                                      '(p.{0,3}a.{0,3}y.{0,3}p.{0,3}a.{0,3}l|ma?c.?fee|n[o0]rt[o0]n|geek.{0,5}squad|ebay|symantec|best buy|lifel[o0]c|secure anywhere|starz|utilities premium|pc security|at&t)'
+                  )
+          )
+  )
+  
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and (
+        any(distinct(headers.hops, .authentication_results.dmarc is not null),
+            strings.ilike(.authentication_results.dmarc, "*fail")
+        )
+      )
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+
+attack_types:
+  - "Callback Phishing"
+tactics_and_techniques:
+  - "Evasion"
+  - "Out of band pivot"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "File analysis"
+  - "Header analysis"
+  - "Sender analysis"
+id: "889417db-e870-5252-81c4-9dd26fb68944"
+og_id: "ca39c83a-b308-532d-894b-528bdaef2748"
+testing_pr: 3967
+testing_sha: b11439395d9f63f18c7981b37c3a71678973145f
