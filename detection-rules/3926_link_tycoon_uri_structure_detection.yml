@@ -5,34 +5,33 @@ severity: "high"
 source: |
     type.inbound
     and 0 < length(body.links) < 30
-    and not profile.by_sender().solicited
     and any(body.links,
-            (
-              // full tycoon uri struct
-              regex.contains(ml.link_analysis(.).final_dom.raw,
-                             'https:\/\/[^/]+\/[a-zA-Z0-9]{0,30}[!@][a-zA-Z0-9]{0,30}\/'
-              )
-              or (
-                // partial tycoon uri struct
-                regex.contains(ml.link_analysis(.).final_dom.raw,
-                               '\/[a-zA-Z0-9]{0,30}[!@][a-zA-Z0-9]{0,30}\/'
+            // full tycoon uri struct
+            any(html.xpath(ml.link_analysis(.).final_dom, '//script/text()').nodes,
+                any(.links,
+                    regex.icontains(.href_url.url,
+                                    'https:\/\/[^/]+\/[a-zA-Z0-9]{0,30}[!@][a-zA-Z0-9]{0,30}\/'
+                    )
+                    and not strings.icontains(.href_url.url, 'https://www.')
+                    and not regex.icontains(.href_url.path,
+                                            '\/[!@][a-zA-Z]{4,30}\/'
+                    )
                 )
-                // thanks cloudflare
-                and strings.contains(ml.link_analysis(.).final_dom.raw,
-                                     'challenges.cloudflare.com'
-                )
+            )
+            // tycoon structured path and cloudflare captcha domain
+            or (
+              any(html.xpath(ml.link_analysis(.).final_dom, '//script/text()').nodes,
+                  regex.icontains(.display_text,
+                                  '\/[a-zA-Z0-9]{0,30}[!@][a-zA-Z0-9]{0,30}\/'
+                  )
               )
-            )
-            // negate folders like /@support/
-            and not regex.contains(ml.link_analysis(.).final_dom.raw,
-                                   '\/[!@][a-zA-Z]{4,30}\/'
-            )
-            // negate links w/ www.
-            and not strings.contains(ml.link_analysis(.).final_dom.raw,
-                                     'https://www.'
+              and any(html.xpath(ml.link_analysis(.).final_dom, '//script/text()').nodes,
+                      strings.icontains(.display_text, 'challenges.cloudflare.com')
+              )
             )
     )
-
+    // unsolicited message
+    and not profile.by_sender().solicited
 attack_types:
   - "Credential Phishing"
 tactics_and_techniques:
