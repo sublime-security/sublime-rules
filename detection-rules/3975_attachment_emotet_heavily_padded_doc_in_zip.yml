@@ -1,0 +1,37 @@
+name: "Attachment: Emotet heavily padded doc in zip file"
+description: |
+  Detects a potential Emotet delivery method using padded .doc files that compress into small zip files. 
+  Contents may include Red Dawn templates exceeding 500MB.
+references:
+  - "https://twitter.com/Cryptolaemus1/status/1633099154623803394"
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and any(attachments,
+          .file_extension == "zip"
+          and any(file.explode(.),
+                  .depth == 0
+                  and .size < 1000000
+                  and not .depth > 0
+                  and strings.ends_with(.scan.exiftool.zip_file_name, ".doc")
+                  and .scan.exiftool.zip_uncompressed_size > 500000000
+          )
+  )
+
+tags:
+  - "Malfam: Emotet"
+attack_types:
+  - "Malware/Ransomware"
+tactics_and_techniques:
+  - "Evasion"
+detection_methods:
+  - "Archive analysis"
+  - "Content analysis"
+  - "Exif analysis"
+  - "File analysis"
+  - "Sender analysis"
+id: "0fcaa34f-374f-5e5a-bde1-c7995e5514f2"
+og_id: "9a5332ed-0023-5d6e-89d3-bd789c3bde6f"
+testing_pr: 3975
+testing_sha: f8ec6f1aab3b5ee8ff33b1ec02d77a08020bd8ad
