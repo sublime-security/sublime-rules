@@ -1,0 +1,57 @@
+name: "Impersonation: HR and financial with recipient domain in display name"
+description: "Detects messages where the sender's display name contains the recipient's organization domain, uses financial or HR-themed subjects, includes attachments, and originates from external domains excluding legitimate business platforms."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+
+  // Display name contains recipient's organization SLD
+  and any(recipients.to,
+          length(.email.domain.sld) >= 4
+          and strings.icontains(sender.display_name, .email.domain.sld)
+  )
+  
+  // Sender domain is external
+  and all(recipients.to,
+          sender.email.domain.root_domain != .email.domain.root_domain
+  )
+  
+  // Financial/HR themed subject
+  and regex.icontains(subject.subject,
+                      '(appraisal|salary|payroll|audit|financial.?record|performance.?review|bonus|compensation|tax.?form|w-?2|evaluation)'
+  )
+  
+  // Has attachment
+  and length(attachments) > 0
+  
+  // Not from org domain
+  and sender.email.domain.root_domain not in $org_domains
+  
+  // Exclude legitimate business automation platforms
+  and sender.email.domain.root_domain not in (
+    "coupahost.com",
+    "oraclecloud.com",
+    "oraclevcn.com",
+    "ariba.com",
+    "leasedirect.com",
+    "workday.com",
+    "myworkday.com",
+    "service-now.com",
+    "successfactors.com",
+    "adp.com",
+    "namely.com",
+    "bamboohr.com",
+    "ultipro.com",
+    "ceridian.com",
+    "zendesk.com"
+  )
+attack_types:
+  - "BEC/Fraud"
+tactics_and_techniques:
+  - "Impersonation: Employee"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Header analysis"
+  - "Sender analysis"
+id: "9f2de70d-2d77-52f6-95b2-93d49d235c49"
