@@ -1,0 +1,51 @@
+name: "Fake message thread with mismatched sender-recipient flow"
+description: "Detects fabricated message threads where the sender-recipient relationship is inconsistent across thread levels, missing proper threading headers, and the current recipient appears as a sender in previous threads."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and length(attachments) == 0
+  and 1 < length(body.previous_threads) < 10
+  // Missing proper threading headers (strong indicator)
+  and headers.in_reply_to is null
+  and (
+    length(headers.references) == 0
+    or not length(headers.references) == length(body.previous_threads)
+  )
+  // The current recipient is the previous threads sender
+  and (
+    body.previous_threads[0].sender.email.email != ""
+    and (
+      recipients.to[0].email.email == body.previous_threads[0].sender.email.email
+    )
+  )
+  and (
+    // Check threads [1] through [8] against their previous thread
+    any([1, 2, 3, 4, 5, 6, 7, 8],
+        // Only check if this thread index exists
+        length(body.previous_threads) > .
+        and body.previous_threads[.].sender.email.email != ""
+        and body.previous_threads[.].recipients.to[0].email.email != ""
+        and body.previous_threads[. - 1].sender.email.email != ""
+        and body.previous_threads[. - 1].recipients.to[0].email.email != ""
+        and (
+          // Thread[N] sender should match Thread[N-1] recipient
+          body.previous_threads[.].sender.email.email != body.previous_threads[. - 1].recipients.to[0].email.email
+        )
+    )
+  )
+
+attack_types:
+  - "BEC/Fraud"
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Social engineering"
+  - "Spoofing"
+detection_methods:
+  - "Header analysis"
+  - "Content analysis"
+  - "Sender analysis"
+id: "2021832d-6e71-537c-ba02-6b9ff3568fbe"
+og_id: "50119702-3f91-59b8-90b6-4d186bf8fb79"
+testing_pr: 3979
+testing_sha: faab7747ad0b9898e8e6cfdad698225068a72b97
