@@ -1,0 +1,38 @@
+name: "PR# 3975 - Attachment: Emotet heavily padded doc in zip file"
+description: |
+  Detects a potential Emotet delivery method using padded .doc files that compress into small zip files. 
+  Contents may include Red Dawn templates exceeding 500MB.
+references:
+  - "https://twitter.com/Cryptolaemus1/status/1633099154623803394"
+  - https://github.com/sublime-security/sublime-rules/pull/3975
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and any(attachments,
+          .file_extension == "zip"
+          and any(file.explode(.),
+                  .depth == 0
+                  and .size < 1000000
+                  and not .depth > 0
+                  and strings.ends_with(.scan.exiftool.zip_file_name, ".doc")
+                  and .scan.exiftool.zip_uncompressed_size > 500000000
+          )
+  )
+
+tags:
+  - "Malfam: Emotet"
+  - pr_author_MSAdministrator
+  - created_from_open_prs
+  - rule_status_modified
+attack_types:
+  - "Malware/Ransomware"
+tactics_and_techniques:
+  - "Evasion"
+detection_methods:
+  - "Archive analysis"
+  - "Content analysis"
+  - "Exif analysis"
+  - "File analysis"
+  - "Sender analysis"
+id: "0fcaa34f-374f-5e5a-bde1-c7995e5514f2"
