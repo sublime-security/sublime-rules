@@ -1,0 +1,54 @@
+name: "PR# 3991 - Brand impersonation: Law enforcement agencies from non-government sender"
+description: "Detects messages impersonating federal law enforcement agencies such as the FBI, Interpol, or UN organizations when sent from non-government domains. The rule identifies specific agency names in the subject, sender display name, or body content while excluding legitimate government communications."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and (
+    (
+      any([
+            "federal bureau of investigation",
+            "fbi",
+            "interpol",
+            "uncc",
+            "customs and border protection"
+          ],
+          strings.icontains(body.current_thread.text, .)
+      )
+    )
+    and any([
+              "United Nations Foundation",
+              "Federal Bureau of Investigation",
+              "Kash Patel",
+              "Kesh Patel"
+            ],
+            (
+              strings.icontains(subject.base, .)
+              or strings.icontains(sender.display_name, .)
+              or strings.icontains(body.current_thread.text, .)
+            )
+    )
+  )
+  and not (strings.ends_with(sender.email.domain.root_domain, ".gov"))
+  and not any(ml.nlu_classifier(body.current_thread.text).topics,
+              .name == "Newsletters and Digests" and .confidence == "high"
+  )
+
+attack_types:
+  - "BEC/Fraud"
+  - "Extortion"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Header analysis"
+  - "Sender analysis"
+  - "Natural Language Understanding"
+id: "ec996c41-4ba8-50c9-b095-0b549ebedc78"
+tags:
+  - created_from_open_prs
+  - rule_status_added
+  - pr_author_MSAdministrator
+references:
+  - https://github.com/sublime-security/sublime-rules/pull/3991
