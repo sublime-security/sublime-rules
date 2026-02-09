@@ -1,0 +1,56 @@
+name: "Job scam with specific salary pattern"
+description: "Detects job scam content that includes specific weekly salary mentions (e.g., '$XXX weekly' patterns) in either the current email thread or previous thread conversations, while excluding legitimate income verification services."
+type: "rule"
+severity: "low"
+source: |
+  type.inbound
+  and (
+    (
+      // job scam in current thread
+      any(ml.nlu_classifier(body.current_thread.text).intents,
+          .name in ("job_scam") and .confidence != "low"
+      )
+      // and salary mention in current thread
+      and regex.icontains(body.current_thread.text,
+                          '\$\d{3} weekly',
+                          'weekly(?:\s+\w+){0,4}\s+\$\d{3}[^\d]'
+      )
+    )
+    // job scam in previous thread
+    or any(body.previous_threads,
+           any(ml.nlu_classifier(.text).intents,
+               .name in ("job_scam") and .confidence != "low"
+           )
+           // and salary mention in previous thread
+           and regex.icontains(.text,
+                               '\$\d{3} weekly',
+                               'weekly(?:\s+\w+){0,4}\s+\$\d{3}[^\d]'
+           )
+    )
+  )
+  and length(body.current_thread.links) < 10
+  
+  // negating income / job verification senders
+  and not (
+    sender.email.domain.root_domain in (
+      'loandepot.com',
+      'sofi.com',
+      'lensa.com',
+      'indeed.com',
+      'ziprecruiter.com',
+      'glassdoor.com',
+      'postjobfree.com',
+      'jobplacements.com'
+    )
+    and headers.auth_summary.dmarc.pass
+  )
+attack_types:
+  - "BEC/Fraud"
+tactics_and_techniques:
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Natural Language Understanding"
+  - "Header analysis"
+  - "Sender analysis"
+id: "af7f9e21-54a1-5bba-a70d-e4d52a13eae3"

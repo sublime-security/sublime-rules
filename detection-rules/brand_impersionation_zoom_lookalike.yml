@@ -1,0 +1,45 @@
+name: "Brand impersonation: Zoom via lookalike domain"
+description: "Message contains a single link which attempts to spoof a 'zoom' link, sent from a free email provider to a single recipient."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and any(body.current_thread.links,
+          not (
+            .href_url.domain.root_domain in (
+              "zoom.us",
+              "zoom.com",
+              "zoominternet.net",
+              "profitzoom.net",
+              "zoomtown.com"
+            )
+            or .display_url.domain.root_domain in (
+              "zoom.us",
+              "zoom.com",
+              "zoominternet.net",
+              "profitzoom.net",
+              "zoomtown.com"
+            )
+          )
+          // zoom in the subdomain or sld
+          and (
+            strings.contains(.href_url.domain.sld, "zoom")
+            or strings.contains(.href_url.domain.subdomain, "zoom")
+            or strings.contains(.display_url.domain.sld, "zoom")
+            or strings.contains(.display_url.domain.subdomain, "zoom")
+          )
+  )
+  and length(body.current_thread.links) == 1
+  and sender.email.domain.root_domain in $free_email_providers
+  and length(recipients.to) == 1
+  and not subject.is_forward
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Free email provider"
+  - "Social engineering"
+detection_methods:
+  - "URL analysis"
+  - "Sender analysis"
+id: "b9d5e4b5-7137-5ac5-b5cc-0ec5323fd31c"
