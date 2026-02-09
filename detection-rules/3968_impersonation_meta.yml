@@ -14,28 +14,27 @@ source: |
       regex.icontains(sender.display_name,
                       'facebook ?ads',
                       'facebook ?business',
-                      'meta ?account',
-                      'meta ?help',
-                      'meta ?support',
-                      'meta ?business',
-                      'meta ?for ?business',
-                      'meta ?policy',
+                      '\bmeta\b ?account',
+                      '\bmeta\b ?help',
+                      '\bmeta\b ?support',
+                      '\bmeta\b ?business',
+                      '\bmeta\b ?for ?business',
+                      '\bmeta\b ?policy',
+                      '\bmeta\b ?verified',
                       'page ?ads ?support',
                       'Instagram ?Not',
                       'Instagram ?Policies',
                       'Instagram ?Report',
                       'Instagram ?Helpdesk',
                       'Instagram ?Support',
-                      'Ads ?Team',
-                      'Meta & Coursera',
+                      '\bMeta & Coursera',
                       'Compliance & Security',
-                      'meta.*inc',
-                      'meta ?copyright',
-                      'meta ?compliance',
-                      'meta ?pro',
-                      'meta ?certify',
-                      'social.?media.?(master|expert|pro|guru)',
-                      'meta.?(social|skill|ads).?(star|set|expert)'
+                      '\bmeta\b.*inc\b',
+                      '\bmeta\b ?copyright',
+                      '\bmeta\b ?compliance',
+                      '\bmeta\b ?certify',
+                      'social.?media.?\b(master|expert|pro|guru)\b',
+                      '\bmeta\b.?(social|skill|ads).?(star|set|expert)'
       )
       or (
         regex.icontains(strings.replace_confusables(sender.display_name),
@@ -45,20 +44,6 @@ source: |
       )
       or strings.ilevenshtein(sender.display_name, 'facebook ads') <= 2
       or strings.ilevenshtein(sender.display_name, 'facebook business') <= 2
-      or (
-        strings.levenshtein(sender.display_name, 'Meta Support') <= 2
-        // negation for Zeta Support
-        and not (
-          sender.display_name == "Zeta Support"
-          and sender.email.domain.root_domain == 'zetaglobal.net'
-        )
-        and not (
-          sender.display_name == "Veza Support"
-          and sender.email.domain.root_domain == 'veza.com'
-          and headers.auth_summary.dmarc.pass
-        )
-        and not sender.display_name == "Get Support"
-      )
       or strings.ilike(sender.email.domain.domain, '*facebook*')
       or strings.ilike(sender.email.local_part,
                        "*instagramlive*",
@@ -82,6 +67,8 @@ source: |
             strings.icontains(sender.display_name, 'MetaGeek Support')
             and sender.email.domain.root_domain == "metageek.com"
           )
+          // negate metamask
+          and not strings.icontains(sender.display_name, 'Metamask')
         )
         or strings.ilevenshtein(sender.display_name, 'facebook') <= 2
       )
@@ -95,9 +82,7 @@ source: |
         )
         or (
           length(body.current_thread.text) < 2000
-          and regex.icontains(body.current_thread.text,
-                              "(?:violation|infringe|copyright)"
-          )
+          and regex.icontains(body.current_thread.text, "(?:violation|infringe)")
         )
         or any(body.links, .href_url.domain.root_domain == "rebrand.ly")
       )
@@ -149,6 +134,7 @@ source: |
                )
         )
       )
+      and not strings.icontains(body.current_thread.text, 'Unroll.Me Rollup')
     )
     // we've seen advertising "advice/recommendations"
     or (
@@ -161,7 +147,7 @@ source: |
             .name == "org" and strings.icontains(.text, 'Community Guidelines')
         )
         or regex.icontains(body.current_thread.text,
-                           '(1\s+(Facebook|Meta)?\s*Way|1601\s+Willow\s+Rd?).*Menlo\s+Park.*CA.*94025'
+                           '(1\s+(Facebook|\bMeta\b)?\s*Way|1601\s+Willow\s+Rd?).*Menlo\s+Park.*CA.*94025'
         )
       )
       and any(ml.nlu_classifier(body.current_thread.text).entities,
@@ -178,7 +164,7 @@ source: |
       )
     )
     or 2 of (
-      strings.icontains(body.current_thread.text, 'Meta'),
+      strings.icontains(body.current_thread.text, 'Meta '),
       strings.icontains(body.current_thread.text, '1602 Willow Road'),
       strings.icontains(body.current_thread.text, 'Menlo Park, CA 91024'),
     )
@@ -199,10 +185,21 @@ source: |
     'metaenterprisemail.com',
     'pigfacebookstore.com.au', // unrelated domain but hitting on facebook
     'metacompliance.com',
-    'metaprop.com' // unrelated domain but hitting on meta pro
+    'metaprop.com', // unrelated domain but hitting on meta pro
+    'oakley.com', // meta intelligence glasses
+    'facebookuserprivacysettlement.com' // fb settlement website
   )
   // negate metaenterprise links
   and not any(headers.reply_to, .email.email == "noreply@facebookmail.com")
+  
+  // message has to have links to somewhere other than fb root domains
+  and not all(body.links,
+              .href_url.domain.root_domain in (
+                'meta.com',
+                'facebook.com',
+                'instagram.com'
+              )
+  )
   
   // negate highly trusted sender domains unless they fail DMARC authentication
   and (
@@ -227,4 +224,4 @@ detection_methods:
 id: "47ca22d7-55a4-5edb-a8fe-4c9217256721"
 og_id: "e38f1e3b-79be-5a59-b084-24a851daf6b9"
 testing_pr: 3968
-testing_sha: ab111e358918f2265bea121658711c646855fe7f
+testing_sha: 0f30883ac8ae4fc6b5ca78de00441884c2e1414e
