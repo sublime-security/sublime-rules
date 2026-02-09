@@ -1,0 +1,83 @@
+name: "PR# 3983 - Callback Phishing via Zoom comment"
+description: "Detects callback scams sent through legitimate Zoom infrastructure that impersonate well-known brands like McAfee, Norton, or PayPal. These messages contain purchase or support-related language along with phone numbers, attempting to trick recipients into calling fraudulent support lines."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and length(attachments) == 0
+  
+  // Legitimate Zoom sending infratructure
+  and sender.email.domain.root_domain == 'zoom.us'
+  and (headers.auth_summary.spf.pass or headers.auth_summary.dmarc.pass)
+  
+  // Zoom Logo
+  and any(ml.logo_detect(file.message_screenshot()).brands, .name == "Zoom")
+  
+  // Callback Phishing
+  and regex.icontains(body.current_thread.text,
+                      (
+                        "mcafee|n[o0]rt[o0]n|geek.{0,5}squad|paypal|ebay|symantec|best buy|lifel[o0]ck"
+                      )
+  )
+  and (
+    3 of (
+      strings.ilike(body.current_thread.text, '*purchase*'),
+      strings.ilike(body.current_thread.text, '*payment*'),
+      strings.ilike(body.current_thread.text, '*transaction*'),
+      strings.ilike(body.current_thread.text, '*subscription*'),
+      strings.ilike(body.current_thread.text, '*antivirus*'),
+      strings.ilike(body.current_thread.text, '*order*'),
+      strings.ilike(body.current_thread.text, '*support*'),
+      strings.ilike(body.current_thread.text, '*help line*'),
+      strings.ilike(body.current_thread.text, '*receipt*'),
+      strings.ilike(body.current_thread.text, '*invoice*'),
+      strings.ilike(body.current_thread.text, '*call*'),
+      strings.ilike(body.current_thread.text, '*cancel*'),
+      strings.ilike(body.current_thread.text, '*renew*'),
+      strings.ilike(body.current_thread.text, '*refund*'),
+      strings.ilike(body.current_thread.text, '*host key*')
+    )
+    or any(ml.nlu_classifier(body.current_thread.text).intents,
+           .name == "callback_scam" and .confidence != "low"
+    )
+  )
+  // phone number regex
+  and any([body.current_thread.text, subject.subject],
+          regex.icontains(.,
+                          '\+?([ilo0-9]{1}.)?\(?[ilo0-9]{3}?\)?.[ilo0-9]{3}.?[ilo0-9]{4}',
+                          '\+?([ilo0-9]{1,2})?\s?\(?\d{3}\)?[\s\.\-⋅]{0,5}[ilo0-9]{3}[\s\.\-⋅]{0,5}[ilo0-9]{4}'
+          )
+  )
+  // negation for legitimate AI generated meeting summaries from Zoom
+  and not (
+    (
+      sender.display_name == "Meeting Summary with AI Companion"
+      and sender.email.email == "no-reply@zoom.us"
+      and headers.auth_summary.dmarc.pass
+    )
+    or (
+      strings.icontains(subject.subject, "Meeting assets")
+      and strings.icontains(body.current_thread.text, "Meeting summary")
+      and sender.email.email == "no-reply@zoom.us"
+      and headers.auth_summary.dmarc.pass
+    )
+  )
+
+attack_types:
+  - "Callback Phishing"
+tactics_and_techniques:
+  - "Out of band pivot"
+  - "Social engineering"
+  - "Impersonation: Brand"
+detection_methods:
+  - "Computer Vision"
+  - "Content analysis"
+  - "Header analysis"
+  - "Sender analysis"
+id: "c3724363-b840-58ee-9c29-7f52d12ec464"
+tags:
+  - created_from_open_prs
+  - rule_status_modified
+  - pr_author_IndiaAce
+references:
+  - https://github.com/sublime-security/sublime-rules/pull/3983
