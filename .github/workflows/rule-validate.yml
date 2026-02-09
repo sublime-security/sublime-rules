@@ -289,26 +289,6 @@ jobs:
           files: "detection-rules/**"
           recover_deleted_files: true
 
-      - name: Checkout base
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
-        if: ${{ steps.get_base_ref.outputs.run_all != 'true' }}
-        with:
-          ref: ${{ steps.get_base_ref.outputs.base_ref }}
-          repository: sublime-security/sublime-rules
-          depth: 0
-          path: sr-main
-
-      - name: Rename files in sr-main based on rule id
-        if: ${{ steps.get_base_ref.outputs.run_all != 'true' }}
-        run: |
-          cd sr-main/detection-rules
-
-          for file in *.yml
-          do
-            id=$(yq '.id' "$file")
-            mv "$file" "${id}.yml"
-          done
-
 
       - name: "Find updated rule IDs"
         id: find_ids
@@ -316,30 +296,58 @@ jobs:
           STEPS_GET_BASE_REF_OUTPUTS_RUN_ALL: ${{ steps.get_base_ref.outputs.run_all }}
           STEPS_CHANGED_FILES_OUTPUTS_DELETED_FILES: ${{ steps.changed-files.outputs.deleted_files }}
         run: |
-          for file in detection-rules/*.yml; do
-            rule_id=$(yq '.id' "$file")
-          
-            if [[ "${STEPS_GET_BASE_REF_OUTPUTS_RUN_ALL}" == "true" ]]; then
+          if [[ "${STEPS_GET_BASE_REF_OUTPUTS_RUN_ALL}" == "true" ]]; then
+            # Run all rules
+            for file in detection-rules/*.yml; do
+              rule_id=$(yq '.id' "$file")
               altered_rule_ids="${rule_id} ${altered_rule_ids}"
-              continue
-            fi
-          
-            new_source=$(yq '.source' "$file")
-            old_source=$(yq '.source' "sr-main/detection-rules/$rule_id.yml" || echo '')
-            
-            # We only need to care when rule source is changed. This will handle renames, tag changes, etc.
-            if [[ "$new_source" != "$old_source" ]]; then
-              echo "$file ($rule_id) has altered source"
-              altered_rule_ids="${rule_id} ${altered_rule_ids}"
-            fi
-          done
-          
-          for file in ${STEPS_CHANGED_FILES_OUTPUTS_DELETED_FILES}; do
-            rule_id=$(yq '.id' "$file")
-            echo "$file ($rule_id) was deleted"
-            altered_rule_ids="${rule_id} ${altered_rule_ids}"
-          done
-          
+            done
+          else
+            # Use three-dot diff to compare only PR changes, handling merge commits correctly
+            git fetch origin "${GITHUB_BASE_REF}:refs/remotes/origin/${GITHUB_BASE_REF}" 2>/dev/null || true
+
+            # Get list of changed detection-rules files (including renames)
+            changed_files=$(git diff --name-only --find-renames "origin/${GITHUB_BASE_REF}...HEAD" -- detection-rules/*.yml || echo "")
+
+            for file in $changed_files; do
+              if [[ ! -f "$file" ]]; then
+                # File was deleted (not renamed)
+                rule_id=$(git show "HEAD^:$file" 2>/dev/null | yq '.id' || echo "unknown")
+                if [[ "$rule_id" != "unknown" ]]; then
+                  echo "$file ($rule_id) was deleted"
+                  altered_rule_ids="${rule_id} ${altered_rule_ids}"
+                fi
+                continue
+              fi
+
+              rule_id=$(yq '.id' "$file")
+              new_source=$(yq '.source' "$file")
+
+              # Find the old file with the same rule ID (handles renames)
+              # Search all yml files in the base branch for this rule ID
+              old_file=$(git ls-tree -r --name-only "origin/${GITHUB_BASE_REF}" -- detection-rules/*.yml | while read old_path; do
+                old_id=$(git show "origin/${GITHUB_BASE_REF}:$old_path" 2>/dev/null | yq '.id' 2>/dev/null || echo "")
+                if [[ "$old_id" == "$rule_id" ]]; then
+                  echo "$old_path"
+                  break
+                fi
+              done)
+
+              if [[ -n "$old_file" ]]; then
+                # File existed in base, compare sources
+                old_source=$(git show "origin/${GITHUB_BASE_REF}:$old_file" 2>/dev/null | yq '.source' || echo '')
+              else
+                # New file in this PR
+                old_source=""
+              fi
+
+              if [[ "$new_source" != "$old_source" ]]; then
+                echo "$file ($rule_id) has altered source"
+                altered_rule_ids="${rule_id} ${altered_rule_ids}"
+              fi
+            done
+          fi
+
           echo "Altered Ruled IDs: [$altered_rule_ids]"
           echo "##[set-output name=rule_ids;]${altered_rule_ids}"
           # TODO: This doesn't solve for a modified rule_id. We could merge with any files known on 'main', but changing
