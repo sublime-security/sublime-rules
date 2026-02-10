@@ -73,62 +73,49 @@ source: |
           or (
             // Email Attachments
             any(file.parse_eml(.).attachments,
-                any(file.explode(.),
-                    .scan.qr.type == "url"
-                    // QR code URL contains recipient's email (targeting indicator)
-                    and any(recipients.to,
-                            .email.domain.valid
-                            and (
-                              // Plaintext email address in URL
-                              strings.icontains(..scan.qr.url.url, .email.email)
-                              // OR base64 encoded email address
-                              or any(strings.scan_base64(..scan.qr.url.url,
-                                                         format="url",
-                                                         ignore_padding=true
-                                     ),
-                                     strings.icontains(., ..email.email)
-                              )
-                            )
-                    )
+                //
+                // This rule makes use of a beta feature and is subject to change without notice
+                // using the beta feature in custom rules is not suggested until it has been formally released
+                //
+                any(beta.scan_qr(.).items,
+                    .type is not null
                     // a single path
-                    and strings.count(.scan.qr.url.path, '/') == 2
+                    and strings.count(.url.path, '/') == 2
                     and (
                       (
                         (
-                          strings.contains(.scan.qr.url.path, '/$')
-                          or strings.contains(.scan.qr.url.path, '/*')
-                          or strings.contains(.scan.qr.url.path, '/#')
+                          strings.contains(.url.path, '/$')
+                          or strings.contains(.url.path, '/*')
+                          or strings.contains(.url.path, '/#')
                         )
                         // subdomain should contain num{3}alpha or alphanum{3}
-                        and regex.icontains(.scan.qr.url.domain.subdomain,
+                        and regex.icontains(.url.domain.subdomain,
                                             '^(?:[a-z]+[0-9]{3}|[0-9]{3}[a-z]+)$'
                         )
                         // url path should contain num{3}alpha or alphanum{3}
-                        and regex.icontains(.scan.qr.url.path,
+                        and regex.icontains(.url.path,
                                             '\/(?:[a-z]+[0-9]{3}|[0-9]{3}[a-z]+)\/'
                         )
                       )
                       or (
                         // special char in the path
                         (
-                          strings.contains(.scan.qr.url.path, '!')
-                          or strings.contains(.scan.qr.url.path, '@')
+                          strings.contains(.url.path, '!')
+                          or strings.contains(.url.path, '@')
                         )
                         and (
-                          strings.contains(.scan.qr.url.path, '/$')
-                          or strings.contains(.scan.qr.url.path, '/*')
-                          or strings.contains(.scan.qr.url.path, '/#')
+                          strings.contains(.url.path, '/$')
+                          or strings.contains(.url.path, '/*')
+                          or strings.contains(.url.path, '/#')
                           // hex dollar sign
-                          or strings.icontains(.scan.qr.url.path, '%24')
+                          or strings.icontains(.url.path, '%24')
                           // hex star
-                          or strings.icontains(.scan.qr.url.path, '%2A')
+                          or strings.icontains(.url.path, '%2A')
                           // hex pound
-                          or strings.icontains(.scan.qr.url.path, '%23')
+                          or strings.icontains(.url.path, '%23')
                         )
                         // ensure expected ordering
-                        and regex.icontains(.scan.qr.url.url,
-                                            '[!@].*(?:[$*]|%2[A43])'
-                        )
+                        and regex.icontains(.url.url, '[!@].*(?:[$*]|%2[A43])')
                       )
                     )
                 )
@@ -201,4 +188,4 @@ detection_methods:
 id: "a4ebed09-6966-5b4c-8449-f066d65b4c99"
 og_id: "fc9e1c09-4691-5cde-94d1-ccd953f1b63a"
 testing_pr: 3998
-testing_sha: e2d76195bf62085228e261fec1c2d676d80e5fdd
+testing_sha: be1c1a4731fb85046d3941a24ef203c3e64f20ca
