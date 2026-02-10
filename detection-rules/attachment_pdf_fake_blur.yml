@@ -1,0 +1,50 @@
+name: "Attachment: PDF with fake image blur and link"
+description: "Detects PDF attachments containing Adobe or Microsoft logos with artificially blurred text patterns that suggest image manipulation to evade detection, combined with embedded URLs."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and any(attachments,
+          (.file_extension == "pdf" or .file_type == "pdf")
+          and any(ml.logo_detect(.).brands,
+                  .name in ("Adobe", "Microsoft")
+                  and .confidence in ("medium", "high")
+          )
+          and any(file.explode(.),
+                  // Work with OCR text directly
+                  length(.scan.ocr.raw) >= 200
+
+                  // Ratio-based fake image blur heuristics
+                  and (
+                    // one-character token ratio: (# of 1-char tokens) / (# of tokens)
+                    (
+                      1.0 * regex.count(.scan.ocr.raw, '\b\w\b') / (
+                        regex.count(.scan.ocr.raw, '\b\w+\b') + 1
+                      )
+                    ) >= 0.35
+
+                    // dash-run density (blur turns glyphs into horizontal strokes)
+                    and (
+                      1.0 * strings.count(.scan.ocr.raw, '-') / (
+                        regex.count(.scan.ocr.raw, '\b\w+\b') + 1
+                      )
+                    ) >= 0.05
+                  )
+          )
+          and any(file.explode(.),
+                  // Strong FP reducer: require at least one extracted URL from the PDF
+                  length(.scan.pdf.urls) > 0
+          )
+  )
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Evasion"
+  - "Image as content"
+  - "Impersonation: Brand"
+  - "PDF"
+detection_methods:
+  - "Computer Vision"
+  - "File analysis"
+  - "Optical Character Recognition"
+  - "URL analysis"
