@@ -14,7 +14,7 @@ source: |
       regex.icontains(sender.display_name,
                       'facebook ?ads',
                       'facebook ?business',
-                      '\bmeta\b ?account',
+                      '\bmeta\b ?account\b',
                       '\bmeta\b ?help',
                       '\bmeta\b ?support',
                       '\bmeta\b ?business',
@@ -29,12 +29,12 @@ source: |
                       'Instagram ?Support',
                       '\bMeta & Coursera',
                       'Compliance & Security',
-                      '\bmeta\b.*inc\b',
+                      '\bmeta\b.*\binc\b',
                       '\bmeta\b ?copyright',
                       '\bmeta\b ?compliance',
                       '\bmeta\b ?certify',
-                      'social.?media.?\b(master|expert|pro|guru)\b',
-                      '\bmeta\b.?(social|skill|ads).?(star|set|expert)'
+                      'social.?media.?\b(?:master|expert|pro|guru)\b',
+                      '\bmeta\b.?(?:social|skill|ads).?(?:star|set|expert)'
       )
       or (
         regex.icontains(strings.replace_confusables(sender.display_name),
@@ -42,6 +42,13 @@ source: |
         )
         and not strings.icontains(sender.display_name, 'facebook')
       )
+      or (
+        regex.icontains(strings.replace_confusables(sender.display_name),
+                        'b.?u.?s.?i.?n.?e.?s.?s'
+        )
+        and not strings.icontains(sender.display_name, 'business')
+      )
+      or strings.contains(sender.display_name, "\u{24C2}")
       or strings.ilevenshtein(sender.display_name, 'facebook ads') <= 2
       or strings.ilevenshtein(sender.display_name, 'facebook business') <= 2
       or strings.ilike(sender.email.domain.domain, '*facebook*')
@@ -58,7 +65,7 @@ source: |
         (
           regex.icontains(sender.display_name,
                           '\bf[\p{Mn}\p{Cf}]*a[\p{Mn}\p{Cf}]*c[\p{Mn}\p{Cf}]*e[\p{Mn}\p{Cf}]*b[\p{Mn}\p{Cf}]*o[\p{Mn}\p{Cf}]*o[\p{Mn}\p{Cf}]*k[\p{Mn}\p{Cf}]*\b',
-                          '\bm[\p{Mn}\p{Cf}]*e[\p{Mn}\p{Cf}]*t[\p{Mn}\p{Cf}]*a[\p{Mn}\p{Cf}]*\b',
+                          '^\s*m[\p{Mn}\p{Cf}]*e[\p{Mn}\p{Cf}]*t[\p{Mn}\p{Cf}]*a[\p{Mn}\p{Cf}]*\b.{5,}',
                           '\bm[\p{Mn}\p{Cf}]*e[\p{Mn}\p{Cf}]*t[\p{Mn}\p{Cf}]*a[\p{Mn}\p{Cf}]*.*support',
                           '\binstagr(am)?\b'
           )
@@ -86,6 +93,9 @@ source: |
         )
         or any(body.links, .href_url.domain.root_domain == "rebrand.ly")
       )
+      and not regex.icontains(body.current_thread.text,
+                              '(?:teams\.microsoft\.com\/meet\/|www\.adobe\.com)'
+      )
     )
     // salesforce sender combined with logo detection and nlu is enough
     or (
@@ -102,7 +112,7 @@ source: |
     // or the body contains a facebook/meta footer with the address citing "community support"
     (
       regex.icontains(body.current_thread.text,
-                      '(1\s+(Facebook|Meta)?\s*Way|1601\s+Willow\s+Rd?).*Menlo\s+Park.*CA.*94025'
+                      '(?:1\s+(?:Facebook|Meta)?\s*Way|1601\s+Willow\s+Rd?).*Menlo\s+Park.*CA.*94025'
       )
       // and it contains a link to spawn a chat with facebook - this is not the way support operates
       and (
@@ -187,7 +197,8 @@ source: |
     'metacompliance.com',
     'metaprop.com', // unrelated domain but hitting on meta pro
     'oakley.com', // meta intelligence glasses
-    'facebookuserprivacysettlement.com' // fb settlement website
+    'facebookuserprivacysettlement.com', // fb settlement website
+    'perceptyx.com' // ai employee engagement
   )
   // negate metaenterprise links
   and not any(headers.reply_to, .email.email == "noreply@facebookmail.com")
@@ -198,6 +209,13 @@ source: |
                 'meta.com',
                 'facebook.com',
                 'instagram.com'
+              )
+  )
+  
+  // mimecast url query params only containing instagram or facebook
+  and not all(body.links,
+              regex.icontains(.href_url.query_params,
+                              ('(?:api\.services\.mimecast\.com|domain=(?:instagram|facebook)\.com)')
               )
   )
   
