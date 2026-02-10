@@ -58,6 +58,7 @@ source: |
                 )
     )
   )
+
   // negate benign topics using ML classifier
   and (
     not any(ml.nlu_classifier(body.current_thread.text).topics,
@@ -65,9 +66,7 @@ source: |
               "Newsletters and Digests",
               "Advertising and Promotions",
               "Educational and Research",
-              "B2B Cold Outreach",
               "Health and Wellness",
-              "Professional and Career Development",
               "Romance",
               "Sexually Explicit Messages",
               "Acts of Violence",
@@ -81,30 +80,40 @@ source: |
   )
   
   // flag if reply-to is present and mismatched with sender
-  // (expected for Calendly, but we want to surface for review)
+  // OR if links exhibit credential phishing behavior
+  // OR if Calendly URL contains crypto-related keywords in the path
+  // OR if it's unsolicited B2B cold outreach or professional development with Calendly
   and (
-    length(headers.reply_to) > 0
-    and all(headers.reply_to,
-            .email.domain.root_domain != sender.email.domain.root_domain
+    (
+      length(headers.reply_to) > 0
+      and all(headers.reply_to,
+              .email.domain.root_domain != sender.email.domain.root_domain
+      )
+    )
+    or any(body.links, ml.link_analysis(.).credphish.disposition == "phishing")
+    or any(body.links,
+           .href_url.domain.domain == "calendly.com"
+           and regex.icontains(.href_url.path,
+                               'crypto|bitcoin|btc|ethereum|eth|blockchain|nft|defi|web3|token|coin|trading|investment|forex|binance|coinbase'
+           )
+    )
+    or any(ml.nlu_classifier(body.current_thread.text).topics,
+           .name in ("B2B Cold Outreach", "Professional and Career Development")
+           and .confidence == "high"
     )
   )
   
-  // only flag unsolicited messages
+  // only flag unsolicited messages or those with malicious history
   and (
-    (
-      not profile.by_sender().solicited
-      or (
-        profile.by_sender().any_messages_malicious_or_spam
-        and not profile.by_sender().any_messages_benign
-      )
-    )
-    // if there's a reply-to, check if it's unsolicited
-    or (
-      length(headers.reply_to) > 0
-      and not any(headers.reply_to, .email.email in $recipient_emails)
-    )
+    not profile.by_sender().solicited
+    or profile.by_sender().any_messages_malicious_or_spam
   )
-  and not profile.by_sender().any_messages_benign
+
+  // negate senders with established benign history
+  and not (
+    profile.by_sender().any_messages_benign
+    and not profile.by_sender().any_messages_malicious_or_spam
+  )
   
 tags:
   - "Hunt"
