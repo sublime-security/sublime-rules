@@ -19,6 +19,9 @@ source: |
     or (headers.auth_summary.spf.pass and headers.auth_summary.dmarc.pass)
   )
   
+  // negate phishing simulations
+  and not profile.by_sender().any_false_positives
+  
   // negate highly trusted sender domains unless they fail DMARC authentication
   and (
     (
@@ -58,7 +61,7 @@ source: |
                 )
     )
   )
-
+  
   // negate benign topics using ML classifier
   and (
     not any(ml.nlu_classifier(body.current_thread.text).topics,
@@ -79,41 +82,19 @@ source: |
     )
   )
   
-  // flag if reply-to is present and mismatched with sender
-  // OR if links exhibit credential phishing behavior
-  // OR if Calendly URL contains crypto-related keywords in the path
-  // OR if it's unsolicited B2B cold outreach or professional development with Calendly
-  and (
-    (
-      length(headers.reply_to) > 0
-      and all(headers.reply_to,
-              .email.domain.root_domain != sender.email.domain.root_domain
-      )
-    )
-    or any(body.links, ml.link_analysis(.).credphish.disposition == "phishing")
-    or any(body.links,
-           .href_url.domain.domain == "calendly.com"
-           and regex.icontains(.href_url.path,
-                               'crypto|bitcoin|btc|ethereum|eth|blockchain|nft|defi|web3|token|coin|trading|investment|forex|binance|coinbase'
-           )
-    )
-    or any(ml.nlu_classifier(body.current_thread.text).topics,
-           .name in ("B2B Cold Outreach", "Professional and Career Development")
-           and .confidence == "high"
-    )
+  // FLAG ONLY: Calendly URLs with crypto/financial scam keywords in path
+  // Detects ELUSIVE COMET and similar targeted campaigns
+  // Using word boundaries to avoid false positives
+  and any(body.links,
+          .href_url.domain.domain == "calendly.com"
+          and regex.icontains(.href_url.path,
+                              '\b(crypto|bitcoin|btc|ethereum|eth|blockchain|nft|defi|web3|token|coin|trading|investment|forex|binance|coinbase|block|bloomberg|series|conference|media)\b'
+          )
   )
   
-  // only flag unsolicited messages or those with malicious history
-  and (
-    not profile.by_sender().solicited
-    or profile.by_sender().any_messages_malicious_or_spam
-  )
-
-  // negate senders with established benign history
-  and not (
-    profile.by_sender().any_messages_benign
-    and not profile.by_sender().any_messages_malicious_or_spam
-  )
+  // STRICT sender requirements: must be BOTH unsolicited AND no benign history
+  and not profile.by_sender().solicited
+  and not profile.by_sender().any_messages_benign
   
 tags:
   - "Hunt"
