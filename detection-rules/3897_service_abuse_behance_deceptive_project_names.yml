@@ -4,34 +4,30 @@ type: "rule"
 severity: "high"
 source: |
   type.inbound
-  and strings.icontains(subject.subject, 'proposal')
-  and any(body.links, .href_url.domain.root_domain == 'behance.net')
+  and strings.ilike(body.current_thread.text,
+                    "*shared a",
+                    "*document*",
+                    "*access*",
+                    "*proposal*",
+                    "*specified link*"
+  )
   and any(body.links,
-          // check if the behance project creator name matches known suspicious patterns
-          any(html.xpath(ml.link_analysis(.).final_dom,
-                         "//script[@id='beconfig-store_state']"
-              ).nodes,
-              strings.parse_json(regex.extract(.raw,
-                                               '<script type="application/json" id="beconfig-store_state">(?P<beconfig_store_state>.*)\s*</script>'
-                                 )[0].named_groups["beconfig_store_state"]
-              )["project"]["project"]["creator"]["displayName"] in (
-                "Shared File",
-                "Secured Document",
-                "Others"
-              )
-          )
-          or 
-          // check if the behance project name appears in the email subject, indicating templated lure content
           .href_url.domain.root_domain == 'behance.net'
-          and any(html.xpath(ml.link_analysis(.).final_dom,
-                             "//script[@id='beconfig-store_state']"
-                  ).nodes,
-                  strings.icontains(subject.base,
-                                    strings.parse_json(regex.extract(.raw,
-                                                                     '<script type="application/json" id="beconfig-store_state">(?P<beconfig_store_state>.*)\s*</script>'
-                                                       )[0].named_groups["beconfig_store_state"]
-                                    )["project"]["project"]["name"]
-                  )
+          and (
+            any(html.xpath(ml.link_analysis(.).final_dom,
+                           "//script[@id='beconfig-store_state']"
+                ).nodes,
+                strings.parse_json(regex.extract(.raw,
+                                                 '<script type="application/json" id="beconfig-store_state">(?P<beconfig_store_state>.*)\s*</script>'
+                                   )[0].named_groups["beconfig_store_state"]
+                )["project"]["project"]["privacyLevel"] == "UNDISCOVERABLE"
+            )
+            or (
+              any(ml.nlu_classifier(body.current_thread.text).intents,
+                  .name == "cred_theft" and .confidence != "low"
+              )
+              and strings.icontains(.href_url.path, '/gallery/')
+            )
           )
   )
 
