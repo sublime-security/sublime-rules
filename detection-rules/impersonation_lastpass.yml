@@ -5,17 +5,8 @@ severity: "high"
 source: |
   type.inbound
   and length(body.links) > 0
-  and (
-    any([subject.subject, sender.display_name, sender.email.domain.domain],
-        strings.ilike(strings.replace_confusables(.), "*Last*Pass*")
-    )
-    or (
-      any(ml.nlu_classifier(body.current_thread.text).entities,
-          .name == "org" and .text == "LastPass"
-      )
-      and not strings.icontains(body.current_thread.text, "PassKey") // negate references to pass keys
-    )
-  //   or any(ml.logo_detect(file.message_screenshot()).brands, .name == "LastPass")
+  and any([subject.subject, sender.display_name, sender.email.domain.domain],
+          strings.ilike(strings.replace_confusables(.), "*LastPass*", "Last?Pass")
   )
   and (
     strings.ilike(body.current_thread.text,
@@ -26,7 +17,7 @@ source: |
                   "*support@lastpass.com*" // real LastPass support address
     )
     or any(body.links,
-           // link to S3
+           // links directly to a S3 bucket
            (
              .href_url.domain.root_domain == "amazonaws.com"
              and strings.icontains(.href_url.domain.subdomain, "s3")
@@ -37,7 +28,8 @@ source: |
            )
     )
     or any(ml.nlu_classifier(body.current_thread.text).topics,
-           .name in ("Security and Authentication", "Reminders and Notifications") and .confidence != "low"
+           .name in ("Security and Authentication", "Reminders and Notifications")
+           and .confidence != "low"
     )
     // invalid sender address
     or not sender.email.domain.valid
