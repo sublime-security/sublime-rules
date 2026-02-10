@@ -1,0 +1,61 @@
+name: "Spam: Fake dating profile notification"
+description: "Detects dating-themed messages from free email providers containing links with the recipient's email address embedded in URL parameters, combined with suspicious language or topics in the message body."
+type: "rule"
+severity: "low"
+source: |
+  type.inbound
+  and sender.email.domain.root_domain in $free_email_providers
+  // not a reply
+  and length(headers.references) == 0
+  and 0 < length(distinct(body.current_thread.links, .href_url.domain.root_domain)
+  ) <= 3
+  and any(body.links,
+          any(.href_url.query_params_decoded["email"],
+              strings.parse_email(.).email in map(recipients.to, .email.email)
+          )
+          or any([.href_url.path, .display_text],
+                 strings.ilike(.,
+                               "*Flirt*",
+                               "*Singles*",
+                               "*Dating*",
+                               "*Girls*",
+                               "*Women*",
+                               "*Screw*",
+                               "*Hook*up*",
+                               "*Reply*",
+                               "*Message*"
+                 )
+          )
+  )
+  and (
+    any(ml.nlu_classifier(body.current_thread.text).entities,
+        .name == "org"
+        and strings.ilike(.text,
+                          "*Flirt*",
+                          "*Singles*",
+                          "*Date*",
+                          "*Dating*",
+                          "*Girls*",
+                          "*Women*",
+                          "*Love*",
+                          "*Hook*up*"
+        )
+    )
+    or any(ml.nlu_classifier(body.current_thread.text).topics, .name == "Romance")
+  )
+
+attack_types:
+  - "Spam"
+tactics_and_techniques:
+  - "Free email provider"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Header analysis"
+  - "Natural Language Understanding"
+  - "Sender analysis"
+  - "URL analysis"
+id: "1e513cfa-08eb-5f38-aced-6bdff65efcdd"
+og_id: "0f33fea2-1508-5ae8-a31b-9d498dfcadba"
+testing_pr: 3993
+testing_sha: f0ce795504ed634b8b36b7f6b1a63ffa64f65ae3
