@@ -1,0 +1,95 @@
+name: "AI-generated HTML with modern CSS patterns"
+description: "Detects messages containing sophisticated HTML with modern CSS features typical of AI-generated templates, including Font Awesome icons, gradients, animations, and card-based layouts, combined with authentication failures from new or suspicious senders."
+type: "rule"
+severity: "low"
+source: |
+  type.inbound
+  
+  // AI-generated HTML patterns with modern CSS (must match at least 2 patterns)
+  and (
+    // Pattern 1: Font Awesome + Modern CSS combo
+    (
+      strings.icontains(body.html.raw, "font-awesome")
+      and (
+        strings.icontains(body.html.raw, "linear-gradient")
+        or strings.icontains(body.html.raw, "box-shadow")
+        or strings.icontains(body.html.raw, "border-radius")
+      )
+    )
+  
+    // Pattern 2: Modern CSS animation/transform features
+    or (
+      strings.icontains(body.html.raw, "linear-gradient")
+      and strings.icontains(body.html.raw, "box-shadow")
+      and (
+        strings.icontains(body.html.raw, "transform:")
+        or strings.icontains(body.html.raw, "transition:")
+        or strings.icontains(body.html.raw, "animation:")
+      )
+    )
+  
+    // Pattern 3: Card-based layout patterns typical of AI templates
+    or (
+      regex.icontains(body.html.raw,
+                      '\.(info-card|cta-button|deadline-banner|timeline-container|key-point|warning-box)'
+      )
+      and strings.icontains(body.html.raw, "border-radius")
+      and strings.icontains(body.html.raw, "box-shadow")
+    )
+  
+    // Pattern 4: Embedded JavaScript with event listeners (unusual for legitimate emails)
+    or (
+      strings.icontains(body.html.raw, "<script>")
+      and strings.icontains(body.html.raw, "addEventListener")
+      and (
+        strings.icontains(body.html.raw, "linear-gradient")
+        or strings.icontains(body.html.raw, "box-shadow")
+      )
+    )
+  )
+  
+  // Verify SPF/DMARC failure for sender domain
+  and (not headers.auth_summary.spf.pass or not headers.auth_summary.dmarc.pass)
+  
+  // Sender reputation checks
+  and (
+    (
+      profile.by_sender().prevalence in ("new", "outlier")
+      and not profile.by_sender().solicited
+    )
+    or (
+      profile.by_sender().any_messages_malicious_or_spam
+      and not profile.by_sender().any_messages_benign
+    )
+  )
+  
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and not headers.auth_summary.dmarc.pass
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+  
+  // negate replies
+  and not (
+    subject.is_reply
+    or subject.is_forward
+    or (
+      length(headers.references) > 0
+      or any(headers.hops, any(.fields, strings.ilike(.name, "In-Reply-To")))
+    )
+  )
+
+attack_types:
+  - "Credential Phishing"
+  - "BEC/Fraud"
+  - "Malware/Ransomware"
+tactics_and_techniques:
+  - "Evasion"
+  - "HTML smuggling"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "HTML analysis"
