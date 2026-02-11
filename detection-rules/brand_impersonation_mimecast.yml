@@ -1,0 +1,54 @@
+name: "Brand impersonation: Mimecast"
+description: "Detects messages impersonating Mimecast with malformed HTML structure, including specific DOCTYPE declarations, empty title tags, Mimecast-specific CSS classes, and suspicious logo handling that deviates from legitimate Mimecast messaging patterns."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and any(html.xpath(body.html, "//table/@class").nodes,
+          strings.count(.raw, "mc-e-") > 3
+  )
+  and (
+    strings.count(body.html.raw,
+                  "<!-- prevent Gmail on iOS font size manipulation -->"
+    ) == 1
+    or (
+      strings.count(body.html.raw, "<!--") > 1
+      // If two comments then the last one should be this one
+      // thus we use predicates and the last() function
+      and html.xpath(body.html, "//comment()[last()]").nodes[0].raw == "<!-- prevent Gmail on iOS font size manipulation -->"
+    )
+  )
+  and not (
+    // If the image source doesn't start with https then flag
+    strings.icontains(html.xpath(body.html, "//img/@src").nodes[0].raw,
+                      "mimecast.com/"
+    )
+    or strings.icontains(html.xpath(body.html, "//img/@src").nodes[0].raw,
+                         ".mimecastcybergraph.com/v2/banners"
+    )
+    or strings.icontains(html.xpath(body.html, "//img/@src").nodes[0].raw,
+                         ".mimecastcybergraph.com/v1/image"
+    )
+    or any(filter(attachments, .file_type == "png"),
+           strings.icontains(strings.concat("cid:", .file_name),
+                             html.xpath(body.html, "//img/@src").nodes[0].raw,
+           )
+    )
+  )
+  and not all(body.links,
+              .href_url.domain.root_domain in (
+                "aka.ms",
+                "mimecast.com",
+                "mimecastprotect.com",
+                "mimecastcybergraph.com"
+              )
+  )
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Evasion"
+detection_methods:
+  - "HTML analysis"
+  - "Content analysis"
+id: "fde1930e-800e-530c-a11a-ffd7fee835e5"
