@@ -11,7 +11,7 @@ source: |
     or // Typosquatting domains in links
    (
       0 < strings.ilevenshtein(sender.display_name, "openai.com") < 3
-      or 0 < strings.ilevenshtein(sender.display_name, "chatgpt.com") < 3 
+      or 0 < strings.ilevenshtein(sender.display_name, "chatgpt.com") < 3
     )
   )
   // subject checks suggesting error with payment
@@ -27,9 +27,21 @@ source: |
           ),
           // it's credphishing or does not go to openAI
           (
-            ml.link_analysis(.).credphish.disposition == "phishing"
-            or .href_url.domain.root_domain not in ('openai.com', 'chatgpt.com')
-            or strings.icontains(.href_url.url, 'hxxps') 
+            // TODO: Uncomment for review/merge after gathering telemetry
+            // ml.link_analysis(.).credphish.disposition == "phishing"
+            // or
+            .href_url.domain.root_domain not in ('openai.com', 'chatgpt.com')
+            or strings.icontains(.href_url.url, 'hxxps')
+            // Extra gate: credential theft indicators in URL path
+            or (
+              regex.icontains(.href_url.path,
+                              'login|signin|verify|auth|account|secure|confirm'
+              )
+              and .href_url.domain.root_domain not in (
+                'openai.com',
+                'chatgpt.com'
+              )
+            )
           )
   )
   and sender.email.domain.root_domain not in ("atlassian.net", "chat.openai.com")
