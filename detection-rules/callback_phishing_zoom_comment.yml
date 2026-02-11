@@ -10,7 +10,7 @@ source: |
   and sender.email.domain.root_domain == 'zoom.us'
   and (headers.auth_summary.spf.pass or headers.auth_summary.dmarc.pass)
   
-  // Zoom Logo 
+  // Zoom Logo
   and any(ml.logo_detect(file.message_screenshot()).brands, .name == "Zoom")
   
   // Callback Phishing
@@ -19,21 +19,27 @@ source: |
                         "mcafee|n[o0]rt[o0]n|geek.{0,5}squad|paypal|ebay|symantec|best buy|lifel[o0]ck"
                       )
   )
-  and 3 of (
-    strings.ilike(body.current_thread.text, '*purchase*'),
-    strings.ilike(body.current_thread.text, '*payment*'),
-    strings.ilike(body.current_thread.text, '*transaction*'),
-    strings.ilike(body.current_thread.text, '*subscription*'),
-    strings.ilike(body.current_thread.text, '*antivirus*'),
-    strings.ilike(body.current_thread.text, '*order*'),
-    strings.ilike(body.current_thread.text, '*support*'),
-    strings.ilike(body.current_thread.text, '*help line*'),
-    strings.ilike(body.current_thread.text, '*receipt*'),
-    strings.ilike(body.current_thread.text, '*invoice*'),
-    strings.ilike(body.current_thread.text, '*call*'),
-    strings.ilike(body.current_thread.text, '*cancel*'),
-    strings.ilike(body.current_thread.text, '*renew*'),
-    strings.ilike(body.current_thread.text, '*refund*')
+  and (
+    3 of (
+      strings.ilike(body.current_thread.text, '*purchase*'),
+      strings.ilike(body.current_thread.text, '*payment*'),
+      strings.ilike(body.current_thread.text, '*transaction*'),
+      strings.ilike(body.current_thread.text, '*subscription*'),
+      strings.ilike(body.current_thread.text, '*antivirus*'),
+      strings.ilike(body.current_thread.text, '*order*'),
+      strings.ilike(body.current_thread.text, '*support*'),
+      strings.ilike(body.current_thread.text, '*help line*'),
+      strings.ilike(body.current_thread.text, '*receipt*'),
+      strings.ilike(body.current_thread.text, '*invoice*'),
+      strings.ilike(body.current_thread.text, '*call*'),
+      strings.ilike(body.current_thread.text, '*cancel*'),
+      strings.ilike(body.current_thread.text, '*renew*'),
+      strings.ilike(body.current_thread.text, '*refund*'),
+      strings.ilike(body.current_thread.text, '*host key*')
+    )
+    or any(ml.nlu_classifier(body.current_thread.text).intents,
+           .name == "callback_scam" and .confidence != "low"
+    )
   )
   // phone number regex
   and any([body.current_thread.text, subject.subject],
@@ -42,7 +48,7 @@ source: |
                           '\+?([ilo0-9]{1,2})?\s?\(?\d{3}\)?[\s\.\-⋅]{0,5}[ilo0-9]{3}[\s\.\-⋅]{0,5}[ilo0-9]{4}'
           )
   )
-  // negation for legitimate AI generated meeting summaries from Zoom 
+  // negation for legitimate AI generated meeting summaries from Zoom
   and not (
     (
       sender.display_name == "Meeting Summary with AI Companion"
