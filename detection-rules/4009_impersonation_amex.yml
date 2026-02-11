@@ -1,0 +1,66 @@
+name: "Brand impersonation: American Express (AMEX)"
+description: |
+  Impersonation of the credit card provider American Express.
+references:
+  - "https://www.inc.com/joseph-steinberg/american-express-users-beware-this-scam.html"
+type: "rule"
+severity: "low"
+source: |
+  type.inbound
+  and (
+    regex.icontains(strings.replace_confusables(sender.display_name),
+                    'american ?express'
+    )
+    or strings.ilike(sender.display_name, "*amer?can expres*")
+    or strings.ilevenshtein(sender.display_name, 'american express') <= 2
+    or strings.icontains(body.current_thread.text,
+                         'american express customer service'
+    )
+    or strings.ilike(sender.email.domain.domain, '*americanexpress*')
+  )
+  and sender.email.domain.root_domain not in (
+    'aexp.com',
+    'americanexpress.ae',
+    'americanexpress.com',
+    'americanexpress.co.uk',
+    'americanexpress.com.bh',
+    'aexpfeedback.com',
+    'amexnetwork.com',
+    'accountonline.com',
+    'transunion.com',
+    'amexgiftcard.com',
+    'amexgbt.com',
+    'herrickstravelamex.com',
+    'citi.com',
+    'secure.com',
+    'nectar.com',
+    'accentinfomedia.com',
+    'egencia.com'
+  )
+  and sender.email.domain.domain not in (
+    'accountprotection.microsoft.com',
+    'amex.membershipmail.net'
+  )
+  and not profile.by_sender().solicited
+  
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and not headers.auth_summary.dmarc.pass
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Lookalike domain"
+  - "Social engineering"
+detection_methods:
+  - "Header analysis"
+  - "Sender analysis"
+id: "d13ff1ee-aa60-5c3f-9648-1ebe2291fe0b"
+og_id: "992a9fa9-84ee-5065-8486-b3a2a8ffa676"
+testing_pr: 4009
+testing_sha: 4be28bc7d374922c4881ceb0acab7e6d4776b716
