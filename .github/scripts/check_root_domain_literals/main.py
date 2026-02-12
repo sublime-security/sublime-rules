@@ -24,8 +24,12 @@ RULE_DIRS = [
     'insights',
 ]
 
-# Initialize tldextract with bundled PSL snapshot (no network calls)
-_extract = tldextract.TLDExtract(suffix_list_urls=None, include_psl_private_domains=False)
+# Pin to the same PSL version used by the Sublime platform
+# (publicsuffix-go v0.30.1 → github.com/publicsuffix/list commit 311a23)
+# To find the current version used by Sublime:
+# https://github.com/search?q=repo%3Asublime-security%2Fgo-mantis+publicsuffix-go&type=code
+_PSL_URL = "https://raw.githubusercontent.com/publicsuffix/list/311a23/public_suffix_list.dat"
+_extract = tldextract.TLDExtract(suffix_list_urls=[_PSL_URL], include_psl_private_domains=False)
 
 
 def find_source_line_offset(filepath):
