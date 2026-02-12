@@ -1,0 +1,83 @@
+name: "Investment fraud: Startup investment solicitation with suspicious indicators"
+description: "Detects messages containing investment-related language involving startups and funding opportunities, combined with suspicious signals such as freemail, low-reputation domains, free file hosts, or mismatched reply-to addresses. The rule identifies content with venture capital, private equity, and startup terminology while excluding legitimate newsletters and professional communications."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  // money keywords (1 required)
+  and regex.icontains(body.current_thread.text,
+                      '\b(?:venture|working|seed|growth)[- ](?:cap|capital|funding)\b|\bVC\b',
+                      '\bprivate[- ](?:equity|credit|finance|lend(ing|er))\b',
+                      '\bconfirmed[- ]orders?\b',
+                      '\bsecondar(y|ies)\b',
+                      '\bhigh[- ]growth\b',
+                      '\bpre[- ]money\b',
+                      '\bconvertible[- ]note\b',
+                      '\bfunding[- ]round\b'
+  )
+  
+  // action keywords (1 required)
+  and (
+    regex.icontains(body.current_thread.text,
+                    '\binvest(?:ing|ment|or)\b',
+                    '\blaunch\b',
+    )
+    or strings.icontains(body.current_thread.text, "accelerate")
+    or strings.icontains(body.current_thread.text, "opportunity")
+  )
+  
+  // startup keywords (1 required)
+  and regex.icontains(body.current_thread.text,
+                      '\b(?:pre[- ]?)?(?:series|seed)(?:[- ][a-e])\b',
+                      '\b(?:early|growth|late)[- ]stage\b',
+                      '\bstart[- ]?up\b'
+  )
+  
+  // character limit
+  and length(body.current_thread.text) <= 3500
+  
+  // suspicious signals
+  and (
+    sender.email.domain.root_domain not in $tranco_1m
+    or any(body.links, .href_url.domain.domain in $free_file_hosts)
+    or any(body.links, .href_url.domain.root_domain in $free_subdomain_hosts)
+    or (
+      length(headers.reply_to) > 0
+      and all(headers.reply_to,
+              .email.domain.root_domain != sender.email.domain.root_domain
+      )
+    )
+    or sender.email.domain.root_domain in $free_email_providers
+  )
+  
+  // topic negations
+  and not any(ml.nlu_classifier(body.current_thread.text).topics,
+              .name in (
+                "Newsletters and Digests",
+                "Professional and Career Development",
+                "Events and Webinars",
+                "Legal and Compliance"
+              )
+  )
+  
+  // pitch deck negation
+  and not strings.icontains(body.current_thread.text, 'deck')
+
+attack_types:
+  - "BEC/Fraud"
+tactics_and_techniques:
+  - "Free email provider"
+  - "Free file host"
+  - "Free subdomain host"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Header analysis"
+  - "Natural Language Understanding"
+  - "Sender analysis"
+  - "Threat intelligence"
+  - "URL analysis"
+id: "16e867d3-3ab8-553e-a6ad-c47819a7a2cf"
+og_id: "3327c2e9-d3df-50fb-b0be-d9ee7ab2473c"
+testing_pr: 4013
+testing_sha: f3b33f45f14ca739ecb7d7e8010d5d120114120e
