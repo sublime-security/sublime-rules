@@ -1,0 +1,44 @@
+name: "Link: Unsolicited email contains link to page containing Tycoon URI structure"
+description: "Detects links containing Tycoon phishing kit URI patterns with specific alphanumeric sequences separated by exclamation marks or at symbols from unsolicited senders."
+type: "rule"
+severity: "high"
+source: |
+    type.inbound
+    and 0 < length(body.links) < 15
+    and any(body.links,
+            // full tycoon uri struct
+            any(html.xpath(ml.link_analysis(.).final_dom, '//script/text()').nodes,
+                any(.links,
+                    regex.icontains(.href_url.url,
+                                    'https:\/\/[^/]+\/[a-zA-Z0-9]{0,30}[!@][a-zA-Z0-9]{0,30}\/'
+                    )
+                    and not strings.icontains(.href_url.url, 'https://www.')
+                    and not regex.icontains(.href_url.path,
+                                            '\/[!@][a-zA-Z]{4,30}\/'
+                    )
+                )
+            )
+            // tycoon structured path and cloudflare captcha domain
+            or (
+              any(html.xpath(ml.link_analysis(.).final_dom, '//script/text()').nodes,
+                  regex.icontains(.display_text,
+                                  '\/[a-zA-Z0-9]{0,30}[!@][a-zA-Z0-9]{0,30}\/'
+                  )
+              )
+              and any(html.xpath(ml.link_analysis(.).final_dom, '//script/text()').nodes,
+                      strings.icontains(.display_text, 'challenges.cloudflare.com')
+              )
+            )
+    )
+    // unsolicited message
+    and not profile.by_sender().solicited
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Evasion"
+  - "Social engineering"
+detection_methods:
+  - "Sender analysis"
+  - "URL analysis"
+  - "URL screenshot"
+id: "531aa65a-fd5d-54f6-ac18-1019b12e4c6a"
