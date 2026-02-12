@@ -1,0 +1,39 @@
+name: "PR# 4018 - Credential phishing: Blue button styled link with file-sharing template artifacts"
+description: "Detects inbound messages containing styled blue button links commonly associated with generic file-sharing phishing templates, where the link does not point to legitimate Outlook domains."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and length(body.previous_threads) == 0
+  and any(filter(html.xpath(body.html, '//a[@href]').nodes,
+  
+                 // blue button background, background-color and observed colors
+                 regex.icontains(.raw,
+                                 '(?:background(?:-color)?)\s*[:\s]\s*#(?:0078d4|3a78d1)'
+                 )
+          ),
+          (
+            // it's styled as a button
+            regex.icontains(.raw, 'padding')
+          )
+  )
+  and not any(body.current_thread.links,
+              .href_url.domain.domain == "outlook.office365.com"
+  )
+
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "HTML analysis"
+  - "URL analysis"
+id: "bc18e7ed-767d-5f1e-8cad-6fc0bc7e3bb4"
+tags:
+  - created_from_open_prs
+  - rule_status_added
+  - pr_author_IndiaAce
+references:
+  - https://github.com/sublime-security/sublime-rules/pull/4018
