@@ -1,0 +1,36 @@
+name: "Credential phishing: Blue button styled link with file-sharing template artifacts"
+description: "Detects inbound messages containing styled blue button links commonly associated with generic file-sharing phishing templates, where the link does not point to legitimate Outlook domains."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and length(body.previous_threads) == 0
+  and any(filter(html.xpath(body.html, '//a[@href]').nodes,
+  
+                 // blue button background, background-color and observed colors
+                 regex.icontains(.raw,
+                                 '(?:background(?:-color)?)\s*[:\s]\s*#(?:0078d4|3a78d1)'
+                 )
+          ),
+          (
+            // it's styled as a button
+            regex.icontains(.raw, 'padding')
+          )
+  )
+  and not any(body.current_thread.links,
+              .href_url.domain.domain == "outlook.office365.com"
+  )
+
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "HTML analysis"
+  - "URL analysis"
+id: "bc18e7ed-767d-5f1e-8cad-6fc0bc7e3bb4"
+og_id: "370f6c07-e59c-515a-9b4b-7be70b5e7284"
+testing_pr: 4018
+testing_sha: b3d5c3b2bf90285fd1c274113b9d41246da415f5
