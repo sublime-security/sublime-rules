@@ -1,0 +1,46 @@
+name: "Service abuse: Google Drive shares with excessive CC recipients and credential theft language"
+description: "Detects messages from legitimate Google Drive sharing addresses that contain credential theft language and either have more than 30 CC recipients from different domains or use undisclosed recipients, indicating potential abuse of Google's trusted sending reputation."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  // using legit google sender
+  and sender.email.email in (
+    'drive-shares-dm-noreply@google.com',
+    'drive-shares-noreply@google.com',
+  )
+  // length of cc'd recipients is > 30 and contain many distinct root_domains, or unidsclosed recipients
+  and (
+    (
+      length(recipients.cc) > 30
+      and not length(distinct(recipients.cc, .email.domain.root_domain)) < 15
+    )
+    or (
+      all(recipients.to, .email.domain.valid == false)
+      and all(recipients.cc, .email.domain.valid == false)
+    )
+  )
+  // email contains warning that sender is outside the organization
+  and any(html.xpath(body.html,
+                     '//div[contains(@style, "background: #fef7e0")]//div'
+          ).nodes,
+          strings.icontains(.display_text, "is outside your organization")
+  )
+  // cred theft intents
+  and any(ml.nlu_classifier(body.current_thread.text).intents,
+          .name == "cred_theft" and .confidence != "low"
+  )
+  
+tags:
+  - "Attack surface reduction"
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Header analysis"
+  - "Natural Language Understanding"
+  - "Sender analysis"
+id: "19dc6f1c-4c46-5dc5-b2ee-a594e768d79b"
