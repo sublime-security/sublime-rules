@@ -1,0 +1,56 @@
+name: "Urgent language with suspicious links from unsolicited sender"
+description: "Detects messages containing urgent time-based language (24/48 hours) combined with links to free file hosts, subdomain hosts, or self-service platforms, or from free email providers. Excludes legitimate timeframe references and targets unsolicited senders."
+type: "rule"
+severity: "low"
+source: |
+  type.inbound
+  // no previous replies
+  and length(body.previous_threads) == 0
+  // message contains a typical hours phrase
+  and regex.icontains(body.current_thread.text, '(?:24|48) hours')
+  // some phrase negations
+  and not regex.icontains(body.current_thread.text,
+                          'hours (?:(?:be)?for|ago|notice|from|but|notification|of submission|to (?:arrange|appear|be|weigh|go|introduce))'
+  )
+  and not regex.icontains(body.current_thread.text,
+                          '(?:the|less than|(?:back to you|usually|transferred) within|coming|available for|wait|closed after) (?:24|48|24[–-]48) hours'
+  )
+  // contains interesting domain
+  and (
+    (
+      0 < length(body.links) < 30
+      and any(body.links,
+              .href_url.domain.root_domain in $free_file_hosts
+              or .href_url.domain.root_domain in $self_service_creation_platform_domains
+              or .href_url.domain.root_domain in $free_subdomain_hosts
+      )
+    )
+    // or free email sender
+    or sender.email.domain.domain in $free_email_providers
+  )
+  and not sender.email.domain.root_domain in (
+    'knowbe4.com',
+    'notion.so',
+    'hubspot.com',
+    'beehiiv.com'
+  )
+  // unsolicited sender
+  and not profile.by_sender().solicited
+
+attack_types:
+  - "BEC/Fraud"
+  - "Credential Phishing"
+  - "Malware/Ransomware"
+tactics_and_techniques:
+  - "Social engineering"
+  - "Free email provider"
+  - "Free file host"
+  - "Free subdomain host"
+detection_methods:
+  - "Content analysis"
+  - "Sender analysis"
+  - "URL analysis"
+id: "e6608849-8536-55ff-935a-ad7ea28f9f19"
+og_id: "769510c1-7c80-568f-b8b9-66ecbc6ff117"
+testing_pr: 4023
+testing_sha: 19ed6fd114fdb922f9cd7ac2b7db38a6fd7c02f9
