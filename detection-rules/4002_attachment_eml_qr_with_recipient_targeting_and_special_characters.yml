@@ -13,48 +13,114 @@ source: |
               // This rule makes use of a beta feature and is subject to change without notice
               // using the beta feature in custom rules is not suggested until it has been formally released
               //
-              any(beta.scan_qr(.).items,
-                  .type is not null
-                  // a single path
-                  and strings.count(.url.path, '/') == 2
-                  and (
+              (
+                .file_extension in $file_extensions_macros
+                and any(file.explode(.),
+                        .scan.qr.type == "url"
+                        // QR code URL contains recipient's email (targeting indicator)
+                        and any(recipients.to,
+                                .email.domain.valid
+                                and (
+                                  // Plaintext email address in URL
+                                  strings.icontains(..scan.qr.url.url,
+                                                    .email.email
+                                  )
+                                  // OR base64 encoded email address
+                                  or any(strings.scan_base64(..scan.qr.url.url,
+                                                             format="url",
+                                                             ignore_padding=true
+                                         ),
+                                         strings.icontains(., ..email.email)
+                                  )
+                                )
+                        )
+                        // a single path
+                        and strings.count(.scan.qr.url.path, '/') == 2
+                        and (
+                          (
+                            (
+                              strings.contains(.scan.qr.url.path, '/$')
+                              or strings.contains(.scan.qr.url.path, '/*')
+                              or strings.contains(.scan.qr.url.path, '/#')
+                            )
+                            // subdomain should contain num{3}alpha or alphanum{3}
+                            and regex.icontains(.scan.qr.url.domain.subdomain,
+                                                '^(?:[a-z]+[0-9]{3}|[0-9]{3}[a-z]+)$'
+                            )
+                            // url path should contain num{3}alpha or alphanum{3}
+                            and regex.icontains(.scan.qr.url.path,
+                                                '\/(?:[a-z]+[0-9]{3}|[0-9]{3}[a-z]+)\/'
+                            )
+                          )
+                          or (
+                            // special char in the path
+                            (
+                              strings.contains(.scan.qr.url.path, '!')
+                              or strings.contains(.scan.qr.url.path, '@')
+                            )
+                            and (
+                              strings.contains(.scan.qr.url.path, '/$')
+                              or strings.contains(.scan.qr.url.path, '/*')
+                              or strings.contains(.scan.qr.url.path, '/#')
+                              // hex dollar sign
+                              or strings.icontains(.scan.qr.url.path, '%24')
+                              // hex star
+                              or strings.icontains(.scan.qr.url.path, '%2A')
+                              // hex pound
+                              or strings.icontains(.scan.qr.url.path, '%23')
+                            )
+                            // ensure expected ordering
+                            and regex.icontains(.scan.qr.url.url,
+                                                '[!@].*(?:[$*]|%2[A43])'
+                            )
+                          )
+                        )
+                )
+              )
+          )
+          or (
+            any(beta.scan_qr(.).items,
+                .type is not null
+                // a single path
+                and strings.count(.url.path, '/') == 2
+                and (
+                  (
                     (
-                      (
-                        strings.contains(.url.path, '/$')
-                        or strings.contains(.url.path, '/*')
-                        or strings.contains(.url.path, '/#')
-                      )
-                      // subdomain should contain num{3}alpha or alphanum{3}
-                      and regex.icontains(.url.domain.subdomain,
-                                          '^(?:[a-z]+[0-9]{3}|[0-9]{3}[a-z]+)$'
-                      )
-                      // url path should contain num{3}alpha or alphanum{3}
-                      and regex.icontains(.url.path,
-                                          '\/(?:[a-z]+[0-9]{3}|[0-9]{3}[a-z]+)\/'
-                      )
+                      strings.contains(.url.path, '/$')
+                      or strings.contains(.url.path, '/*')
+                      or strings.contains(.url.path, '/#')
                     )
-                    or (
-                      // special char in the path
-                      (
-                        strings.contains(.url.path, '!')
-                        or strings.contains(.url.path, '@')
-                      )
-                      and (
-                        strings.contains(.url.path, '/$')
-                        or strings.contains(.url.path, '/*')
-                        or strings.contains(.url.path, '/#')
-                        // hex dollar sign
-                        or strings.icontains(.url.path, '%24')
-                        // hex star
-                        or strings.icontains(.url.path, '%2A')
-                        // hex pound
-                        or strings.icontains(.url.path, '%23')
-                      )
-                      // ensure expected ordering
-                      and regex.icontains(.url.url, '[!@].*(?:[$*]|%2[A43])')
+                    // subdomain should contain num{3}alpha or alphanum{3}
+                    and regex.icontains(.url.domain.subdomain,
+                                        '^(?:[a-z]+[0-9]{3}|[0-9]{3}[a-z]+)$'
+                    )
+                    // url path should contain num{3}alpha or alphanum{3}
+                    and regex.icontains(.url.path,
+                                        '\/(?:[a-z]+[0-9]{3}|[0-9]{3}[a-z]+)\/'
                     )
                   )
-              )
+                  or (
+                    // special char in the path
+                    (
+                      strings.contains(.url.path, '!')
+                      or strings.contains(.url.path, '@')
+                    )
+                    and (
+                      strings.contains(.url.path, '/$')
+                      or strings.contains(.url.path, '/*')
+                      or strings.contains(.url.path, '/#')
+                      // hex dollar sign
+                      or strings.icontains(.url.path, '%24')
+                      // hex star
+                      or strings.icontains(.url.path, '%2A')
+                      // hex pound
+                      or strings.icontains(.url.path, '%23')
+                    )
+                    // ensure expected ordering
+                    and regex.icontains(.url.url, '[!@].*(?:[$*]|%2[A43])')
+                  )
+                )
+            )
           )
   )
 
@@ -72,4 +138,4 @@ detection_methods:
 id: "7150bc0d-cbae-5e18-a9c8-5c57f9ff6cfe"
 og_id: "2289acd5-c3dc-58c2-81f6-4e1b0cc30064"
 testing_pr: 4002
-testing_sha: 79ab92215419edb7859a5f380dc0f21585b08d5a
+testing_sha: 8cd7c15e9e54931613a82c4c735a0dd16901622e
