@@ -1,0 +1,41 @@
+name: "PR# 4012 - Open redirect: embluemail.com"
+description: |
+  Message contains use of the embluemail.com redirect. This has been exploited in the wild.
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and any(body.links,
+          .href_url.domain.domain == "nts.embluemail.com"
+          and strings.istarts_with(.href_url.path, '/p/cl')
+          and strings.icontains(.href_url.query_params, '!')
+          and regex.icontains(.href_url.query_params,
+                              '\!(?:((?:%68|h)(?:%74|t){2}(?:%70|p)(?:%73|s)?)?(?:%3a|:))?(?:%2f|\/){2}'
+          )
+  )
+  and not sender.email.domain.domain == "nts.embluemail.com"
+  and not strings.iends_with(headers.message_id, '@embluemail.com>')
+  
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and not headers.auth_summary.dmarc.pass
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+attack_types:
+  - "Credential Phishing"
+  - "Malware/Ransomware"
+tactics_and_techniques:
+  - "Open redirect"
+detection_methods:
+  - "Sender analysis"
+  - "URL analysis"
+id: "3332c10d-dbf6-5f67-be49-19991a5d1541"
+tags:
+  - created_from_open_prs
+  - rule_status_modified
+  - pr_author_sfc-gh-tpeska
+references:
+  - https://github.com/sublime-security/sublime-rules/pull/4012
