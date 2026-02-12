@@ -1,0 +1,56 @@
+name: "Link: Undisclosed recipients with suspicious link"
+description: "Detects messages sent to undisclosed recipients that contain links leading to pages with captcha verification, which may indicate automated bot protection on malicious sites."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  // no previous threads
+  and length(body.previous_threads) == 0
+  
+  // few links
+  and 0 < length(body.current_thread.links) < 10
+  
+  // undisclosed recipients with all recipients cc'd or bcc'd
+  and (
+    any(recipients.to, strings.ilike(.display_name, "undisclosed?recipients"))
+    or (length(recipients.cc) > 0 and length(recipients.to) == 0)
+    or (length(recipients.bcc) > 0 and length(recipients.to) == 0)
+  )
+  
+  // final_dom contains a captcha
+  and any(body.links,
+          ml.link_analysis(., mode="aggressive").credphish.contains_captcha
+          // blocked by a Cloudflare captcha
+          or strings.icontains(ml.link_analysis(., mode="aggressive").final_dom.raw,
+                               'https://challenges.cloudflare.com/turnstile/',
+          )
+          // additional logic to flag non-standard captchas
+          or (
+            length(ml.link_analysis(., mode="aggressive").final_dom.display_text) < 250
+            and strings.ilike(ml.link_analysis(., mode="aggressive").final_dom.display_text,
+                              "*captcha*",
+                              "*confirm*human*",
+                              "*solve*puzzle*"
+            )
+          )
+  )
+  // negate newsletters and listservs
+  and not (
+    any(ml.nlu_classifier(body.current_thread.text).topics,
+        .name in ("Newsletters and Digests", "Advertising and Promotions")
+        and .confidence != "low"
+    )
+    or any(headers.hops, any(.fields, .name == "List-Unsubscribe"))
+  )
+
+attack_types:
+  - "Credential Phishing"
+  - "Malware/Ransomware"
+tactics_and_techniques:
+  - "Evasion"
+detection_methods:
+  - "Header analysis"
+  - "URL analysis"
+  - "URL screenshot"
+  - "Computer Vision"
+  - "Content analysis"
