@@ -4,6 +4,7 @@ type: "rule"
 severity: "medium"
 source: |
   type.inbound
+  and length(attachments) == 0
   // common subject lines - keywords
   and (
     strings.contains(subject.subject, "OpenAI")
@@ -11,10 +12,12 @@ source: |
     or (strings.contains(subject.subject, "0penAI"))
   )
   and strings.ilike(body.current_thread.text, "*OpenAI*", "*Ads*", "*GPT*")
-  // corresponding - common body link 
-  and length(body.links) > 0
-  and any(body.links,
-          .href_url.domain.domain in ('testflight.apple.com', 'apps.apple.com')
+  and (
+    length(body.links) > 0
+    and all(body.links,
+            .href_url.domain.root_domain != sender.email.domain.root_domain
+    )
+    and any(body.links, .href_url.domain.domain in ('apps.apple.com'))
   )
   
 tags:
