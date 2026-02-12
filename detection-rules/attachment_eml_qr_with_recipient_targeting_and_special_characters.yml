@@ -9,11 +9,8 @@ source: |
   and any(attachments,
           // Email Attachments
           any(file.parse_eml(.).attachments,
-              //
-              // This rule makes use of a beta feature and is subject to change without notice
-              // using the beta feature in custom rules is not suggested until it has been formally released
-              //
               (
+                // looks for office docs in the attached eml
                 .file_extension in $file_extensions_macros
                 and any(file.explode(.),
                         .scan.qr.type == "url"
@@ -77,50 +74,55 @@ source: |
                         )
                 )
               )
-          )
-          or (
-            any(beta.scan_qr(.).items,
-                .type is not null
-                // a single path
-                and strings.count(.url.path, '/') == 2
-                and (
-                  (
-                    (
-                      strings.contains(.url.path, '/$')
-                      or strings.contains(.url.path, '/*')
-                      or strings.contains(.url.path, '/#')
-                    )
-                    // subdomain should contain num{3}alpha or alphanum{3}
-                    and regex.icontains(.url.domain.subdomain,
-                                        '^(?:[a-z]+[0-9]{3}|[0-9]{3}[a-z]+)$'
-                    )
-                    // url path should contain num{3}alpha or alphanum{3}
-                    and regex.icontains(.url.path,
-                                        '\/(?:[a-z]+[0-9]{3}|[0-9]{3}[a-z]+)\/'
-                    )
-                  )
-                  or (
-                    // special char in the path
-                    (
-                      strings.contains(.url.path, '!')
-                      or strings.contains(.url.path, '@')
-                    )
+              or (
+                // looks for pdfs and images in the attached eml
+                //
+                // This rule makes use of a beta feature and is subject to change without notice
+                // using the beta feature in custom rules is not suggested until it has been formally released
+                //
+                any(beta.scan_qr(.).items,
+                    .type is not null
+                    // a single path
+                    and strings.count(.url.path, '/') == 2
                     and (
-                      strings.contains(.url.path, '/$')
-                      or strings.contains(.url.path, '/*')
-                      or strings.contains(.url.path, '/#')
-                      // hex dollar sign
-                      or strings.icontains(.url.path, '%24')
-                      // hex star
-                      or strings.icontains(.url.path, '%2A')
-                      // hex pound
-                      or strings.icontains(.url.path, '%23')
+                      (
+                        (
+                          strings.contains(.url.path, '/$')
+                          or strings.contains(.url.path, '/*')
+                          or strings.contains(.url.path, '/#')
+                        )
+                        // subdomain should contain num{3}alpha or alphanum{3}
+                        and regex.icontains(.url.domain.subdomain,
+                                            '^(?:[a-z]+[0-9]{3}|[0-9]{3}[a-z]+)$'
+                        )
+                        // url path should contain num{3}alpha or alphanum{3}
+                        and regex.icontains(.url.path,
+                                            '\/(?:[a-z]+[0-9]{3}|[0-9]{3}[a-z]+)\/'
+                        )
+                      )
+                      or (
+                        // special char in the path
+                        (
+                          strings.contains(.url.path, '!')
+                          or strings.contains(.url.path, '@')
+                        )
+                        and (
+                          strings.contains(.url.path, '/$')
+                          or strings.contains(.url.path, '/*')
+                          or strings.contains(.url.path, '/#')
+                          // hex dollar sign
+                          or strings.icontains(.url.path, '%24')
+                          // hex star
+                          or strings.icontains(.url.path, '%2A')
+                          // hex pound
+                          or strings.icontains(.url.path, '%23')
+                        )
+                        // ensure expected ordering
+                        and regex.icontains(.url.url, '[!@].*(?:[$*]|%2[A43])')
+                      )
                     )
-                    // ensure expected ordering
-                    and regex.icontains(.url.url, '[!@].*(?:[$*]|%2[A43])')
-                  )
                 )
-            )
+              )
           )
   )
 
