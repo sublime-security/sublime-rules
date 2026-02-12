@@ -25,7 +25,7 @@ RULE_DIRS = [
 ]
 
 # Initialize tldextract with bundled PSL snapshot (no network calls)
-_extract = tldextract.TLDExtract(suffix_list_urls=None)
+_extract = tldextract.TLDExtract(suffix_list_urls=None, include_psl_private_domains=False)
 
 
 def find_source_line_offset(filepath):
