@@ -4,15 +4,18 @@ type: "rule"
 severity: "medium"
 source: |
   type.inbound
-  and regex.icontains(body.current_thread.text,
-                      '\bbluecross\b',
-                      '\bblue cross\b',
-                      '\bblueshield\b',
-                      '\bblue shield\b',
-                      '\bbcbs\b'
+  and (
+    regex.icontains(body.current_thread.text,
+                    '\bblue[- ]cross\b',
+                    '\bblue[- ]shield\b',
+                    '\bbcbs\b'
+    )
+    or strings.icontains(body.current_thread.text, "bluecross")
+    or strings.icontains(body.current_thread.text, "blueshield")
   )
   and (
-    regex.icontains(body.current_thread.text, '\bkit\b', '\bpackage\b')
+    strings.icontains(body.current_thread.text, "kit")
+    or strings.icontains(body.current_thread.text, "package")
     or (
       regex.icontains(body.current_thread.text, 'review.{0,8}document')
       and any(ml.nlu_classifier(body.current_thread.text).intents,
@@ -20,75 +23,10 @@ source: |
       )
     )
   )
+  
+  // link restriction
   and 1 <= length(body.links) <= 9
   
-  // negate legitimate BCBS root domains
-  // can be expanded as needed
-  and not sender.email.domain.root_domain in (
-    'bcbs.com', // universal domain
-    'fepblue.org', // federal employee domain
-    'anthembluecross.com', // anthem affiliate domain
-    // global domains
-    'bcbsglobal.com', // universal global domain
-    'bcbsglobalsolutions.com', // universal global domain
-    'geo-blue.com', // merged universal global domain
-    'bcbspma.com', // panama domain
-    'bcbsu.com', // uruguay domain
-    // canada
-    'bluecross.ca', // canadian domain
-    'medaviebc.ca', // medavie domain
-    'ontarioblue.ca', // ontario domain
-    // us domains
-    'bcbsal.org', // alabama domain
-    'premera.com', // alaska domain
-    'azblue.com', // arizona domain
-    'arkansasbluecross.com', // arkansas domain
-    'arkbluecross.com', // arkansas redirected shortened mail domain
-    'antheminc.com', // california domain
-    'blueshieldca.com', // california domain
-    'anthem.com', // CO, CT, IN, KY, ME, MO, NV, NH, OH, VA, WI domain
-    'highmarkbcbsde.com', // DE domain
-    'carefirst.com', // DC, MD, VA domain
-    'bcbsfl.com', // florida domain
-    'floridablue.com', // florida domain
-    'bcbsga.com', // georgia domain
-    'hmsa.com', // hawaii domain
-    'bcidaho.com', // idaho domain
-    'regence.com', // ID, OR, UT, WA domain
-    'bcbsil.com', // illinois domain
-    'wellmark.com', // IA, SD domain
-    'bcbsks.com', // kansas domain
-    'bcbsla.com', // louisiana domain
-    'bcbsma.com', // massachusetts domain
-    'bluecrossma.com', // massachusetts domain
-    'bcbsm.com', // michigan domain
-    'bluecrossmn.com', // minnesota domain
-    'bcbsms.com', // mississippi domain
-    'bluekc.com', // missouri domain
-    'bcbsmt.com', // montana domain
-    'nebraskablue.com', // nebraska domain
-    'horizonblue.com', // new jersey domain
-    'bcbsnm.com', // new mexico domain
-    'empireblue.com', // new york domain
-    'bcbswny.com', // new york domain
-    'bsneny.com', // new york domain
-    'excellusbcbs.com', // new york domain
-    'bcbsnc.com', // north carolina domain
-    'bcbsnd.com', // north dakota domain
-    'bcbsok.com', // oklahoma domain
-    'capbluecross.com', // pennsylvania domain
-    'highmarkblueshield.com', // PA, WV domain
-    'highmarkbcbs.com', // pennsylvania domain
-    'ibx.com', // pennsylvania domain
-    'ssspr.com', // puerto rico domain
-    'bcbsri.com', // rhode island domain
-    'bcbssc.com', // south carolina domain
-    'southcarolinablues.com', // south carolina domain
-    'bcbst.com', // tennessee domain
-    'bcbstx.com', // texas domain
-    'bluecrossvt.org', // vermont domain
-    'bcbswy.com', // wyoming domain
-  )
   // negate highly trusted sender domains unless they fail DMARC authentication
   and (
     (
@@ -97,6 +35,7 @@ source: |
     )
     or sender.email.domain.root_domain not in $high_trust_sender_root_domains
   )
+  
   // negate org domains unless they fail DMARC authentication
   and (
     (
@@ -105,14 +44,17 @@ source: |
     )
     or sender.email.domain.root_domain not in $org_domains
   )
+  
   // negate legitimate conversations
   and not (
     (subject.is_forward or subject.is_reply) and headers.in_reply_to is not null
   )
+  
   // topic negations
   and not any(ml.nlu_classifier(body.current_thread.text).topics,
-              .name in ("Events and Webinars")
+              .name in ("Newsletters and Digests", "Political Mail")
   )
+  
   // younger domain
   and (
     network.whois(sender.email.domain).days_old <= 365
