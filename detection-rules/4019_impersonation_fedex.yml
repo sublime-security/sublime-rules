@@ -1,0 +1,52 @@
+name: "Brand impersonation: FedEx"
+description: |
+  Impersonation of the shipping provider FedEx.
+references:
+  - "https://www.fedex.com/en-us/trust-center/report-fraud/fraudulent-email-examples.html"
+type: "rule"
+severity: "low"
+source: |
+  type.inbound
+  and (
+    sender.display_name in~ ('fedex', 'fedex shipment', 'fedex tracking updates')
+    or strings.ilevenshtein(sender.display_name, 'fedex') <= 1
+    or regex.icontains(sender.display_name, '^Fed-?ex')
+    or strings.ilike(sender.email.domain.domain, '*fedex*')
+  )
+  and sender.email.domain.root_domain not in~ (
+    'fedex.com',
+    'cj.com', // CJ is a global affiliate marketing network
+    'sedex.com', // sedex.com is not affiliated with FedEx, but is an apparent FP
+    'myworkday.com',
+    'billtrust.com',
+    'flying-cargo.rs', // Serbian arm of Fedex (https://www.fedex.com/en-rs/customer-support.html)
+    'confirmit.com', // survey/market research company
+    'centercode.com', // survey company
+    'latest-fedex.com' // legit marketing/CRM campaigns
+  )
+  and (
+    not profile.by_sender().any_messages_benign
+    and not profile.by_sender().solicited
+  )
+  
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and not headers.auth_summary.dmarc.pass
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Lookalike domain"
+  - "Social engineering"
+detection_methods:
+  - "Header analysis"
+  - "Sender analysis"
+id: "552364d7-599d-58a1-9822-2b4977ef40c1"
+og_id: "94a2b602-2bc1-5ea3-941e-752e3a2235cf"
+testing_pr: 4019
+testing_sha: 55fa77839ac687cd8edbf88bfe15bf0e25ff7aa6
