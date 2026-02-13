@@ -10,58 +10,34 @@ type: "rule"
 severity: "low"
 source: |
   type.inbound
-  and sender.email.domain.domain != "norton.com"
-  and any(attachments,
-          (.file_type in $file_types_images or .file_type == "pdf")
-          and (
-            (
-              strings.ilike(.file_name, "*norton*")
-              and not (
-                any(recipients.to, strings.iends_with(.display_name, "Norton"))
-              )
-            )
-            or any(file.explode(.),
-                   regex.icontains(.scan.ocr.raw,
-                                   ".*norton.?60.*",
-                                   ".*lifelock.*",
-                                   ".*norton.?security.*",
-                                   ".*norton.?anti.?virus.*",
-                                   ".*Norton.{2,3}subscription.*"
-                   )
-            )
-          )
-  )
   and (
-    (
-      // if freemail, flag if it's a first-time sender
-      sender.email.domain.root_domain in $free_email_providers
-      and sender.email.email not in $sender_emails
+    any([sender.display_name, subject.base],
+        regex.icontains(., 'norton.{0,5}(?:lifelock|subscription|billing)')
     )
-    or (
-      // if custom domain, we want to avoid flagging
-      // on the real Norton invoices
-      // so we flag if it's not a first-time sender
-      // and if it's not in the tranco 1M w/ a reply-to mismatch
-      // for example we've observed:
-      // Sender: Norton <quickbooks@notification.intuit.com>
-      // Reply-to: foo@outlook.com
-      sender.email.domain.root_domain not in $free_email_providers
-      and sender.email.domain.domain not in $sender_domains
-      and (
-        sender.email.domain.root_domain not in $tranco_1m
-        or any(headers.reply_to,
-               .email.domain.domain != sender.email.domain.domain
-        )
-      )
+    or any(attachments,
+           (.file_type in $file_types_images or .file_type == "pdf")
+           and (
+             (
+               strings.ilike(.file_name, "*norton*")
+               and not (
+                 any(recipients.to, strings.iends_with(.display_name, "Norton"))
+               )
+             )
+             or any(file.explode(.),
+                    regex.icontains(.scan.ocr.raw,
+                                    ".*norton.?60.*",
+                                    ".*lifelock.*",
+                                    ".*norton.?security.*",
+                                    ".*norton.?anti.?virus.*",
+                                    ".*norton.{2,3}subscription.*"
+                    )
+             )
+           )
     )
-    or (
-      (
-        length(recipients.to) == 0
-        or all(recipients.to, .display_name == "Undisclosed recipients")
-      )
-      and length(recipients.cc) == 0
-      and length(recipients.bcc) == 0
-    )
+  )
+  and not (
+    sender.email.domain.root_domain in~ ("norton.com")
+    and coalesce(headers.auth_summary.dmarc.pass, false)
   )
 attack_types:
   - "Credential Phishing"
