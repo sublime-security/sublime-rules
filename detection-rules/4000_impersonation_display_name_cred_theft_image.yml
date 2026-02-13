@@ -1,5 +1,5 @@
 name: "PR# 4000 - Impersonation: Recipient organization in sender display name with credential theft image"
-description: "Sender display name contains the recipient's organization domain while the actual email address differs. Message includes a single image attachment with OCR-detected credential theft language referencing the recipient's domain, and has minimal or no body text."
+description: "Sender display name contains the recipient's organization domain while the actual email address differs. Message includes a single image attachment with OCR-detected credential theft language referencing the recipient's domain, and has no body text."
 type: "rule"
 severity: "medium"
 source: |
@@ -7,33 +7,21 @@ source: |
   and length(body.links) <= 1
   and length(attachments) == 1
   and strings.icontains(sender.display_name, recipients.to[0].email.domain.sld)
-  and sender.display_name != sender.email.email
-  and (
-    // No body text
-    (
-      length(body.current_thread.text) == 0 or body.current_thread.text is null
-    )
+  and length(recipients.to) == 1
+  and recipients.to[0].email.email in $org_emails
+  and 
+  // No body text
+  (
+    length(body.current_thread.text) == 0 or body.current_thread.text is null
   )
-  and (
-    all(attachments,
-        (.file_type in $file_types_images)
-        and (
-          any(file.explode(.),
-              (
-                (
-                  (
-                    strings.icontains(.scan.ocr.raw,
-                                      recipients.to[0].email.domain.sld
-                    )
-                  )
-                )
-                and any(ml.nlu_classifier(.scan.ocr.raw).intents,
-                        .name == "cred_theft" and .confidence == "high"
-                )
-              )
+  and all(attachments,
+          (.file_type in $file_types_images)
+          and strings.icontains(beta.ocr(.).text,
+                                recipients.to[0].email.domain.sld
           )
-        )
-    )
+          and any(ml.nlu_classifier(beta.ocr(.).text).intents,
+                  .name == "cred_theft" and .confidence == "high"
+          )
   )
 attack_types:
   - "Credential Phishing"
