@@ -1,0 +1,48 @@
+name: "Attachment: HTML smuggling with decimal encoding"
+description: |
+  Potential HTML smuggling attack based on large blocks of decimal encoding. Attackers often use decimal encoding as an obfuscation technique to bypass traditional email security measures. 
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and any(attachments,
+          (
+            .file_extension in~ ("html", "htm", "shtml", "dhtml", "xhtml")
+            or (
+              .file_extension is null
+              and .file_type == "unknown"
+              and .content_type == "application/octet-stream"
+            )
+            or .file_extension in~ $file_extensions_common_archives
+            or .file_type == "html"
+            or .content_type == "text/html"
+          )
+          and any(file.explode(.),
+                  // suspicious identifiers
+                  any(.scan.strings.strings, regex.contains(., '(\d{2,3},){60,}'))
+          )
+  )
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and not headers.auth_summary.dmarc.pass
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+attack_types:
+  - "Credential Phishing"
+  - "Malware/Ransomware"
+tactics_and_techniques:
+  - "Evasion"
+  - "HTML smuggling"
+  - "Scripting"
+detection_methods:
+  - "Archive analysis"
+  - "Content analysis"
+  - "File analysis"
+  - "HTML analysis"
+id: "a77cd611-c1f7-56d7-a02e-c8b543e7e102"
+og_id: "f99213c4-7031-50b1-ae81-b45f790d3fa4"
+testing_pr: 4031
+testing_sha: c85ea521f3ba65891fda9b05cffceb8af0b792d6
