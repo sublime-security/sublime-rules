@@ -1,0 +1,58 @@
+name: "PR# 4031 - Attachment: HTML smuggling - QR Code with suspicious links"
+description: "This rule detects messages with HTML attachments containing QR codes"
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and 1 <= length(attachments) < 3
+  
+  // inspects HTML attachments for QR codes
+  and any(attachments,
+          (
+            .file_extension in~ ("html", "htm", "shtml", "dhtml", "xhtml")
+            or (
+              .file_extension is null
+              and .file_type == "unknown"
+              and .content_type == "application/octet-stream"
+            )
+            or .file_extension in~ $file_extensions_common_archives
+            or .file_type == "html"
+            or .content_type == "text/html"
+          )
+          and any(file.explode(file.html_screenshot(.)),
+                  // any URL
+                  ml.link_analysis(.scan.qr.url).submitted
+                  // currently we won't pick it up as a URL if it's
+                  // not prefaced with a scheme. this is not very strong,
+                  // but it's unlikely to cause FPs for this rule
+                  or regex.contains(.scan.qr.data, '\.')
+          )
+  )
+  
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and not headers.auth_summary.dmarc.pass
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "QR code"
+detection_methods:
+  - "Computer Vision"
+  - "Header analysis"
+  - "Natural Language Understanding"
+  - "QR code analysis"
+  - "Sender analysis"
+  - "URL analysis"
+  - "URL screenshot"
+id: "728cdcf4-e338-5fb1-8569-7eb449c26852"
+tags:
+  - created_from_open_prs
+  - rule_status_modified
+  - pr_author_MSAdministrator
+references:
+  - https://github.com/sublime-security/sublime-rules/pull/4031
