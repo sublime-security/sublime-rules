@@ -1,0 +1,51 @@
+name: "Attachment: HTML smuggling Microsoft sign in"
+description: |
+  Scans HTML files to detect HTML smuggling techniques impersonating a Microsoft login page.
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and any(attachments,
+          (
+            .file_extension in~ ("html", "htm", "shtml", "dhtml")
+            or .file_extension in~ $file_extensions_common_archives
+            or .file_type == "html"
+          )
+          and any(file.explode(.),
+                  .scan.entropy.entropy >= 5.7
+                  and .flavors.mime == "text/html"
+                  and length(.scan.javascript.identifiers) == 0
+                  and any(.scan.url.urls,
+                          .domain.domain not in $tranco_1m
+                          or .domain.root_domain in $free_subdomain_hosts
+                  )
+  
+                  // seen in the wild: "sign in to your account", "sign in to your microsoft account"
+                  and strings.ilike(.scan.html.title, "*sign in*", "*microsoft*")
+          )
+  )
+  // allow Microsoft domains just to be safe
+  and sender.email.domain.root_domain not in~ (
+    'microsoft.com',
+    'microsoftsupport.com',
+    'office.com'
+  )
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Free subdomain host"
+  - "HTML smuggling"
+  - "Impersonation: Brand"
+  - "Social engineering"
+detection_methods:
+  - "Archive analysis"
+  - "Content analysis"
+  - "File analysis"
+  - "Header analysis"
+  - "Javascript analysis"
+  - "Sender analysis"
+  - "URL analysis"
+id: "230ef493-624b-55eb-a068-0f29a3c51e00"
+og_id: "878d6385-95c2-5540-a887-a6fa9456409c"
+testing_pr: 4031
+testing_sha: c85ea521f3ba65891fda9b05cffceb8af0b792d6
