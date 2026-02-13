@@ -1,0 +1,51 @@
+name: "PR# 4031 - Attachment: Double base64-encoded zip file in HTML smuggling attachment"
+description: |
+  Qakbot double Base64 encodes zip files within their HTML smuggling email attachments. This leads to predictable file header strings appearing in the HTML string content.
+references:
+  - "https://twitter.com/pr0xylife/status/1593325734004768770"
+  - "https://github.com/Neo23x0/signature-base/blob/master/yara/mal_qbot_payloads.yar"
+  - "https://delivr.to/payloads?id=0e04949a-24f3-4acd-b77c-bbffc4cb3cb9"
+  - "https://delivr.to/payloads?id=ef39f124-6766-491c-a46c-00f2b60aa7a7"
+  - https://github.com/sublime-security/sublime-rules/pull/4031
+type: "rule"
+severity: "high"
+authors:
+  - twitter: "ajpc500"
+source: |
+  type.inbound
+  and any(attachments,
+          .file_extension in ("html", "htm")
+          and any(file.explode(.),
+                  any(.scan.strings.strings,
+                      strings.ilike(.,
+                                    // Double Base64 encoded zips
+                                    "*VUVzREJCUUFBUUFJQ*",
+                                    "*VFc0RCQlFBQVFBSU*",
+                                    "*VRXNEQkJRQUFRQUlB*",
+                                    // Reversed base64 strings double encoded zips
+                                    "*QJFUUBFUUCJERzVUV*",
+                                    "*USBFVQBFlQCR0cFV*",
+                                    "*BlUQRFUQRJkQENXRV*"
+                      )
+                  )
+          )
+  )
+tags:
+  - "Malfam: QakBot"
+  - pr_author_MSAdministrator
+  - created_from_open_prs
+  - rule_status_modified
+attack_types:
+  - "Malware/Ransomware"
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Evasion"
+  - "HTML smuggling"
+  - "Scripting"
+detection_methods:
+  - "Archive analysis"
+  - "Content analysis"
+  - "File analysis"
+  - "HTML analysis"
+  - "Sender analysis"
+id: "cd198e0a-faac-58ae-af71-fd6e42b9bd40"
