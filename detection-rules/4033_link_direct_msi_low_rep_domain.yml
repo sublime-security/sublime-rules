@@ -1,0 +1,31 @@
+name: "PR# 4033 - Link: Direct MSI download from low reputation domain"
+description: "Detects messages containing links that directly download MSI files from domains not in the top 10k trusted sites and unrelated to the sender's domain."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  // low amount of distinct links which are unrelated to the sender or not in tranco_10k
+  and length(distinct(filter(body.current_thread.links,
+                             .href_url.domain.root_domain != sender.email.domain.root_domain
+                             and .href_url.domain.root_domain not in $tranco_10k
+                      ),
+                      .href_url.url
+             )
+  ) <= 5
+  // the link leads to a direct download of an MSI file
+  and any(body.current_thread.links, strings.iends_with(.href_url.url, '.msi'))
+tags:
+  - "Attack surface reduction"
+  - pr_author_zoomequipd
+  - created_from_open_prs
+  - rule_status_added
+attack_types:
+  - "Malware/Ransomware"
+tactics_and_techniques:
+  - "Evasion"
+detection_methods:
+  - "Sender analysis"
+  - "URL analysis"
+id: "167d183f-649b-57d7-b254-22243db4cb8f"
+references:
+  - https://github.com/sublime-security/sublime-rules/pull/4033
