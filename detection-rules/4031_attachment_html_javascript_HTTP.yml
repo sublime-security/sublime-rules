@@ -1,0 +1,43 @@
+name: "PR# 4031 - Attachment: HTML with JavaScript functions for HTTP requests"
+description: "This rule identifies HTML attachments which contain multiple references to JavaScript functions that support making HTTP requests. This has been observed in phishing campaigns to load remote payloads into otherwise benign HTML attachments."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  // not high trust sender domains
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and not headers.auth_summary.dmarc.pass
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+  and any(attachments,
+          .file_extension in~ ("html", "htm", "shtml", "dhtml")
+          and 3 of (
+            strings.icontains(file.parse_html(.).raw, '.replace'),
+            strings.icontains(file.parse_html(.).raw, 'XMLHttpRequest'),
+            strings.icontains(file.parse_html(.).raw, 'onreadystate'),
+            strings.icontains(file.parse_html(.).raw, 'GET'),
+            strings.icontains(file.parse_html(.).raw, 'send()'),
+            strings.icontains(file.parse_html(.).raw, 'responseText'),
+          )
+  )
+
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Evasion"
+  - "Scripting"
+detection_methods:
+  - "Content analysis"
+  - "HTML analysis"
+  - "Javascript analysis"
+  - "File analysis"
+id: "cb369abe-e3af-5619-aca4-afbfc3719751"
+tags:
+  - created_from_open_prs
+  - rule_status_modified
+  - pr_author_MSAdministrator
+references:
+  - https://github.com/sublime-security/sublime-rules/pull/4031
