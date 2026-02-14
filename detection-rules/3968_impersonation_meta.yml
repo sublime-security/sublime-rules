@@ -12,42 +12,27 @@ source: |
     // that it can be used without any other impersonation logic
     (
       regex.icontains(sender.display_name,
-                      'facebook ?ads',
-                      'facebook ?business',
-                      '\bmeta\b ?account\b',
-                      '\bmeta\b ?help',
-                      '\bmeta\b ?support',
-                      '\bmeta\b ?business',
-                      '\bmeta\b ?for ?business',
-                      '\bmeta\b ?policy',
+                      '\bm.?e.?t.?a\b.*(?:recruiting|certification|trust|safety|badge|alert|advertising|compliance|copyright|enforcement|intellectual|rights|account|help|support|business|policy|verif(?:y|i(?:cado|ed))|Vérifié|certify|\binc\b)',
+                      '\bm.?e.?t.?a(?:recruiting|pro|certification|trust|safety|badge|alert|advertising|compliance|copyright|enforcement|intellectual|rights|account|help|support|business|policy)team',
                       '^[a-z]+ from \bmeta$',
-                      '\bmeta\b ?verified',
                       'page ?ads ?support',
-                      'Instagram ?Not',
-                      'Instagram ?Policies',
-                      'Instagram ?Report',
-                      'Instagram ?Helpdesk',
-                      'Instagram ?Support',
+                      'Instagram\s*(?:Not|Policies|Report|Helpdesk|Support)',
                       '\bMeta & Coursera',
                       'Compliance & Security',
-                      '\bmeta\b.*\binc\b',
-                      '\bmeta\b ?copyright',
-                      '\bmeta\b ?compliance',
-                      '\bmeta\b ?certify',
                       'social.?media.?\b(?:master|expert|pro|guru)\b',
                       '\bmeta\b.?(?:social|skill|ads).?(?:star|set|expert)'
       )
       or (
-        regex.icontains(strings.replace_confusables(sender.display_name),
-                        'f.?a.?c.?e.?b.?o.?o.?k'
+        regex.icontains(sender.display_name,
+                        "f\u{200a}?a\u{200a}?c\u{200a}?e\u{200a}?b\u{200a}?o\u{200a}?o\u{200a}?k"
         )
         and not strings.icontains(sender.display_name, 'facebook')
       )
       or (
-        regex.icontains(strings.replace_confusables(sender.display_name),
-                        'b.?u.?s.?i.?n.?e.?s.?s'
+        regex.icontains(sender.display_name, '\bmeta\b')
+        and regex.icontains(subject.base,
+                            '(?:recruiting|certification|trust|safety|badge|alert|advertising|compliance|copyright|enforcement|intellectual|rights|account|help|support|business|policy|verif(?:y|i(?:cado|ed))|Vérifié|Trademark|Misuse|Review|Violation|Warning|Restriction|Inappropriate|Content)'
         )
-        and not strings.icontains(sender.display_name, 'business')
       )
       or strings.contains(sender.display_name, "\u{24C2}")
       or strings.ilevenshtein(sender.display_name, 'facebook ads') <= 2
@@ -59,7 +44,7 @@ source: |
       )
       or strings.icontains(sender.email.domain.subdomain, 'meta-')
     )
-    // the use of these keywords (facebook, meta, meta.*support)
+    // the use of these keywords (facebook, instagram)
     // or the levenshtein distance to facebook
     // are less strong and thus need to be combined with logo detection or nlu
     or (
@@ -67,17 +52,8 @@ source: |
         (
           regex.icontains(sender.display_name,
                           '\bf[\p{Mn}\p{Cf}]*a[\p{Mn}\p{Cf}]*c[\p{Mn}\p{Cf}]*e[\p{Mn}\p{Cf}]*b[\p{Mn}\p{Cf}]*o[\p{Mn}\p{Cf}]*o[\p{Mn}\p{Cf}]*k[\p{Mn}\p{Cf}]*\b',
-                          '^\s*m[\p{Mn}\p{Cf}]*e[\p{Mn}\p{Cf}]*t[\p{Mn}\p{Cf}]*a[\p{Mn}\p{Cf}]*\b.{5,}',
-                          '\bm[\p{Mn}\p{Cf}]*e[\p{Mn}\p{Cf}]*t[\p{Mn}\p{Cf}]*a[\p{Mn}\p{Cf}]*.*support',
                           '\binstagr(am)?\b'
           )
-          // negate metageek.com
-          and not (
-            strings.icontains(sender.display_name, 'MetaGeek Support')
-            and sender.email.domain.root_domain == "metageek.com"
-          )
-          // negate metamask
-          and not strings.icontains(sender.display_name, 'Metamask')
         )
         or strings.ilevenshtein(sender.display_name, 'facebook') <= 2
       )
@@ -94,9 +70,6 @@ source: |
           and regex.icontains(body.current_thread.text, "(?:violation|infringe)")
         )
         or any(body.links, .href_url.domain.root_domain == "rebrand.ly")
-      )
-      and not regex.icontains(body.current_thread.text,
-                              '(?:teams\.microsoft\.com\/meet\/|www\.adobe\.com)'
       )
     )
     // salesforce sender combined with logo detection and nlu is enough
@@ -153,7 +126,6 @@ source: |
                )
         )
       )
-      and not strings.icontains(body.current_thread.text, 'Unroll.Me Rollup')
     )
     // we've seen advertising "advice/recommendations"
     or (
@@ -235,4 +207,4 @@ detection_methods:
 id: "47ca22d7-55a4-5edb-a8fe-4c9217256721"
 og_id: "e38f1e3b-79be-5a59-b084-24a851daf6b9"
 testing_pr: 3968
-testing_sha: be609997ba7e56ffc5815730dfc6f95fe4048520
+testing_sha: e45e3545cc264c894dd3216056008073383404b4
