@@ -1,0 +1,74 @@
+name: "PR# 4034 - Link: Figma design deck with credential theft language"
+description: "A single link to a Figma design deck that contains credential theft language. The message comes from either a new sender, one with previously detected malicious activity, or a known sender who has not been in contact for over 30 days and has no history of benign messages."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  // only one link to Figma
+  and length(distinct(filter(body.links,
+                             .href_url.domain.root_domain in ("figma.com")
+                             and (
+                               strings.istarts_with(.href_url.path, "/deck")
+                               or (
+                                 strings.istarts_with(.href_url.path, "/design")
+                                 and .href_url.query_params is not null
+                               )
+                             )
+                      ),
+                      .href_url.url
+             )
+  ) == 1
+  and any(filter(body.links,
+                 .href_url.domain.root_domain in ("figma.com")
+                 and (
+                   strings.istarts_with(.href_url.path, "/deck")
+                   or (
+                     strings.istarts_with(.href_url.path, "/design")
+                     and .href_url.query_params is not null
+                   )
+                 )
+          ),
+          any(ml.nlu_classifier(beta.ocr(ml.link_analysis(.).screenshot).text).intents,
+              .name == "cred_theft" and .confidence in ("medium", "high")
+          )
+          or any(ml.nlu_classifier(beta.ocr(ml.link_analysis(.).screenshot).text).topics,
+                 .name in (
+                   "E-Signature",
+                   "Secure Message",
+                   "File Sharing and Cloud Services"
+                 )
+                 and .confidence != "low"
+          )
+  )
+  and (
+    (
+      profile.by_sender().prevalence in ("new", "outlier")
+      and not profile.by_sender().solicited
+    )
+    or profile.by_sender().any_messages_malicious_or_spam
+    or profile.by_sender().days_since.last_contact > 30
+    // individual sender profile
+    or profile.by_sender_email().days_since.first_contact < 3
+  )
+  and not profile.by_sender().any_messages_benign
+
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Evasion"
+  - "Free file host"
+  - "Social engineering"
+detection_methods:
+  - "Natural Language Understanding"
+  - "Computer Vision"
+  - "Optical Character Recognition"
+  - "URL analysis"
+  - "URL screenshot"
+  - "Sender analysis"
+id: "8dd752d9-a474-5455-a405-55ca433e3b9e"
+tags:
+  - created_from_open_prs
+  - rule_status_modified
+  - pr_author_peterdj45
+references:
+  - https://github.com/sublime-security/sublime-rules/pull/4034
