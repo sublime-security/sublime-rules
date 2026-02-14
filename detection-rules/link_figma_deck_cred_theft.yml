@@ -7,17 +7,37 @@ source: |
   // only one link to Figma
   and length(distinct(filter(body.links,
                              .href_url.domain.root_domain in ("figma.com")
-                             and strings.istarts_with(.href_url.path, "/deck")
+                             and (
+                               strings.istarts_with(.href_url.path, "/deck")
+                               or (
+                                 strings.istarts_with(.href_url.path, "/design")
+                                 and .href_url.query_params is not null
+                               )
+                             )
                       ),
                       .href_url.url
              )
   ) == 1
   and any(filter(body.links,
                  .href_url.domain.root_domain in ("figma.com")
-                 and strings.istarts_with(.href_url.path, "/deck")
+                 and (
+                   strings.istarts_with(.href_url.path, "/deck")
+                   or (
+                     strings.istarts_with(.href_url.path, "/design")
+                     and .href_url.query_params is not null
+                   )
+                 )
           ),
           any(ml.nlu_classifier(beta.ocr(ml.link_analysis(.).screenshot).text).intents,
               .name == "cred_theft" and .confidence in ("medium", "high")
+          )
+          or any(ml.nlu_classifier(beta.ocr(ml.link_analysis(.).screenshot).text).topics,
+                 .name in (
+                   "E-Signature",
+                   "Secure Message",
+                   "File Sharing and Cloud Services"
+                 )
+                 and .confidence != "low"
           )
   )
   and (
@@ -27,6 +47,8 @@ source: |
     )
     or profile.by_sender().any_messages_malicious_or_spam
     or profile.by_sender().days_since.last_contact > 30
+    // individual sender profile
+    or profile.by_sender_email().days_since.first_contact < 3
   )
   and not profile.by_sender().any_messages_benign
 
