@@ -1,0 +1,35 @@
+name: "Brand impersonation: OpenAI with typosquatting"
+description: "Detects messages impersonating OpenAI using character substitution and typosquatting techniques in the subject line, containing links that likely redirect to malicious sites."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and length(attachments) == 0
+  // common subject lines - keywords
+  and (
+    strings.contains(subject.subject, "OpenAI")
+    or (strings.contains(subject.subject, "OpenAl"))
+    or (strings.contains(subject.subject, "0penAI"))
+  )
+  and strings.ilike(body.current_thread.text, "*OpenAI*", "*Ads*", "*GPT*")
+  and (
+    length(body.links) > 0
+    and all(body.links,
+            .href_url.domain.root_domain != sender.email.domain.root_domain
+    )
+    and any(body.links, .href_url.domain.domain in ('apps.apple.com'))
+  )
+  
+tags:
+  - "Attack surface reduction"
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Social engineering"
+  - "Evasion"
+detection_methods:
+  - "Content analysis"
+  - "Header analysis"
+  - "URL analysis"
+id: "c2f3efea-5397-558e-a6be-957d2f757e1c"
