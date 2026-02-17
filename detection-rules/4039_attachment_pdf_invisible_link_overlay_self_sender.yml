@@ -1,0 +1,55 @@
+name: "Attachment: PDF with invisible link overlay from self-sender or undisclosed recipients"
+description: "Detects PDF attachments containing invisible link overlays that redirect to suspicious domains, sent either from self-senders or to undisclosed recipients. The PDF contains hidden clickable areas with zero border width that link to URL shorteners or free subdomain hosts, a technique commonly used to bypass visual inspection."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and (
+    // self sender
+    (
+      length(recipients.to) == 1
+      and sender.email.email == recipients.to[0].email.email
+    )
+    // or the sender is all undisclosed or there is no recipients
+    or (
+      length(recipients.to) == 0
+      or all(recipients.to, .email.domain.valid == false)
+    )
+  )
+  and any(attachments,
+          .file_extension == "pdf"
+          and any(file.explode(.),
+                  any(.scan.strings.strings,
+                      strings.ilike(., "*<</Subtype/Link*")
+                      and strings.ilike(., "*/Rect[*")
+                      and strings.ilike(., "*/BS*")
+                      and strings.ilike(., "*/W 0*")
+                      and strings.ilike(., "*/S/URI*")
+                      and (
+                        strings.ilike(., "*http://*")
+                        or strings.ilike(., "*https://*")
+                      )
+                      and (
+                        any($url_shorteners, strings.icontains(.., .))
+                        or any($free_subdomain_hosts, strings.icontains(.., .))
+                      )
+                  )
+                  and length(.scan.url.urls) <= 2
+          )
+  )
+attack_types:
+  - "Credential Phishing"
+  - "Malware/Ransomware"
+tactics_and_techniques:
+  - "Evasion"
+  - "PDF"
+  - "Free subdomain host"
+detection_methods:
+  - "File analysis"
+  - "Sender analysis"
+  - "URL analysis"
+  - "Header analysis"
+id: "617b4665-4510-5560-a3b8-b58757cfede5"
+og_id: "2d77bde0-de44-5a75-8fee-c0df8cb29ea4"
+testing_pr: 4039
+testing_sha: 73cf7ddd4a8c4f6109bb1455825d470daef23cd1
