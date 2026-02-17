@@ -1,0 +1,138 @@
+name: "Attachment: QR code with recipient targeting and special characters"
+description: "Detects messages with QR code in attachments containing special characters in the path that include the recipient's email address in either the URL path or fragment, potentially encoded in base64. The URLs have a simple path structure and may end with suspicious patterns."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and length(recipients.to) == 1
+  and recipients.to[0].email.domain.valid
+  and any(attachments,
+          (
+            // Office documents
+            .file_extension in $file_extensions_macros
+            and any(file.explode(.),
+                    .scan.qr.type == "url"
+                    // QR code URL contains recipient's email (targeting indicator)
+                    and any(recipients.to,
+                            .email.domain.valid
+                            and (
+                              // Plaintext email address in URL
+                              strings.icontains(..scan.qr.url.url, .email.email)
+                              // OR base64 encoded email address
+                              or any(strings.scan_base64(..scan.qr.url.url,
+                                                         format="url",
+                                                         ignore_padding=true
+                                     ),
+                                     strings.icontains(., ..email.email)
+                              )
+                            )
+                    )
+                    // a single path
+                    and strings.count(.scan.qr.url.path, '/') == 2
+                    and (
+                      (
+                        (
+                          strings.contains(.scan.qr.url.path, '/$')
+                          or strings.contains(.scan.qr.url.path, '/*')
+                          or strings.contains(.scan.qr.url.path, '/#')
+                        )
+                        // subdomain should contain num{3}alpha or alphanum{3}
+                        and regex.icontains(.scan.qr.url.domain.subdomain,
+                                            '^(?:[a-z]+[0-9]{3}|[0-9]{3}[a-z]+)$'
+                        )
+                        // url path should contain num{3}alpha or alphanum{3}
+                        and regex.icontains(.scan.qr.url.path,
+                                            '\/(?:[a-z]+[0-9]{3}|[0-9]{3}[a-z]+)\/'
+                        )
+                      )
+                      or (
+                        // special char in the path
+                        (
+                          strings.contains(.scan.qr.url.path, '!')
+                          or strings.contains(.scan.qr.url.path, '@')
+                        )
+                        and (
+                          strings.contains(.scan.qr.url.path, '/$')
+                          or strings.contains(.scan.qr.url.path, '/*')
+                          or strings.contains(.scan.qr.url.path, '/#')
+                          // hex dollar sign
+                          or strings.icontains(.scan.qr.url.path, '%24')
+                          // hex star
+                          or strings.icontains(.scan.qr.url.path, '%2A')
+                          // hex pound
+                          or strings.icontains(.scan.qr.url.path, '%23')
+                        )
+                        // ensure expected ordering
+                        and regex.icontains(.scan.qr.url.url,
+                                            '[!@].*(?:[$*]|%2[A43])'
+                        )
+                      )
+                    )
+            )
+          )
+          or (
+            // pdf or images
+            (
+              .file_type == "pdf" or .file_type in $file_types_images
+            )
+            //
+            // This rule makes use of a beta feature and is subject to change without notice
+            // using the beta feature in custom rules is not suggested until it has been formally released
+            //
+            and any(beta.scan_qr(.).items,
+                    .type is not null
+                    // a single path
+                    and strings.count(.url.path, '/') == 2
+                    and (
+                      (
+                        (
+                          strings.contains(.url.path, '/$')
+                          or strings.contains(.url.path, '/*')
+                          or strings.contains(.url.path, '/#')
+                        )
+                        // subdomain should contain num{3}alpha or alphanum{3}
+                        and regex.icontains(.url.domain.subdomain,
+                                            '^(?:[a-z]+[0-9]{3}|[0-9]{3}[a-z]+)$'
+                        )
+                        // url path should contain num{3}alpha or alphanum{3}
+                        and regex.icontains(.url.path,
+                                            '\/(?:[a-z]+[0-9]{3}|[0-9]{3}[a-z]+)\/'
+                        )
+                      )
+                      or (
+                        // special char in the path
+                        (
+                          strings.contains(.url.path, '!')
+                          or strings.contains(.url.path, '@')
+                        )
+                        and (
+                          strings.contains(.url.path, '/$')
+                          or strings.contains(.url.path, '/*')
+                          or strings.contains(.url.path, '/#')
+                          // hex dollar sign
+                          or strings.icontains(.url.path, '%24')
+                          // hex star
+                          or strings.icontains(.url.path, '%2A')
+                          // hex pound
+                          or strings.icontains(.url.path, '%23')
+                        )
+                        // ensure expected ordering
+                        and regex.icontains(.url.url, '[!@].*(?:[$*]|%2[A43])')
+                      )
+                    )
+            )
+          )
+  )
+
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "QR code"
+  - "Social engineering"
+  - "Evasion"
+detection_methods:
+  - "File analysis"
+  - "QR code analysis"
+  - "URL analysis"
+  - "Computer Vision"
+id: "fc9e1c09-4691-5cde-94d1-ccd953f1b63a"
