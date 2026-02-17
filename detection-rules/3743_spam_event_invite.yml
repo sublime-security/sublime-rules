@@ -8,23 +8,21 @@ source: |
   and (
     strings.icontains(body.current_thread.text, "attend")
     or strings.icontains(body.current_thread.text, "relevant fit")
-    or strings.icontains(body.current_thread.text, "your chance")
-    or strings.icontains(body.current_thread.text, "you're invited")
-    or strings.icontains(body.current_thread.text, "invitation code")
-    or strings.icontains(body.current_thread.text, "promo code")
     or strings.icontains(body.current_thread.text, "early bird")
     or regex.icontains(body.current_thread.text,
                        '\bjoin (?:us|them?)\b',
-                       'dear.{0,15}colleagues?',
-                       '(?:opportunity|contribute) to',
+                       '\bdear.{0,15}colleagues?\b',
+                       '\b(?:opportunity|contribute) to\b',
                        '\bparticipat(?:e|ion)\b',
-                       'collaborat(?:e|ion)',
+                       '\bcollaborat(?:e|ion)\b',
                        '\bnominat(?:ed?|ions?)\b',
                        '\bpartner(?:ing|ship)?s?\b',
-                       '(?:\blook|looking\b) forward to.{0,15}your?',
-                       '(?:regist(?:er|ration)|submission) deadline',
-                       'invit(?:e|ing|ation)(?: you| them| to)?',
-                       'miss (?:this|the) chance'
+                       '\b(?:look|looking) forward to.{0,15}your?\b',
+                       '\b(?:regist(?:er|ration)|submission) deadline\b',
+                       '\binvit(?:e|ing|ation)(?: you| them| to)?\b',
+                       '\bmiss (?:this|the|your) chance\b',
+                       '\byou(?:.re| are) invited\b',
+                       '\b(?:invitation|promo) code\b'
     )
     or (
       regex.icontains(body.current_thread.text, '\bapply\b')
@@ -46,14 +44,23 @@ source: |
   
   // event (1 required)
   and (
-    regex.icontains(body.current_thread.text,
-                    '\bpanel\b',
-                    '\bforum\b',
-                    '\bsummit\b'
+    regex.icontains(body.current_thread.text, '\bforum\b')
+    or (
+      strings.icontains(body.current_thread.text, "summit")
+      and not regex.icontains(body.current_thread.text, '\bmount(?:ain)?\b')
+    )
+    or (
+      strings.icontains(body.current_thread.text, "panel")
+      and not regex.icontains(body.current_thread.text, '\bsolar panel\b')
+      and not strings.icontains(body.current_thread.text, "student")
     )
     or (
       strings.icontains(body.current_thread.text, "conference")
-      and not regex.icontains(body.current_thread.text, '\bconference call\b')
+      and not regex.icontains(body.current_thread.text,
+                              '\bconference (?:room|call)\b',
+                              '\bparent(?:\s*(?:-|\/|and|&)?\s*)teacher\b'
+      )
+      and not strings.icontains(body.current_thread.text, "press conference")
     )
   )
   
@@ -63,34 +70,36 @@ source: |
                 "Newsletters and Digests",
                 "Charity and Non-Profit",
                 "Reminders and Notifications",
-                "Government Services"
+                "Government Services",
+                "Software and App Updates"
               )
   )
   
   // keyword negations
   and not (
-    (
-      strings.ilike(body.current_thread.text,
-                    "*internship*",
-                    "*scholarship*",
-                    "*chamber?of?commerce*",
-                    "*invoice?number*",
-                    "*payment?details*",
-                    "*balance?due*"
-      )
-      or regex.icontains(body.current_thread.text, '\bpay\b.{0,10}invoice')
+    strings.ilike(body.current_thread.text,
+                  "*internship*",
+                  "*scholarship*",
+                  "*chamber?of?commerce*",
+                  "*invoice?number*",
+                  "*payment?details*",
+                  "*balance?due*",
+                  "*quarantine*"
     )
-    and not strings.icontains(body.current_thread.text, "complimentary")
+    or regex.icontains(body.current_thread.text, '\bpay.{0,10}invoice\b')
+    or any(body.links, strings.icontains(.display_text, 'read online'))
   )
   
-  // negate legit invites
-  and not any(attachments,
-              (.file_extension =~ "ics" or .content_type == "text/calendar")
-  )
+  // negate legitimate invites
   and not (
-    any(body.links, .href_url.domain.root_domain == 'zoom.us')
-    and strings.ilike(body.current_thread.text, '*meeting id:*')
-    and strings.ilike(body.current_thread.text, '*passcode:*', '*password:*')
+    any(attachments,
+        (.file_extension =~ "ics" or .content_type == "text/calendar")
+    )
+    or (
+      any(body.links, .href_url.domain.root_domain == 'zoom.us')
+      and strings.ilike(body.current_thread.text, '*meeting id:*')
+      and strings.ilike(body.current_thread.text, '*passcode:*', '*password:*')
+    )
   )
   
   // negate important tld's
@@ -118,11 +127,7 @@ source: |
   
   // negate legitimate conversations
   and not (
-    (subject.is_reply or subject.is_forward)
-    and (
-      length(headers.references) > 0
-      and any(headers.hops, any(.fields, strings.ilike(.name, "In-Reply-To")))
-    )
+    (subject.is_forward or subject.is_reply) and headers.in_reply_to is not null
   )
 
 attack_types:
@@ -136,4 +141,4 @@ detection_methods:
 id: "0e9606f8-8261-5acd-96cf-d6cb5898a593"
 og_id: "dbe23860-32b1-57b3-a445-34b15000bc9d"
 testing_pr: 3743
-testing_sha: 3bfb3ad1f718ea6586ab358e006383acfb3ce190
+testing_sha: 402f59d9b5563120d487e3606414e67767df7a79
