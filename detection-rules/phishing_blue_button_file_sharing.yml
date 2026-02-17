@@ -16,12 +16,30 @@ source: |
             // it's styled as a button
             regex.icontains(.raw, 'padding')
           )
+          // ignore links going to microsoft
+          and not any(.links,
+                      .href_url.domain.sld in (
+                        "microsoft",
+                        "azure",
+                        "outlook.office365",
+                        "office365"
+                      )
+          )
+          // handle mimecast rewrites the same as above
+          and not any(.links,
+                      any(.href_url.query_params_decoded['domain'],
+                          strings.parse_domain(.).domain in (
+                            "microsoft.com",
+                            "azure.com",
+                            "outlook.office365.com",
+                            "office365.com"
+                          )
+                      )
+          )
   )
-  and not any(body.current_thread.links,
-              .href_url.domain.domain == "outlook.office365.com"
-  )
+  and any(ml.nlu_classifier(body.current_thread.text).intents, .name != "benign")
   and not (
-    sender.email.email == "defender-noreply@microsoft.com"
+    sender.email.domain.root_domain == "microsoft.com"
     and headers.auth_summary.dmarc.pass
   )
 
