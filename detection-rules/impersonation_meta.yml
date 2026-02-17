@@ -12,9 +12,9 @@ source: |
     // that it can be used without any other impersonation logic
     (
       regex.icontains(sender.display_name,
-                      '\bm.?e.?t.?a\b.*(?:verif(?:y|i(?:cado|ed)))?.*\b(?:recruiting|certification|trust|safety|badge|alert|advertising|compliance|copyright|enforcement|intellectual|rights|account|help|support|business|policy|Vérifié|certify|inc)\b',
-                      '\bm.?e.?t.?a(?:recruiting|pro|certification|trust|safety|badge|alert|advertising|compliance|copyright|enforcement|intellectual|rights|account|help|support|business|policy)team',
-                      '\bf.?a.?c.?e.?b.?o.?o.?k\b.*(?:verif(?:y|i(?:cado|ed)))?.*(?:recruiting|ads team|certification|trust|safety|badge|alert|advertising|compliance|copyright|enforcement|intellectual|rights|account|help|support|business|policy|Vérifié|certify|\binc\b)',
+                      '\bm.?e.?t.?a\b.*(?:verif(?:y|i(?:cado|ed)))?.*\b(?:recruiting|certification|trust|safety|badge|alert|advertising|compliance|copyright|enforcement|intellectual|rights|account|help|support|service|business|policy|Vérifié|certify|inc|help[ -]?desk)\b',
+                      '\bm.?e.?t.?a(?:recruiting|pro|certification|trust|safety|badge|alert|advertising|compliance|copyright|enforcement|intellectual|rights|service|account|help|support|business|policy)team',
+                      '\bf.?a.?c.?e.?b.?o.?o.?k\b.*(?:verif(?:y|i(?:cado|ed)))?.*\b(?:recruiting|ads[ -]?team|certification|trust|safety|badge|alert|advertising|compliance|copyright|enforcement|intellectual|rights|service|account|help|support|business|policy|Vérifié|certify|inc|help[ -]?desk)\b',
                       '^[a-z]+ from \bmeta$',
                       'page ?ads ?support',
                       'Instagram\s*(?:Not|Policies|Report|Helpdesk|Support)',
@@ -49,27 +49,31 @@ source: |
                         '\binstagr(am)?\b'
         )
         or strings.ilevenshtein(sender.display_name, 'facebook') <= 2
-        or (
-          regex.icontains(sender.display_name, '\bm.?e.?t.?a\b')
-          and regex.icontains(subject.base,
-                              '\b(?:recruiting|permanently|locked|certification|trust|safety|badge|alert|advertising|compliance|copyright|enforcement|intellectual|rights|account|help|support|business|policy|verif(?:y|i(?:cado|ed))|Vérifié|Trademark|Misuse|Review|Violation|Warning|Restriction|Inappropriate|Content|multiple reports)\b'
-          )
-        )
+        or regex.icontains(sender.display_name, '\bm.?e.?t.?a\b')
         or sender.email.email == 'noreply@appsheet.com'
       )
-      and (
+      and 2 of (
         any(ml.logo_detect(file.message_screenshot()).brands,
             .name in ("Facebook", "Meta", "Instagram", "Threads")
-        )
-        or any(ml.nlu_classifier(body.current_thread.text).intents,
-               .name in ("cred_theft", "callback_scam", "steal_pii")
-               and .confidence in ("medium", "high")
-        )
-        or (
+        ),
+        any(ml.nlu_classifier(body.current_thread.text).intents,
+            .name in ("cred_theft", "callback_scam", "steal_pii")
+            and .confidence in ("medium", "high")
+        ),
+        (
           length(body.current_thread.text) < 2000
           and regex.icontains(body.current_thread.text, "(?:violation|infringe)")
-        )
-        or any(body.links, .href_url.domain.root_domain == "rebrand.ly")
+        ),
+        regex.icontains(subject.base,
+                        '\b(?:recruiting|permanently|locked|certification|trust|safety|badge|alert|advertising|compliance|copyright|enforcement|intellectual|rights|account|help|support|business|policy|verif(?:y|i(?:cado|ed))|Vérifié|Trademark|Misuse|Review|Violation|Warning|Restriction|Inappropriate|service|Content|multiple reports)\b'
+        ),
+        any(body.links,
+            .href_url.domain.root_domain in $self_service_creation_platform_domains
+            or .href_url.domain.root_domain in $free_file_hosts
+            or .href_url.domain.root_domain in $free_subdomain_hosts
+            or .href_url.domain.root_domain in $url_shorteners
+        ),
+        sender.email.domain.root_domain in $free_email_providers
       )
     )
     // salesforce sender combined with logo detection and nlu is enough
@@ -186,14 +190,29 @@ source: |
   // negate metaenterprise links
   and not any(headers.reply_to, .email.email == "noreply@facebookmail.com")
   
+  // meta wiki renamer
+  and not (
+    sender.display_name == 'Meta-Wiki'
+    and sender.email.domain.root_domain == 'wikimedia.org'
+  )
+  
   // we dont want emails where all the links go to meta domains
-  and not all(body.links,
+  and not (
+    (
+      length(body.links) > 1
+      and all(body.links,
               .href_url.domain.root_domain in (
                 'facebook.com',
                 'instagram.com',
                 'meta.com'
               )
+              and not strings.istarts_with(.href_url.path, '/share/')
+      )
+    )
+    // too many links
+    or length(body.links) > 20
   )
+  
   // negate highly trusted sender domains unless they fail DMARC authentication
   and (
     (
