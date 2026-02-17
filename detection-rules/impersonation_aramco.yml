@@ -25,8 +25,10 @@ source: |
       )
     )
     or regex.icount(body.current_thread.text, "vendor|supplier") > 3
+    or any(headers.reply_to, .email.domain.root_domain in $free_email_providers)
+    or network.whois(sender.email.domain).days_old <= 90
+    or any(headers.reply_to, network.whois(.email.domain).days_old < 90)
   )
-  
   // Aramco domain negations
   and sender.email.domain.root_domain not in~ (
     'aramco.com',
@@ -36,12 +38,11 @@ source: |
     'aramcodigital.com',
     'aramcoeurope.com'
   )
-  
   // negate emails sent by the Aston Martin Aramco F1 Team
   and sender.email.domain.root_domain != "astonmartinf1.com"
   and not strings.icontains(subject.subject, 'Aston Martin')
   and not regex.icontains(subject.subject, 'Formula (?:One|1)', '\bF1\b')
-
+  
   // negate highly trusted sender domains unless they fail DMARC authentication
   and (
     (
