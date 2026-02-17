@@ -1,0 +1,29 @@
+name: "Link: Direct download of executable file"
+description: "Detects messages containing links that directly download executable (.exe) files, with a limited number of distinct links that are either unrelated to the sender's domain or not in the top 10k most popular websites."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  // low amount of distinct links which are unrelated to the sender or not in tranco_10k
+  and (
+    length(distinct(filter(body.current_thread.links,
+                           .href_url.domain.root_domain != sender.email.domain.root_domain
+                           and .href_url.domain.root_domain not in $tranco_10k
+                    ),
+                    .href_url.url
+           )
+    ) <= 15
+    or sender.email.domain.root_domain in $free_email_providers
+  )
+  // the link leads to a direct download of an EXE file
+  and any(body.current_thread.links, strings.iends_with(.href_url.url, '.exe'))
+tags:
+  - "Attack surface reduction"
+attack_types:
+  - "Malware/Ransomware"
+tactics_and_techniques:
+  - "Evasion"
+  - "Free email provider"
+detection_methods:
+  - "Sender analysis"
+  - "URL analysis"
