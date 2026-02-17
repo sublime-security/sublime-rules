@@ -1,0 +1,34 @@
+name: "PR# 4036 - Brand impersonation: Indeed"
+description: "Detects messages impersonating Indeed using logo detection, Indeed branding elements, and font styling while originating from domains other than legitimate Indeed domains."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and any(ml.logo_detect(file.message_screenshot()).brands, .name == "Indeed")
+  and any(body.current_thread.links, .display_text == 'Indeed')
+  and strings.contains(body.html.raw, 'Indeed Sans')
+  and sender.email.domain.root_domain not in ('indeed.com', 'indeedemail.com')
+  // not forwards/replies
+  and not (
+    length(headers.references) > 0
+    and (subject.is_forward or subject.is_reply)
+    and length(body.previous_threads) >= 1
+  )
+
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Social engineering"
+detection_methods:
+  - "Computer Vision"
+  - "Content analysis"
+  - "Header analysis"
+  - "Sender analysis"
+id: "9487b164-fd8a-54bb-b583-2f362e489282"
+tags:
+  - created_from_open_prs
+  - rule_status_added
+  - pr_author_D-Bolton
+references:
+  - https://github.com/sublime-security/sublime-rules/pull/4036
