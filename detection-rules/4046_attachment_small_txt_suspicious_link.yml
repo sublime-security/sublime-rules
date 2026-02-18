@@ -1,0 +1,37 @@
+name: "Attachment: Small text file with link containing recipient email address"
+description: "Attach text file is less than 1000 bytes and contains a recipients email address. Seen in the wild carrying credential phishing links."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and any(attachments,
+          .content_type in~ ("text/plain", "text")
+          // negate calendar invites
+          and not (
+            .file_extension == "ics"
+            or .content_type in ("application/ics", "text/calendar")
+          )
+          and any(file.explode(.),
+                  .size < 1000
+                  and any(.scan.url.urls,
+                          any(recipients.to,
+                              strings.icontains(..url, .email.email)
+                              and .email.domain.valid
+                          )
+                  )
+          )
+  )
+tags:
+ - "Attack surface reduction"
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Evasion"
+  - "Social engineering"
+detection_methods:
+  - "File analysis"
+  - "URL analysis"
+id: "810ae33c-0551-5918-b4df-ebe17acdd80e"
+og_id: "c0472c9d-1e06-5177-90b1-f57620944ff5"
+testing_pr: 4046
+testing_sha: cc77b4ce66a6030f91aa1f44954448094b45e47b
