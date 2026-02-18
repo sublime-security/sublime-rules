@@ -1,0 +1,64 @@
+name: "Link: PDF display mismatch with business document social engineering"
+description: "Detects links that display as PDF files but actually point to HTML pages on low-reputation domains, combined with business proposal or document-related social engineering language in the subject or body from external senders."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and length(body.current_thread.text) < 1600
+  and length(body.current_thread.links) <= 5
+  and length(recipients.to) <= 5
+  
+  // Core PDF display mismatch pattern
+  and any(body.current_thread.links,
+          // Link displays as PDF but points to HTML page
+          strings.ilike(.display_text, "*.pdf")
+          // Link domain is not reputable
+          and .href_url.domain.root_domain not in $tranco_1m
+          // Domain completely unrelated to sender's organization
+          and .href_url.domain.root_domain != sender.email.domain.root_domain
+  )
+  
+  // Business document context
+  and (
+    // Look for business proposal/document language
+    strings.ilike(body.current_thread.text,
+                  "*proposal*",
+                  "*RFP*",
+                  "*architects*",
+    )
+    or strings.ilike(subject.base, "*proposal*", "*RFP*", "*architects*")
+  )
+  
+  // Not from organizational domains
+  and not (
+    sender.email.domain.root_domain in $org_domains
+    and coalesce(headers.auth_summary.dmarc.pass, false)
+  )
+  
+  // Not legitimate document sharing services
+  and not any(body.current_thread.links,
+              strings.ilike(.display_text, "*.pdf")
+              and .href_url.domain.root_domain in (
+                "dropbox.com",
+                "onedrive.live.com",
+                "drive.google.com"
+              )
+  )
+  
+  // negations
+  and not strings.ilike(body.current_thread.text,
+                        "*budget*update*",
+                        "*new*document*"
+  )
+attack_types:
+  - "Credential Phishing"
+  - "BEC/Fraud"
+  - "Malware/Ransomware"
+tactics_and_techniques:
+  - "Evasion"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Sender analysis"
+  - "URL analysis"
+id: "901c1dd0-d557-57cf-b520-a287ad6e8be7"
