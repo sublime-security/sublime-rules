@@ -1,0 +1,39 @@
+name: "PR# 4046 - Attachment: Small text file with link containing recipient email address"
+description: "Attach text file is less than 1000 bytes and contains a recipients email address. Seen in the wild carrying credential phishing links."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and any(attachments,
+          .content_type in~ ("text/plain", "text")
+          // negate calendar invites
+          and not (
+            .file_extension == "ics"
+            or .content_type in ("application/ics", "text/calendar")
+          )
+          and any(file.explode(.),
+                  .size < 1000
+                  and any(.scan.url.urls,
+                          any(recipients.to,
+                              strings.icontains(..url, .email.email)
+                              and .email.domain.valid
+                          )
+                  )
+          )
+  )
+tags:
+  - "Attack surface reduction"
+  - pr_author_MSAdministrator
+  - created_from_open_prs
+  - rule_status_modified
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Evasion"
+  - "Social engineering"
+detection_methods:
+  - "File analysis"
+  - "URL analysis"
+id: "810ae33c-0551-5918-b4df-ebe17acdd80e"
+references:
+  - https://github.com/sublime-security/sublime-rules/pull/4046
