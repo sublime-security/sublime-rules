@@ -1,0 +1,92 @@
+name: "Attachment: Microsoft impersonation via PDF with link and suspicious language"
+description: "Attached PDF contains a Microsoft-affilated logo, suspicious language or keywords, and a link. Known malware delivery method."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and (
+    any(attachments,
+        (.file_extension == "pdf" or .file_type == "pdf")
+        and any(ml.logo_detect(.).brands, strings.starts_with(.name, "Microsoft"))
+    )
+  )
+  and any(attachments,
+          (.file_extension == "pdf" or .file_type == "pdf")
+          and any(file.explode(.),
+                  (
+                    length(filter([
+                                    "password",
+                                    "unread messages",
+                                    "Shared Documents",
+                                    "expiration",
+                                    "expire",
+                                    "expiring",
+                                    "kindly",
+                                    "renew",
+                                    "review",
+                                    "emails failed",
+                                    "kicked out",
+                                    "prevented",
+                                    "storage",
+                                    "required now",
+                                    "cache",
+                                    "qr code",
+                                    "security update",
+                                    "invoice",
+                                    "retrieve",
+                                    'engine failed',
+                                    'OneDrive Error',
+                                    'problem connecting',                                  
+                                    'secure file',
+                                    'access'
+                                  ],
+                                  strings.icontains(..scan.ocr.raw, .)
+                           )
+                    ) >= 2
+                    or any(ml.nlu_classifier(.scan.ocr.raw).intents,
+                           .name == "cred_theft" and .confidence == "high"
+                    )
+                  )
+                  and (length(.scan.url.urls) > 0 or length(.scan.pdf.urls) > 0)
+          )
+  )
+  and (
+    not any(headers.hops,
+            .authentication_results.compauth.verdict is not null
+            and .authentication_results.compauth.verdict == "pass"
+            and sender.email.domain.domain in (
+              "microsoft.com",
+              "sharepointonline.com"
+            )
+    )
+  )
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and not headers.auth_summary.dmarc.pass
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+
+tags:
+  - "Malfam: Pikabot"
+attack_types:
+  - "Credential Phishing"
+  - "Malware/Ransomware"
+tactics_and_techniques:
+  - "Image as content"
+  - "Impersonation: Brand"
+  - "PDF"
+  - "Scripting"
+  - "Social engineering"
+detection_methods:
+  - "Computer Vision"
+  - "File analysis"
+  - "Header analysis"
+  - "Natural Language Understanding"
+  - "Sender analysis"
+id: "bed0c1e0-ec85-5c80-8219-0bc16abee23c"
+og_id: "70d41c7f-19ba-5a4d-9eb6-3682eb655314"
+testing_pr: 4046
+testing_sha: cc77b4ce66a6030f91aa1f44954448094b45e47b
