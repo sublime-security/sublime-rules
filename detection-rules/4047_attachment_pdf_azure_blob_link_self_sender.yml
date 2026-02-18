@@ -1,0 +1,55 @@
+name: "PR# 4047 - Attachment: Self-sent PDF with Azure Blob Storage link containing sender domain"
+description: "Detects messages where the sender emails themselves a PDF attachment that matches the subject line and contains a Microsoft Azure Blob Storage link with the sender's domain embedded in both the subdomain and path."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  // self sender
+  and length(recipients.to) == 1
+  and sender.email.email == recipients.to[0].email.email
+  // short body
+  and length(body.current_thread.text) < 200
+  // one attachment
+  and length(attachments) == 1
+  // subject matches file name
+  and all(attachments, .file_name == strings.concat(subject.base, '.pdf'))
+  and any(attachments,
+          any(file.explode(.),
+              // one Microsoft Azure Blob Storage link that contains sender domain in subdomain and path
+              length(.scan.url.urls) == 1
+              and any(.scan.url.urls,
+                      .domain.root_domain == 'windows.net'
+                      and strings.contains(.path, sender.email.domain.sld)
+                      and strings.contains(.domain.subdomain,
+                                           sender.email.domain.sld
+                      )
+              )
+          )
+          // short pdf that contains the sender domain or subject
+          and any(file.explode(.),
+                  (
+                    strings.icontains(.scan.strings.raw, sender.email.domain.sld)
+                    or strings.icontains(.scan.strings.raw, subject.base)
+                  )
+                  and length(.scan.strings.raw) < 200
+          )
+  )
+attack_types:
+  - "BEC/Fraud"
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Evasion"
+  - "Free file host"
+  - "PDF"
+detection_methods:
+  - "File analysis"
+  - "Header analysis"
+  - "Sender analysis"
+  - "URL analysis"
+id: "be62d569-8e94-5d79-aa65-8f05b2e72c29"
+tags:
+  - created_from_open_prs
+  - rule_status_added
+  - pr_author_D-Bolton
+references:
+  - https://github.com/sublime-security/sublime-rules/pull/4047
