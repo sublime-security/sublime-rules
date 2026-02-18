@@ -3,18 +3,24 @@ description: "Detects messages where the sender and recipient are the same addre
 type: "rule"
 severity: "medium"
 source: |
-  type.inbound 
+  type.inbound
   and any(filter(body.links, .href_url.domain.root_domain == 'sharepoint.com'),
-       // it is either a OneNote or PDF file, or unknown
-       regex.icontains(.href_url.path, '\/:[obu]:\/(?:p|g\/personal)')
+          // it is either a OneNote or PDF file, or unknown
+          regex.icontains(.href_url.path, '\/:[obu]:\/(?:p|g\/personal)')
   )
   and not strings.starts_with(headers.message_id, '<Share-')
   and not strings.ends_with(headers.message_id, '@odspnotify>')
   and length(recipients.to) == 1
   and recipients.to[0].email.email == sender.email.email
   // 0 or 1 attachments (this resudces FPs whcich had many attachments)
-  and length(attachments) - length(filter(attachments, strings.contains(body.html.raw, strings.concat('src="cid:', .content_id)))) <= 1
-
+  and length(attachments) - length(filter(attachments,
+                                          strings.contains(body.html.raw,
+                                                           strings.concat('src="cid:',
+                                                                          .content_id
+                                                           )
+                                          )
+                                   )
+  ) <= 1
 attack_types:
   - "Credential Phishing"
 tactics_and_techniques:
