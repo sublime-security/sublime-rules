@@ -1,0 +1,97 @@
+name: "PR# 4046 - HTML smuggling containing recipient email address"
+description: "HTML attachment (or HTML attachment in attached email) is small and contains a recipients email address."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and (
+    any(attachments,
+        (
+          .file_extension in~ ("html", "htm", "shtml", "dhtml")
+          or .content_type == "message/rfc822"
+          or .file_type == "html"
+          or (.content_type == "text/html" or .file_extension in ('eml'))
+        )
+        and any(file.explode(.),
+                .size < 10000
+                and length(.scan.strings.strings) < 20
+                and any(recipients.to,
+                        any(..scan.strings.strings,
+                            strings.icontains(., ..email.email)
+                        )
+                        and .email.domain.valid
+                )
+        )
+    )
+    or any(attachments,
+           (.file_extension in~ $file_extensions_common_archives)
+           and any(file.explode(.),
+                   (
+                     .file_extension in~ ("html", "htm", "shtml", "dhtml")
+                     or ..file_type == "html"
+                     or ..content_type == "text/html"
+                   )
+                   and .size < 10000
+                   and length(.scan.strings.strings) < 20
+                   and any(recipients.to,
+                           any(..scan.strings.strings,
+                               strings.icontains(., ..email.email)
+                           )
+                           and .email.domain.valid
+                   )
+           )
+    )
+  )
+  and not any(attachments,
+              any(file.parse_eml(.).attachments,
+                  .content_type == "message/delivery-status"
+              )
+  )
+  // bounce-back negations
+  and not (
+    any(attachments,
+        .content_type in ("message/delivery-status", "text/calendar")
+    )
+  )
+  // negate bouncebacks from proofpoint
+  and not (
+    sender.display_name == "Mail Delivery Subsystem"
+    and strings.ends_with(headers.message_id, "pphosted.com>")
+    and any(headers.hops,
+            .index == 0 and strings.contains(.received.server.raw, "pphosted.com")
+    )
+    and any(attachments, .content_type == "message/rfc822")
+  )
+  
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and not coalesce(headers.auth_summary.dmarc.pass, false)
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+    or (
+      sender.email.domain.domain in $org_domains
+      and not coalesce(headers.auth_summary.dmarc.pass, false)
+    )
+  )
+
+tags:
+  - "Attack surface reduction"
+  - pr_author_MSAdministrator
+  - created_from_open_prs
+  - rule_status_modified
+attack_types:
+  - "Credential Phishing"
+  - "Malware/Ransomware"
+tactics_and_techniques:
+  - "Evasion"
+  - "HTML smuggling"
+  - "Scripting"
+detection_methods:
+  - "Archive analysis"
+  - "File analysis"
+  - "Sender analysis"
+id: "c7bdf7cf-8b15-584f-bb2b-1d18aa09b840"
+references:
+  - https://github.com/sublime-security/sublime-rules/pull/4046
