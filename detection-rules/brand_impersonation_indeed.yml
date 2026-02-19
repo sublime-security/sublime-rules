@@ -1,0 +1,40 @@
+name: "Brand impersonation: Indeed"
+description: "Detects messages impersonating Indeed using logo detection, Indeed branding elements, and font styling while originating from domains other than legitimate Indeed domains."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and any(ml.logo_detect(file.message_screenshot()).brands, .name == "Indeed")
+  and any(body.current_thread.links, .display_text == 'Indeed')
+  and strings.contains(body.html.raw, 'Indeed Sans')
+  and sender.email.domain.root_domain not in ('indeed.com', 'indeedemail.com')
+  // not forwards/replies
+  and not (
+    length(headers.references) > 0
+    and (subject.is_forward or subject.is_reply)
+    and length(body.previous_threads) >= 1
+  )
+  // negate iCloud Private Message Relay
+  and not (
+    sender.email.domain.domain == "privaterelay.appleid.com"
+    or any(headers.hops, any(.fields, .name == "X-ICLOUD-HME"))
+  )
+  // negate instances where proofpoint sends a review of a reported message via analyzer 
+  and not (
+    sender.email.email == "analyzer@analyzer.securityeducation.com"
+    and any(headers.domains, .root_domain == "pphosted.com")
+    and headers.auth_summary.spf.pass
+    and headers.auth_summary.dmarc.pass
+  )
+
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Social engineering"
+detection_methods:
+  - "Computer Vision"
+  - "Content analysis"
+  - "Header analysis"
+  - "Sender analysis"
+id: "f1e291fc-15f8-5ae1-b36c-444d89440a08"
