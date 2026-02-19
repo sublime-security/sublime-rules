@@ -1,0 +1,41 @@
+name: "Attachment: PDF with credential theft language and suspicious reply-to from custom domain"
+description: "Detects PDF attachments containing credential theft language and links to free subdomain hosts, sent from custom domains with freemail reply-to addresses."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  // Custom domain sender with freemail reply-to
+  and any(filter(headers.reply_to,
+                 .email.domain.root_domain in $free_email_providers
+                 and sender.email.domain.root_domain not in $free_email_providers
+          ),
+          .email.email is not null
+  )
+  and any(attachments,
+          .file_extension == "pdf"
+          and any(file.explode(.),
+                  any(.scan.pdf.urls,
+                      .domain.root_domain in $free_subdomain_hosts
+                      and .domain.subdomain is not null
+                      and .domain.subdomain != "www"
+                  )
+                  
+          )
+          and any(file.explode(.),
+                  any(ml.nlu_classifier(.scan.strings.raw).intents, .name == 'cred_theft' and .confidence in ('medium', 'high'))
+          )
+  )
+
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Free email provider"
+  - "Free subdomain host"
+  - "PDF"
+  - "Social engineering"
+detection_methods:
+  - "File analysis"
+  - "Header analysis"
+  - "Natural Language Understanding"
+  - "Sender analysis"
+  - "URL analysis"
