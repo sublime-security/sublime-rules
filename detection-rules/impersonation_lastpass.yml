@@ -1,0 +1,56 @@
+name: "Brand impersonation: LastPass"
+description: "Detects messages impersonating the password manager LastPass that contain suspicious language about maintenance, vault exports, or master passwords."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and length(body.links) > 0
+  and any([subject.subject, sender.display_name, sender.email.domain.domain],
+          strings.ilike(strings.replace_confusables(.), "*LastPass*", "Last?Pass")
+  )
+  and (
+    strings.ilike(body.current_thread.text,
+                  "*back*up*",
+                  "*maintenance*",
+                  "*master*password*",
+                  "*export*vault*",
+                  "*support@lastpass.com*" // real LastPass support address
+    )
+    or any(body.links,
+           // links directly to a S3 bucket
+           (
+             .href_url.domain.root_domain == "amazonaws.com"
+             and strings.icontains(.href_url.domain.subdomain, "s3")
+           )
+           // recipient email as a URL param
+           or any(.href_url.query_params_decoded["email"],
+                  strings.parse_email(.).email in map(recipients.to, .email.email)
+           )
+    )
+    or any(ml.nlu_classifier(body.current_thread.text).topics,
+           .name in ("Security and Authentication", "Reminders and Notifications")
+           and .confidence != "low"
+    )
+    // invalid sender address
+    or not sender.email.domain.valid
+  )
+  // negate newsletters
+  and not any(ml.nlu_classifier(body.current_thread.text).topics,
+              .name in ("Newsletters and Digests") and .confidence != "low"
+  )
+  and not (
+    sender.email.domain.root_domain in~ ("lastpass.com")
+    and headers.auth_summary.dmarc.pass
+  )
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Natural Language Understanding"
+  - "Sender analysis"
+  - "URL analysis"
+  - "Header analysis"
+id: "99831d35-1be6-547c-993e-6e6997b565bd"
