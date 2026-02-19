@@ -1,0 +1,32 @@
+name: "Link: AI-generated credential theft with HTML comments"
+description: "Detects messages containing AI-generated HTML comments with phrases like 'as requested' or 'replace link', combined with styled button elements and credential theft language."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and length(body.previous_threads) == 0
+  // contains ai-esque code comments like "as requested" and "replace x link"
+  and any(html.xpath(body.html, '//comment()').nodes,
+      regex.icontains(.raw,
+                      'keeping.{0,10}same|as.{0,10}requested|replace.{0,20}(?:url|link|below)|\(unchanged\)|<!-- new:|<!-- replace'
+      )
+  )
+  // contains a button
+  and any(html.xpath(body.html, '//a[@style]').nodes,
+          regex.icontains(.raw, 'padding') and regex.icontains(.raw, 'background')
+  )
+  and any(ml.nlu_classifier(body.current_thread.text).intents,
+          .name in ("cred_theft") and .confidence != "low"
+  )
+  and not sender.email.domain.root_domain in $high_trust_sender_root_domains
+tags:
+  - "Attack surface reduction"
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Evasion"
+  - "Social engineering"
+detection_methods:
+  - "HTML analysis"
+  - "Natural Language Understanding"
+  - "Content analysis"
