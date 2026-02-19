@@ -4,21 +4,13 @@ type: "rule"
 severity: "medium"
 source: |
   type.inbound
-  and length(attachments) == 0
-  // common subject lines - keywords
-  and (
-    strings.contains(subject.subject, "OpenAI")
-    or (strings.contains(subject.subject, "OpenAl"))
-    or (strings.contains(subject.subject, "0penAI"))
+  and any(body.current_thread.links,
+          .href_url.domain.domain in ('apps.apple.com')
+          and regex.icount(.href_url.path,
+                           '[/-](?:suite|business?|ads?|manager?|campaigns?)'
+          ) >= 2
   )
-  and strings.ilike(body.current_thread.text, "*OpenAI*", "*Ads*", "*GPT*")
-  and (
-    length(body.links) > 0
-    and all(body.links,
-            .href_url.domain.root_domain != sender.email.domain.root_domain
-    )
-    and any(body.links, .href_url.domain.domain in ('apps.apple.com'))
-  )
+  and strings.icontains(body.html.raw, 'App Store')
   
 tags:
   - "Attack surface reduction"
@@ -35,4 +27,4 @@ detection_methods:
 id: "d41720c1-2f78-5758-be6e-ffe1bd3b92a5"
 og_id: "c2f3efea-5397-558e-a6be-957d2f757e1c"
 testing_pr: 3980
-testing_sha: 20ffcd55141e8cc323b87fc54b01ed85c44690d1
+testing_sha: 184ac7d71e0986e26283b342f2fde575925549b6
