@@ -1,0 +1,54 @@
+name: "Credential phishing: Blue button styled link with file-sharing template artifacts"
+description: "Detects inbound messages containing styled blue button links commonly associated with generic file-sharing phishing templates, where the link does not point to legitimate Outlook domains."
+type: "rule"
+severity: "low"
+source: |
+  type.inbound
+  and length(body.previous_threads) == 0
+  and any(filter(html.xpath(body.html, '//a[@href]').nodes,
+                 // blue button background, background-color and observed colors
+                 regex.icontains(.raw,
+                                 '(?:background(?:-color)?)\s*[:\s]\s*#(?:0078d4|3a78d1)'
+                 )
+          ),
+          (
+            // it's styled as a button
+            regex.icontains(.raw, 'padding')
+          )
+          // ignore links going to microsoft
+          and not any(.links,
+                      .href_url.domain.sld in (
+                        "microsoft",
+                        "azure",
+                        "outlook.office365",
+                        "office365"
+                      )
+          )
+          // handle mimecast rewrites the same as above
+          and not any(.links,
+                      any(.href_url.query_params_decoded['domain'],
+                          strings.parse_domain(.).domain in (
+                            "microsoft.com",
+                            "azure.com",
+                            "outlook.office365.com",
+                            "office365.com"
+                          )
+                      )
+          )
+  )
+  and any(ml.nlu_classifier(body.current_thread.text).intents, .name != "benign")
+  and not (
+    sender.email.domain.root_domain == "microsoft.com"
+    and headers.auth_summary.dmarc.pass
+  )
+
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "HTML analysis"
+  - "URL analysis"
+id: "370f6c07-e59c-515a-9b4b-7be70b5e7284"
