@@ -1,0 +1,141 @@
+name: "Spam: Conference or summit invitation"
+description: "Detects invites for conferences or summits that request speaking, presenting, or sponsorship opportunities. The rule looks for invitation language combined with event-related terms and presentation requests, while excluding legitimate calendar invites and conversations."
+type: "rule"
+severity: "low"
+source: |
+  type.inbound
+  // invitation (1 required)
+  and (
+    strings.icontains(body.current_thread.text, "attend")
+    or strings.icontains(body.current_thread.text, "relevant fit")
+    or strings.icontains(body.current_thread.text, "early bird")
+    or regex.icontains(body.current_thread.text,
+                       '\bjoin (?:us|them?)\b',
+                       '\bdear.{0,15}colleagues?\b',
+                       '\b(?:opportunity|contribute) to\b',
+                       '\bparticipat(?:e|ion)\b',
+                       '\bcollaborat(?:e|ion)\b',
+                       '\bnominat(?:ed?|ions?)\b',
+                       '\bpartner(?:ing|ship)?s?\b',
+                       '\b(?:look|looking) forward to.{0,15}your?\b',
+                       '\b(?:regist(?:er|ration)|submission) deadline\b',
+                       '\binvit(?:e|ing|ation)(?: you| them| to)?\b',
+                       '\bmiss (?:this|the|your) chance\b',
+                       '\byou(?:.re| are) invited\b',
+                       '\b(?:invitation|promo) code\b'
+    )
+    or (
+      regex.icontains(body.current_thread.text, '\bapply\b')
+      and not regex.icontains(body.current_thread.text,
+                              '\bterms (?:and|&) conditions\b'
+      )
+    )
+  )
+  
+  // request (1 required)
+  and (
+    strings.icontains(body.current_thread.text, "pitch")
+    or strings.icontains(body.current_thread.text, "sponsor")
+    or regex.icontains(body.current_thread.text,
+                       '\bpresent(?:ing|ation)?\b',
+                       '\bspeak(?:er|ers)?(?: at)?\b'
+    )
+  )
+  
+  // event (1 required)
+  and (
+    regex.icontains(body.current_thread.text, '\bforum\b')
+    or (
+      strings.icontains(body.current_thread.text, "summit")
+      and not regex.icontains(body.current_thread.text, '\bmount(?:ain)?\b')
+    )
+    or (
+      strings.icontains(body.current_thread.text, "panel")
+      and not regex.icontains(body.current_thread.text, '\bsolar panel\b')
+      and not strings.icontains(body.current_thread.text, "student")
+    )
+    or (
+      strings.icontains(body.current_thread.text, "conference")
+      and not regex.icontains(body.current_thread.text,
+                              '\bconference (?:room|call)\b',
+                              '\bparent(?:\s*(?:-|\/|and|&)?\s*)teacher\b'
+      )
+      and not strings.icontains(body.current_thread.text, "press conference")
+    )
+  )
+  
+  // topic negations
+  and not any(ml.nlu_classifier(body.current_thread.text).topics,
+              .name in (
+                "Newsletters and Digests",
+                "Charity and Non-Profit",
+                "Reminders and Notifications",
+                "Government Services",
+                "Software and App Updates"
+              )
+  )
+  
+  // keyword negations
+  and not (
+    strings.ilike(body.current_thread.text,
+                  "*internship*",
+                  "*scholarship*",
+                  "*chamber?of?commerce*",
+                  "*invoice?number*",
+                  "*payment?details*",
+                  "*balance?due*",
+                  "*quarantine*"
+    )
+    or regex.icontains(body.current_thread.text, '\bpay.{0,10}invoice\b')
+    or any(body.links, strings.icontains(.display_text, 'read online'))
+  )
+  
+  // negate legitimate invites
+  and not (
+    any(attachments,
+        (.file_extension =~ "ics" or .content_type == "text/calendar")
+    )
+    or (
+      any(body.links, .href_url.domain.root_domain == 'zoom.us')
+      and strings.ilike(body.current_thread.text, '*meeting id:*')
+      and strings.ilike(body.current_thread.text, '*passcode:*', '*password:*')
+    )
+  )
+  
+  // negate important tld's
+  and not (
+    sender.email.domain.tld in ('gov', 'edu') and headers.auth_summary.dmarc.pass
+  )
+  
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and not headers.auth_summary.dmarc.pass
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+  
+  // negate org domains unless they fail DMARC authentication
+  and (
+    (
+      sender.email.domain.root_domain in $org_domains
+      and not headers.auth_summary.dmarc.pass
+    )
+    or sender.email.domain.root_domain not in $org_domains
+  )
+  
+  // negate legitimate conversations
+  and not (
+    (subject.is_forward or subject.is_reply) and headers.in_reply_to is not null
+  )
+
+attack_types:
+  - "Spam"
+tactics_and_techniques:
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Header analysis"
+  - "Sender analysis"
+id: "dbe23860-32b1-57b3-a445-34b15000bc9d"
