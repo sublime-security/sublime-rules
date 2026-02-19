@@ -1,0 +1,48 @@
+name: "Attachment: Password-protected PDF with recipient targeting"
+description: "Detects messages containing password-protected PDF attachments where the sender's display name includes the recipient's local part or name, and the recipient's domain appears in the subject line. This pattern is commonly used to bypass security filters and establish legitimacy with targeted recipients."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  // one recipient
+  and length(recipients.to) == 1
+  // recipient's domain is in the subject
+  and strings.icontains(subject.subject, recipients.to[0].email.domain.sld)
+  // recipient's local part is in the sender display name 
+  and (
+    strings.icontains(sender.display_name, recipients.to[0].email.local_part)
+    or any(regex.extract(recipients.to[0].email.local_part, '(?P<name>.*?)\.'),
+           strings.icontains(sender.display_name, .named_groups["name"])
+    )
+  )
+  // password protected pdf
+  and any(filter(attachments, .file_type == "pdf"),
+          //
+          // This rule makes use of a beta feature and is subject to change without notice
+          // using the beta featuer in custom rules is not suggested until it has been formally released.
+          //
+          any(beta.parse_exif(.).fields,
+              strings.icontains(.value, 'password protected')
+          )
+  )
+  
+  
+
+attack_types:
+  - "Malware/Ransomware"
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Encryption"
+  - "Evasion"
+  - "PDF"
+  - "Social engineering"
+detection_methods:
+  - "Archive analysis"
+  - "File analysis"
+  - "Header analysis"
+  - "Sender analysis"
+  - "Exif analysis"
+id: "0ed9c9db-e258-5c2d-b400-3290478119b0"
+og_id: "ff59ed53-cd55-5ea5-8593-7aa22ec0388b"
+testing_pr: 4064
+testing_sha: db9afb3c4dab4e168d8b76b288880b2b48acebd9
