@@ -1,0 +1,53 @@
+name: "Link: Personalized URL with recipient address on commonly abused web service"
+description: "Detects messages containing links to file hosting or self-service platforms where the recipient's email address is embedded in the URL path, fragment, or base64-encoded components, indicating targeted personalization tactics."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and length(recipients.to) == 1
+  and recipients.to[0].email.domain.valid
+  and 0 < length(body.links) < 10
+  and any(body.links,
+          // root domain is commonly abused
+          (
+            .href_url.domain.root_domain in $free_file_hosts
+            or .href_url.domain.root_domain in $self_service_creation_platform_domains
+          )
+          and (
+            // the recipient email is in the url
+            (
+              strings.icontains(.href_url.path, recipients.to[0].email.email)
+              or strings.icontains(.href_url.fragment,
+                                   recipients.to[0].email.email
+              )
+              or any(strings.scan_base64(.href_url.path, ignore_padding=true),
+                     strings.icontains(., recipients.to[0].email.email)
+              )
+              or any(strings.scan_base64(.href_url.fragment, ignore_padding=true),
+                     strings.icontains(., recipients.to[0].email.email)
+              )
+            )
+          )
+          // the url contains a #
+          and strings.contains(.href_url.url, '#')
+          // the url doesnt contain campaign params
+          and not regex.icontains(.href_url.url,
+                                  '(?:location|utm_(?:term|source|medium|content|campaign))='
+          )
+          // too many fp on typeform and no recent tp
+          and not .href_url.domain.root_domain == 'typeform.com'
+  )
+  // we dont want links with common unsubscribe paths
+  and not any(body.links,
+              strings.icontains(.href_url.path, "/subscriptions/unsubscribe")
+  )
+attack_types:
+  - "Credential Phishing"
+  - "Malware/Ransomware"
+tactics_and_techniques:
+  - "Free file host"
+  - "Social engineering"
+detection_methods:
+  - "URL analysis"
+  - "Header analysis"
+id: "e3b5fa90-2149-54b7-ae9a-87cda01b24a5"
