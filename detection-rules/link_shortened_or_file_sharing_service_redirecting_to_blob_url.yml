@@ -1,5 +1,5 @@
-name: "Link: Suspicious link domain redirecting to blob URL"
-description: "Detects messages containing links from URL shorteners, file hosts, or self-service platforms that redirect to blob URLs, indicating potential malware delivery or credential harvesting."
+name: "Link: URL redirecting to blob URL"
+description: "Detects messages containing links that redirect to blob URLs, indicating potential malware delivery or credential harvesting."
 type: "rule"
 severity: "medium"
 source: |
@@ -8,18 +8,8 @@ source: |
   and length(recipients.to) == 1
   and recipients.to[0].email.domain.valid
   and any(body.links,
-          (
-            // root domain is shortener or commonly abused web service
-            .href_url.domain.root_domain in $url_shorteners
-            or .href_url.domain.root_domain in $free_file_hosts
-            or .href_url.domain.root_domain in $free_subdomain_hosts
-            or .href_url.domain.root_domain in $self_service_creation_platform_domains
-            or .href_url.domain.tld in $suspicious_tlds
-            // or somewhat recently reg'd domain
-            or network.whois(.href_url.domain).days_old < 30
-          )
           // the url redirects to a blob url 
-          and strings.istarts_with(ml.link_analysis(.).effective_url.url, 'blob:')
+          strings.istarts_with(ml.link_analysis(.).effective_url.url, 'blob:')
   )
 
 attack_types:
