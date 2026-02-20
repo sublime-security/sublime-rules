@@ -1,0 +1,33 @@
+name: "Link: Hidden domain using @ symbol with suspicious indicators"
+description: "Detects URLs that use the @ symbol to hide suspicious domains or URL shorteners within the link structure, excluding legitimate email addresses and malformed mailto/telto links."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and any(body.links,
+          // extract out the hidden domain and hidden tld behind the @ in the url's domain
+          any(regex.extract(.href_url.url,
+                            '^https?:\/\/[^/?#]+@(?P<hidden_domain>[a-z0-9-]+\.(?P<hidden_tld>[a-z]+))/'
+              ),
+              // the hidden domain behind the @ is a shortener
+              .named_groups["hidden_domain"] in $url_shorteners
+              // the hidden tld behind the @ is suspicious
+              or .named_groups["hidden_tld"] in $suspicious_tlds
+          )
+          // we dont want to match solely on an email address
+          and not regex.icontains(.href_url.url,
+                                  '^https?:\/\/[a-z0-9._-]+@[a-z0-9.-]+\.(?:[a-z]{2,4}|online)/?$'
+          )
+          // we dont want to match on malformed mailto or telto links
+          and not regex.icontains(.href_url.url, '^https?:\/\/(?:mail|tel)\s*to:')
+  )
+
+attack_types:
+  - "Credential Phishing"
+  - "Malware/Ransomware"
+tactics_and_techniques:
+  - "Evasion"
+detection_methods:
+  - "URL analysis"
+  - "Content analysis"
+id: "9f9aefd1-4474-5a91-833b-d6bc00ee0b59"
