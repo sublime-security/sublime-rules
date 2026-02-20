@@ -4,9 +4,15 @@ type: "rule"
 severity: "medium"
 source: |
   type.inbound
-  and any(headers.reply_to,
-          .email.domain.root_domain in $free_email_providers
-          and .email.domain.root_domain != sender.email.domain.root_domain
+  and (
+    any(headers.reply_to,
+        .email.domain.root_domain in $free_email_providers
+        and .email.domain.root_domain != sender.email.domain.root_domain
+    )
+    or (
+      sender.email.domain.root_domain in $free_email_providers
+      and strings.ilevenshtein(sender.display_name, sender.email.local_part) > 7
+    )
   )
   and all(recipients.to,
           .email.domain.root_domain != sender.email.domain.root_domain
@@ -48,10 +54,9 @@ source: |
                      '*hotel*',
                      '*room reserv*',
                      '*room inquiry*',
-                     '*room availability*',
-                     '*suite*',
-                     '*accommodation*'
+                     '*room availability*'
     )
+    or regex.icontains(subject.base, '\bsuite')
   )
 attack_types:
   - "BEC/Fraud"
