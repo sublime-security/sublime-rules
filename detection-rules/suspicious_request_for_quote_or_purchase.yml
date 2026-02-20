@@ -43,6 +43,11 @@ source: |
       and length(recipients.cc) == 1
       and sender.email.email == recipients.cc[0].email.email
     )
+    or (
+      length(recipients.to) == 1
+      and length(recipients.cc) == 0
+      and sender.email.email == recipients.to[0].email.email
+    )
   )
   and (
     // Group the keyword patterns that specifically indicate RFQ/RFP
@@ -69,6 +74,9 @@ source: |
         ),
         any(ml.nlu_classifier(body.current_thread.text).entities,
             .name == "financial" and regex.imatch(.text, "rfp|rfq")
+        ),
+        any(ml.nlu_classifier(body.current_thread.text).entities,
+            .name == "request" and strings.icontains(.text, 'submit bid')
         )
       )
       // Required: at least one RFQ/RFP keyword pattern
@@ -85,6 +93,9 @@ source: |
           ),
           regex.icontains(body.current_thread.text,
                           '(please|kindly).{0,30}(?:proposal|quot(e|ation))'
+          ),
+          regex.icontains(body.current_thread.text,
+                          '(?:invitation|intent) to bid'
           ),
           regex.icontains(subject.subject,
                           '(request for (purchase|quot(e|ation))|\bRFQ\b|\bRFP\b|bid invit(e|ation))'
@@ -135,7 +146,8 @@ source: |
           (
             length(attachments) == 0
             and strings.icontains(body.current_thread.text, "attached")
-          )
+          ),
+          any(body.current_thread.links, regex.icontains(.href_url.url, 'RFP'))
         )
       )
     )
@@ -192,7 +204,7 @@ source: |
       )
       and not profile.by_sender().any_messages_benign
     )
-    // sender address listed as a recipient 
+    // sender address listed as a recipient
     or (
       length(recipients.to) == 1
       and sender.email.email in map(recipients.to, .email.email)
