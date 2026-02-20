@@ -1,0 +1,45 @@
+name: "Service abuse: Adobe Behance with deceptive project names"
+description: "Detects messages with 'proposal' in the subject that link to Adobe Behance projects using deceptive creator display names like 'Shared File', 'Secured Document', or 'Others', or where the project name matches the email subject line. This pattern indicates potential abuse of the legitimate Behance platform for malicious purposes."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and strings.ilike(body.current_thread.text,
+                    "*shared a",
+                    "*document*",
+                    "*access*",
+                    "*proposal*",
+                    "*specified link*"
+  )
+  and any(body.links,
+          .href_url.domain.root_domain == 'behance.net'
+          and (
+            any(html.xpath(ml.link_analysis(.).final_dom,
+                           "//script[@id='beconfig-store_state']"
+                ).nodes,
+                strings.parse_json(regex.extract(.raw,
+                                                 '<script type="application/json" id="beconfig-store_state">(?P<beconfig_store_state>.*)\s*</script>'
+                                   )[0].named_groups["beconfig_store_state"]
+                )["project"]["project"]["privacyLevel"] == "UNDISCOVERABLE"
+            )
+            or (
+              any(ml.nlu_classifier(body.current_thread.text).intents,
+                  .name == "cred_theft" and .confidence != "low"
+              )
+              and strings.icontains(.href_url.path, '/gallery/')
+            )
+          )
+  )
+
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Social engineering"
+  - "Free file host"
+detection_methods:
+  - "Content analysis"
+  - "URL analysis"
+  - "HTML analysis"
+  - "Javascript analysis"
+id: "35c21ec6-d240-5ba1-9fdc-98106e8c6af3"
