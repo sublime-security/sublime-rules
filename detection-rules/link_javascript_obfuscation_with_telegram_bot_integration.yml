@@ -1,0 +1,37 @@
+name: "Link: JavaScript obfuscation with Telegram bot integration"
+description: "Detects links containing obfuscated JavaScript code with embedded Telegram bot tokens or API references, indicating potential data exfiltration or command and control infrastructure."
+type: "rule"
+severity: "high"
+source: |
+    type.inbound
+    and 0 < length(body.links) < 15
+    and length(recipients.to) == 1
+    and recipients.to[0].email.domain.valid
+    and any(body.links,
+            // javascript obfuscator code - https://obfuscator.io/
+            regex.icontains(ml.link_analysis(.).final_dom.raw,
+                            '(?:(?:return|function|var|let|const|parseInt)\(?\s*_0x[a-f0-9]{6}.{0,50}){5}'
+            )
+            and (
+              // telegram bot token struct
+              regex.icontains(ml.link_analysis(.).final_dom.raw,
+                              '[\x22\x27][0-9]{10}:[a-z0-9_-]{20,35}[\x22\x27]'
+              )
+              // telegram strings
+              or regex.icontains(ml.link_analysis(.).final_dom.raw,
+                                 '(?:telegram(?:chatid|BotToken)|TELEGRAM_(?:BOT_TOKENS|CHAT_IDS)|api\.telegram\.org/bot|telegramToken)'
+              )
+            )
+    )
+
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Evasion"
+  - "Scripting"
+detection_methods:
+  - "Content analysis"
+  - "Javascript analysis"
+  - "URL analysis"
+  - "URL screenshot"
+id: "032a4485-be40-5f61-843c-1e5c6400eedb"
