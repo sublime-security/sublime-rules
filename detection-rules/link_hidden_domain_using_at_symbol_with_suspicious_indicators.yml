@@ -1,7 +1,7 @@
 name: "Link: Hidden domain using @ symbol with suspicious indicators"
 description: "Detects URLs that use the @ symbol to hide suspicious domains or URL shorteners within the link structure, excluding legitimate email addresses and malformed mailto/telto links."
 type: "rule"
-severity: "high"
+severity: "low"
 source: |
   type.inbound
   and any(body.links,
@@ -11,15 +11,24 @@ source: |
               ),
               // the hidden domain behind the @ is a shortener
               .named_groups["hidden_domain"] in $url_shorteners
+              // the hidden domain behind the @ is a free file host
+              or .named_groups["hidden_domain"] in $free_file_hosts
+              // the hidden domain behind the @ is a free subdomain host
+              or .named_groups["hidden_domain"] in $free_subdomain_hosts
+              // the hidden domain behind the @ is a commonly abused web service
+              or .named_groups["hidden_domain"] in $self_service_creation_platform_domains
               // the hidden tld behind the @ is suspicious
               or .named_groups["hidden_tld"] in $suspicious_tlds
           )
           // we dont want to match solely on an email address
           and not regex.icontains(.href_url.url,
-                                  '^https?:\/\/[a-z0-9._-]+@[a-z0-9.-]+\.(?:[a-z]{2,4}|online)/?$'
+                                  '^https?:\/\/[a-z0-9._-]+@[a-z0-9.-]+\.(?:[a-z]{2,7})/?$'
           )
           // we dont want to match on malformed mailto or telto links
           and not regex.icontains(.href_url.url, '^https?:\/\/(?:mail|tel)\s*to:')
+  
+          // we dont want to match on unsubscribe links
+          and not regex.icontains(.href_url.url, '\bunsubscribe\b')
   )
 
 attack_types:
