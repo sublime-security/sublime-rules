@@ -106,60 +106,45 @@ source: |
     strings.ilike(body.current_thread.text, '*work*')
   )
   // needs to have a link going somewhere suspicious
-  and (
-    any(body.links,
-        (
+  and any(body.links,
           (
             (
-              .href_url.domain.root_domain in $free_file_hosts
-              or .href_url.domain.root_domain in $free_subdomain_hosts
-              or .href_url.domain.root_domain in $self_service_creation_platform_domains
-              or .href_url.domain.root_domain in $url_shorteners
-            )
-            or (
-              // domain contains brand, but root domain is not legit brand domain
-              regex.icontains(.href_url.domain.domain,
-                              '(?:ferrari|tesla|vuitton|red[ -]?bull|nike|robert[ -]?half|adidas|coca[ -]?cola|instagram|spotify|reebok|marriott|starbucks)'
+              (
+                .href_url.domain.root_domain in $free_file_hosts
+                or .href_url.domain.root_domain in $free_subdomain_hosts
+                or .href_url.domain.root_domain in $self_service_creation_platform_domains
+                or .href_url.domain.root_domain in $url_shorteners
               )
-              and not regex.icontains(.href_url.domain.root_domain,
-                                      '(?:spotify|instagram|ferarri|tesla|nike|adidas|louisvuitton|redbull|roberthalf|coca-cola|reebok|marriott|starbucks)\.com'
+              or (
+                // domain contains brand, but root domain is not legit brand domain
+                regex.icontains(.href_url.domain.domain,
+                                '(?:ferrari|tesla|vuitton|red[ -]?bull|nike|robert[ -]?half|adidas|coca[ -]?cola|instagram|spotify|reebok|marriott|starbucks)'
+                )
+                and not regex.icontains(.href_url.domain.root_domain,
+                                        '(?:spotify|instagram|ferarri|tesla|nike|adidas|louisvuitton|redbull|roberthalf|coca-cola|reebok|marriott|starbucks)\.com'
+                )
               )
             )
+            and not strings.icontains(.display_text, 'unsubscribe')
           )
-          and not strings.icontains(.display_text, 'unsubscribe')
-        )
-    )
   )
   and (
     regex.icontains(subject.base,
-                    '(?:ferrari|tesla|vuitton|red.?bull|nike|robert.?half|adidas|coca.?cola|instagram|spotify|reebok|marriott|starbucks)'
+                    '(?:ferrari|tesla|vuitton|red.?bull|nike|robert[ _-]?half|adidas|coca[ _-]?cola|instagram|spotify|reebok|marriott|starbucks)'
     )
     or regex.icontains(sender.display_name,
-                       '(?:ferrari|tesla|vuitton|red.?bull|nike|robert.?half|adidas|coca.?cola|instagram|spotify|reebok|marriott|starbucks)'
+                       '(?:ferrari|tesla|vuitton|red.?bull|nike|robert[ _-]?half|adidas|coca[ _-]?cola|instagram|spotify|reebok|marriott|starbucks)'
     )
     or regex.icontains(body.current_thread.text,
-                       '\b(?:ferrari|tesla|vuitton|red.?bull|nike|robert.?half|adidas|coca.?cola|spotify|reebok|marriott|starbucks)\b'
+                       '\b(?:ferrari|tesla|vuitton|red.?bull|nike|robert[ _-]?half|adidas|coca[ _-]?cola|spotify|reebok|marriott|starbucks)\b'
     )
     or regex.icontains(sender.display_name, '\bIG\b.*(?:Recruitment|Strategy)')
   )
-  // no webinar registration emails
+  
+  // topical negations
   and not regex.icontains(body.current_thread.text,
-                          '\bregister\b.{0,50}\bwebinar\b'
+                          '\b(?:(?:leadership|upcoming) event|sponsorship opportunity|summit|because you subscribed|register\b.{0,50}\bwebinar|introduce (?:myself|ourselves)|confirmed attendees|proposed agenda)\b'
   )
-  
-  // no sponsorship emails
-  and not regex.icontains(body.current_thread.text, '\bsponsorship opportunity\b')
-  
-  // no upcoming events
-  and not regex.icontains(body.current_thread.text,
-                          '\b(?:leadership|upcoming) event'
-  )
-  
-  // no summits
-  and not regex.icontains(body.current_thread.text, '\bsummit')
-  
-  // no subscriptions
-  and not strings.icontains(body.current_thread.text, 'because you subscribed')
   
   // no resume attachments
   and not any(attachments, strings.icontains(.file_name, 'resume'))
@@ -177,8 +162,6 @@ source: |
   and not any(body.links,
               strings.icontains(.href_url.query_params, 'utm_content=')
   )
-  // email is unsolicited
-  and not profile.by_sender().solicited
 attack_types:
   - "Credential Phishing"
 tactics_and_techniques:
