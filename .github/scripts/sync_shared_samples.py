@@ -25,8 +25,8 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from lib import (
     # Constants
     DO_NOT_MERGE_LABEL,
-    BULK_PR_LABEL,
-    AUTHOR_MEMBERSHIP_EXCLUSION_LABEL,
+    SHARED_SAMPLES_BULK_PR_LABEL,
+    SHARED_SAMPLES_AUTHOR_MEMBERSHIP_EXCLUSION_LABEL,
     DEFAULT_MAX_RULES_PER_PR,
     DEFAULT_DELETE_RULES_DELAY_DAYS,
     DEFAULT_AUTHOR_TAG_PREFIX,
@@ -329,29 +329,29 @@ def handle_pr_rules(graphql_session, rest_session):
             if author_in_org:
                 print(f"\tPR #{pr_number}: Author {pr.author_login} is an org member (association: {pr.author_association})")
                 # Remove exclusion label if present
-                if pr.has_label(AUTHOR_MEMBERSHIP_EXCLUSION_LABEL):
-                    remove_label(rest_session, REPO_OWNER, REPO_NAME, pr_number, AUTHOR_MEMBERSHIP_EXCLUSION_LABEL)
+                if pr.has_label(SHARED_SAMPLES_AUTHOR_MEMBERSHIP_EXCLUSION_LABEL):
+                    remove_label(rest_session, REPO_OWNER, REPO_NAME, pr_number, SHARED_SAMPLES_AUTHOR_MEMBERSHIP_EXCLUSION_LABEL)
             else:
                 # Check for trigger comment if author not in org (in-memory check)
                 if INCLUDE_PRS_WITH_COMMENT:
                     has_comment = pr.has_trigger_comment(COMMENT_TRIGGER)
 
                     # If trigger comment was found, remove the exclusion label
-                    if has_comment and pr.has_label(AUTHOR_MEMBERSHIP_EXCLUSION_LABEL):
-                        print(f"\tPR #{pr_number}: Removing '{AUTHOR_MEMBERSHIP_EXCLUSION_LABEL}' label due to trigger comment")
-                        remove_label(rest_session, REPO_OWNER, REPO_NAME, pr_number, AUTHOR_MEMBERSHIP_EXCLUSION_LABEL)
+                    if has_comment and pr.has_label(SHARED_SAMPLES_AUTHOR_MEMBERSHIP_EXCLUSION_LABEL):
+                        print(f"\tPR #{pr_number}: Removing '{SHARED_SAMPLES_AUTHOR_MEMBERSHIP_EXCLUSION_LABEL}' label due to trigger comment")
+                        remove_label(rest_session, REPO_OWNER, REPO_NAME, pr_number, SHARED_SAMPLES_AUTHOR_MEMBERSHIP_EXCLUSION_LABEL)
 
                     if not has_comment:
                         print(f"\tSkipping PR #{pr_number}: Author {pr.author_login} is not an org member and is missing comment trigger")
 
                         # Apply exclusion label if not already present
-                        if not pr.has_label(AUTHOR_MEMBERSHIP_EXCLUSION_LABEL):
-                            print(f"\tPR #{pr_number} doesn't have the '{AUTHOR_MEMBERSHIP_EXCLUSION_LABEL}' label. Applying...")
-                            apply_label(rest_session, REPO_OWNER, REPO_NAME, pr_number, AUTHOR_MEMBERSHIP_EXCLUSION_LABEL)
+                        if not pr.has_label(SHARED_SAMPLES_AUTHOR_MEMBERSHIP_EXCLUSION_LABEL):
+                            print(f"\tPR #{pr_number} doesn't have the '{SHARED_SAMPLES_AUTHOR_MEMBERSHIP_EXCLUSION_LABEL}' label. Applying...")
+                            apply_label(rest_session, REPO_OWNER, REPO_NAME, pr_number, SHARED_SAMPLES_AUTHOR_MEMBERSHIP_EXCLUSION_LABEL)
                             # Post comment explaining how to enable sync
                             post_exclusion_comment_if_needed(
                                 rest_session, REPO_OWNER, REPO_NAME, pr_number,
-                                AUTHOR_MEMBERSHIP_EXCLUSION_LABEL,
+                                SHARED_SAMPLES_AUTHOR_MEMBERSHIP_EXCLUSION_LABEL,
                                 org_name=ORG_NAME,
                                 comment_trigger=COMMENT_TRIGGER
                             )
@@ -387,13 +387,13 @@ def handle_pr_rules(graphql_session, rest_session):
                 print(f"\tSkipping PR #{pr_number}: Contains {yaml_rule_count} YAML rules (max allowed: {MAX_RULES_PER_PR})")
 
                 # Apply bulk label if not already present
-                if not pr.has_label(BULK_PR_LABEL):
-                    print(f"\tPR #{pr_number} doesn't have the '{BULK_PR_LABEL}' label. Applying...")
-                    apply_label(rest_session, REPO_OWNER, REPO_NAME, pr_number, BULK_PR_LABEL)
+                if not pr.has_label(SHARED_SAMPLES_BULK_PR_LABEL):
+                    print(f"\tPR #{pr_number} doesn't have the '{SHARED_SAMPLES_BULK_PR_LABEL}' label. Applying...")
+                    apply_label(rest_session, REPO_OWNER, REPO_NAME, pr_number, SHARED_SAMPLES_BULK_PR_LABEL)
                     # Post comment explaining the limit
                     post_exclusion_comment_if_needed(
                         rest_session, REPO_OWNER, REPO_NAME, pr_number,
-                        BULK_PR_LABEL,
+                        SHARED_SAMPLES_BULK_PR_LABEL,
                         max_rules=MAX_RULES_PER_PR,
                         rule_count=yaml_rule_count
                     )
@@ -401,8 +401,8 @@ def handle_pr_rules(graphql_session, rest_session):
                 continue
             else:
                 # Remove bulk label if rule count is now under limit
-                if pr.has_label(BULK_PR_LABEL):
-                    remove_label(rest_session, REPO_OWNER, REPO_NAME, pr_number, BULK_PR_LABEL)
+                if pr.has_label(SHARED_SAMPLES_BULK_PR_LABEL):
+                    remove_label(rest_session, REPO_OWNER, REPO_NAME, pr_number, SHARED_SAMPLES_BULK_PR_LABEL)
 
         # Process files in the PR
         for file in files:
