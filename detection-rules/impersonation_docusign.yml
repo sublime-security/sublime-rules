@@ -261,7 +261,7 @@ source: |
         or any(html.xpath(body.html, '//img/@alt').nodes, .raw =~ "docusign")
   
         // Basic variations with HTML encoding
-        // use of regex extract allows 
+        // use of regex extract allows
         or any(regex.iextract(body.html.raw,
                               '(?:D|&#68;|&#x44;)(?:&#?[0-9a-fA-F]{2,6};|\s|o|о|&#1086;|&#x43e;)(?:&#?[0-9a-fA-F]{2,6};|\s|c|с|&#1089;|&#x441;)u(?:&#?[0-9a-fA-F]{2,6};|\s)?S(?:&#?[0-9a-fA-F]{2,6};|\s|i|і|&#1110;|&#x456;)(?:&#?[0-9a-fA-F]{2,6};|\s|g|ɡ|&#609;|&#x261;)(?:n|&#110;|&#x6e;)'
                ),
@@ -281,7 +281,7 @@ source: |
                .full_match !~ "docusign"
         )
   
-        // Handle repeated HTML entities and variation selectors (using Unicode class)                           
+        // Handle repeated HTML entities and variation selectors (using Unicode class)
         or any(regex.iextract(body.html.raw,
                               'D(?:&#[0-9]{1,7};)*\p{Mn}*o(?:&#[0-9]{1,7};)*\p{Mn}*c(?:&#[0-9]{1,7};)*\p{Mn}*u(?:&#[0-9]{1,7};)*\p{Mn}*[Ss](?:&#[0-9]{1,7};)*\p{Mn}*i(?:&#[0-9]{1,7};)*\p{Mn}*g(?:&#[0-9]{1,7};)*\p{Mn}*n'
                ),
@@ -392,14 +392,12 @@ source: |
     )
   )
   
-  // negate highly trusted sender domains unless they fail DMARC authentication
-  and (
-    coalesce(sender.email.domain.root_domain in $high_trust_sender_root_domains
-             and not headers.auth_summary.dmarc.pass,
-             false
-    )
-    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  // negate highly trusted sender domains if they pass DMARC authentication
+  and not (
+    sender.email.domain.root_domain in $high_trust_sender_root_domains
+    and coalesce(headers.auth_summary.dmarc.pass, false)
   )
+  
   // negation for messages traversing docusign.net
   // happens with custom sender domains
   and not (
