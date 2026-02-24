@@ -1,0 +1,44 @@
+name: "Attachment: PDF proposal with credential theft indicators"
+description: "PDF attachment with 'proposal' in filename contains sender or recipient domain, credential theft language detected via OCR, and includes a single URL link."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and any(attachments,
+          .file_type == "pdf"
+          and strings.icontains(.file_name, 'proposal')
+          // filename contains sender or recipient sld
+          and (
+            strings.icontains(.file_name, sender.email.domain.sld)
+            or (
+              length(recipients.to) == 1
+              and any(recipients.to,
+                      .email.domain.valid
+                      and .email.email != sender.email.email
+                      and strings.icontains(..file_name, .email.domain.sld)
+              )
+            )
+          )
+          // OCR is cred_theft
+          and any(ml.nlu_classifier(beta.ocr(.).text).intents,
+                  .name == "cred_theft"
+          )
+          // contains a link
+          and any(file.explode(.), length(.scan.url.urls) == 1)
+  )
+
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "PDF"
+  - "Social engineering"
+  - "Evasion"
+detection_methods:
+  - "File analysis"
+  - "Natural Language Understanding"
+  - "Optical Character Recognition"
+  - "URL analysis"
+id: "6034852d-7d77-5273-8a5e-bf0dc5377d53"
+og_id: "364658e4-8a02-5632-a5ee-11bd869fb896"
+testing_pr: 4079
+testing_sha: da95cfd449467c8f5816fb511618bee8e03d2d15
