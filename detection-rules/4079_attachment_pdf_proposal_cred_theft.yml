@@ -4,9 +4,14 @@ type: "rule"
 severity: "high"
 source: |
   type.inbound
+  and not (
+    (subject.is_reply or subject.is_forward)
+    and (length(headers.references) > 0 or headers.in_reply_to is not null)
+  )
   and any(attachments,
           .file_type == "pdf"
           and strings.icontains(.file_name, 'proposal')
+          and beta.parse_exif(.).page_count == 1
           // filename contains sender or recipient sld
           and (
             strings.icontains(.file_name, sender.email.domain.sld)
@@ -23,10 +28,9 @@ source: |
           and any(ml.nlu_classifier(beta.ocr(.).text).intents,
                   .name == "cred_theft"
           )
-          // contains a link
-          and any(file.explode(.), length(.scan.url.urls) == 1)
+          // contains exactly one link on the root pdf
+          and any(file.explode(.), .depth == 0 and length(.scan.url.urls) == 1)
   )
-
 attack_types:
   - "Credential Phishing"
 tactics_and_techniques:
@@ -41,4 +45,4 @@ detection_methods:
 id: "6034852d-7d77-5273-8a5e-bf0dc5377d53"
 og_id: "364658e4-8a02-5632-a5ee-11bd869fb896"
 testing_pr: 4079
-testing_sha: da95cfd449467c8f5816fb511618bee8e03d2d15
+testing_sha: 82513109bfba6ccea1449990f246aa8743c56555
