@@ -4,6 +4,7 @@ type: "rule"
 severity: "high"
 source: |
   type.inbound
+  and not ((subject.is_reply or subject.is_forward) and (length(headers.references) > 0 or headers.in_reply_to is not null))
   and any(attachments,
           .file_type == "pdf"
           and strings.icontains(.file_name, 'proposal')
@@ -23,8 +24,8 @@ source: |
           and any(ml.nlu_classifier(beta.ocr(.).text).intents,
                   .name == "cred_theft"
           )
-          // contains a link
-          and any(file.explode(.), length(.scan.url.urls) == 1)
+          // contains exactly one link on the root pdf
+          and any(file.explode(.), .depth == 0 and length(.scan.url.urls) == 1)
   )
 
 attack_types:
