@@ -1,0 +1,48 @@
+name: "PR# 4085 - VIP impersonation with w2 request"
+description: "This rule detects emails attempting to impersonate a VIP requesting a W-2"
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and any($org_vips, strings.contains(sender.display_name, .display_name))
+  and not (
+    sender.email.domain.domain in $org_domains
+    and coalesce(headers.auth_summary.dmarc.pass, false)
+  )
+  
+  // W-2 Language with a request
+  and (
+    strings.contains(subject.base, 'W-2')
+    or strings.icontains(subject.base, 'w2')
+    or strings.icontains(subject.base, 'wage')
+    or strings.icontains(subject.base, 'tax form')
+  )
+  and strings.contains(body.current_thread.text, 'W-2')
+  and any(ml.nlu_classifier(body.current_thread.text).entities,
+          .name == "request"
+  )
+  
+  // different reply-to address
+  and length(headers.reply_to) > 0
+  and sender.email.email not in map(headers.reply_to, .email.email)
+  
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and not (
+    sender.email.domain.root_domain in $high_trust_sender_root_domains
+    and coalesce(headers.auth_summary.dmarc.pass, false)
+  )
+attack_types:
+  - "BEC/Fraud"
+tactics_and_techniques:
+  - "Impersonation: VIP"
+detection_methods:
+  - "Content analysis"
+  - "Header analysis"
+  - "Natural Language Understanding"
+id: "ff7422f6-af2e-5140-b67d-6ce601f76298"
+tags:
+  - created_from_open_prs
+  - rule_status_modified
+  - pr_author_JFarina5
+references:
+  - https://github.com/sublime-security/sublime-rules/pull/4085
