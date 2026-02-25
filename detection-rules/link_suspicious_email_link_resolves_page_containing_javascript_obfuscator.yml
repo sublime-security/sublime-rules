@@ -1,0 +1,30 @@
+name: "Link: Suspicious Email Link Resolves Page Containing JavaScript Obfuscator"
+description: "Detects messages containing credential theft language and links to pages with obfuscated JavaScript code, commonly used to evade detection in credential harvesting attacks."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and 0 < length(body.links) < 10
+  and length(recipients.to) == 1
+  and recipients.to[0].email.domain.valid
+  and any(ml.nlu_classifier(body.current_thread.text).intents,
+          .name == 'cred_theft' and .confidence == 'high'
+  )
+  and any(body.links,
+          // javascript obfuscator code - https://obfuscator.io/
+          regex.icontains(ml.link_analysis(.).final_dom.raw,
+                          '(?:(?:return|function|var|let|const|parseInt)\(?\s*_0x[a-f0-9]{6}.{0,50}){5}'
+          )
+  )
+
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Evasion"
+  - "Scripting"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Javascript analysis"
+  - "Natural Language Understanding"
+  - "URL analysis"
