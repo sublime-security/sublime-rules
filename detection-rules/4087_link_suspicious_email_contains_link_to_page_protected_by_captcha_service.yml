@@ -1,0 +1,49 @@
+name: "PR# 4087 - Link: Suspicious Email Contains Link to Page Protected by Captcha Service"
+description: "Detects messages containing links to credential theft pages that implement CAPTCHA or human verification challenges, including hCaptcha, Cloudflare Turnstile, or reCAPTCHA services. The linked pages contain verification prompts designed to appear legitimate while harvesting credentials."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and 0 < length(body.links) < 10
+  and length(recipients.to) == 1
+  and recipients.to[0].email.domain.valid
+  // email text likely classified as cred_theft
+  and any(ml.nlu_classifier(body.current_thread.text).intents,
+          .name == 'cred_theft' and .confidence == 'high'
+  )
+  and any(body.links,
+          regex.icontains(ml.link_analysis(.).final_dom.raw,
+                          // page references hcaptcha
+                          'hcaptcha\.com\/1\/api\.js',
+                          // page references cloudflare
+                          '(?:Cloudflare Ray ID|cloudflare\.com\/turnstile\/)',
+                          // recaptcha/generic captcha
+                          '\b(?:re)?captcha'
+          )
+          and regex.icontains(ml.link_analysis(.).final_dom.inner_text,
+                              // generic captcha/lure strings
+                              '(?:(?:download|review).{0,25}document|verify.{0,25}(?:identity|human)|human (?:confirmation|verification|check(?:point)?)|verification (?:required|complete|failed)|checking your.{0,25}connection|enter the code below|(?:security|captcha) verification|access check|detected unusual traffic from your computer|security code|challenge solve|prove that you are human|not a robot|Enter displayed text)'
+          )
+  )
+  // no box links
+  and not any(body.current_thread.links,
+              regex.icontains(.href_url.url, '\.box\.com\/(?:signup|link)\/')
+  )
+
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Evasion"
+  - "Social engineering"
+  - "Impersonation: Brand"
+detection_methods:
+  - "Natural Language Understanding"
+  - "URL analysis"
+  - "Content analysis"
+id: "6a27103d-5988-5f48-a220-609e46252aeb"
+tags:
+  - created_from_open_prs
+  - rule_status_added
+  - pr_author_hadojae
+references:
+  - https://github.com/sublime-security/sublime-rules/pull/4087
