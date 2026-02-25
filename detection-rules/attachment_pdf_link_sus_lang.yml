@@ -38,17 +38,23 @@ source: |
                             and any(ml.link_analysis(.).final_dom.links,
                                     .href_url.domain.root_domain != ..domain.root_domain
                                     and regex.icontains(.display_text,
-                                                        '\b(?:(?:re)?view|see|read)\s*(?:\S+\s*){0,3}\s*(?:document|message|now|account)',
-                                                        '\b(?:request|review)\b.{1,5}\b(?:bid|proposal|agreement|portfolio|contract|settlement|invoice)\b'
+                                                        '\b(?:(?:re)?view|see|read)[\t\x20]*(?:\S+[\t\x20]*){0,3}[\t\x20]*(?:document|message|now)',
+                                                        '\b(?:request|review)\b.{1,5}\b(?:bid|proposal|agreement|portfolio|contract|settlement|invoice)\b',
                                     )
                             )
                           )
                           or (
-                            length(ml.link_analysis(.).final_dom.inner_text) < 1050
-                            and regex.icontains(ml.link_analysis(.).final_dom.inner_text,
-                                                '\b(?:(?:re)?view|see|read)\s*(?:\S+\s*){0,3}\s*(?:document|message|now|account)',
+                            length(ml.link_analysis(.).final_dom.display_text) < 1050
+                            and regex.icontains(ml.link_analysis(.).final_dom.display_text,
+                                                '\b(?:(?:re)?view|see|read)[\t\x20]*(?:\S+[\t\x20]*){0,3}[\t\x20]*(?:document|message|now)',
                                                 '\b(?:request|review)\b.{1,5}\b(?:bid|proposal|agreement|portfolio|contract|settlement|invoice)\b'
                             )
+                          )
+                          // the title contains high confidence indicators
+                          or any(html.xpath(ml.link_analysis(.).final_dom,
+                                            '//title'
+                                 ).nodes,
+                                 strings.icontains(.raw, 'Secure Document')
                           )
                   )
           )
