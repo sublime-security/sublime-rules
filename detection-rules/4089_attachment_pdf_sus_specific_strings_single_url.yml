@@ -1,0 +1,45 @@
+name: "PR# 4089 - Attachment: PDF with suspicious single strings and single URL"
+description: "Detects single-page PDF attachments containing suspicious language such as 'View Document' or 'View PDF' along with exactly one URL, commonly used in credential theft attacks."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  // only a single pdf attachmet
+  and length(attachments) == 1
+  and any(attachments,
+          .file_type == "pdf"
+          // a single page pdf
+          and beta.parse_exif(.).page_count == 1
+          and any(file.explode(.),
+                  .depth == 1
+                  // the pdf contains speciifc suspicious wording
+                  // these are exact matches when split on new lines extracted from the text of the PDF from the scanPDF scanner
+                  and (
+                    'View Document' in~ .scan.strings.strings
+                    or 'View PDF' in~ .scan.strings.strings
+                  )
+                  // negate where there are no strings that have spaces
+                  and not all(.scan.strings.strings,
+                              not strings.icontains(., ' ')
+                  )
+          )
+          and any(file.explode(.), .depth == 0 and length(.scan.url.urls) == 1)
+  )
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "PDF"
+  - "Social engineering"
+  - "Evasion"
+detection_methods:
+  - "Content analysis"
+  - "File analysis"
+  - "URL analysis"
+  - "Exif analysis"
+id: "5424f3f2-9db9-516f-a6c5-6ce05ba271c7"
+tags:
+  - created_from_open_prs
+  - rule_status_added
+  - pr_author_zoomequipd
+references:
+  - https://github.com/sublime-security/sublime-rules/pull/4089
