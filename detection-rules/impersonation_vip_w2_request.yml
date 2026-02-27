@@ -1,5 +1,5 @@
-name: "VIP impersonation with w2 request"
-description: "This rule detects emails attempting to impersonate a VIP requesting a W-2"
+name: "VIP impersonation with w2 request with reply-to mismatch"
+description: "This rule detects emails attempting to impersonate a VIP requesting a W-2 with a reply-to mismatch."
 type: "rule"
 severity: "high"
 source: |
@@ -11,13 +11,19 @@ source: |
   )
   
   // W-2 Language with a request
-  and strings.contains(subject.base, 'W-2')
+  and (
+    strings.contains(strings.replace_confusables(subject.base), 'W-2')
+    or strings.icontains(subject.base, 'w2')
+    or strings.icontains(subject.base, 'wage')
+    or strings.icontains(subject.base, 'tax form')
+    or strings.icontains(subject.base, 'irs')
+  )
   and strings.contains(body.current_thread.text, 'W-2')
   and any(ml.nlu_classifier(body.current_thread.text).entities,
           .name == "request"
   )
   
-  // deifferent reply-to address
+  // different reply-to address
   and length(headers.reply_to) > 0
   and sender.email.email not in map(headers.reply_to, .email.email)
   
