@@ -4,6 +4,10 @@ type: "rule"
 severity: "medium"
 source: |
   type.inbound
+  // self sender
+  and length(recipients.to) == 1
+  and recipients.to[0].email.email == sender.email.email
+  // single link to sharepoint
   and length(filter(body.current_thread.links,
                     .href_url.domain.root_domain == 'sharepoint.com'
                     // it is either a OneNote or PDF file, or unknown
@@ -12,10 +16,14 @@ source: |
                     )
              )
   ) == 1
+  // only one link to sharepoint
+  and length(filter(body.current_thread.links,
+                    .href_url.domain.root_domain == 'sharepoint.com'
+             )
+  ) == 1
+  // not sent via sharepoint
   and not strings.starts_with(headers.message_id, '<Share-')
   and not strings.ends_with(headers.message_id, '@odspnotify>')
-  and length(recipients.to) == 1
-  and recipients.to[0].email.email == sender.email.email
   // 0 or 1 attachments (this reduces FPs which had many attachments)
   and length(attachments) - length(filter(attachments,
                                           strings.contains(body.html.raw,
@@ -25,6 +33,8 @@ source: |
                                           )
                                    )
   ) <= 1
+tags:
+  - "Attack surface reduction"
 attack_types:
   - "Credential Phishing"
 tactics_and_techniques:
@@ -39,4 +49,4 @@ detection_methods:
 id: "07ba6eb7-19eb-591e-bafb-3156d418a1e6"
 og_id: "588e7203-98f8-5ab0-a89a-803ae377bda5"
 testing_pr: 4040
-testing_sha: efc08f40d47e2f91bfc525beb8a131b11c43b0e4
+testing_sha: 32088419ce42f7ad5b36e67f46537056ce8ce224
