@@ -9,24 +9,26 @@ source: |
             any(html.xpath(ml.link_analysis(.).final_dom, '//script//text()').nodes,
                 // full tycoon uri struct
                 any(.links,
-                    regex.icontains(.href_url.url,
+                    any(regex.extract(.href_url.url,
+                                      '(?P<url_fragment>\/[a-zA-Z0-9]{0,30}[!@][a-zA-Z0-9]{0,30}\/)'
+                        ),
+                        not regex.icontains(.named_groups["url_fragment"], '\/[!@][a-zA-Z]{2,30}\/')
+                    )
+                    and regex.icontains(.href_url.url,
                                     'https:\/\/[^/]+\/[a-zA-Z0-9]{0,30}[!@][a-zA-Z0-9]{0,30}\/'
                     )
                     and not strings.icontains(.href_url.url, 'https://www.')
-                    and not strings.icontains(.href_url.domain.root_domain,
-                                              'unpkg.com'
-                    )
-                    and not regex.icontains(.href_url.path,
-                                            '\/[!@][a-zA-Z]{2,30}\/'
+                    and not regex.icontains(.href_url.domain.root_domain,
+                                              '(?:fpjs\.io|(?:medium|unpkg).com)'
                     )
                 )
-                // tycoon structured path and cloudflare captcha domain
-                or (
-                  regex.icontains(.display_text,
-                                  '\/[a-zA-Z0-9]{0,30}[!@][a-zA-Z0-9]{0,30}\/'
-                  )
-                  and strings.icontains(.display_text, 'challenges.cloudflare.com')
-                )
+            )
+            // tycoon structured path and cloudflare captcha domain
+            or (
+              regex.icontains(.display_text,
+                              '\/[a-zA-Z0-9]{0,30}[!@][a-zA-Z0-9]{0,30}\/'
+              )
+              and strings.icontains(.display_text, 'challenges.cloudflare.com')
             )
     )
 attack_types:
