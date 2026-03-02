@@ -1,0 +1,44 @@
+name: "Credential phishing: AI-generated credential theft with styled buttons from no-reply sender"
+description: "Detects inbound messages from noreply addresses containing AI-generated comments, styled buttons, and credential theft intent from no-reply senders. The rule identifies messages with HTML comments suggesting automated generation (phrases like 'as requested', 'replace link') combined with styled call-to-action buttons and NLU-classified credential theft content."
+type: "rule"
+severity: "low"
+source: |
+  type.inbound
+  and length(body.previous_threads) == 0
+  and strings.ilike(sender.email.local_part,
+                    '*noreply*',
+                    '*no-reply*',
+                    '*donotreply*',
+                    '*no_reply*'
+  )
+  // contains ai-esque code comments like "as requested" and "replace x link"
+  and any(html.xpath(body.html, '//comment()').nodes,
+          regex.contains(.raw,
+                         'keeping.{0,10}same|as.{0,10}requested|replace.{0,30}(?:url|link|below|available|need|want)|\(unchanged\)|Header with Logo'
+          )
+  )
+  // contains a button
+  and any(html.xpath(body.html, '//a[@style]').nodes,
+          regex.icontains(.raw, 'padding') and regex.icontains(.raw, 'background')
+  )
+  and any(ml.nlu_classifier(body.current_thread.text).intents,
+          .name in ("cred_theft") and .confidence != "low"
+  )
+  and not sender.email.domain.root_domain in $high_trust_sender_root_domains
+tags:
+  - "Attack surface reduction"
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Social engineering"
+  - "Evasion"
+detection_methods:
+  - "HTML analysis"
+  - "Natural Language Understanding"
+  - "Content analysis"
+  - "Sender analysis"
+id: "f983a45d-2487-5c74-b25c-f07ad0373afa"
+og_id: "ad08616b-f2fd-5cd2-ba06-4006b0e1d49c"
+testing_pr: 4093
+testing_sha: 038596b33dc8eab8f351252f1c0339a2d84ac81a
