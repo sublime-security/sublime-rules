@@ -40,7 +40,7 @@ source: |
         (
           any(ml.logo_detect(.).brands, .name == "DocuSign")
           or any(file.explode(.),
-                 strings.ilike(.scan.ocr.raw, "*DocuSign*")
+                 regex.icontains(.scan.ocr.raw, "DocuSi?gn")
                  and (
                    any(ml.nlu_classifier(.scan.ocr.raw).intents,
                        .name == "cred_theft" and .confidence != "low"
@@ -71,6 +71,15 @@ source: |
                                   "*Adobe Sign*",
                                   // Additional Adobe Acrobat Sign check
                                   "*Powered by\nAdobe\nAcrobat Sign*"
+                    )
+                    or (
+                      .scan.ocr.raw is not null
+                      // account for OCR misses
+                      and any(regex.iextract(.scan.ocr.raw, '^(?P<envelope_id>.{20})'),
+                          0 < strings.ilevenshtein(.named_groups["envelope_id"],
+                                                   'Docusign Envelope ID'
+                          ) <= 4
+                      )
                     )
                     or (
                       .depth == 0
