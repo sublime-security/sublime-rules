@@ -8,6 +8,8 @@ source: |
     (subject.is_reply or subject.is_forward)
     and (length(headers.references) > 0 or headers.in_reply_to is not null)
   )
+  // a single PDFs
+  and length(filter(attachments, .file_type == "pdf")) == 1
   and any(attachments,
           .file_type == "pdf"
           and regex.icontains(.file_name, '\b(proposal|bid|document|rf[pq])\b')
@@ -18,6 +20,11 @@ source: |
           )
           // contains exactly one link on the root pdf
           and any(file.explode(.), .depth == 0 and length(.scan.url.urls) == 1)
+  )
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and not (
+    sender.email.domain.root_domain in $high_trust_sender_root_domains
+    and headers.auth_summary.dmarc.pass
   )
 attack_types:
   - "Credential Phishing"
@@ -33,4 +40,4 @@ detection_methods:
 id: "6034852d-7d77-5273-8a5e-bf0dc5377d53"
 og_id: "364658e4-8a02-5632-a5ee-11bd869fb896"
 testing_pr: 4079
-testing_sha: 89fe583f0341b9051ad15a914290f6f23ebcd1b6
+testing_sha: e56cbb3b21cb4f7baf3dc80ad61db5abf478c2e4
