@@ -1,0 +1,26 @@
+name: "Attachment: PDF with single URL and Zoom meeting reference"
+description: "Detects PDF attachments containing exactly one URL and text referencing a 'scheduled Zoom meeting' in the document content. This pattern is commonly used in social engineering attacks that impersonate legitimate meeting invitations to trick recipients into visiting malicious websites."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and any(filter(attachments, .file_type == "pdf"), 
+      any(file.explode(.), 
+          length(.scan.pdf.urls) == 1
+      )
+      and any(file.explode(.),
+          .depth == 1
+          and strings.icontains(.scan.ocr.raw, "scheduled Zoom meeting")
+      )
+  )
+
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "PDF"
+  - "Social engineering"
+detection_methods:
+  - "File analysis"
+  - "Optical Character Recognition"
+  - "Content analysis"
