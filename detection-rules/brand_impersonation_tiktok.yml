@@ -5,7 +5,7 @@ severity: "medium"
 source: |
   type.inbound
   and (
-    // TikTok Brand Detection 
+    // TikTok Brand Detection
     (
       // display name contains tiktok
       strings.ilike(strings.replace_confusables(sender.display_name), '*tiktok*')
@@ -27,12 +27,20 @@ source: |
       strings.icontains(body.current_thread.text, "tiktok")
       and (
         strings.icontains(body.current_thread.text, "verified badge")
+        or strings.icontains(body.current_thread.text, "verification badge")
         or strings.icontains(body.current_thread.text, "verification criteria")
         or strings.icontains(body.current_thread.text, "activate badge")
         or strings.icontains(body.current_thread.text, "verification complete")
         or strings.icontains(body.current_thread.text, "almost verified")
         or strings.icontains(body.current_thread.text, "review complete")
         or strings.icontains(body.current_thread.text, "verify profile")
+        or any(body.links,
+               strings.icontains(.display_text, "badge")
+               and (
+                 .href_url.domain.root_domain in $free_file_hosts
+                 or .href_url.domain.domain == "share.google"
+               )
+        )
       )
     )
   )
@@ -91,6 +99,11 @@ source: |
     or sender.email.domain.root_domain not in $high_trust_sender_root_domains
   )
   and not profile.by_sender().solicited
+  // negate legitimate security awareness/fraud warning emails
+  and not (
+    strings.icontains(body.current_thread.text, "pretending to be")
+    or strings.icontains(body.current_thread.text, "avoid scams")
+  )
 
 attack_types:
   - "Credential Phishing"
