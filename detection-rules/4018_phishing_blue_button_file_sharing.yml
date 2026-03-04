@@ -17,31 +17,40 @@ source: |
           )
           // ignore links going to microsoft
           and not any(.links,
-                      .href_url.domain.sld in (
-                        "microsoft",
-                        "azure",
-                        "outlook.office365",
-                        "office365"
+                      (
+                        .href_url.domain.sld in (
+                          "microsoft",
+                          "azure",
+                          "outlook.office365",
+                          "office365"
+                        )
                       )
-          )
-          // handle mimecast rewrites the same as above
-          and not any(.links,
-                      any(.href_url.query_params_decoded['domain'],
-                          strings.parse_domain(.).domain in (
-                            "microsoft.com",
-                            "azure.com",
-                            "outlook.office365.com",
-                            "office365.com"
-                          )
+                      or (
+                        .href_url.domain.root_domain in (
+                          "mimecast.com",
+                          "mimecastprotect.com"
+                        )
+                        and any(.href_url.query_params_decoded['domain'],
+                                strings.parse_domain(.).domain in (
+                                  "microsoft.com",
+                                  "azure.com",
+                                  "outlook.office365.com",
+                                  "office365.com"
+                                )
+                        )
                       )
           )
   )
   and any(ml.nlu_classifier(body.current_thread.text).intents, .name != "benign")
+  // negate attachments that contain the known microsoft content type
+  and not any(attachments,
+              strings.icontains(.content_type, 'x-microsoft-rpmsg-message')
+  )
+  // negate microsoft emails who pass auth
   and not (
     sender.email.domain.root_domain == "microsoft.com"
     and headers.auth_summary.dmarc.pass
   )
-
 attack_types:
   - "Credential Phishing"
 tactics_and_techniques:
@@ -54,4 +63,4 @@ detection_methods:
 id: "bc18e7ed-767d-5f1e-8cad-6fc0bc7e3bb4"
 og_id: "370f6c07-e59c-515a-9b4b-7be70b5e7284"
 testing_pr: 4018
-testing_sha: 8aed64a464bb2b6f31fd0744b972e29a54bbd879
+testing_sha: 62808ccdf309e74728f614502ad1ec4c97868c52
