@@ -1,0 +1,79 @@
+name: "Attachment: PDF with suspicious link and action-oriented language"
+description: "Detects PDF attachments containing a single link that leads to pages with language prompting users to view, review, or read documents, accounts, or business-related content such as bids, proposals, agreements, or contracts."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and length(attachments) == 1
+  and any(attachments,
+          .file_type == "pdf"
+          and beta.parse_exif(.).page_count == 1
+          and any(file.explode(.),
+                  .depth == 0
+                  // reduce fps by limiting the length to a single link
+                  and length(.scan.url.urls) == 1
+                  and any(filter(.scan.url.urls,
+                                 // remove mailto: links
+                                 not strings.istarts_with(.url, 'mailto:')
+                                 and not strings.istarts_with(.url, 'email:')
+                                 // remove links found in exiftool output
+                                 and not (
+                                   ..scan.exiftool.producer is not null
+                                   and strings.icontains(..scan.exiftool.producer,
+                                                         .domain.domain
+                                   )
+                                 )
+  
+                                 // remove links found in exiftool output
+                                 and not (
+                                   ..scan.exiftool.creator is not null
+                                   and strings.icontains(..scan.exiftool.creator,
+                                                         .domain.domain
+                                   )
+                                 )
+                                 and not .domain.root_domain in ('pdf-tools.com')
+                          ),
+                          (
+                            200 <= ml.link_analysis(.).status_code < 300
+                            and length(ml.link_analysis(.).final_dom.links) < 100
+                            and any(ml.link_analysis(.).final_dom.links,
+                                    .href_url.domain.root_domain != ..domain.root_domain
+                                    and regex.icontains(.display_text,
+                                                        '\b(?:(?:re)?view|see|read)[\t\x20]*(?:\S+[\t\x20]*){0,3}[\t\x20]*(?:document|message|now)',
+                                                        '\b(?:request|review)\b.{1,5}\b(?:bid|proposal|agreement|portfolio|contract|settlement|invoice)\b',
+                                    )
+                            )
+                          )
+                          or (
+                            200 <= ml.link_analysis(.).status_code < 300
+                            and length(ml.link_analysis(.).final_dom.display_text) < 1050
+                            and regex.icontains(ml.link_analysis(.).final_dom.display_text,
+                                                '\b(?:(?:re)?view|see|read)[\t\x20]*(?:\S+[\t\x20]*){0,3}[\t\x20]*(?:document|message|now)',
+                                                '\b(?:request|review)\b.{1,5}\b(?:bid|proposal|agreement|portfolio|contract|settlement|invoice)\b'
+                            )
+                            // a common fp in the .au for a payment system
+                            and not strings.icontains(ml.link_analysis(.).final_dom.display_text,
+                                                      'View Podium Message'
+                            )
+                          )
+                          // the title contains high confidence indicators
+                          or any(html.xpath(ml.link_analysis(.).final_dom,
+                                            '//title'
+                                 ).nodes,
+                                 strings.icontains(.raw, 'Secure Document')
+                          )
+                  )
+          )
+  )
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "PDF"
+  - "Social engineering"
+  - "Evasion"
+detection_methods:
+  - "File analysis"
+  - "URL analysis"
+  - "Content analysis"
+  - "URL screenshot"
+id: "816d33a0-5217-5b17-a656-f8ce888592cb"
