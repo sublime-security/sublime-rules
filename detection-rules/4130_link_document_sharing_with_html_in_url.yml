@@ -1,0 +1,40 @@
+name: "PR# 4130 - Link: HTML url with document sharing language"
+description: "Detects messages containing generic document sharing language paired with links to HTML files that use persuasive language like 'click here' or 'open document'. This pattern is commonly used to deliver malicious HTML content disguised as legitimate document sharing."
+type: "rule"
+severity: "medium"
+source: |
+    type.inbound
+    // generic document sharing language
+    and regex.icontains(body.current_thread.text,
+                        '(share|invite|open).{0,20}(attachment|file|access|document)',
+                        '(attachment|file|access|document|message).{0,10}(share|invite)'
+    )
+    // url contains "click me" language and ends with .html
+    and any(filter(body.links,
+                   regex.icontains(.display_text,
+                                   '(open|click|view|reveal|sign).{0,10}(here|document|file|attach)'
+                   )
+            ),
+            strings.iends_with(.href_url.url, '.html')
+    )
+    and not (subject.is_forward or subject.is_reply)
+    and not any(ml.nlu_classifier(body.current_thread.text).topics,
+                .name == "Newsletters and Digests" and .confidence != "low"
+    )
+attack_types:
+  - "Credential Phishing"
+  - "Malware/Ransomware"
+tactics_and_techniques:
+  - "Social engineering"
+  - "HTML smuggling"
+detection_methods:
+  - "Content analysis"
+  - "URL analysis"
+  - "Natural Language Understanding"
+id: "dc2978d7-1f10-5d96-ac74-c1872bf37e9a"
+tags:
+  - created_from_open_prs
+  - rule_status_added
+  - pr_author_IndiaAce
+references:
+  - https://github.com/sublime-security/sublime-rules/pull/4130
