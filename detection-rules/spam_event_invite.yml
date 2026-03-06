@@ -1,4 +1,4 @@
-name: "Spam: Conference or summit invitation"
+name: "Spam: Event invitation"
 description: "Detects invites for conferences or summits that request speaking, presenting, or sponsorship opportunities. The rule looks for invitation language combined with event-related terms and presentation requests, while excluding legitimate calendar invites and conversations."
 type: "rule"
 severity: "low"
@@ -50,8 +50,8 @@ source: |
     regex.icontains(body.current_thread.text,
                     '\bpanel (?:discussions?|conversations?|opportunit(?:y|ies))\b',
                     '\bpanel{1,2}ists?\b',
-                    '\b(?:experts?|guests?|leaders?|executives?|keynote|interactive|C[a-z]{2}) .{1,12}panels?\b',
-                    '\bpanel.{1,20}(?:expert|guest|speaker|session|C[a-z]{2})s?\b',
+                    '\b(?:experts?|guests?|leaders?|executives?|keynote|interactive|\bC[a-z]{2}\b) .{1,12}panels?\b',
+                    '\bpanel.{1,20}(?:expert|guest|speaker|session|\bC[a-z]{2}\b)s?\b',
                     '\b(?:sem|web)inar\b',
                     '\bround[- ]?table\b',
     )
@@ -79,13 +79,14 @@ source: |
       strings.icontains(body.current_thread.text, "conference")
       and not regex.icontains(body.current_thread.text,
                               '\bconference (?:room|call)\b',
-                              '\bparent(?:\s*(?:-|\/|and|&)?\s*)teacher\b'
+                              '\bparent(?:\s*(?:-|\/|and|&)?\s*)teacher\b',
+                              '\b(?:press|all)[- ]conference\b'
       )
-      and not strings.icontains(body.current_thread.text, "press conference")
     )
   )
   
   // topic negations
+  and not length(ml.nlu_classifier(body.current_thread.text).topics) == 0
   and not any(ml.nlu_classifier(body.current_thread.text).topics,
               .name in (
                 "Newsletters and Digests",
@@ -101,6 +102,8 @@ source: |
     strings.ilike(body.current_thread.text,
                   "*internship*",
                   "*scholarship*",
+                  "shadowing",
+                  "*purchase?price*",
                   "*chamber?of?commerce*",
                   "*invoice?number*",
                   "*payment?details*",
@@ -114,6 +117,9 @@ source: |
                        '\battendees?.{1,7}(?:list|data(?:base)?)\b'
     )
   )
+  
+  // content limiters
+  and not length(body.current_thread.text) > 28500
   
   // negate legitimate invites
   and not (
