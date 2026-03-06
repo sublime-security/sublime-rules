@@ -1,0 +1,37 @@
+name: "Service abuse: Google OAuth with suspicious redirect destination"
+description: "Detects messages containing Google OAuth links with prompt=none parameter that redirect to suspicious domains including free file hosts, free subdomain providers, or self-service creation platforms."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and any(body.links,
+          regex.icontains(.href_url.url,
+                          // commonly abused google oauth w/ prompt=none
+                          '^https?:\/\/accounts\.google\.com\/o\/oauth2\/v2\/auth\?.*prompt=none'
+          )
+          and (
+            // effective url is suspicious
+            ml.link_analysis(.href_url, mode="aggressive").effective_url.domain.tld in $suspicious_tlds
+            or ml.link_analysis(.href_url, mode="aggressive").effective_url.domain.root_domain in $free_file_hosts
+            or ml.link_analysis(.href_url, mode="aggressive").effective_url.domain.domain in $free_file_hosts
+            or ml.link_analysis(.href_url, mode="aggressive").effective_url.domain.root_domain in $free_subdomain_hosts
+            or ml.link_analysis(.href_url, mode="aggressive").effective_url.domain.domain in $free_subdomain_hosts
+            or ml.link_analysis(.href_url, mode="aggressive").effective_url.domain.root_domain in $self_service_creation_platform_domains
+            or ml.link_analysis(.href_url, mode="aggressive").effective_url.domain.domain in $self_service_creation_platform_domains
+            // effective url can sometimes also be a chrome error
+            or ml.link_analysis(.href_url, mode="aggressive").effective_url.url == 'chrome-error://chromewebdata/'
+          )
+  )
+
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Evasion"
+  - "Free file host"
+  - "Free subdomain host"
+  - "Open redirect"
+  - "Social engineering"
+detection_methods:
+  - "URL analysis"
+  - "Threat intelligence"
+id: "462764c9-f0bc-5fe9-abe4-04db8adc4874"
