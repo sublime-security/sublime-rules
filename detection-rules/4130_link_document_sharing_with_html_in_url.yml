@@ -3,24 +3,26 @@ description: "Detects messages containing generic document sharing language pair
 type: "rule"
 severity: "medium"
 source: |
-    type.inbound
-    // generic document sharing language
-    and regex.icontains(body.current_thread.text,
-                        '(share|invite|open).{0,20}(attachment|file|access|document)',
-                        '(attachment|file|access|document|message).{0,10}(share|invite)'
-    )
-    // url contains "click me" language and ends with .html
-    and any(filter(body.links,
-                   regex.icontains(.display_text,
-                                   '(open|click|view|reveal|sign).{0,10}(here|document|file|attach)'
-                   )
-            ),
-            strings.iends_with(.href_url.url, '.html')
-    )
-    and not (subject.is_forward or subject.is_reply)
-    and not any(ml.nlu_classifier(body.current_thread.text).topics,
-                .name == "Newsletters and Digests" and .confidence != "low"
-    )
+   type.inbound
+   // generic document sharing language
+   and regex.icontains(body.current_thread.text,
+                       '(share|invite|open).{0,20}(attachment|file|access|document)',
+                       '(attachment|file|access|document|message).{0,10}(share|invite)'
+   )
+   // url contains "click me" language and ends with .html
+   and any(filter(body.links,
+                  regex.icontains(.display_text,
+                                  '(open|click|view|reveal|sign).{0,10}(here|document|file|attach)'
+                  )
+           ),
+           strings.iends_with(.href_url.url, '.html')
+           and not .href_url.domain.root_domain in $high_trust_sender_root_domains
+   )
+   and not (subject.is_forward or subject.is_reply)
+   and not any(ml.nlu_classifier(body.current_thread.text).topics,
+               .name in ("Newsletters and Digests", "Travel and Transportation")
+               and .confidence != "low"
+   )
 attack_types:
   - "Credential Phishing"
   - "Malware/Ransomware"
