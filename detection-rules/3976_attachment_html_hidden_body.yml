@@ -1,0 +1,37 @@
+name: "PR# 3976 - Attachment: HTML with hidden body"
+description: "This rule identifies HTML attachments which begin directly with a hidden body element.  This has been observed in phishing campaigns to hide the content of an otherwise benign HTML attachment that then has remote content injected into the body."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  // not high trust sender domains
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and not headers.auth_summary.dmarc.pass
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+  and any(attachments,
+          .file_extension == "html"
+          // starts with the hidden body element
+          and regex.icontains(file.parse_html(.).raw,
+                              '^<body style\s*=\s*"\s*display\s*:\s*none\s*;\s*">'
+          )
+  )
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Evasion"
+  - "Scripting"
+detection_methods:
+  - "Content analysis"
+  - "HTML analysis"
+  - "File analysis"
+id: "baa25185-8cb5-5c4d-b142-a4dc4e0f0be7"
+tags:
+  - created_from_open_prs
+  - rule_status_modified
+  - pr_author_MSAdministrator
+references:
+  - https://github.com/sublime-security/sublime-rules/pull/3976
