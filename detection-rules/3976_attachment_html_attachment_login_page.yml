@@ -1,0 +1,117 @@
+name: "PR# 3976 - Attachment: HTML attachment with login portal indicators"
+description: |
+  Recursively scans files and archives to detect indicators of login portals implemented in HTML files. This is a known credential theft technique used by threat actors.
+references:
+  - "https://www.trustwave.com/en-us/resources/blogs/spiderlabs-blog/html-file-attachments-still-a-threat/"
+  - "https://app.any.run/tasks/6bd34bda-91ef-4d13-847c-81d7787dc763/"
+  - "https://playground.sublimesecurity.com?id=6cd813e4-085b-4229-ad15-d2194cdbb91b"
+  - https://github.com/sublime-security/sublime-rules/pull/3976
+type: "rule"
+severity: "medium"
+authors:
+  - twitter: "ajpc500"
+source: |
+  type.inbound
+  and any(attachments,
+          (
+            .file_extension in~ ("html", "htm", "shtml", "dhtml")
+            or .file_extension in~ $file_extensions_common_archives
+            or .file_type == "html"
+          )
+          and any(file.explode(.),
+                  // suspicious strings found in javascript
+                  (
+                    length(filter(.scan.javascript.strings,
+                                  strings.ilike(., "*password*", )
+                           )
+                    ) >= 2
+                    and 2 of (
+                      any(.scan.javascript.strings,
+                          strings.ilike(., "*incorrect*")
+                      ),
+                      any(.scan.javascript.strings, strings.ilike(., "*invalid*")),
+                      any(.scan.javascript.strings, strings.ilike(., "*login*")),
+                      any(.scan.javascript.strings, regex.icontains(., "sign.in")),
+                    )
+                  )
+                  or (
+                    // suspicious strings found outside of javascript, but binexplode'd file still of HTML type
+                    length(filter(.scan.strings.strings,
+                                  strings.ilike(., "*password*", )
+                           )
+                    ) >= 2
+                    and 2 of (
+                      any(.scan.strings.strings, strings.ilike(., "*incorrect*")),
+                      any(.scan.strings.strings, strings.ilike(., "*invalid*")),
+                      any(.scan.strings.strings, strings.ilike(., "*login*")),
+                      any(.scan.strings.strings, strings.ilike(., "*<script>*")),
+                      any(.scan.strings.strings, regex.icontains(., "sign.in")),
+                      any(.scan.strings.strings,
+                          regex.icontains(.,
+                                          '<title>.[^<]+(Payment|Invoice|Statement|Login|Microsoft|Email|Excel)'
+                          )
+                      )
+                    )
+                  )
+                  or 
+                  // Known phishing obfuscation
+                  2 of (
+                    // Enter password
+                    any(.scan.strings.strings,
+                        strings.ilike(.,
+                                      "*&#69;&#110;&#116;&#101;&#114;&#32;&#112;&#97;&#115;&#115;&#119;&#111;&#114;&#100*"
+                        )
+                    ),
+  
+                    // Forgotten my password
+                    any(.scan.strings.strings,
+                        strings.ilike(.,
+                                      "*&#70;&#111;&#114;&#103;&#111;&#116;&#116;&#101;&#110;&#32;&#109;&#121;&#32;&#112;&#97;&#115;&#115;&#119;&#111;&#114;&#100*"
+                        )
+                    ),
+  
+                    // Sign in
+                    any(.scan.strings.strings,
+                        strings.ilike(.,
+                                      "*&#83;&#105;&#103;&#110;&#32;&#105;&#110*"
+                        )
+                    )
+                  )
+          )
+  )
+  and (
+    (
+      // exclude internal mailers where there is no SPF configured.
+      // if the sender's root domain is an org domain, we
+      // ensure there's an SPF pass
+      // we use root_domain because it's typically subdomains that are misconfigured
+      sender.email.domain.root_domain in $org_domains
+      and headers.auth_summary.spf.pass
+    )
+    or sender.email.domain.root_domain not in $org_domains
+  )
+  
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and not headers.auth_summary.dmarc.pass
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "HTML smuggling"
+  - "Scripting"
+detection_methods:
+  - "Archive analysis"
+  - "File analysis"
+  - "HTML analysis"
+  - "Javascript analysis"
+  - "Sender analysis"
+id: "b120fba3-705b-58ea-a2d8-28f65f7cc0d9"
+tags:
+  - created_from_open_prs
+  - rule_status_modified
+  - pr_author_MSAdministrator
