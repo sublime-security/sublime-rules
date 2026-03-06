@@ -1,0 +1,50 @@
+name: "Acts of Violence: Repetitive violence language (previous threads)"
+description: "Flags obsessive repetition like 'DIE DIE DIE' or repeated violence words that show fixation in previous email threads."
+type: "rule"
+severity: "critical"
+source: |
+  type.inbound
+  and 0 < length(body.previous_threads) < 2
+  and any(body.previous_threads,
+          (
+            // Repeated die or death or kill
+            regex.icontains(.text,
+                            '(?:(?:die|death|kill|murder|shoot)\s*!*\s*){3,}'
+            )
+            // Repeated violence verbs
+            or regex.icontains(.text,
+                               '(?:(?:kill|murder|shoot|stab|hurt|harm|attack|assault|beat|destroy|eliminate|slaughter|slay|strangle|choke)\s+(?:[\r\n]+\s+){0,5}){3,}'
+            )
+            // Death/violence in all caps
+            or regex.count(.text,
+                           '(?:DIE|KILL|MURDER|DEATH|SHOOT|HURT|DESTROY|DEAD)'
+            ) > 3
+            // Or combined with "YOU" or "WILL"
+            or regex.contains(.text,
+                              '(?:YOU|WILL)\s+(?:[^\r\n\x20]+\s+){0,5}(?:DIE|KILL|DEATH|SHOOT|HURT|DEAD)'
+            )
+            // Extreme repetition with any violence term
+            or (
+              length(.text) < 500
+              and (
+                regex.icount(.text, '(?:die|kill|dead|death|murder|shoot|hurt)', ) > 5
+              )
+            )
+          )
+          and any(ml.nlu_classifier(.text).topics,
+                  .name == "Acts of Violence" and .confidence == "high"
+          )
+          and length(.text) > 50
+          and length(.text) < 10000
+  
+          // Negate benign contexts
+          and not any(ml.nlu_classifier(.text).topics,
+                      .name in (
+                        "News and Current Events",
+                        "Newsletters and Digests",
+                        "Entertainment and Sports"
+                      )
+                      and .confidence == "high"
+          )
+  )
+id: "19c865b0-de30-5cf6-b90a-604c7ab1d897"
