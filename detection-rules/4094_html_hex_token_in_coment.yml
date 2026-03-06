@@ -1,0 +1,31 @@
+name: "PR# 4094 - HTML: Hex token comment indicating campaign tracking"
+description: "Detects HTML messages containing a 24-character hexadecimal token within HTML comments, either at the very beginning of the document or as the sole comment element. This pattern may indicate automated message generation or tracking mechanisms."
+type: "rule"
+severity: "low"
+source: |
+  type.inbound
+  and (
+    // token appears at very start of HTML
+    regex.icontains(body.html.raw, '^\s*<!--\s*[a-f0-9]{24}\s*-->')
+    // or there's exactly one comment and it's a hex token
+    or (
+      length(html.xpath(body.html, '//comment()').nodes) == 1
+      and any(html.xpath(body.html, '//comment()').nodes,
+              regex.icontains(.raw, '<!--\s*[a-f0-9]{24}\s*-->')
+      )
+    )
+  )
+attack_types:
+  - "Spam"
+tactics_and_techniques:
+  - "Evasion"
+detection_methods:
+  - "Content analysis"
+  - "HTML analysis"
+id: "a2ca39bb-651a-59dc-b0a5-f7d0c21090f9"
+tags:
+  - created_from_open_prs
+  - rule_status_added
+  - pr_author_IndiaAce
+references:
+  - https://github.com/sublime-security/sublime-rules/pull/4094
