@@ -1,0 +1,52 @@
+name: "BEC/Fraud: Penpal scam"
+description: "This rule detects messages from individuals looking to establish contact under the guise of seeking friendship or a penpal relationship. Over time, they build trust and then exploit this relationship by asking for money, personal information, or involvement in suspicious activities."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  
+  // the sender or the reply-to is a freemail provider
+  and (
+    sender.email.domain.domain in $free_email_providers
+    or any(headers.reply_to,
+           .email.domain.root_domain in $free_email_providers
+           and not sender.email.domain.root_domain in $free_email_providers
+    )
+  )
+  
+  // body contains pen ?pal
+  and regex.contains(body.current_thread.text, 'pen\s?pal')
+  
+  // and NLU Request
+  and any(ml.nlu_classifier(body.current_thread.text).entities,
+          .name == "request"
+  )
+  
+  // not a reply
+  and (
+    length(headers.references) == 0
+    or not any(headers.hops, any(.fields, strings.ilike(.name, "In-Reply-To")))
+  )
+  
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and not headers.auth_summary.dmarc.pass
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+
+attack_types:
+  - "BEC/Fraud"
+tactics_and_techniques:
+  - "Free email provider"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Header analysis"
+  - "Sender analysis"
+id: "79fe9bf6-9a6d-5daf-9744-3ff7a6d9e7d3"
+og_id: "a4bdfa17-7527-5ee2-a27b-44d03e190773"
+testing_pr: 4139
+testing_sha: c943f3a7a6443b09ccaef5bcd62b9bafa4e56252
