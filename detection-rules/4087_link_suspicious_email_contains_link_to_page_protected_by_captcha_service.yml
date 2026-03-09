@@ -12,22 +12,51 @@ source: |
           .name == 'cred_theft' and .confidence == 'high'
   )
   and any(body.links,
-          regex.icontains(ml.link_analysis(.).final_dom.raw,
-                          // page references hcaptcha
-                          'hcaptcha\.com\/1\/api\.js',
-                          // page references cloudflare
-                          '(?:Cloudflare Ray ID|cloudflare\.com\/turnstile\/)',
-                          // recaptcha/generic captcha
-                          '\b(?:re)?captcha'
+          (
+            (
+              .href_url.domain.domain in $url_shorteners
+              or .href_url.domain.root_domain in $url_shorteners
+              or .href_url.domain.domain in $free_file_hosts
+              or .href_url.domain.root_domain in $free_file_hosts
+              or .href_url.domain.domain in $free_subdomain_hosts
+              or .href_url.domain.root_domain in $free_subdomain_hosts
+              or .href_url.domain.domain in $self_service_creation_platform_domains
+              or .href_url.domain.root_domain in $self_service_creation_platform_domains
+              or .href_url.domain.tld in $suspicious_tlds
+              or network.whois(.href_url.domain).days_old < 30
+            )
+            and not ml.link_analysis(.).effective_url.domain.root_domain in $tranco_10k
           )
-          and regex.icontains(ml.link_analysis(.).final_dom.inner_text,
-                              // generic captcha/lure strings
-                              '(?:(?:download|review).{0,25}document|verify.{0,25}(?:identity|human)|human (?:confirmation|verification|check(?:point)?)|verification (?:required|complete|failed)|checking your.{0,25}connection|enter the code below|(?:security|captcha) verification|access check|detected unusual traffic from your computer|security code|challenge solve|prove that you are human|not a robot|Enter displayed text)'
+          and regex.icontains(ml.link_analysis(.).final_dom.raw,
+                              // page references hcaptcha
+                              'hcaptcha\.com\/1\/api\.js',
+                              // page references cloudflare
+                              '(?:Cloudflare Ray ID|cloudflare\.com\/turnstile\/)',
+                              // other captcha phrases
+                              '\b(?:prove|verify) (?:that )?you are human\b',
+                              'Two[ -]?Factor Auth',
+                              'enter (?:all of )?the characters you see',
+                              'reached the limit for number of attempts',
+                              'switch to the audio challenge',
+                              'really you sending the requests',
+                              'enter text above',
+                              'type the code',
+                              'Solve the following tasks',
+                              "I'm not a robot",
+                              "ensure you're not a bot"
           )
   )
   // no box links
   and not any(body.current_thread.links,
               regex.icontains(.href_url.url, '\.box\.com\/(?:signup|link)\/')
+  )
+  
+  // negate emails
+  and not (
+    sender.email.email == 'quarantine@messaging.microsoft.com'
+    or sender.email.email == 'notifications@stripe.com'
+    or sender.email.email == 'no-reply@fellow.app'
+    or sender.email.email == 'clientstatement@africanbank.co.za'
   )
 
 attack_types:
