@@ -1,10 +1,13 @@
 name: "Spam: Firebase password reset from suspicious sender"
-description: "Detects Firebase password reset messages from suspicious or new senders that may be attempting to abuse the Firebase authentication service."
+description: "Detects Firebase password reset messages from suspicious senders that may be attempting to abuse the Firebase authentication service."
 type: "rule"
 severity: "low"
 source: |
   type.inbound
-  and sender.email.domain.root_domain == "firebaseapp.com"
+  and (
+    sender.email.domain.root_domain == "firebaseapp.com"
+    or not coalesce(headers.auth_summary.dmarc.pass, false)
+  )
   and length(filter(body.links,
                     .href_url.domain.root_domain not in ("aka.ms")
                     and .href_url.path is not null
@@ -14,17 +17,6 @@ source: |
           .href_url.domain.domain == sender.email.domain.domain
           and .href_url.path == "/__/auth/action"
           and any(.href_url.query_params_decoded["mode"], . == "resetPassword")
-  )
-  and (
-    (
-      not profile.by_sender().solicited
-      and profile.by_sender().prevalence == "new"
-    )
-    or (
-      profile.by_sender().any_messages_malicious_or_spam
-      and not profile.by_sender().any_messages_benign
-    )
-    or not headers.auth_summary.dmarc.pass
   )
 tags:
   - "Attack surface reduction"
