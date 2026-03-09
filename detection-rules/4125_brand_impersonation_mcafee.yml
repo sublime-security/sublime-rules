@@ -5,22 +5,30 @@ severity: "medium"
 source: |
   type.inbound
   and (
-    regex.icontains(body.current_thread.text,
-                    'McAfee.{0,30}(?:Defense|Protection)'
+    (
+      regex.icontains(body.current_thread.text,
+                      'McAfee.{0,30}(?:Defense|Protection)'
+      )
+      and length(filter(ml.nlu_classifier(body.current_thread.text).entities,
+                        .name == "urgency"
+                 )
+      ) >= 2
     )
     or regex.icontains(subject.base, 'McAfee.{0,30}(?:Defense|Protection)')
     or regex.icontains(sender.display_name, '^[\s[:punct:]]*mc\s*afee')
-    or any(ml.nlu_classifier(body.current_thread.text).entities,
-           .name == "org" and strings.icontains(.text, 'mcafee')
-    )
     or (
       any(ml.nlu_classifier(body.current_thread.text).entities,
-          .name == "sender" and strings.icontains(.text, 'mcafee')
+          .name in ("org", "sender") and strings.icontains(.text, 'mcafee')
       )
-      and any(ml.nlu_classifier(body.current_thread.text).entities,
-              .name == "urgency"
-      )
+      and length(filter(ml.nlu_classifier(body.current_thread.text).entities,
+                        .name == "urgency"
+                 )
+      ) >= 2
     )
+  )
+  and not any(ml.nlu_classifier(body.current_thread.text).topics,
+              .name in ("Newsletters and Digests", "B2B Cold Outreach")
+              and .confidence != "low"
   )
   and not (
     sender.email.domain.root_domain in ('mcafee.com', 'mcafeesecure.com')
@@ -28,7 +36,7 @@ source: |
   )
   and not (
     sender.email.domain.root_domain in $high_trust_sender_root_domains
-    and coalesce(headers.auth_summary.dmarc.pass, false)
+    and headers.auth_summary.dmarc.pass
   )
 
 attack_types:
@@ -46,4 +54,4 @@ detection_methods:
 id: "a56dc4a1-d3bb-5c02-ab57-d7037899c17c"
 og_id: "6b593b92-b4f8-5a38-a2ba-216432df589c"
 testing_pr: 4125
-testing_sha: 2408cab1c52d8533ede17da52f1bb6d5bafa6da1
+testing_sha: cecec9bc5ce55a40f00e38253d1731b58f55937d
