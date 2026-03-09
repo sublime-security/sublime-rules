@@ -1,0 +1,38 @@
+name: "Fake message thread with organization-wide targeting and mismatched reply-to address"
+description: "Detects fake reply or forward messages lacking proper thread indicators, featuring a reply-to address different from the sender but with matching display names, while targeting the entire organization with broad language."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  // fake thread
+  and (subject.is_forward or subject.is_reply)
+  and (
+    (length(headers.references) == 0 and headers.in_reply_to is null)
+    or not any(headers.hops, any(.fields, strings.ilike(.name, "In-Reply-To")))
+  )
+  // Mismatched sender and reply to address with same display name
+  and any(headers.reply_to,
+          .display_name == sender.display_name
+          and .email.email != sender.email.email
+  )
+  // Detect language indicating the message targets the entire organization
+  and 1 of (
+    strings.icontains(body.current_thread.text, 'all customers'),
+    strings.icontains(body.current_thread.text, 'every employee'),
+    regex.icontains(subject.base, 'all (employee|staff)')
+  )
+
+attack_types:
+  - "BEC/Fraud"
+tactics_and_techniques:
+  - "Evasion"
+  - "Social engineering"
+  - "Spoofing"
+detection_methods:
+  - "Header analysis"
+  - "Content analysis"
+  - "Sender analysis"
+id: "ffe8e939-9a9d-5b67-94c5-683554507f81"
+og_id: "c14d282b-a7f4-57ac-89d2-a28dc650ec08"
+testing_pr: 4157
+testing_sha: 5a56b7bd743039621340c6fcb06955aefd0c7a0c
