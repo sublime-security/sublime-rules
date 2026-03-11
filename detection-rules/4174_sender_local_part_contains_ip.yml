@@ -4,7 +4,18 @@ type: "rule"
 severity: "medium"
 source: |
   type.inbound
-  and regex.icontains(sender.email.local_part, '(\d{1,3}\.){3}\d{1,3}')
+  and length(body.current_thread.text) > 100
+  and regex.icontains(sender.email.local_part,
+                      '(\d{1,3}\.){3}\d{1,3}[^\.][[:alpha:]]+',
+                      '[[:alpha:]]+(\d{1,3}\.){3}\d{1,3}[^\.]'
+  )
+  and not (
+    strings.ilike(sender.email.local_part, "*report*", "*abuse*")
+    or any(ml.nlu_classifier(body.current_thread.text).topics,
+           .name == "Bounce Back and Delivery Failure Notifications"
+           and .confidence != "low"
+    )
+  )
 tags:
   - "Attack surface reduction"
   - pr_author_peterdj45
