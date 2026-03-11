@@ -5,24 +5,10 @@ severity: "medium"
 source: |
   type.inbound
   and any(body.links,
-          regex.icontains(.href_url.url,
-                          // commonly abused google oauth w/ prompt=none
-                          '^https?:\/\/accounts\.google\.com\/o\/oauth2\/v2\/auth\?.*prompt=none'
-          )
-          and (
-            // effective url is suspicious
-            ml.link_analysis(.href_url, mode="aggressive").effective_url.domain.tld in $suspicious_tlds
-            or ml.link_analysis(.href_url, mode="aggressive").effective_url.domain.root_domain in $free_file_hosts
-            or ml.link_analysis(.href_url, mode="aggressive").effective_url.domain.domain in $free_file_hosts
-            or ml.link_analysis(.href_url, mode="aggressive").effective_url.domain.root_domain in $free_subdomain_hosts
-            or ml.link_analysis(.href_url, mode="aggressive").effective_url.domain.domain in $free_subdomain_hosts
-            or ml.link_analysis(.href_url, mode="aggressive").effective_url.domain.root_domain in $self_service_creation_platform_domains
-            or ml.link_analysis(.href_url, mode="aggressive").effective_url.domain.domain in $self_service_creation_platform_domains
-            // effective url can sometimes also be a chrome error
-            or ml.link_analysis(.href_url, mode="aggressive").effective_url.url == 'chrome-error://chromewebdata/'
-          )
+          .href_url.domain.domain == "accounts.google.com"
+          and strings.istarts_with(.href_url.path, '/o/oauth2/v2/auth')
+          and strings.icontains(.href_url.url, 'prompt=none')
   )
-
 attack_types:
   - "Credential Phishing"
 tactics_and_techniques:
