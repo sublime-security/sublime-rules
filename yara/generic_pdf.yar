@@ -29,6 +29,28 @@ rule w9_pdf_01 {
         and any of ($lw_*)
 }
 
+// testing rule - merge over the above: w9_pdf_01
+rule TESTING_w9_pdf_01 {
+    meta:
+        author = "kyle eaton"
+        date = "2026-01-23"
+        updated = "2026-03-10"
+        description = "matching PDF observed in fake w9/invoice campaigns. Focusing on some of the object values found in the w9 lures, as well as some of the embedded images."
+    strings:
+        $header = {25 50 44 46 2D 31 2E}
+        $lw_01 = {2F 4C 57 20 31 2E 35 32 36 39 39 39 39 35 0A 2F 4D 4C 20 31 30}
+        $lw_02 = {2F 4C 57 20 2E 37 36 33 30 30 30 30 31 0A 2F 4D 4C 20 31 30}
+        $lw_03 = {2F 4C 57 20 31 2E 31 34 34 39 39 39 39 38 0A 2F 4D 4C 20 31 30}
+        $jpg_blue_signature = {00 00 33 A3 42 55 DF 24 13 94 9E CA 29 B7 8C EC 8B 0A 3F 27 2A C9 73 4D 28 26 BE 9B B3 DE D6 E5 49 C9 7C 52 C7 C0 CA B5 B5 A7 51 0F 26 D1 5F 2A C0 5B}
+        $jpg_w9_form = {8A B4 B4 3F F8 FE 4F A1 FE 55 9B 57 F4 33 FF 00 13 25 1E C7 F9 50 07 51 45 14 50 01 45 14 50 01 45 14 50 01 45 14 50 01 45 14 50 01 45 14 50 01 45 14 50 01 45 14 50 01 45 14 50 01 45 14 50 01 45 14 50 01 45 14 50 01 45 14 50 01 45 14 50 01 45 14 50 01 45 14 50 01 45 14 50 01 45 14 50 01 45 14 50 01 45 14 50 01}
+    condition:
+        $header at 0
+        and (
+            any of ($lw_*)
+            or any of ($jpg_*)
+        )
+}
+
 rule invoice_pdf_01 {
     meta:
         author = "kyle eaton"
