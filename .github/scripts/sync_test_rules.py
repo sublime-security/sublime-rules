@@ -258,6 +258,9 @@ def handle_pr_rules(graphql_session, rest_session):
                 if pr.has_label(BULK_PR_LABEL):
                     remove_label(rest_session, REPO_OWNER, REPO_NAME, pr_number, BULK_PR_LABEL)
 
+        # Track skip text labels found across all files in this PR
+        pr_skip_text_labels = set()
+
         # Process files in the PR
         for file in files:
             print(f"\tStatus of {file['filename']}: {file['status']}")
@@ -288,6 +291,7 @@ def handle_pr_rules(graphql_session, rest_session):
                     matched_texts, labels_to_apply = check_skip_texts(content, SKIP_TEXTS)
                     if matched_texts:
                         print(f"\tSkipping file {file['filename']}: contains texts {matched_texts}")
+                        pr_skip_text_labels.update(labels_to_apply)
 
                         # Apply all associated labels
                         for label in labels_to_apply:
@@ -338,6 +342,17 @@ def handle_pr_rules(graphql_session, rest_session):
                     if not pr.has_label(IN_TEST_RULES_LABEL):
                         print(f"\tPR #{pr_number} doesn't have the '{IN_TEST_RULES_LABEL}' label. Applying...")
                         apply_label(rest_session, REPO_OWNER, REPO_NAME, pr_number, IN_TEST_RULES_LABEL)
+
+        # Remove skip text labels that no longer apply
+        if SKIP_FILES_WITH_TEXT and SKIP_TEXTS:
+            all_possible_skip_labels = set()
+            for labels in SKIP_TEXTS.values():
+                all_possible_skip_labels.update(labels)
+            stale_skip_labels = all_possible_skip_labels - pr_skip_text_labels
+            for label in stale_skip_labels:
+                if pr.has_label(label):
+                    print(f"\tPR #{pr_number} no longer matches skip texts for '{label}'. Removing...")
+                    remove_label(rest_session, REPO_OWNER, REPO_NAME, pr_number, label)
 
     # Clean up files no longer in open PRs
     clean_output_folder(OUTPUT_FOLDER, new_files)
