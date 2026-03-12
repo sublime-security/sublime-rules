@@ -7,18 +7,21 @@ source: |
   and length(recipients.to) == 1
   and 0 < length(body.links) < 15
   and any(body.links,
-          // ordered strings commonly observed in the microsoft device code phishing lure
+          // strings commonly observed in the microsoft device code phishing lure
           regex.icontains(ml.link_analysis(., mode="aggressive").final_dom.display_text,
-                          "verification code.*copy code.*Secured by Microsoft.*(?:Adobe|DocuSign)",
-                          "verification complete.*(?:redirecting to|opening) your document.*preparing verification.*(?:complete verification|verify your identity) with Microsoft.*copy code"
+                          "verification co(?:mplete|de)",
+                          '\bcopy code\b',
+                          "Secured by Microsoft",
+                          "(?:redirecting to|opening) your document",
+                          "preparing verification",
+                          "(?:verify your identity|complete verification) with Microsoft"
           )
-          // unique device code antibot token, api path, ms device login path url, aes decrypt
+          // unique device code antibot token cookie, api path, ms device login path url
           and (
             regex.icontains(ml.link_analysis(., mode="aggressive").final_dom.raw,
                             'X-Antibot-Token',
                             '\/api\/device\/sta(?:rt|tus)\/',
-                            'microsoft\.com\/devicelogin',
-                            'decrypt\(\{name:[\x22\x27]AES-GCM'
+                            'microsoft\.com\/devicelogin'
             )
             // or api path on workers dev associated with this activity
             or any(ml.link_analysis(., mode="aggressive").unique_urls_accessed,
