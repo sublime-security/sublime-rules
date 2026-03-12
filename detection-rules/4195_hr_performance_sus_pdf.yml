@@ -1,0 +1,91 @@
+name: "Attachment: PDF performance review document with suspicious metadata"
+description: "Detects PDF attachments containing performance and compensation review content with suspicious metadata indicating generation from headless browsers or automated tools, commonly used in social engineering attacks targeting HR-related processes."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and (
+    // directly attached PDF
+    any(filter(attachments, .file_type == "pdf"),
+        (
+          // table of contents detection
+          (
+            any(file.explode(.),
+                strings.contains(.scan.ocr.raw,
+                                 'Performance & Compensation Review'
+                )
+            )
+            // the Table of contents can be on another page
+            and any(file.explode(.),
+                    regex.icontains(.scan.ocr.raw,
+                                    'Performance Rating: EXCEEDS EXPECTATIONS'
+                    )
+                    or strings.icontains(.scan.ocr.raw, 'Performance Rating')
+            )
+          )
+          // heading of sections within observed documents
+          or (
+            any(file.explode(.),
+                any(.scan.strings.strings,
+                    any([
+                          'Employee Acknowledgement',
+                          'Document Summary',
+                          'appraisal overview',
+                          'accessing full appraisal',
+                          'MERIT INCREASE',
+                          'Performance Rating: EXCEEDS EXPECTATIONS',
+                          'CURRENT BASE NEW BASE',
+                          '<</Title (2026 Performance & Compensation Review)'
+                        ],
+                        .. =~ .
+                    )
+                )
+            )
+          )
+        )
+        and (
+          (
+            (
+              strings.icontains(beta.parse_exif(.).creator, 'HeadlessChrome')
+              or strings.icontains(beta.parse_exif(.).creator, 'Chromium')
+            )
+            and strings.icontains(beta.parse_exif(.).producer, 'Skia/PDF')
+          )
+          or (
+            any(beta.parse_exif(.).fields,
+                .key == "Creator"
+                and (.value == "" or strings.istarts_with(.value, 'Chromium'))
+            )
+            and any(beta.parse_exif(.).fields,
+                    .key == "Title"
+                    and (
+                      .value == ""
+                      // company handbook
+                      or .value in ('Company HandBook')
+                      // appraisal themes
+                      or strings.icontains(.value,
+                                           'Performance & Compensation Review'
+                      )
+                    )
+            )
+            and strings.istarts_with(beta.parse_exif(.).producer, 'Skia/PDF m134')
+          )
+        )
+    )
+  )
+attack_types:
+  - "BEC/Fraud"
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "PDF"
+  - "Social engineering"
+  - "Impersonation: Employee"
+detection_methods:
+  - "Content analysis"
+  - "Exif analysis"
+  - "File analysis"
+  - "Optical Character Recognition"
+id: "dd6cbdf3-5389-5834-9a71-1554df9b5fc2"
+og_id: "81c66c63-2a1c-56fd-b97c-67e45d57c8d0"
+testing_pr: 4195
+testing_sha: 498449531e5ea733ac338fe9b6bfd6f8d1638f4f
