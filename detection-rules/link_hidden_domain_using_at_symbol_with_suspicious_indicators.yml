@@ -4,37 +4,35 @@ type: "rule"
 severity: "low"
 source: |
   type.inbound
-  and length(body.previous_threads) == 0
   and any(body.links,
-          // extract out the hidden domain and hidden tld behind the @ in the url's domain
-          any(regex.extract(.href_url.url,
-                            '^https?:\/\/[^/?#]+@(?P<hidden_domain>[a-z0-9-]+\.(?P<hidden_tld>[a-z]+))/'
-              ),
-              // the hidden domain behind the @ is a shortener
-              .named_groups["hidden_domain"] in $url_shorteners
-              // the hidden domain behind the @ is a free file host
-              or .named_groups["hidden_domain"] in $free_file_hosts
-              // the hidden domain behind the @ is a free subdomain host
-              or .named_groups["hidden_domain"] in $free_subdomain_hosts
-              // the hidden domain behind the @ is a commonly abused web service
-              or .named_groups["hidden_domain"] in $self_service_creation_platform_domains
-              // the hidden tld behind the @ is suspicious
-              or .named_groups["hidden_tld"] in $suspicious_tlds
+          // this checks for a likely domain in the
+          .href_url.username is not null
+          and strings.contains(.href_url.username, '.')
+          // and coalesce(strings.parse_domain(.href_url.username).valid, false)
+          and .href_url.password is null
+          and (
+            .href_url.domain.domain in $url_shorteners
+            or .href_url.domain.root_domain in $url_shorteners
+            or .href_url.domain.domain in $free_file_hosts
+            or .href_url.domain.root_domain in $free_file_hosts
+            or .href_url.domain.domain in $free_subdomain_hosts
+            or .href_url.domain.root_domain in $free_subdomain_hosts
+            or .href_url.domain.domain in $self_service_creation_platform_domains
+            or .href_url.domain.root_domain in $self_service_creation_platform_domains
+            or .href_url.domain.tld in $suspicious_tlds
           )
-          // we dont want to match solely on an email address
-          and not regex.icontains(.href_url.url,
-                                  '^https?:\/\/[a-z0-9._-]+@[a-z0-9.-]+\.(?:[a-z]{2,7}|consulting)/?$'
+          and not (
+            coalesce(strings.parse_email(.href_url.url).domain.valid, false)
+            and .parser == "hyperlink"
           )
           // we dont want to match on malformed mailto or telto links
-          and not regex.icontains(.href_url.url,
-                                  '^https?:\/\/(?:mail|tel)\s*to[:=]'
-          )
-  
-          // we dont want to match on unsubscribe links
-          and not regex.icontains(.href_url.url, '\bunsubscribe\b')
+          and not .href_url.scheme in ('mailto', "tel")
+          and not regex.icontains(.href_url.url, '^https?:\/\/(?:mail|tel)\s*to=')
   
           // we dont want to match on the actual intended usage of the username/pass@ in the domain
           and not regex.icontains(.href_url.url, '^https?:\/\/[^/]+:[^/]+@')
+  
+          and not coalesce(regex.icontains(.href_url.query_params, '\bunsubscribe\b'), false)
   
           // we dont want utm urls
           and not regex.icontains(.href_url.url,
