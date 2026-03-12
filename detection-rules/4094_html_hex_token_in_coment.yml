@@ -4,9 +4,26 @@ type: "rule"
 severity: "low"
 source: |
   type.inbound
-  // htmnl comment contains 24-character hexadecimal token
-  and any(html.xpath(body.html, '//comment()').nodes,
-          regex.icontains(.raw, '<!--\s*[a-f0-9]{24}\s*-->')
+  and (
+    // 24-character hex token is the very first thing in HTML
+    regex.icontains(body.html.raw, '^\s*<!--\s*[a-f0-9]{24}\s*-->')
+    // exactly one comment and it's the hex token
+    or (
+      length(html.xpath(body.html, '//comment()').nodes) == 1
+      and regex.icontains(html.xpath(body.html, '//comment()').nodes[0].raw,
+                          '^<!--\s*[a-f0-9]{24}\s*-->$'
+      )
+    )
+    or (
+      // hex at the end of the html
+      regex.icontains(body.html.raw,
+                      '<!--\s*[a-f0-9]{24}\s*-->\s*(?:</\w+>\s*)*$'
+      )
+      // negate these advertising(?) campaigns containing mso checks in html comments like <!--[if mso]-->
+      and not any(html.xpath(body.html, '//comment()').nodes,
+                  strings.icontains(.raw, '[if')
+      )
+    )
   )
 attack_types:
   - "Spam"
