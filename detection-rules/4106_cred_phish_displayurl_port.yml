@@ -4,13 +4,29 @@ type: "rule"
 severity: "medium"
 source: |
   type.inbound
-  and length(body.previous_threads) == 0
+  and (
+    // no previous threads
+    length(body.previous_threads) == 0
+    // or is a fake thread
+    or (
+      (length(headers.references) == 0 or headers.in_reply_to is null)
+      and (
+        subject.is_reply
+        or subject.is_forward
+        or length(body.previous_threads) > 0
+      )
+    )
+  )
   and any(body.links,
           strings.contains(.display_url.url, ':8443')
           and network.whois(.href_url.domain).days_old <= 365
   )
+  
   // Negate noreply-spamdigest senders
-  and not sender.email.domain.root_domain == "noreply-spamdigest@google.com"
+  and not (
+    sender.email.email == "noreply-spamdigest@google.com"
+    and headers.auth_summary.dmarc.pass
+  )
 attack_types:
   - "Credential Phishing"
   - "Malware/Ransomware"
@@ -21,4 +37,4 @@ detection_methods:
 id: "4604ca32-8f37-5c0f-bc3e-65b27c256356"
 og_id: "11f23791-a006-5ab5-83eb-9ad816ed5b4a"
 testing_pr: 4106
-testing_sha: 1834b4578283ae12f053f92fad6bd151e361fd51
+testing_sha: bcf15b133dc525cd5ae3ce6bc1ab9b9d69522311
