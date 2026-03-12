@@ -51,6 +51,20 @@ rule TESTING_w9_pdf_01 {
         )
 }
 
+rule w9_pdf_IDs {
+    meta:
+        author = "kyle eaton"
+        date = "2026-03-12"
+        description = "matching PDF ID values from a few malicious/fake w9 documents." 
+    strings:
+        $header = {25 50 44 46 2D 31 2E}
+        $id1 = {5B 3C 33 34 39 31 30 37 35 38 46 39 38 32 31 46 37 32 33 46 41 34 30 30 39 38 46 41 30 34 36 35 36 42 3E 20 3C 33 34 39 31 30 37 35 38 46 39 38 32 31 46 37 32 33 46 41 34 30 30 39 38 46 41 30 34 36 35 36 42 3E 5D}
+        $id2 = {5B 3C 38 65 61 37 33 35 61 36 33 33 61 30 30 35 36 38 32 66 31 32 33 62 61 36 63 61 36 36 61 38 34 63 3E 3C 38 65 61 37 33 35 61 36 33 33 61 30 30 35 36 38 32 66 31 32 33 62 61 36 63 61 36 36 61 38 34 63 3E 5D}
+    condition:
+        $header at 0
+        and any of ($id*)
+}
+
 rule invoice_pdf_01 {
     meta:
         author = "kyle eaton"
