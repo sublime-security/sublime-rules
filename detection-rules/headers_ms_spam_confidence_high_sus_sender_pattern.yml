@@ -1,0 +1,35 @@
+name: "Headers: Microsoft high spam confidence with self-sender pattern and reply-to mismatch"
+description: "Detects messages with high Microsoft spam confidence scores (5-9) where the sender sends to themselves but uses a different domain in the reply-to header."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  // microsoft spam confidence is noticeably high
+  and any(headers.hops,
+          any(.fields,
+              .name == "X-MS-Exchange-Organization-SCL"
+              and (
+                // 0 to 9 confidence in spam
+                regex.match(.value, '[5-9]')
+              )
+          )
+  )
+  
+  // the sender exhibits a "self sender" pattern
+  and (
+    length(recipients.to) == 1
+    and recipients.to[0].email.email == sender.email.email
+  )
+  
+  // sender email & reply-to email do not match
+  and headers.reply_to[0].email.domain.root_domain != sender.email.domain.root_domain
+
+attack_types:
+  - "BEC/Fraud"
+  - "Spam"
+tactics_and_techniques:
+  - "Evasion"
+  - "Spoofing"
+detection_methods:
+  - "Header analysis"
+  - "Sender analysis"
