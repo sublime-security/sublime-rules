@@ -1,0 +1,52 @@
+name: "Brand impersonation: File sharing notification with template artifacts"
+description: "Detects messages impersonating file sharing services that contain template artifacts such as placeholder comments, incomplete HTML elements, and development remnants. The message includes 'shared with you' language and exhibits multiple indicators of being generated from a malicious template including HTML comments with development terms, broken anchor tags, and filename elements that closely match the subject line."
+type: "rule"
+severity: "low"
+source: |
+  type.inbound
+  and strings.icontains(body.current_thread.text, 'shared with you')
+  // we detect a file sharing logo with high confidence
+  and any(ml.logo_detect(file.message_screenshot()).brands,
+          .name in ('Microsoft', 'Dropbox', 'Google') and .confidence == "high"
+  )
+  and 2 of (
+    // the subject is very similar to the name of the file-name html class
+    any(html.xpath(body.html, '//span[@class="file-name"]').nodes,
+        strings.ilevenshtein(.display_text, subject.subject) < 15
+    ),
+    // we detect a href to a # implying a neglected placeholder
+    any(html.xpath(body.html, '//a[@href="#"]').nodes, .raw is not null),
+    // we detect "ai-esque" comments
+    any(html.xpath(body.html, '//comment()').nodes,
+        regex.icontains(.raw, '(optional|section|placeholder|todo|fixme)')
+    ),
+    // recipients local part is in the body of the message
+    any(recipients.to,
+        strings.icontains(body.current_thread.text, .email.local_part)
+    ),
+    strings.icontains(body.html.raw, 'if the button does not work')
+  )
+  // and cred theft/bec high confidence
+  and any(ml.nlu_classifier(body.current_thread.text).intents,
+          .name in ("cred_theft", "bec") and .confidence == "high"
+  )
+  // not sent from legitimate Microsoft emails as long as auth passes
+  and not (
+    sender.email.email in (
+      'no-reply@outlook.mail.microsoft',
+      'azuredevops@microsoft.com'
+    )
+    and headers.auth_summary.dmarc.pass
+  )
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Social engineering"
+  - "Evasion"
+detection_methods:
+  - "HTML analysis"
+  - "Computer Vision"
+  - "Content analysis"
+  - "Header analysis"
+id: "37d89611-e8ab-50c5-af7a-c9d5a0a785fd"
