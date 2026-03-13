@@ -1,0 +1,69 @@
+name: "Link: Personalized URL with recipient address on commonly abused web service"
+description: "Detects messages containing links to file hosting or self-service platforms where the recipient's email address is embedded in the URL path, fragment, or base64-encoded components, indicating targeted personalization tactics."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and length(recipients.to) == 1
+  and recipients.to[0].email.domain.valid
+  and 0 < length(body.links) < 10
+  and any(body.links,
+          (
+            // the recipient email is in the url
+            (
+              strings.icontains(.href_url.path, recipients.to[0].email.email)
+              or strings.icontains(.href_url.fragment,
+                                   recipients.to[0].email.email
+              )
+              or any(strings.scan_base64(.href_url.path, ignore_padding=true),
+                     strings.icontains(., recipients.to[0].email.email)
+              )
+              or any(strings.scan_base64(.href_url.fragment, ignore_padding=true),
+                     strings.icontains(., recipients.to[0].email.email)
+              )
+            )
+          )
+          // the url contains #
+          and strings.contains(.href_url.url, '#')
+  
+          // the url doesnt contain #?
+          and not strings.contains(.href_url.url, '#?')
+  
+          // the url doesnt contain /#/
+          and not strings.contains(.href_url.url, '/#/')
+  
+          // not sharepoint
+          and not .href_url.domain.root_domain == 'sharepoint.com'
+  
+          // the url doesnt contain campaign params
+          and not regex.icontains(.href_url.url,
+                                  '(?:location|utm_(?:term|source|medium|content|campaign))='
+          )
+          // too many fp on typeform and no recent tp
+          and not .href_url.domain.root_domain == 'typeform.com'
+  
+          // no welcome links on frame.io
+          and not (
+            .href_url.domain.domain == 'accounts.frame.io'
+            and .href_url.path == '/welcome'
+          )
+          // we dont want links with common unsubscribe paths
+          and not strings.icontains(.href_url.path, "unsubscribe")
+  )
+  
+  // not mimecast email with malicious blocked url in it
+  and not (
+    subject.base == 'A message triggered content policies'
+    and strings.icontains(body.current_thread.text, 'Mimecast Services Limited')
+  )
+
+attack_types:
+  - "Credential Phishing"
+  - "Malware/Ransomware"
+tactics_and_techniques:
+  - "Free file host"
+  - "Social engineering"
+detection_methods:
+  - "URL analysis"
+  - "Header analysis"
+id: "e3b5fa90-2149-54b7-ae9a-87cda01b24a5"
