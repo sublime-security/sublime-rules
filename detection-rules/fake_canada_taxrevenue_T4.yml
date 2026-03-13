@@ -4,20 +4,41 @@ type: "rule"
 severity: "medium"
 source: |
   type.inbound
-  and length(attachments) > 0
+  and length(attachments) >= 0
   and (
-    regex.icontains(subject.subject, 'New mail from the Canada Revenue Agency*')
+    strings.icontains(sender.display_name, "Canada Revenue Agency")
+    or regex.icontains(subject.subject,
+                       'New mail from the Canada Revenue Agency*'
+    )
     or regex.icontains(subject.subject,
                        "Nouveau courrier de l'Agence du revenu du Canada*"
     )
     or regex.icontains(subject.subject, "T4 form*")
     or regex.icontains(subject.subject, "T4 slip*")
   )
-  and regex.icontains(body.current_thread.text,
-                      "Message Preview",
-                      "Canada Revenue Agency",
-                      "T4"
+  and (
+    any(filter(attachments, .file_type == "jpg"),
+        any(file.explode(.),
+            any(.scan.strings.strings,
+                any(['s TR, L e T', 'ey oo Canada.', '(anada', ], .. =~ .)
+            )
+        )
+    )
+    or (
+      any(filter(attachments, .file_type == "pdf"),
+          any(file.explode(.),
+              .scan.pdf_obj_hash.object_hash in (
+                "d78fe5b3970f3fc62903a9a718ad13b9",
+                "e63a2fcd4f7c82df5e42e30cf5b18675",
+                "242063f5800d21c276b1f9c904b32013",
+                "7ef09f07baf4d959b980e5638424888b"
+              )
+              or any(.scan.url.urls, .domain.root_domain == 'vercel.app')
+          )
+      )
+    )
   )
+
 attack_types:
   - "BEC/Fraud"
   - "Credential Phishing"
