@@ -1,0 +1,49 @@
+name: "Brand impersonation: Robinhood"
+description: "Detects messages impersonating Robinhood by analyzing sender display name, domain, body content including specific address references, and social media links, while excluding legitimate Robinhood communications with proper DMARC authentication."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and (
+    strings.icontains(sender.display_name, "Robinhood")
+    or strings.icontains(sender.email.domain.root_domain, "Robinhood")
+    or strings.ilevenshtein(sender.display_name, 'Robinhood') <= 2
+    or 2 of (
+      strings.icontains(body.current_thread.text, "Robinhood"),
+      strings.icontains(body.current_thread.text, "42 Willow Road"),
+      strings.icontains(body.current_thread.text, "Menlo Park, CA 97095")
+      or (
+        length(filter(body.links,
+                      strings.icontains(.href_url.url,
+                                        'https://www.facebook.com/robinhood'
+                      )
+                      or strings.icontains(.href_url.url,
+                                           'https://twitter.com/robinhoodapp'
+                      )
+                      or strings.icontains(.href_url.url,
+                                           'https://www.youtube.com/@RobinhoodApp'
+                      )
+                      or strings.icontains(.href_url.url,
+                                           'https://www.instagram.com/robinhood'
+                      )
+               )
+        ) >= 2
+      )
+    )
+  )
+  and not (
+    sender.email.domain.root_domain in ("robinhood.com", "robinhood.org")
+    and headers.auth_summary.dmarc.pass
+  )
+
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Header analysis"
+  - "Sender analysis"
+  - "URL analysis"
+id: "7c8eca19-63ac-5cd3-a92b-4fb34b526683"
