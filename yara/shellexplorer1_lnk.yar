@@ -35,23 +35,3 @@ rule ShellExplorer1_LNK_RTF
         filesize < 5MB and
         (($clsid_hex or $clsid_bin) and ($lnk_hex or $lnk_bin))
 }
-
-rule ShellExplorer1_LNK_OOXML
-{
-    strings:
-        $pk_magic = { 50 4B 03 04 }
-
-        // Embedded OLE magic (inside ZIP)
-        $ole_magic = { D0 CF 11 E0 A1 B1 1A E1 }
-
-        // Shell.Explorer.1 CLSID
-        $clsid = { C3 2A B2 EA C1 30 CF 11 A7 EB 00 00 C0 5B AE 0B }
-
-        // LNK header (first 8 bytes)
-        $lnk = { 4C 00 00 00 01 14 02 00 }
-
-    condition:
-        $pk_magic at 0 and
-        filesize < 10MB and
-        $ole_magic and $clsid and $lnk
-}

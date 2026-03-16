@@ -7,16 +7,25 @@ source: |
   and (
     (
       strings.icontains(body.current_thread.text, 'Microsoft Teams')
-      and strings.icontains(body.current_thread.text, 'join the meeting now')
+      and strings.icontains(body.current_thread.text, 'join the meeting')
       and strings.contains(body.current_thread.text, 'Meeting ID:')
       and strings.contains(body.current_thread.text, 'Passcode:')
     )
     or (
       strings.icontains(body.current_thread.text, "teams")
+      // strings that give us confidence it's teams
       and 2 of (
         strings.icontains(body.current_thread.text, "internal"),
         strings.icontains(body.current_thread.text, "message"),
-        strings.icontains(body.current_thread.text, "meeting")
+        strings.icontains(body.current_thread.text, "meeting"),
+        strings.icontains(body.current_thread.text, "Download Teams")
+      )
+    )
+    // either the subject or sender.display name containt Microsoft Teams and Meeting
+    or (
+      any([subject.base, sender.display_name],
+          strings.icontains(., 'Microsoft Teams')
+          and strings.icontains(., 'meeting')
       )
     )
   )
@@ -24,21 +33,34 @@ source: |
   and length(headers.references) == 0
   and headers.in_reply_to is null
   // few links
-  and length(body.links) < 10
-  
+  and length(distinct(body.links, .href_url.url)) < 10
+  // short body
+  and length(body.current_thread.text) < 600
   // no unsubscribe links
   // common in newsletters which link to a webinar style event
   and not any(body.links, strings.icontains(.display_text, "unsub"))
   
   // one of the links contains is a CTA that doesn't link to MS
-  and any(body.links,
+  and any(body.current_thread.links,
           (
-            .display_text =~ "join the meeting now"
+            .display_text =~ "join the meeting"
+            or strings.icontains(.display_text, "join the meeting")
             or strings.icontains(.display_text, "play recording")
           )
           and .href_url.domain.root_domain not in (
             "microsoft.com",
-            "microsoft.us"
+            "microsoft.us",
+            "microsoft.cn",
+            "live.com"
+          )
+          and not (
+            .href_url.domain.root_domain == "mimecastprotect.com"
+            and strings.parse_domain(.href_url.query_params_decoded["domain"][0]).root_domain in (
+              "microsoft.com",
+              "microsoft.us",
+              "microsoft.cn",
+              "live.com"
+            )
           )
           // rewriters often abstract the link
           and .href_url.domain.root_domain not in $bulk_mailer_url_root_domains
@@ -66,7 +88,6 @@ source: |
     )
     or sender.email.domain.root_domain not in $high_trust_sender_root_domains
   )
-
 attack_types:
   - "Credential Phishing"
 tactics_and_techniques:
