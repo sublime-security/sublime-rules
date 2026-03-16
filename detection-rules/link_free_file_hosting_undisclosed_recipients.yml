@@ -5,8 +5,12 @@ severity: "medium"
 source: |
   type.inbound
   // no previous threads
-  and length(body.previous_threads) == 0
-  
+  and (
+    length(body.previous_threads) == 0
+    // If there is a previous thread, it is unrelated to current thread
+    or any(body.previous_threads, .sender.email.email != mailbox.email.email)
+  )
+
   // few links that aren't "social" links
   and 0 < length(filter(body.current_thread.links,
                         .href_url.domain.root_domain not in (
@@ -19,7 +23,6 @@ source: |
                         )
                  )
   ) < 10
-  
   // undisclosed recipients or all recipients cc'd
   and (
     any(recipients.to, strings.ilike(.display_name, "undisclosed?recipients"))
@@ -33,14 +36,12 @@ source: |
       and all(recipients.to, .email.email != mailbox.email.email)
     )
   )
-  
   // links to free file hosts or free subdomain hosts
   and any(body.current_thread.links,
           (
             .href_url.domain.root_domain in $free_file_hosts
             or .href_url.domain.root_domain in $free_subdomain_hosts
           )
-          and .href_url.domain.subdomain is not null
           and .visible
           and not (
             .href_url.domain.root_domain == "googleusercontent.com"
@@ -48,7 +49,6 @@ source: |
           )
           and not .href_url.domain.domain in $tenant_domains
   )
-  
   // negate listmailers & benign threads
   and not (
     any(headers.hops, any(.fields, .name == "List-Unsubscribe"))
@@ -56,7 +56,11 @@ source: |
            .name == "benign" and .confidence == "high"
     )
   )
-  
+  // negating legitimate messages from twilio/zendesk
+  and not (
+    sender.email.domain.root_domain in ("twilio.com", "zendesk.com")
+    and headers.auth_summary.dmarc.pass
+  )
   // unsolicited and passing auth, or failing/missing dmarc
   and (
     (
@@ -66,7 +70,6 @@ source: |
     or profile.by_sender_email().days_since.last_inbound > 365
     or (not coalesce(headers.auth_summary.dmarc.pass, false))
   )
-
 
 attack_types:
   - "Credential Phishing"
