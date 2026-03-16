@@ -5,27 +5,39 @@ severity: "medium"
 source: |
   type.inbound
   and sender.email.domain.root_domain == 'substack.com'
-  and sender.display_name != strings.replace_confusables(sender.display_name)
   // substack-branded elements pointing to non-substack domains
-  and any(filter(html.xpath(body.html, '//a[@href]').nodes,
-                 // purple button or typical button classes
-                 (
-                   strings.icontains(.raw, 'background-color: #7c3aed')
-                   or strings.icontains(.raw, 'background-color:#7c3aed')
-                   or strings.icontains(.raw, 'class="button')
-                   or strings.icontains(.raw, 'bgcolor="#7c3aed"')
-                 )
-          ),
-          // rewrites to non-Substack domain
-          any(.links, .href_url.domain.root_domain not in~ ('substack.com'))
+  and 2 of (
+    any(filter(html.xpath(body.html, '//a[@href]').nodes,
+               // purple button or typical button classes
+               (
+                 strings.icontains(.raw, 'background-color: #7c3aed')
+                 or strings.icontains(.raw, 'background-color:#7c3aed')
+                 or strings.icontains(.raw, 'class="button')
+                 or strings.icontains(.raw, 'bgcolor="#7c3aed"')
+               )
+        ),
+        // rewrites to non-Substack domain
+        any(.links, .href_url.domain.root_domain not in~ ('substack.com'))
+    ),
+    // sender name contains confusables
+    sender.display_name != strings.replace_confusables(sender.display_name),
+    // lots of urgency entities
+    length(filter(ml.nlu_classifier(body.current_thread.text).entities,
+                  .name == "urgency"
+           )
+    ) >= 5,
+    // excessive hidden character spam in HTML source
+    any(html.xpath(body.html, '//*').nodes,
+        (
+          strings.count(.raw, '&#173;') + strings.count(.raw, '&#847;')
+   + strings.count(.raw, '&#8199;')
+        ) > 100
+    )
   )
   // cred theft with urgency
   and (
     any(ml.nlu_classifier(body.current_thread.text).intents,
         .name == "cred_theft" and .confidence != "low"
-    )
-    and any(ml.nlu_classifier(body.current_thread.text).entities,
-            .name == "urgency"
     )
   )
 attack_types:
