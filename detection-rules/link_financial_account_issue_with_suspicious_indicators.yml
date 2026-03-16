@@ -10,30 +10,40 @@ source: |
   and regex.icontains(body.current_thread.text,
                       '(?:issue|problem) with your.{0,20}(?:card|account|renewal|payment|billing)'
   )
-  and (
-    // link is suspicious for one reason or another
-    any(body.links,
-        .href_url.domain.domain in $url_shorteners
-        or .href_url.domain.root_domain in $url_shorteners
-        or .href_url.domain.root_domain in $free_file_hosts
-        or .href_url.domain.domain in $free_file_hosts
-        or .href_url.domain.root_domain in $free_subdomain_hosts
-        or .href_url.domain.domain in $free_subdomain_hosts
-        or .href_url.domain.root_domain in $self_service_creation_platform_domains
-        or .href_url.domain.domain in $self_service_creation_platform_domains
-        or .href_url.domain.tld in $suspicious_tlds
-        or network.whois(.href_url.domain).days_old < 30
-    )
-    or (
-      // high confidence cred theft with a topic of either financial or payment comms
-      any(ml.nlu_classifier(body.current_thread.text).intents,
+  // link is suspicious for one reason or another
+  and any(body.links,
+          (
+            .href_url.domain.domain in $url_shorteners
+            or .href_url.domain.root_domain in $url_shorteners
+            or .href_url.domain.root_domain in $free_file_hosts
+            or .href_url.domain.domain in $free_file_hosts
+            or .href_url.domain.root_domain in $free_subdomain_hosts
+            or .href_url.domain.domain in $free_subdomain_hosts
+            or .href_url.domain.root_domain in $self_service_creation_platform_domains
+            or .href_url.domain.domain in $self_service_creation_platform_domains
+            or .href_url.domain.tld in $suspicious_tlds
+            or network.whois(.href_url.domain).days_old < 30
+            or .href_url.domain.root_domain == 'sendgrid.net'
+          )
+          // too many FPs with app.link
+          and not .href_url.domain.root_domain in ('app.link', 'sng.link')
+  )
+  
+  // high confidence cred theft with a topic of either financial or payment comms
+  and any(ml.nlu_classifier(body.current_thread.text).intents,
           .name == 'cred_theft' and .confidence == 'high'
-      )
-      and any(ml.nlu_classifier(body.current_thread.text).topics,
-              .name == 'Financial Communications' and .confidence == 'high'
-              or .name == 'Payment Information' and .confidence == 'high'
-      )
+  )
+  and any(ml.nlu_classifier(body.current_thread.text).topics,
+          .name == 'Financial Communications' and .confidence == 'high'
+          or .name == 'Payment Information' and .confidence == 'high'
+  )
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and not headers.auth_summary.dmarc.pass
     )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
   )
 
 attack_types:
