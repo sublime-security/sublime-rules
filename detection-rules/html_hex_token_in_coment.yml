@@ -1,0 +1,28 @@
+name: "Body HTML: Comment with 24-character hex token"
+description: "Detects messages containing HTML comments with exactly 24 hexadecimal characters, which may indicate tracking tokens, session identifiers, or other suspicious embedded data used for evasion or tracking purposes."
+type: "rule"
+severity: "low"
+source: |
+  type.inbound
+  and (
+    // 24-character hex token is the very first thing in HTML
+    regex.icontains(body.html.raw, '^\s*<!--\s*[a-f0-9]{24}\s*-->')
+    // exactly one comment and it's the hex token
+    or (
+      // hex is anywhere in html with no mso 
+      any(html.xpath(body.html, '//comment()').nodes,
+          regex.icontains(.raw, '^<!--\s*[a-f0-9]{24}\s*-->$')
+      )
+      and not any(html.xpath(body.html, '//comment()').nodes,
+                  strings.icontains(.raw, '[if')
+      )
+    )
+  )
+attack_types:
+  - "Spam"
+tactics_and_techniques:
+  - "Evasion"
+detection_methods:
+  - "Content analysis"
+  - "HTML analysis"
+id: "2a5da530-3c80-5b05-83cd-ae092ef68a0d"
