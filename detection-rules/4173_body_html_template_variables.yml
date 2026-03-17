@@ -1,11 +1,36 @@
-name: "PR# 4173 - Template variables in HTML body content"
-description: "Message contains unprocessed template variables commonly used in mass mailing systems, indicating potential misuse of email marketing platforms or malformed bulk messages."
+name: "PR# 4173 - Template variables with suspicious indicators"
+description: "Detects messages containing unrendered template variables (e.g., {{email}}, {{date}}, {{unsubscribe_link}}) combined with suspicious indicators such as fake message threads, SPF authentication failures, or URL shorteners."
 type: "rule"
 severity: "low"
 source: |
   type.inbound
   and regex.icontains(body.html.raw,
-                      '\{\{(date|unsubscribe_link|email|year|manage_prefs_url|privacy_url|Support_Link|Notification_Preferences_Link|ACCOUNT_SETTINGS_URL|SECURITY_FAQ_URL|recipient_email|domainlogo|companyname)\}\}'
+                      '\{\{(date|unsubscribe_link|email|year|manage_prefs_url|privacy_url|support_link|notification_preferences_link|account_settings_url|security_faq_url|recipient_email|domainlogo|companyname)\}\}'
+  )
+  // one other suspicious indicator
+  and (
+    // Fake message thread
+    (
+      (
+        regex.icontains(subject.subject, '\b(?:RE|FWD?)\s*:')
+        or any([body.current_thread.text, body.html.display_text, body.plain.raw],
+               3 of (
+                 strings.icontains(., "from:"),
+                 strings.icontains(., "to:"),
+                 strings.icontains(., "sent:"),
+                 strings.icontains(., "date:"),
+                 strings.icontains(., "cc:"),
+                 strings.icontains(., "subject:")
+               )
+        )
+      )
+      and (length(headers.references) == 0 or headers.in_reply_to is null)
+    )
+    // spf fail
+    or (not headers.auth_summary.spf.pass)
+  
+    // "URL shorteners"
+    or any(body.links, .href_url.domain.root_domain in $url_shorteners)
   )
 attack_types:
   - "Spam"
@@ -14,7 +39,9 @@ tactics_and_techniques:
   - "Social engineering"
 detection_methods:
   - "Content analysis"
+  - "Header analysis"
   - "HTML analysis"
+  - "URL analysis"
 id: "1e236e56-5f5e-57e9-8ec5-bcfe5ac868ec"
 tags:
   - created_from_open_prs
