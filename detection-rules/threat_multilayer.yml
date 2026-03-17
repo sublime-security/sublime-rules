@@ -4,6 +4,22 @@ type: "rule"
 severity: "high"
 source: |
   type.inbound
+  and not (
+    (
+      any(ml.nlu_classifier(body.current_thread.text).topics,
+          .name in ("Payment Information")
+      )
+      and (any(ml.nlu_classifier(body.current_thread.text).intents, .name == "extortion"))
+    )
+    or (
+      any(ml.nlu_classifier(body.current_thread.text).intents, .name == "extortion")
+      and (
+        regex.icontains(strings.replace_confusables(body.current_thread.text),
+                        '[bḆḂ]it[cĉƈ][oöة]i[nņɲ]|\bbtc\b|blockchain'
+        )
+      )
+    )
+  )
   // Intent or action markers — must be directly coupled with violence
   and (
     // Future intent + violence verb
@@ -126,5 +142,10 @@ source: |
                 "Entertainment and Sports"
               )
               and .confidence == "high"
+  )
+  // Negate bulk/marketing emails with unsubscribe links
+  and not any(body.links,
+              strings.icontains(.display_text, "unsubscribe")
+              or strings.icontains(.href_url.url, "unsubscribe")
   )
 id: "95cecf7e-0762-5170-8c2a-d97fbc0d7680"
