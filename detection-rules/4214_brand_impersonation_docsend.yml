@@ -1,0 +1,55 @@
+name: "Brand impersonation: DocSend"
+description: |
+  Attack impersonating DocSend.
+references:
+  - "https://docsend.com"
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and (
+    (
+      sender.display_name =~ 'DocSend'
+      or strings.ilevenshtein(sender.display_name, 'DocSend') <= 1
+      or strings.icontains(sender.email.domain.domain, '*docsend*')
+    )
+    or 2 of (
+      regex.icontains(body.current_thread.text, 'on Dropbox\s*(?:Doc)?\s*Send'),
+      regex.icontains(body.current_thread.text,
+                      'The Dropbox\s*(?:Doc)?\s*Send Team'
+      ),
+      regex.icontains(body.current_thread.text,
+                      'Report to Dropbox\s*(?:Doc)?\s*Send'
+      ),
+      regex.icontains(body.html.raw, 'alt="DocSend"'),
+      regex.icontains(body.html.raw, 'assets\.docsend\.com\/public\/'),
+      regex.icontains(body.html.raw, 'docsend\.com\/view\/'),
+      regex.icontains(body.current_thread.text,
+                      '©\s*20[0-9]{2}\s*,\s*Dropbox DocSend'
+      )
+    )
+  )
+  and sender.email.domain.root_domain not in~ ('docsend.com')
+  and sender.email.email not in $recipient_emails
+  
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and not headers.auth_summary.dmarc.pass
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Lookalike domain"
+  - "Social engineering"
+detection_methods:
+  - "Header analysis"
+  - "Sender analysis"
+id: "cdd78491-c6ac-5ff1-a8af-c5734fa60924"
+og_id: "cd9a3f7a-bda2-5cf9-9a0f-8acef23711a3"
+testing_pr: 4214
+testing_sha: 0b2cad4542c367371ce426877688ebc1a687d9bc
