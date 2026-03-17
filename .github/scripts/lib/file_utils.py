@@ -92,7 +92,7 @@ def count_yaml_rules_in_pr(files):
     """
     yaml_count = 0
     for file in files:
-        if (file['status'] in ['added', 'modified', 'changed'] and
+        if (file['status'] in ['added', 'modified', 'changed', 'renamed'] and
             file['filename'].startswith('detection-rules/') and
                 file['filename'].endswith('.yml')):
             yaml_count += 1
