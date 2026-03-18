@@ -8,9 +8,11 @@ source: |
   and (
     length(body.previous_threads) == 0
     // If there is a previous thread, it is unrelated to current thread
-    or any(body.previous_threads, .sender.email.email != mailbox.email.email)
+    or (
+      length(body.previous_threads) > 1
+      and any(body.previous_threads, .sender.email.email != mailbox.email.email)
+    )
   )
-
   // few links that aren't "social" links
   and 0 < length(filter(body.current_thread.links,
                         .href_url.domain.root_domain not in (
@@ -56,9 +58,11 @@ source: |
            .name == "benign" and .confidence == "high"
     )
   )
-  // negating legitimate messages from twilio/zendesk
   and not (
-    sender.email.domain.root_domain in ("twilio.com", "zendesk.com")
+    (
+      sender.email.domain.root_domain in ("twilio.com", "zendesk.com")
+      or headers.return_path.domain.root_domain in ("twilio.com", "zendesk.com")
+    )
     and headers.auth_summary.dmarc.pass
   )
   // unsolicited and passing auth, or failing/missing dmarc
