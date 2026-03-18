@@ -8,12 +8,31 @@ severity: "high"
 source: |
   type.inbound
   and (
-    sender.display_name =~ 'DocSend'
-    or strings.ilevenshtein(sender.display_name, 'DocSend') <= 1
-    or strings.icontains(sender.email.domain.domain, '*docsend*')
+    (
+      sender.display_name =~ 'DocSend'
+      or strings.ilevenshtein(sender.display_name, 'DocSend') <= 1
+      or strings.icontains(sender.email.domain.domain, '*docsend*')
+      or regex.icontains(body.current_thread.text, 'on Dropbox\s*(?:Doc)?\s*Send')
+      or regex.icontains(body.current_thread.text,
+                         'The Dropbox\s*(?:Doc)?\s*Send Team'
+      )
+      or regex.icontains(body.current_thread.text,
+                         'Report to Dropbox\s*(?:Doc)?\s*Send'
+      )
+      or regex.icontains(body.current_thread.text,
+                         '©\s*20[0-9]{2}\s*,\s*Dropbox DocSend'
+      )
+      or any(ml.nlu_classifier(body.current_thread.text).entities,
+             .name in ("sender", "org")
+             and strings.icontains(.text, 'Dropbox DocSend')
+      )
+    )
   )
-  and sender.email.domain.root_domain not in~ ('docsend.com')
-  and sender.email.email not in $recipient_emails
+  and not (
+    sender.email.domain.root_domain in~ ('docsend.com')
+    and coalesce(headers.auth_summary.dmarc.pass, false)
+  )
+  and not profile.by_sender_email().solicited
   
   // negate highly trusted sender domains unless they fail DMARC authentication
   and (
@@ -23,6 +42,7 @@ source: |
     )
     or sender.email.domain.root_domain not in $high_trust_sender_root_domains
   )
+
 attack_types:
   - "Credential Phishing"
 tactics_and_techniques:
