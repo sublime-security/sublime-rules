@@ -451,7 +451,7 @@ jobs:
             return existingRuns
 
       - name: "Trigger MQL Mimic Tests"
-        if: ${{ github.event_name != 'merge_group' }}
+        if: ${{ github.event_name != 'merge_group' && steps.find_ids.outputs.rule_ids != '' }}
         env:
           trigger_url: '${{ secrets.MQL_MOCK_TRIGGER }}'
           branch: '${{ steps.get_head_ref.outputs.head_ref }}'
@@ -473,7 +473,7 @@ jobs:
             -d "$body"
 
       - name: Wait for MQL Mimic check to be completed
-        if: ${{ github.event_name != 'merge_group' }}
+        if: ${{ github.event_name != 'merge_group' && steps.find_ids.outputs.rule_ids != '' }}
         uses: sublime-security/action-wait-for-check@master
         # Wait for results so that the token remains valid while the test suite is executing and posting a check here.
         with:
@@ -482,6 +482,32 @@ jobs:
           ref: ${{ steps.get_head.outputs.HEAD }}
           timeoutSeconds: 3600
           ignoreIDs: ${{ steps.find_mql_mimic_results.outputs.result }}
+
+      - name: "Create MQL Mimic Check (no rules changed)"
+        uses: actions/github-script@v6
+        if: ${{ github.event_name != 'merge_group' && steps.find_ids.outputs.rule_ids == '' }}
+        env:
+          run_url: "${{ format('https://github.com/{0}/actions/runs/{1}', steps.get_head_ref.outputs.repo, github.run_id) }}"
+          HEAD_SHA: ${{ steps.get_head.outputs.HEAD }}
+        with:
+          debug: ${{ secrets.ACTIONS_STEP_DEBUG || false }}
+          retries: 3
+          retry-exempt-status-codes: 400, 401, 403, 404
+          script: |
+            await github.rest.checks.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              head_sha: process.env.HEAD_SHA,
+              name: "MQL Mimic Tests",
+              status: "completed",
+              conclusion: "success",
+              details_url: process.env.run_url,
+              output: {
+                title: "MQL Mimic Tests",
+                summary: "No MQL rule changes detected, skipping MQL Mimic tests",
+                text: "No detection rules were modified in this PR, so MQL Mimic tests were not required.",
+              },
+            });
 
       - name: "Create MQL Mimic Check"
         # this needs to be upgraded to v7 but need to get this working now
