@@ -19,25 +19,20 @@ source: |
                 )
             )
           )
+          or regex.icontains(.display_text,
+                             '(?:(open|view|read|private).{0,15}message)'
+          )
+          or any([.href_url.path, .display_text],
+                 any((ml.nlu_classifier(.).topics),
+                     .name in ("Romance", "Sexually Explicit Messages")
+                 )
+          )
           // visit the URL and check the effecitve url
           or any(values(ml.link_analysis(.).effective_url.query_params_decoded),
                  any(.,
                      strings.parse_email(.).email in map(recipients.to,
                                                          .email.email
                      )
-                 )
-          )
-          or any([.href_url.path, .display_text],
-                 strings.ilike(.,
-                               "*Flirt*",
-                               "*Singles*",
-                               "*Dating*",
-                               "*Girls*",
-                               "*Women*",
-                               "*Screw*",
-                               "*Hook*up*",
-                               "*Reply*",
-                               "*Message*"
                  )
           )
   )
@@ -55,19 +50,6 @@ source: |
         )
     )
     or any(ml.nlu_classifier(body.current_thread.text).topics, .name == "Romance")
-  )
-  // negate iCloud Private Message Relay
-  and not (
-    sender.email.domain.domain == "privaterelay.appleid.com"
-    or any(headers.hops, any(.fields, .name == "X-ICLOUD-HME"))
-    // negate listservs
-    or (
-      any(headers.hops, any(.fields, .name == "List-Unsubscribe"))
-      and (
-        strings.contains(sender.display_name, "via")
-        or strings.icontains(subject.subject, "monitor")
-      )
-    )
   )
 
 attack_types:
