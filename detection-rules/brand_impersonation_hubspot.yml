@@ -64,12 +64,25 @@ source: |
             "hubspot.com",
             "hs-email.com",
             "hubspotemail.net",
-            "hubspotqa.com"
+            "hubspotqa.com",
+            "hubspotdataprivacy.net"
           )
         )
       )
       and headers.auth_summary.dmarc.pass
     )
+  
+    // topic negation
+    and not any(ml.nlu_classifier(body.current_thread.text).topics,
+                .name in ("Newsletters and Digests")
+    )
+  
+    // negate unsubscribe links
+    and not any(body.links, strings.icontains(.display_text, "unsubscribe"))
+  
+    // negate legitimate conversations
+    and not (subject.is_reply or subject.is_forward)
+  
     // Exclude high trust domains with valid auth and solicited senders
     and (
       (
