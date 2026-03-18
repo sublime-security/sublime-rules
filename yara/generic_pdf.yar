@@ -114,3 +114,16 @@ rule pdf_suspicious_image_001
         $header at 0
         and any of ($jpg*)
 }
+
+rule rmm_pdf_lure {
+    meta:
+        authors = "kyle eaton, mark morris"
+        date = "2026-03-18"
+        description = "matching PDFs with specific left and right rect values - seen in RMM delivery documents"
+    strings:
+        $header = {25 50 44 46 2D 31 2E}
+        $link1 = {2f 52 65 63 74 20 5b 31 37 34 2e 37 35 [5-8] 32 31 36 2e 37 35}
+    condition:
+        $header at 0 and
+        $link1
+}
