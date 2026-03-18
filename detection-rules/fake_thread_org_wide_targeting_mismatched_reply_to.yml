@@ -1,35 +1,90 @@
-name: "Fake message thread with organization-wide targeting and mismatched reply-to address"
-description: "Detects fake reply or forward messages lacking proper thread indicators, featuring a reply-to address different from the sender but with matching display names, while targeting the entire organization with broad language."
+name: "BEC/Fraud: Targeting entire organization with suspicious indicators"
+description: "Detects messages that target all employees, staff, or customers and contain at least 2 suspicious indicators."
 type: "rule"
-severity: "medium"
+severity: ""
 source: |
   type.inbound
-  // fake thread
-  and (subject.is_forward or subject.is_reply)
+  // Detect language indicating the message targets the entire organization
   and (
-    (length(headers.references) == 0 and headers.in_reply_to is null)
-    or not any(headers.hops, any(.fields, strings.ilike(.name, "In-Reply-To")))
+    regex.icontains(body.current_thread.text,
+                    '(all|every) (employee|staff|customers)'
+    )
+    or regex.icontains(subject.base, '(all|every) (employee|staff|customers)')
   )
-  // Mismatched sender and reply to address with same display name
-  and any(headers.reply_to,
+  and 2 of (
+    // fake thread
+    (
+      (subject.is_forward or subject.is_reply)
+      and (
+        (length(headers.references) == 0 and headers.in_reply_to is null)
+        or not any(headers.hops,
+                   any(.fields, strings.ilike(.name, "In-Reply-To"))
+        )
+      )
+    ),
+    // Mismatched sender and reply to address with same display name
+    (
+      any(headers.reply_to,
           .display_name == sender.display_name
           and .email.email != sender.email.email
+      )
+    ),
+    // W-2 mention
+    (
+      regex.icontains(subject.base, 'w-2', 'w_2', 'w2', 'w\x{2011}2')
+      or strings.icontains(body.current_thread.text, 'w-2')
+    ),
+    // blank subject
+    (
+      subject.subject == ''
+    ),
+    // QR code link in attachment contains recipient email address
+    (
+      any(attachments,
+          (
+            .file_type in $file_types_images
+            or .file_extension in $file_extensions_macros
+            or .file_type == "pdf"
+          )
+          and any(filter(file.explode(.), .scan.qr.type == "url"),
+                  any(recipients.to,
+                      .email.domain.valid
+                      and (
+                        strings.icontains(..scan.qr.url.url, .email.email)
+                        or any(beta.scan_base64(..scan.qr.url.url, format="url"),
+                               strings.icontains(., ..email.email)
+                        )
+                      )
+                  )
+          )
+      )
+    ),
+    // kindly in current thread
+    (
+      strings.icontains(body.current_thread.text, 'kindly')
+    ),
+    // new sender domain
+    (
+      network.whois(sender.email.domain).days_old < 30
+    ),
+    // linked domain is less than 30 days old
+    (
+      any(body.links, network.whois(.href_url.domain).days_old < 30)
+    )
   )
-  // Detect language indicating the message targets the entire organization
-  and 1 of (
-    strings.icontains(body.current_thread.text, 'all customers'),
-    strings.icontains(body.current_thread.text, 'every employee'),
-    regex.icontains(subject.base, 'all (employee|staff)')
-  )
+  
 
 attack_types:
   - "BEC/Fraud"
 tactics_and_techniques:
-  - "Evasion"
   - "Social engineering"
   - "Spoofing"
+  - "QR code"
+  - "Evasion"
 detection_methods:
-  - "Header analysis"
   - "Content analysis"
+  - "Header analysis"
+  - "QR code analysis"
   - "Sender analysis"
+  - "Whois"
 id: "c14d282b-a7f4-57ac-89d2-a28dc650ec08"
