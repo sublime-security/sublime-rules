@@ -1,0 +1,56 @@
+name: "Attachment: PDF with free subdomain link and credential theft language with suspicious sender indicators"
+description: "Detects PDF attachments containing URLs hosted on free subdomain services with credential theft language, combined with suspicious sender indicators such as mismatched reply-to addresses or invalid domains."
+type: "rule"
+severity: ""
+source: |
+    type.inbound
+    and any(attachments,
+            .file_extension == "pdf"
+            and any(file.explode(.),
+                    any(.scan.pdf.urls,
+                        .domain.root_domain in $free_subdomain_hosts
+                        and .domain.subdomain is not null
+                        and .domain.subdomain != "www"
+                    )
+            )
+            and any(file.explode(.),
+                    any(ml.nlu_classifier(.scan.strings.raw).intents,
+                        .name == 'cred_theft'
+                        and .confidence in ('medium', 'high')
+                    )
+            )
+    )
+    // one other indicator
+    and (
+      // Custom domain sender with freemail reply-to
+      any(filter(headers.reply_to,
+                 .email.domain.root_domain in $free_email_providers
+                 and sender.email.domain.root_domain not in $free_email_providers
+          ),
+          .email.email is not null
+      )
+      // Mismatched sender and reply to address with same display name
+      or any(headers.reply_to,
+             .display_name == sender.display_name
+             and .email.email != sender.email.email
+      )
+      // kindly
+      or strings.icontains(body.current_thread.text, 'kindly')
+      // Invalid reply-to address
+      or any(headers.reply_to, not .email.domain.valid)
+    )
+
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "PDF"
+  - "Free subdomain host"
+  - "Social engineering"
+  - "Evasion"
+detection_methods:
+  - "File analysis"
+  - "URL analysis"
+  - "Natural Language Understanding"
+  - "Header analysis"
+  - "Content analysis"
+id: "f89befda-81e2-56e7-a1f3-a3daaedae81f"
