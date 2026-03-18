@@ -4,16 +4,22 @@ type: "rule"
 severity: "low"
 source: |
   type.inbound
+  and 0 < length(body.links) < 15
   and any(body.links,
           regex.icontains(.href_url.path,
                           // commonly abused wordpress paths
                           '^\/wp-(?:admin|includes)\/.*\.(?:html?|php)',
-                          '^\/wp-content\/(?:(?:mu-)?plugins|themes|uploads)\/.*\.(?:html?|php)',
+                          '^\/wp-content\/(?:(?:mu-)?plugins|themes)\/.*\.(?:html?|php)'
+          )
+          and not regex.icontains(.href_url.path,
+                                  '^\/wp-admin\/(?:[a-z0-9-]+\/)?[a-z0-9-]+\.php'
+          )
+          and not regex.icontains(.href_url.path,
+                                  '^\/wp-content\/.*\/(?:confirm|functions|matomo)\.php$'
           )
   )
   // exclude wordpress mailer
   and not strings.istarts_with(headers.mailer, 'WPMailSMTP')
-
 attack_types:
   - "Credential Phishing"
   - "Malware/Ransomware"
