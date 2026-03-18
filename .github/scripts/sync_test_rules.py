@@ -218,9 +218,13 @@ def handle_pr_rules(graphql_session, rest_session):
         if CHECK_ACTION_COMPLETION:
             if not pr.has_required_check(REQUIRED_CHECK_NAME, REQUIRED_CHECK_CONCLUSION):
                 print(f"\tSkipping PR #{pr_number}: Required check '{REQUIRED_CHECK_NAME}' has not completed with conclusion '{REQUIRED_CHECK_CONCLUSION}'")
-                # Remove in-test-rules label if previously applied
-                if pr.has_label(IN_TEST_RULES_LABEL):
-                    remove_label(rest_session, REPO_OWNER, REPO_NAME, pr_number, IN_TEST_RULES_LABEL)
+                # Preserve existing synced files from previous passing commits
+                # Don't remove in-test-rules label since the rule is still in test-rules (older version)
+                prefix = f"{pr_number}_"
+                for filename in os.listdir(OUTPUT_FOLDER):
+                    if filename.startswith(prefix) and filename.endswith('.yml'):
+                        print(f"\tPreserving existing file: {filename}")
+                        new_files.add(filename)
                 continue
 
         # Use files from GraphQL data (already fetched)
@@ -254,16 +258,19 @@ def handle_pr_rules(graphql_session, rest_session):
                 if pr.has_label(BULK_PR_LABEL):
                     remove_label(rest_session, REPO_OWNER, REPO_NAME, pr_number, BULK_PR_LABEL)
 
+        # Track skip text labels found across all files in this PR
+        pr_skip_text_labels = set()
+
         # Process files in the PR
         for file in files:
             print(f"\tStatus of {file['filename']}: {file['status']}")
             process_file = False
 
             # Check file type and status
-            if (file['status'] in ['added', 'modified', 'changed'] and
+            if (file['status'] in ['added', 'modified', 'changed', 'renamed'] and
                 file['filename'].startswith('detection-rules/') and
                     file['filename'].endswith('.yml')):
-                if file['status'] == "added" and INCLUDE_ADDED:
+                if file['status'] in ["added", "renamed"] and INCLUDE_ADDED:
                     process_file = True
                 elif file['status'] in ['modified', 'changed'] and INCLUDE_UPDATES:
                     process_file = True
@@ -284,6 +291,7 @@ def handle_pr_rules(graphql_session, rest_session):
                     matched_texts, labels_to_apply = check_skip_texts(content, SKIP_TEXTS)
                     if matched_texts:
                         print(f"\tSkipping file {file['filename']}: contains texts {matched_texts}")
+                        pr_skip_text_labels.update(labels_to_apply)
 
                         # Apply all associated labels
                         for label in labels_to_apply:
@@ -334,6 +342,17 @@ def handle_pr_rules(graphql_session, rest_session):
                     if not pr.has_label(IN_TEST_RULES_LABEL):
                         print(f"\tPR #{pr_number} doesn't have the '{IN_TEST_RULES_LABEL}' label. Applying...")
                         apply_label(rest_session, REPO_OWNER, REPO_NAME, pr_number, IN_TEST_RULES_LABEL)
+
+        # Remove skip text labels that no longer apply
+        if SKIP_FILES_WITH_TEXT and SKIP_TEXTS:
+            all_possible_skip_labels = set()
+            for labels in SKIP_TEXTS.values():
+                all_possible_skip_labels.update(labels)
+            stale_skip_labels = all_possible_skip_labels - pr_skip_text_labels
+            for label in stale_skip_labels:
+                if pr.has_label(label):
+                    print(f"\tPR #{pr_number} no longer matches skip texts for '{label}'. Removing...")
+                    remove_label(rest_session, REPO_OWNER, REPO_NAME, pr_number, label)
 
     # Clean up files no longer in open PRs
     clean_output_folder(OUTPUT_FOLDER, new_files)

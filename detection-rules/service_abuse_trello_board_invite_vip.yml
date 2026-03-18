@@ -5,10 +5,20 @@ severity: "medium"
 source: |
   type.inbound
   and sender.email.domain.root_domain == "trello.com"
+  // inspect the hops for two observed patterns
   and any(headers.hops,
           any(.fields,
-              .name =~ "X-Msys-Api"
-              and strings.icontains(.value, 'campaign_id":"invite_board_')
+              // X-Msys-Api with campaign_id
+              (
+                .name =~ "X-Msys-Api"
+                and strings.icontains(.value, 'campaign_id":"invite_board_')
+              )
+              // X-Atl-Po-Triggerid with trello and invite board
+              or (
+                .name == "Feedback-Id"
+                and strings.icontains(.value, 'trello')
+                and regex.icontains(.value, 'invite[_-]board')
+              )
           )
   )
   
