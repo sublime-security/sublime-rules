@@ -8,7 +8,8 @@ source: |
   and recipients.to[0].email.domain.valid
   and 0 < length(body.links) < 10
   and any(body.links,
-          (
+          .parser == "hyperlink"
+          and (
             // the recipient email is in the url
             (
               strings.icontains(.href_url.path, recipients.to[0].email.email)
@@ -22,6 +23,18 @@ source: |
                      strings.icontains(., recipients.to[0].email.email)
               )
             )
+          )
+          and (
+            .href_url.domain.root_domain in $free_file_hosts
+            or .href_url.domain.root_domain in $free_subdomain_hosts
+            or .href_url.domain.root_domain in $self_service_creation_platform_domains
+            or .href_url.domain.root_domain in $url_shorteners
+            or .href_url.domain.domain in $free_file_hosts
+            or .href_url.domain.domain in $free_subdomain_hosts
+            or .href_url.domain.domain in $self_service_creation_platform_domains
+            or .href_url.domain.domain in $url_shorteners
+            or .href_url.domain.tld in $suspicious_tlds
+            or network.whois(.href_url.domain).days_old < 30
           )
           // the url contains #
           and strings.contains(.href_url.url, '#')
@@ -56,7 +69,6 @@ source: |
     subject.base == 'A message triggered content policies'
     and strings.icontains(body.current_thread.text, 'Mimecast Services Limited')
   )
-
 attack_types:
   - "Credential Phishing"
   - "Malware/Ransomware"
