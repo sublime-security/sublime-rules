@@ -4,7 +4,6 @@ type: "rule"
 severity: "medium"
 source: |
   type.inbound
-  and length(attachments) == 0
   and (
     (
       length(body.current_thread.text) < 2000
@@ -60,15 +59,17 @@ source: |
   )
   and (
     any(ml.nlu_classifier(body.current_thread.text).entities,
-        .name == "request" and .text == "Kindly send me a statement or all open"
+        .name == "financial" and .text == "payments"
     )
-    or any(ml.nlu_classifier(body.current_thread.text).entities,
-           .name == "financial" and .text == "payments"
+    or any(ml.nlu_classifier(body.current_thread.text).topics,
+           .name == "Request to View Invoice" and .confidence in ("medium")
     )
     or any(ml.nlu_classifier(body.current_thread.text).intents,
            .name == "bec" and .confidence in ("medium")
     )
   )
+  // Free sender email
+  and (sender.email.domain.root_domain in $free_email_providers)
   // negate highly trusted sender domains unless they fail DMARC authentication
   and (
     (
@@ -90,4 +91,4 @@ detection_methods:
 id: "70ef508d-e7d6-543e-83e1-b616c29cf988"
 og_id: "5ee943cf-f1ed-58dc-8cc0-b72e8716f811"
 testing_pr: 4226
-testing_sha: fef49c4483cf4671e32ed8ab0eb0f92255a1e607
+testing_sha: f5217a1fe7de2738c0f0fe5fa413a982edb93228
