@@ -1,0 +1,40 @@
+name: "Attachment: ICS calendar file with base64-encoded recipient email in AWS Lambda URL"
+description: "Detects ICS calendar attachments containing AWS Lambda URLs with base64-encoded recipient email addresses, indicating targeted credential theft or personalized malicious redirects."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and any(attachments,
+          (
+            .file_extension in~ ('ics')
+            or .content_type in ("application/ics", "text/calendar")
+          )
+          and any(
+                  // extract line-folded AWS Lambda URL
+                  regex.extract(file.parse_text(.).text,
+                                'href="(https://[^\r]+)\r\n ([^\r]*aws[^\r]*)(?:\r\n ([^"]+))?"'
+                  ),
+                  any(
+                      // reassemble URL and scan for base64
+                      strings.scan_base64(strings.concat(.groups[0],
+                                                         .groups[1],
+                                                         .groups[2]
+                                          ),
+                                          ignore_padding=true
+                      ),
+                      // decoded value contains the recipient's email
+                      strings.icontains(., recipients.to[0].email.email)
+                  )
+          )
+  )
+
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Encryption"
+  - "Evasion"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "File analysis"
+  - "URL analysis"
