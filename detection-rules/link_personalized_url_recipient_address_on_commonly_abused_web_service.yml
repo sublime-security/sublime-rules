@@ -3,72 +3,83 @@ description: "Detects messages containing links to file hosting or self-service 
 type: "rule"
 severity: "medium"
 source: |
-  type.inbound
-  and length(recipients.to) == 1
-  and recipients.to[0].email.domain.valid
-  and 0 < length(body.links) < 10
-  and any(body.links,
-          .parser == "hyperlink"
-          and (
-            // the recipient email is in the url
-            (
-              strings.icontains(.href_url.path, recipients.to[0].email.email)
-              or strings.icontains(.href_url.fragment,
-                                   recipients.to[0].email.email
-              )
-              or any(strings.scan_base64(.href_url.path, ignore_padding=true),
-                     strings.icontains(., recipients.to[0].email.email)
-              )
-              or any(strings.scan_base64(.href_url.fragment, ignore_padding=true),
-                     strings.icontains(., recipients.to[0].email.email)
-              )
+type.inbound
+and length(recipients.to) == 1
+and recipients.to[0].email.domain.valid
+and 0 < length(body.links) < 10
+and any(body.links,
+        .parser == "hyperlink"
+        and (
+          // the recipient email is in the url
+          (
+            strings.icontains(.href_url.path, recipients.to[0].email.email)
+            or strings.icontains(.href_url.fragment,
+                                 recipients.to[0].email.email
+            )
+            or any(strings.scan_base64(.href_url.path, ignore_padding=true),
+                   strings.icontains(., recipients.to[0].email.email)
+            )
+            or any(strings.scan_base64(.href_url.fragment, ignore_padding=true),
+                   strings.icontains(., recipients.to[0].email.email)
             )
           )
-          and (
-            .href_url.domain.root_domain in $free_file_hosts
-            or .href_url.domain.root_domain in $free_subdomain_hosts
-            or .href_url.domain.root_domain in $self_service_creation_platform_domains
-            or .href_url.domain.root_domain in $url_shorteners
-            or .href_url.domain.domain in $free_file_hosts
-            or .href_url.domain.domain in $free_subdomain_hosts
-            or .href_url.domain.domain in $self_service_creation_platform_domains
-            or .href_url.domain.domain in $url_shorteners
-            or .href_url.domain.tld in $suspicious_tlds
-            or network.whois(.href_url.domain).days_old < 30
+        )
+        and (
+          .href_url.domain.root_domain in $free_file_hosts
+          or .href_url.domain.root_domain in $free_subdomain_hosts
+          or .href_url.domain.root_domain in $self_service_creation_platform_domains
+          or .href_url.domain.root_domain in $url_shorteners
+          or .href_url.domain.root_domain == 'sendgrid.net'
+          or .href_url.domain.domain in $free_file_hosts
+          or .href_url.domain.domain in $free_subdomain_hosts
+          or .href_url.domain.domain in $self_service_creation_platform_domains
+          or .href_url.domain.domain in $url_shorteners
+          or .href_url.domain.tld in $suspicious_tlds
+          or network.whois(.href_url.domain).days_old < 30
+          or regex.icontains(.href_url.path,
+                             '\/(?:wp-(?:admin|includes)\/|redirect)'
           )
-          // the url contains #
-          and strings.contains(.href_url.url, '#')
-  
-          // the url doesnt contain #?
-          and not strings.contains(.href_url.url, '#?')
-  
-          // the url doesnt contain /#/
-          and not strings.contains(.href_url.url, '/#/')
-  
-          // not sharepoint
-          and not .href_url.domain.root_domain == 'sharepoint.com'
-  
-          // the url doesnt contain campaign params
-          and not regex.icontains(.href_url.url,
-                                  '(?:location|utm_(?:term|source|medium|content|campaign))='
+          or regex.icontains(.display_text,
+                             '(?:password|re(?:new|view|mittance)|verify|view completed|^(?:confirm settings|open|play message|view)$|open to edit|update message encryption|Complete Revalidation|listen to (?:your (?:voice[ _-]?mail)|message|audio)|View & Sign Document|Open Agreement|view meeting details)'
           )
-          // too many fp on typeform and no recent tp
-          and not .href_url.domain.root_domain == 'typeform.com'
-  
-          // no welcome links on frame.io
-          and not (
-            .href_url.domain.domain == 'accounts.frame.io'
-            and .href_url.path == '/welcome'
+          or regex.icontains(strings.replace_confusables(.display_text),
+                            'password'
           )
-          // we dont want links with common unsubscribe paths
-          and not strings.icontains(.href_url.path, "unsubscribe")
-  )
-  
-  // not mimecast email with malicious blocked url in it
-  and not (
-    subject.base == 'A message triggered content policies'
-    and strings.icontains(body.current_thread.text, 'Mimecast Services Limited')
-  )
+        )
+        // the url contains #
+        and strings.contains(.href_url.url, '#')
+
+        // the url doesnt contain #?
+        and not strings.contains(.href_url.url, '#?')
+
+        // the url doesnt contain /#/
+        and not strings.contains(.href_url.url, '/#/')
+
+        // not sharepoint
+        and not .href_url.domain.root_domain == 'sharepoint.com'
+
+        // the url doesnt contain campaign params
+        and not regex.icontains(.href_url.url,
+                                '(?:location|utm_(?:term|source|medium|content|campaign))='
+        )
+        // too many fp on typeform and no recent tp
+        and not .href_url.domain.root_domain == 'typeform.com'
+
+        // no welcome links on frame.io
+        and not (
+          .href_url.domain.domain == 'accounts.frame.io'
+          and .href_url.path == '/welcome'
+        )
+        // we dont want links with common unsubscribe paths
+        and not strings.icontains(.href_url.path, "unsubscribe")
+)
+
+// not mimecast email with malicious blocked url in it
+and not (
+  subject.base == 'A message triggered content policies'
+  and strings.icontains(body.current_thread.text, 'Mimecast Services Limited')
+)
+
 attack_types:
   - "Credential Phishing"
   - "Malware/Ransomware"
