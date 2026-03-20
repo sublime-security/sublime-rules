@@ -1,0 +1,63 @@
+name: "PR# 4242 - Brand impersonation: ZoomInfo with financial request language"
+description: "Detects messages impersonating ZoomInfo that contain financial payment language or BEC indicators, combined with fake thread characteristics such as reply/forward subjects without proper email headers or no previous conversation history."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and length(attachments) >= 0
+  and (
+    // no previous threads
+    length(body.previous_threads) == 0
+    // or is a fake thread
+    or (
+      (length(headers.references) == 0 or headers.in_reply_to is null)
+      and (
+        subject.is_reply
+        or subject.is_forward
+        or length(body.previous_threads) > 0
+      )
+    )
+  )
+  and regex.icontains(body.html.raw, 'zoominfo.com')
+  
+  // ml.nlu classifying emails based malicious contents
+  and (
+    any(ml.nlu_classifier(body.current_thread.text).entities,
+        .name == "financial" and .text == "payments"
+    )
+    or any(ml.nlu_classifier(body.current_thread.text).intents,
+           .name == "bec" and .confidence in ("medium")
+    )
+    or any(ml.nlu_classifier(body.current_thread.text).topics,
+           .name == "Payment Information" and .confidence in ("high")
+    )
+    or any(ml.nlu_classifier(body.current_thread.text).topics,
+           .name == "Request to View Invoice"
+           and .confidence in ("medium", "high")
+    )
+  )
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and not headers.auth_summary.dmarc.pass
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+attack_types:
+  - "BEC/Fraud"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Header analysis"
+  - "Natural Language Understanding"
+  - "Sender analysis"
+id: "a6577bf9-a076-5f61-8e28-5f9e2404890f"
+tags:
+  - created_from_open_prs
+  - rule_status_added
+  - pr_author_cybher0808
+references:
+  - https://github.com/sublime-security/sublime-rules/pull/4242
