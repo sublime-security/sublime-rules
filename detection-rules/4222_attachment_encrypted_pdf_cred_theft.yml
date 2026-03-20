@@ -16,23 +16,19 @@ source: |
           and all(filter(file.explode(.), .depth > 0), .size == 0)
   )
   and (
-    any(ml.nlu_classifier(body.current_thread.text).intents,
-        .name == "cred_theft" and .confidence in ("medium", "high")
-    )
-    or any(ml.nlu_classifier(beta.ocr(file.message_screenshot()).text).intents,
-           .name == "cred_theft" and .confidence in ("medium", "high")
-    )
-    or regex.icontains(body.current_thread.text,
-                       '(Access|Preview|Unlock|Decrypt|Pass)\s*(?:word|code)\s*(?:\S+\s+){0,3}PDF\s*is?\s*:',
-                       'This\s+(?:file|document|pdf)\s+is\s+(?:password[-\s]?)\s+protected\.\s*The\s+password\s+is\s*:?',
-                       '(?:Access|Preview|Unlock|Decrypt)\s+(?:\S+\s+){0,3}PDF(?:\S+\s+){0,3}pass(?:word|code)'
+    regex.icontains(body.current_thread.text,
+                    '(Access|Preview|Unlock|Decrypt|Pass)\s*(?:word|code)\s*(?:\S+\s+){0,3}PDF\s*is?\s*:',
+                    'This\s+(?:file|document|pdf)\s+is\s+(?:password[-\s]?)\s+protected\.\s*The\s+password\s+is\s*:?',
+                    '(?:Access|Preview|Unlock|Decrypt)\s+(?:\S+\s+){0,3}PDF(?:\S+\s+){0,3}pass(?:word|code)'
     )
     or (
       regex.icontains(body.current_thread.text,
-                      'PDF\s*(?:.){0,20}\s*pass(?:word|code)'
+                      'PDF\s*(?:.){0,18}\spass(?:word|code)'
       )
       and not regex.icontains(body.current_thread.text,
-                              'PDF\s*[^\r\n]+\s*pass(?:word|code)\s+is\s+your'
+                              'PDF\s*[^\r\n]+\s*pass(?:word|code)\s+(is\s+your|format\swould\sbe)',
+                              'encrypted[\w\s]{1,60}identity',
+                              'PDF\s(document\sis|is)\spassword-protected'
       )
     )
     or (
@@ -47,9 +43,11 @@ source: |
                               '(?:Access|Preview|Unlock|Decrypt)\s+(?:\S+\s+){0,3}PDF(?:\S+\s+){0,3}pass(?:word|code)'
               )
               or (
-                regex.icontains(.text, 'PDF\s*(?:.){0,20}\s*pass(?:word|code)')
+                regex.icontains(.text, 'PDF\s*(?:.){0,18}\s*pass(?:word|code)')
                 and not regex.icontains(.text,
-                                        'PDF\s*[^\r\n]+\s*pass(?:word|code)\s+is\s+your'
+                                        'PDF\s*[^\r\n]+\s*pass(?:word|code)\s+(is\s+your|format\swould\sbe)',
+                                        'encrypted[\w\s]{1,60}identity',
+                                        'PDF\s(document\sis|is)\spassword-protected'
                 )
               )
       )
@@ -88,6 +86,7 @@ source: |
       and not headers.auth_summary.dmarc.pass
     )
     or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+    or sender.email.domain.root_domain not in $org_domains
   )
 attack_types:
   - "Credential Phishing"
@@ -105,4 +104,4 @@ detection_methods:
 id: "8f7629c7-c486-59ad-acbf-7d69444b01c2"
 og_id: "c9596c9a-0465-5364-8523-542e6d25a8f7"
 testing_pr: 4222
-testing_sha: 069f183a96fdfca17ba084e1354d5c9e3bf435b3
+testing_sha: e0263616818532121e6e6d7ca6685a9896cb9589
