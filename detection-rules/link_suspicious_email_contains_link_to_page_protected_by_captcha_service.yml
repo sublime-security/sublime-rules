@@ -7,12 +7,9 @@ source: |
   and 0 < length(body.links) < 10
   and length(recipients.to) == 1
   and recipients.to[0].email.domain.valid
-  // email text likely classified as cred_theft
-  and any(ml.nlu_classifier(body.current_thread.text).intents,
-          .name == 'cred_theft' and .confidence == 'high'
-  )
   and any(body.links,
-          (
+          .parser == 'hyperlink'
+          and (
             (
               .href_url.domain.domain in $url_shorteners
               or .href_url.domain.root_domain in $url_shorteners
@@ -26,6 +23,11 @@ source: |
               or network.whois(.href_url.domain).days_old < 30
             )
             and not ml.link_analysis(.).effective_url.domain.root_domain in $tranco_10k
+            and not .href_url.domain.root_domain in (
+              'zendesk.com',
+              'cloudfront.net',
+              'onehub.com'
+            )
           )
           and regex.icontains(ml.link_analysis(.).final_dom.raw,
                               // page references hcaptcha
@@ -34,7 +36,6 @@ source: |
                               '(?:Cloudflare Ray ID|cloudflare\.com\/turnstile\/)',
                               // other captcha phrases
                               '\b(?:prove|verify) (?:that )?you are human\b',
-                              'Two[ -]?Factor Auth',
                               'enter (?:all of )?the characters you see',
                               'reached the limit for number of attempts',
                               'switch to the audio challenge',
@@ -50,14 +51,8 @@ source: |
   and not any(body.current_thread.links,
               regex.icontains(.href_url.url, '\.box\.com\/(?:signup|link)\/')
   )
-  
-  // negate emails
-  and not (
-    sender.email.email == 'quarantine@messaging.microsoft.com'
-    or sender.email.email == 'notifications@stripe.com'
-    or sender.email.email == 'no-reply@fellow.app'
-    or sender.email.email == 'clientstatement@africanbank.co.za'
-  )
+  // negating phish reports
+  and not any(recipients.to, .email.email in ('support@vimeo.com'))
 
 attack_types:
   - "Credential Phishing"
