@@ -1,0 +1,72 @@
+name: "Acts of Violence: Public spectacle threats"
+description: "Catches threats wanting media coverage or public attention for violence."
+type: "rule"
+severity: "critical"
+source: |
+  type.inbound
+  and (
+    // Violence + news/media — require actor intending to create a news event
+    (
+      regex.icontains(body.current_thread.text,
+                      '(?:i|we|i''ll|we''ll|this|it)\s+(?:will|''ll|gonna|going to)\s+(?:[^\r\n\x20]+\s+){0,5}(?:be on|make|hit)\s+(?:[^\r\n\x20]+\s+){0,3}(?:the\s+)?(?:news|headlines|television|tv|media|front page)'
+      )
+      and regex.icontains(body.current_thread.text,
+                          '(?:kill|murder|shoot|attack|massacre|slaughter|bodies|corpses|casualties|dead|violence|blood)'
+      )
+    )
+    // World will see/know + violence — require first-person actor as agent
+    or (
+      regex.icontains(body.current_thread.text,
+                      '(?:i|we|i''ll|we''ll)\s+(?:will|''ll|gonna|going to|am going to)\s+(?:[^\r\n\x20]+\s+){0,7}(?:show|make|let|prove)\s+(?:[^\r\n\x20]+\s+){0,5}(?:the world|everyone|people|them all)'
+      )
+      and regex.icontains(body.current_thread.text,
+                          '(?:kill|murder|die|death|shoot|attack|blood|violence|pain)'
+      )
+    )
+    // Broadcast violence
+    or regex.icontains(body.current_thread.text,
+                       '(?:broadcast|stream|show|display)\s+(?:[^\r\n\x20]+\s+){0,5}(?:their|the|your)?\s*(?:death|killing|murder|bodies|corpses|execution)'
+    )
+    // Names/faces will be known
+    or (
+      regex.icontains(body.current_thread.text,
+                      '(?:your|their|all (?:of )?)(?:names?|faces?)\s+(?:will|gonna)\s+(?:[^\r\n\x20]+\s+){0,7}(?:known|public|everywhere|all over|famous|in the)'
+      )
+      and regex.icontains(body.current_thread.text,
+                          '(?:kill|murder|die|death|shoot|attack|blood|violence|pain|massacre)'
+      )
+    )
+    // CNN/media + violence — require first-person actor
+    or (
+      regex.icontains(body.current_thread.text,
+                      '(?:cnn|fox news|bbc|nbc|abc|cbs|media)\s+(?:[^\r\n\x20]+\s+){0,7}(?:kill|murder|die|death|shoot|attack|blood|violence|pain|massacre)'
+      )
+      and regex.icontains(body.current_thread.text,
+                          '(?:i|we|i''ll|we''ll)\s+(?:will|''ll|gonna|going to)\s+(?:[^\r\n\x20]+\s+){0,6}(?:kill|murder|shoot|stab|hurt|harm|attack|assault|beat|destroy|eliminate|slaughter)'
+      )
+    )
+    // Famous for violence
+    or regex.icontains(body.current_thread.text,
+                       '(?:be|become|make you|make them)\s+(?:[^\r\n\x20]+\s+){0,5}famous\s+(?:[^\r\n\x20]+\s+){0,5}(?:kill|murder|die|death|shoot|attack|blood|violence|pain|massacre)'
+    )
+    // Headlines with names + violence
+    or regex.icontains(body.current_thread.text,
+                       '(?:your|their|all)\s+(?:[^\r\n\x20]+\s+){0,5}names?\s+(?:[^\r\n\x20]+\s+){0,5}(?:headlines|news)\s+(?:[^\r\n\x20]+\s+){0,5}(?:kill|murder|die|death|shoot|attack|blood|violence|pain|massacre)'
+    )
+  )
+  and length(body.current_thread.text) > 50
+  and length(body.current_thread.text) < 10000
+  and any(ml.nlu_classifier(body.current_thread.text).topics,
+          .name == "Acts of Violence" and .confidence == "high"
+  )
+  
+  // Negate benign contexts
+  and not any(ml.nlu_classifier(body.current_thread.text).topics,
+              .name in (
+                "News and Current Events",
+                "Newsletters and Digests",
+                "Entertainment and Sports"
+              )
+              and .confidence == "high"
+  )
+id: "d1324797-5a26-5fd6-bb4e-7fb445014278"

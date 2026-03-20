@@ -1,0 +1,74 @@
+name: "Acts of Violence: Weapon-specific threats (previous threads)"
+description: "Flags in previous email threads threats that describe specific weapons and how they will be used."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and length(body.previous_threads) > 0
+  and any(body.previous_threads,
+          any(ml.nlu_classifier(.text).topics,
+              .name == "Acts of Violence" and .confidence == "high"
+          )
+          and (
+            // Gun/firearm threats
+            (
+              regex.icontains(.text,
+                              '(?:(?:i|we|i''m|i''ll|we''ll)\s+(?:[^\r\n\x20]+\s+){0,3}|gonna\s+)(?:bring|use|have|get|take|carry|pull out)\s+(?:[^\r\n\x20]+\s+){0,5}(?:a|my|the|your)\s*(?:gun|rifle|pistol|firearm|weapon|ar[\s\-]?15|ak[\s\-]?47|glock|shotgun)'
+              )
+              and regex.icontains(.text,
+                                  '(?:shoot|kill|fire|aim|point|blast|cap)'
+              )
+            )
+            // Shooting threats
+            or regex.icontains(.text,
+                               '(?:i|we)\s+(?:will|''ll|gonna|going to|am going to|shall|promise|swear)\s+(?:[^\r\n\x20]+\s+){0,5}shoot\s+(?:[^\r\n\x20]+\s+){0,5}(?:you|them|everyone|your|their)\s+(?:[^\r\n\x20]+\s+){0,5}(?:in the (?:head|face|chest|back)|dead|up)'
+            )
+            // Knife/stabbing threats
+            or (
+              regex.icontains(.text,
+                              '(?:knife|blade|dagger|machete|cleaver|razor)'
+              )
+              and regex.icontains(.text,
+                                  '(?:stab|cut|slash|slice|carve|gut)\s+(?:[^\r\n\x20]+\s+){0,5}(?:you|them|your|their)'
+              )
+            )
+            // Explosive threats
+            or regex.icontains(.text,
+                               '(?:bomb|explosive|blow up|detonate|grenade|c4|dynamite)\s+(?:[^\r\n\x20]+\s+){0,5}(?:the|your|their)?\s*(?:building|school|office|place|house|home|you|them)'
+            )
+            // Choking/strangling
+            or regex.icontains(.text,
+                               '(?:choke|strangle|suffocate|asphyxiate)\s+(?:[^\r\n\x20]+\s+){0,5}(?:you|them)\s+(?:[^\r\n\x20]+\s+){0,5}(?:to death|until|with)'
+            )
+            // Acid/chemical attacks
+            or regex.icontains(.text,
+                               '(?:throw|splash|pour|spray|use)\s+(?:[^\r\n\x20]+\s+){0,5}(?:acid|bleach|chemical|gasoline|petrol)\s+(?:[^\r\n\x20]+\s+){0,5}(?:on|at|in)\s+(?:[^\r\n\x20]+\s+){0,5}(?:you|your|them|their)\s+(?:face|body|eyes)?'
+            )
+            // Vehicle as weapon
+            or regex.icontains(.text,
+                               '(?:run|drive|plow|ram)\s+(?:[^\r\n\x20]+\s+){0,5}(?:you|them|everyone)\s+(?:[^\r\n\x20]+\s+){0,5}(?:over|down|into)'
+            )
+            // Blunt weapons
+            or (
+              regex.icontains(.text,
+                              '(?:(?:i|we|i''m|i''ll|we''ll)\s+(?:[^\r\n\x20]+\s+){0,3}|gonna\s+)(?:bat|club|pipe|hammer|crowbar|brick|rock)'
+              )
+              and regex.icontains(.text,
+                                  '(?:beat|smash|bash|hit|crack|crush)\s+(?:[^\r\n\x20]+\s+){0,5}(?:you|your|them|their)\s+(?:skull|head|face|brain)?'
+              )
+            )
+          )
+          and length(.text) > 50
+          and length(.text) < 10000
+  
+          // Negate benign contexts
+          and not any(ml.nlu_classifier(.text).topics,
+                      .name in (
+                        "News and Current Events",
+                        "Newsletters and Digests",
+                        "Entertainment and Sports"
+                      )
+                      and .confidence == "high"
+          )
+  )
+id: "0056c8d5-6f27-5ef4-b08c-e2a8cddf2d6c"

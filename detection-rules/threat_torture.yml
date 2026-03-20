@@ -1,0 +1,70 @@
+name: "Acts of Violence: Torture and prolonged suffering threats"
+description: "Flags threats focused on causing prolonged pain and suffering."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and (
+    // Intent + harm/suffering
+    regex.icontains(body.current_thread.text,
+                    '(?:i|we)\s+(?:will|''ll|gonna|going to|am going to|shall|promise|swear)\s+(?:[^\r\n\x20]+\s+){0,5}(?:make|show|give|cause)\s+(?:[^\r\n\x20]+\s+){0,5}(?:you|everyone|them)\s+(?:[^\r\n\x20]+\s+){0,5}(?:pain|suffer|agony|hurt|misery|torture)'
+    )
+    // Physical harm threats
+    or regex.icontains(body.current_thread.text,
+                       '(?:break|smash|crush|shatter|fracture)\s+(?:[^\r\n\x20]+\s+){0,7}(?:bones|face|skull|head|neck|spine|back|legs|arms)'
+    )
+    // Maiming/disfigurement threats
+    or regex.icontains(body.current_thread.text,
+                       '(?:blind|disfigure|maim|cripple|disable|paralyze)\s+(?:[^\r\n\x20]+\s+){0,5}(?:you|them|everyone)'
+    )
+    // Acid/chemical threats
+    or regex.icontains(body.current_thread.text,
+                       '(?:throw|splash|pour|use)\s+(?:[^\r\n\x20]+\s+){0,5}acid\s+(?:[^\r\n\x20]+\s+){0,5}(?:on|at|in)\s+(?:[^\r\n\x20]+\s+){0,5}(?:you|your|their)'
+    )
+    // Bodily harm with intent
+    or regex.icontains(body.current_thread.text,
+                       '(?:i|we)\s+(?:will|gonna|going to)\s+(?:[^\r\n\x20]+\s+){0,5}(?:rip|tear|cut|slash|carve|gouge)\s+(?:[^\r\n\x20]+\s+){0,5}(?:your|their)\s+(?:eyes|throat|face|body)'
+    )
+    // Suffering language
+    or regex.icontains(body.current_thread.text,
+                       '(?:beg|plead|scream|cry)\s+for\s+(?:mercy|help|your life)'
+    )
+  )
+  and length(body.current_thread.text) > 50
+  and length(body.current_thread.text) < 10000
+  and any(ml.nlu_classifier(body.current_thread.text).topics,
+          .name == "Acts of Violence" and .confidence == "high"
+  )
+  
+  // Negate benign contexts
+  and not any(ml.nlu_classifier(body.current_thread.text).topics,
+              .name in (
+                "News and Current Events",
+                "Newsletters and Digests",
+                "Entertainment and Sports"
+              )
+              and .confidence == "high"
+  )
+  and not (
+    (
+      any(ml.nlu_classifier(body.current_thread.text).topics,
+          .name in ("Payment Information")
+      )
+      and (
+        any(ml.nlu_classifier(body.current_thread.text).intents,
+            .name == "extortion"
+        )
+      )
+    )
+    or (
+      any(ml.nlu_classifier(body.current_thread.text).intents,
+          .name == "extortion"
+      )
+      and (
+        regex.icontains(strings.replace_confusables(body.current_thread.text),
+                        '[bḆḂ]it[cĉƈ][oöة]i[nņɲ]|\bbtc\b|blockchain'
+        )
+      )
+    )
+  )
+id: "e1ede950-4af5-5889-a6e5-77a8a3405e26"
