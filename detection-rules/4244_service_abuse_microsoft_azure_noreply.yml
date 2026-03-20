@@ -5,8 +5,37 @@ severity: "medium"
 source: |
   type.inbound
   and sender.email.email == 'azure-noreply@microsoft.com'
-  and any(ml.nlu_classifier(body.current_thread.text).intents,
-          .name == "callback_scam" and .confidence != "low"
+  and (
+    regex.icontains(body.current_thread.text,
+                    (
+                      "mcafee|n[o0]rt[o0]n|geek.{0,5}squad|paypal|ebay|symantec|best buy|lifel[o0]ck|defender"
+                    )
+    )
+    and (
+      3 of (
+        strings.ilike(body.current_thread.text, '*purchase*'),
+        strings.ilike(body.current_thread.text, '*payment*'),
+        strings.ilike(body.current_thread.text, '*transaction*'),
+        strings.ilike(body.current_thread.text, '*subscription*'),
+        strings.ilike(body.current_thread.text, '*antivirus*'),
+        strings.ilike(body.current_thread.text, '*order*'),
+        strings.ilike(body.current_thread.text, '*support*'),
+        strings.ilike(body.current_thread.text, '*receipt*'),
+        strings.ilike(body.current_thread.text, '*invoice*'),
+        strings.ilike(body.current_thread.text, '*call*'),
+        strings.ilike(body.current_thread.text, '*cancel*'),
+        strings.ilike(body.current_thread.text, '*renew*'),
+        strings.ilike(body.current_thread.text, '*refund*'),
+        strings.ilike(body.current_thread.text, '*host key*')
+      )
+    )
+    // phone number regex
+    and any([body.current_thread.text, subject.subject],
+            regex.icontains(.,
+                            '\+?([ilo0-9]{1}.)?\(?[ilo0-9]{3}?\)?.[ilo0-9]{3}.?[ilo0-9]{4}',
+                            '\+?([ilo0-9]{1,2})?\s?\(?\d{3}\)?[\s\.\-⋅]{0,5}[ilo0-9]{3}[\s\.\-⋅]{0,5}[ilo0-9]{4}'
+            )
+    )
   )
 
 attack_types:
@@ -22,4 +51,4 @@ detection_methods:
 id: "6883ae21-6a80-5a56-8062-1686b6203f91"
 og_id: "b7a81635-14b1-58f0-bff3-0124e662234b"
 testing_pr: 4244
-testing_sha: d270e371fbd71f7d19114d80f88323fb6eade45b
+testing_sha: 1765e0dba657cd1663059a06a09f18c93a4021a4
