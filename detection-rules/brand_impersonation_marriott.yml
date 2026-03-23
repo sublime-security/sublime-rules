@@ -1,0 +1,39 @@
+name: "Brand impersonation: Marriott with gift language"
+description: "Detects messages impersonating Marriott brand that contain gift-related language such as 'appreciation gift', 'thank you gift', or 'something special' from senders not associated with legitimate Marriott domains."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and (
+    strings.icontains(subject.base, "marriott")
+    or strings.icontains(sender.display_name, "marriott")
+    or strings.ilevenshtein(sender.display_name, 'marriott') <= 2
+  )
+  and any([body.current_thread.text, subject.base],
+          regex.icontains(.,
+                          '(?:appreciation|thank)(?:\s|-)?(you)?\s+gift',
+                          'something special',
+                          'special.{0,10}thank(?:\s|-)you'
+          )
+  )
+  and not (
+    sender.email.domain.root_domain in~ (
+      "marriott.com",
+      "res-marriott.com",
+      "email-marriott.com",
+      "feedback-marriott.com",
+      "marriotthotels.se",
+      "bookonline.com"
+    )
+    and coalesce(headers.auth_summary.dmarc.pass, false)
+  )
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Header analysis"
+  - "Sender analysis"
+id: "39b32b97-80bc-5033-902e-312377cab6e2"

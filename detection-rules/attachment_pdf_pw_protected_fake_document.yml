@@ -1,0 +1,33 @@
+name: "Attachment: Password-protected PDF with fake document indicators"
+description: "Detects PDF attachments that are password protected and matching YARA signatures looking for specific content observed in previous activity."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and length(attachments) == 1
+  and any(filter(attachments, .file_type == "pdf"),
+          //
+          // This rule makes use of a beta feature and is subject to change without notice
+          // using the beta featuer in custom rules is not suggested until it has been formally released.
+          //
+          any(beta.parse_exif(.).fields,
+              strings.icontains(.value, 'password protected')
+          )
+          and any(file.explode(.),
+                  any(.scan.yara.matches,
+                      .name in ("pwd_protected_pdf_fake_document_1")
+                  )
+          )
+  )
+attack_types:
+  - "Malware/Ransomware"
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Encryption"
+  - "Evasion"
+  - "PDF"
+detection_methods:
+  - "File analysis"
+  - "YARA"
+  - "Exif analysis"
+id: "b45e4440-1133-5122-a90f-2516dba88588"

@@ -1,0 +1,42 @@
+name: "Attachment: ICS with embedded Javascript in SVG file"
+description: "Detects incoming messages containing ICS attachments with embedded SVG files that contain malicious JavaScript code, including base64-encoded content and potentially harmful event handlers. The rule specifically watches for onload events, location redirects, error handlers, and iframe elements with base64 data URIs."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and any(attachments,
+          (
+            .file_extension in~ ('ics')
+            or .content_type in ("application/ics", "text/calendar")
+          )
+          and any(file.explode(.),
+                  (
+                    .file_extension in~ ("svg", "svgz")
+                    or .flavors.mime == "image/svg+xml"
+                  )
+                  and any(.scan.strings.strings,
+                          strings.ilike(.,
+                                        "*onload*",
+                                        "*window.location.href*",
+                                        "*onerror*",
+                                        "*CDATA*",
+                                        "*<script*",
+                                        "*</script*",
+                                        "*atob*",
+                                        "*location.assign*",
+                                        "*decodeURIComponent*"
+                          )
+                  )
+          )
+  )
+attack_types:
+  - "Credential Phishing"
+  - "Malware/Ransomware"
+tactics_and_techniques:
+  - "Scripting"
+  - "Evasion"
+detection_methods:
+  - "File analysis"
+  - "Javascript analysis"
+  - "Sender analysis"
+id: "d5201a19-4c0d-537b-bd0b-278ef48fd983"

@@ -29,6 +29,7 @@ source: |
     or regex.icontains(body.current_thread.text,
                        ".*reach you.{0,20}Microsoft Teams"
     )
+    or strings.icontains(body.current_thread.text, "microsoft account team")
     or strings.ilike(sender.display_name, '*new activity in Teams*')
     or strings.icontains(strings.replace_confusables(sender.display_name),
                          'microsoft advertising support'
@@ -52,19 +53,22 @@ source: |
                        "[MḾṀṂⱮМḿṁṃᵯⱮ𝐌𝑀][iíìîïīĭĩįıɪɨᵢⁱ𝐢𝑖][rŕŗřȑȓɾᵣⁿʳ𝐫𝑟][cćĉċčçƈȼ𝐜𝑐][oóòôõöøōŏőɵₒᵒº𝐨𝑜][sśŝšșşʂᵴˢˢ𝐬𝑠][oóòôõöøōŏőɵₒᵒº𝐨𝑜][fḟƒᵮᶠ𝐟𝑓][tťțţᵵₜᵗᵗ𝐭𝑡]" // [sic]
     )
   )
-  and sender.email.domain.root_domain not in~ (
-    'microsoft.com',
-    'microsoftstoreemail.com',
-    'microsoftsupport.com',
-    'office.com',
-    'teams-events.com',
-    'qualtrics-research.com',
-    'skype.com',
-    'azureadnotifications.us',
-    'microsoftonline.us',
-    'mail.microsoft',
-    'office365.com',
-    'microsoftadvertising.com'
+  and not (
+    sender.email.domain.root_domain in~ (
+      'microsoft.com',
+      'microsoftstoreemail.com',
+      'microsoftsupport.com',
+      'office.com',
+      'teams-events.com',
+      'qualtrics-research.com',
+      'skype.com',
+      'azureadnotifications.us',
+      'microsoftonline.us',
+      'mail.microsoft',
+      'office365.com',
+      'microsoftadvertising.com'
+    )
+    and headers.auth_summary.dmarc.pass
   )
   and not (
     sender.email.domain.domain in~ (
@@ -120,15 +124,16 @@ source: |
     or sender.email.domain.root_domain not in $high_trust_sender_root_domains
   )
   // not a newsletter or advertisement
-  and not any(beta.ml_topic(body.current_thread.text).topics,
-              .name in ("Newsletters and Digests")
-              and .confidence == "high"
-              and (
-                any(body.links,
-                    strings.icontains(.display_text, "unsubscribe")
-                    and (strings.icontains(.href_url.path, "unsubscribe"))
-                )
-              )
+  and not (
+    any(ml.nlu_classifier(body.current_thread.text).topics,
+        .name in ("Newsletters and Digests") and .confidence == "high"
+    )
+    and (
+      any(body.links,
+          strings.icontains(.display_text, "unsubscribe")
+          and (strings.icontains(.href_url.path, "unsubscribe"))
+      )
+    )
   )
 
 attack_types:
