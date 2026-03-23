@@ -410,10 +410,10 @@ def handle_pr_rules(graphql_session, rest_session):
             process_file = False
 
             # Check file type and status
-            if (file['status'] in ['added', 'modified', 'changed'] and
+            if (file['status'] in ['added', 'modified', 'changed', 'renamed'] and
                 file['filename'].startswith('detection-rules/') and
                     file['filename'].endswith('.yml')):
-                if file['status'] == "added" and INCLUDE_ADDED:
+                if file['status'] in ["added", "renamed"] and INCLUDE_ADDED:
                     process_file = True
                 elif file['status'] in ['modified', 'changed'] and INCLUDE_UPDATES:
                     process_file = True
