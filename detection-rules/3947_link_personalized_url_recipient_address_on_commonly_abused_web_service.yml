@@ -25,26 +25,26 @@ source: |
                   )
                 )
                 and (
-                  .href_url.domain.root_domain in $free_file_hosts
-                  or .href_url.domain.root_domain in $free_subdomain_hosts
-                  or .href_url.domain.root_domain in $self_service_creation_platform_domains
-                  or .href_url.domain.root_domain in $url_shorteners
-                  or .href_url.domain.root_domain == 'sendgrid.net'
-                  or .href_url.domain.domain in $free_file_hosts
-                  or .href_url.domain.domain in $free_subdomain_hosts
-                  or .href_url.domain.domain in $self_service_creation_platform_domains
-                  or .href_url.domain.domain in $url_shorteners
-                  or .href_url.domain.tld in $suspicious_tlds
-                  or network.whois(.href_url.domain).days_old < 30
-                  or regex.icontains(.href_url.path,
-                                     '\/(?:wp-(?:admin|includes)\/|redirect)'
+                  (
+                    .href_url.domain.root_domain in $free_file_hosts
+                    or .href_url.domain.domain in $free_file_hosts
+                    or .href_url.domain.root_domain in $free_subdomain_hosts
+                    or .href_url.domain.domain in $free_subdomain_hosts
+                    or .href_url.domain.root_domain in $self_service_creation_platform_domains
+                    or .href_url.domain.domain in $self_service_creation_platform_domains
+                    or .href_url.domain.root_domain in $url_shorteners
+                    or .href_url.domain.domain in $url_shorteners
+                    or .href_url.domain.root_domain == 'sendgrid.net'
+                    or (
+                      .href_url.domain.tld in $suspicious_tlds
+                      and not .href_url.domain.tld in ('me', 'us')
+                    )
+                    or network.whois(.href_url.domain).days_old < 30
+                    or regex.icontains(.href_url.path,
+                                       '\/(?:wp-(?:admin|includes)\/|redirect)'
+                    )
                   )
-                  or regex.icontains(.display_text,
-                                     '(?:password|re(?:new|view|mittance)|verify|view completed|^(?:confirm settings|open|play message|view)$|open to edit|update message encryption|Complete Revalidation|listen to (?:your (?:voice[ _-]?mail)|message|audio)|View & Sign Document|Open Agreement|view meeting details)'
-                  )
-                  or regex.icontains(strings.replace_confusables(.display_text),
-                                     'password'
-                  )
+                  and not .href_url.domain.root_domain in ('geotab.com')
                 )
                 // the url contains #
                 and strings.contains(.href_url.url, '#')
@@ -79,6 +79,9 @@ source: |
           subject.base == 'A message triggered content policies'
           and strings.icontains(body.current_thread.text, 'Mimecast Services Limited')
         )
+        and not any(ml.nlu_classifier(body.current_thread.text).intents,
+                    .name == 'benign' and .confidence == 'high'
+        )
 
 attack_types:
   - "Credential Phishing"
@@ -92,4 +95,4 @@ detection_methods:
 id: "1ab87aab-1585-51eb-96b6-403e1ed229f4"
 og_id: "e3b5fa90-2149-54b7-ae9a-87cda01b24a5"
 testing_pr: 3947
-testing_sha: e7f7e7227da3f5ef2cbbbb83247d2e9c8815a89a
+testing_sha: c644f5d442fdc862cb501cf803a7c5af77a64e49
