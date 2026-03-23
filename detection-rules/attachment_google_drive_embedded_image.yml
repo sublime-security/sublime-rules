@@ -1,0 +1,39 @@
+name: "Attachment: Fake Google Drive embedded attachment"
+description: "Detects messages with small image attachments that contain PDF-related text but are embedded images combined with attachment related language."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  // link as image
+  and (
+    all(attachments, .file_type in $file_types_images)
+    and regex.icontains(body.html.raw, 'src="cid')
+    // mentions attachments but there are none or just images with no pdfs
+    and regex.icontains(body.current_thread.text, 'please (?:see|find) attached')
+    and any(body.links, .display_url.url is null)
+  )
+  // filter suspicious image by file size, char count, image size & keywords
+  and any(filter(attachments, .file_extension in $file_types_images),
+          length(beta.ocr(.).text) < 40
+          and regex.icontains(beta.ocr(.).text, '\bpdf|pof\b')
+          and beta.parse_exif(.).image_height < 130
+          and beta.parse_exif(.).image_width < 190
+  )
+  and any(ml.nlu_classifier(body.current_thread.text).intents, .name != "benign")
+
+attack_types:
+  - "Credential Phishing"
+  - "BEC/Fraud"
+tactics_and_techniques:
+  - "Evasion"
+  - "Image as content"
+  - "Social engineering"
+detection_methods:
+  - "Computer Vision"
+  - "Content analysis"
+  - "Exif analysis"
+  - "File analysis"
+  - "HTML analysis"
+  - "Natural Language Understanding"
+  - "Optical Character Recognition"
+  - "URL analysis"
