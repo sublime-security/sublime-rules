@@ -4,8 +4,16 @@ type: "rule"
 severity: "medium"
 source: |
   type.inbound
-  and any(ml.nlu_classifier(body.current_thread.text).intents,
-          .name == "cred_theft" and .confidence == "high"
+  and (
+    any(ml.nlu_classifier(body.current_thread.text).intents,
+        .name == "cred_theft" and .confidence == "high"
+    )
+    or any(ml.nlu_classifier(body.current_thread.text).entities,
+           .name == "org" and .text == 'AAA'
+    )
+    or any(ml.nlu_classifier(body.current_thread.text).entities,
+           .name == "request" and strings.icontains(.text, 'Claim Your Free Kit')
+    )
   )
   and any(ml.nlu_classifier(body.current_thread.text).topics,
           .name == "Advertising and Promotions" and .confidence != "low"
@@ -21,7 +29,6 @@ source: |
     )
     or sender.email.domain.root_domain not in $high_trust_sender_root_domains
   )
-
 attack_types:
   - "Credential Phishing"
 tactics_and_techniques:

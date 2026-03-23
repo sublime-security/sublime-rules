@@ -6,10 +6,11 @@ source: |
   type.inbound
   and (
     any(ml.logo_detect(file.message_screenshot()).brands, .name == "USPS")
-    or sender.display_name =~ "USPS"
+    or strings.icontains(sender.display_name, "USPS")
+    or regex.contains(body.html.display_text, 'USPS\s*\.\s*COM')
   )
   and length(body.links) > 0
-  and 2 of (
+  and 3 of (
     any(body.links,
         strings.ilike(.display_text,
                       "*check now*",
@@ -20,14 +21,29 @@ source: |
     ),
     strings.ilike(body.current_thread.text,
                   "*returned*to*sender*",
-                  "*redelivery*"
+                  "*redelivery*",
+                  '*USPS promotions*',
+                  '*review your package*',
+                  '*receiver address*',
+                  '*sorry tolet*',
+                  '*Due to an incorrect*'
     ),
     // impersonal greeting
     any(ml.nlu_classifier(body.current_thread.text).entities,
         .name == "recipient" and .text =~ "Customer"
     ),
-    // no links go to usps.com
-    all(body.links, .href_url.domain.root_domain != "usps.com")
+    // free email sender
+    sender.email.domain.root_domain in $free_email_providers,
+    // contains link to recently registered domain
+    any(body.links, network.whois(.href_url.domain).days_old < 15),
+    (
+      regex.icontains(strings.replace_confusables(body.html.display_text),
+                      '\b(?:u.?s.?p.?s|shipping|delivery)\b'
+      )
+      and not regex.icontains(body.html.display_text,
+                              '\b(?:usps|shipping|delivery)\b'
+      )
+    )
   )
   and (
     sender.email.domain.root_domain not in (
@@ -44,7 +60,21 @@ source: |
       and not headers.auth_summary.dmarc.pass
     )
   )
-  
+  // negate newsletters
+  and not (
+    length(body.links) > 20
+    or any(ml.nlu_classifier(body.html.display_text).topics,
+           .name == "Newsletters and Digests"
+    )
+  )
+  // not all links to usps.com
+  and not all(body.links, .href_url.domain.root_domain == "usps.com")
+  // negate legit forwards and replies
+  and not (
+    (subject.is_reply or subject.is_forward)
+    and length(body.previous_threads) > 0
+    and (length(headers.references) > 0 or headers.in_reply_to is not null)
+  )
   // negate highly trusted sender domains unless they fail DMARC authentication
   and (
     (
@@ -53,6 +83,11 @@ source: |
     )
     or sender.email.domain.root_domain not in $high_trust_sender_root_domains
   )
+  and not any(body.links,
+              regex.icontains(.display_text, 'Track (?:Your Order|Shipment)')
+              and .href_url.domain.domain == 'tools.usps.com'
+  )
+  and not sender.email.domain.root_domain in ('shopifyemail.com')
 attack_types:
   - "Credential Phishing"
 tactics_and_techniques:

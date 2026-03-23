@@ -5,15 +5,16 @@ type: "rule"
 severity: "medium"
 source: |
   type.inbound
+  // detect generic greetings
   and length(body.current_thread.text) <= 20
   and length(subject.base) <= 15
   // exclude messages with previous thread context (forwards/replies)
   and length(body.previous_threads) == 0
-  // detect generic greetings
   and (
     any(ml.nlu_classifier(body.current_thread.text).entities, .name == "greeting")
     or strings.ilike(body.current_thread.text, "*hi*", "*hello*", "*hey*")
     or length(body.current_thread.text) <= 5
+    or regex.match(body.current_thread.text, '\d+')
   )
   // external freemail sender
   and sender.email.domain.root_domain in $free_email_providers
@@ -45,20 +46,20 @@ source: |
   and (
     (
       not (
-        headers.auth_summary.dmarc.pass == false
+        coalesce(headers.auth_summary.dmarc.pass, false)
         or headers.auth_summary.spf.pass == false
       )
       and (
         not profile.by_sender().solicited
         or (
           profile.by_sender().any_messages_malicious_or_spam
-          and not profile.by_sender().any_false_positives
+          and not profile.by_sender().any_messages_benign
         )
       )
-      and not profile.by_sender().any_false_positives
+      and not profile.by_sender().any_messages_benign
     )
     or (
-      headers.auth_summary.dmarc.pass == false
+      coalesce(headers.auth_summary.dmarc.pass, false)
       or headers.auth_summary.spf.pass == false
     )
   )
