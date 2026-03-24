@@ -1,0 +1,54 @@
+name: "PR# 4256 - Attachment: QR code linking to Cloudflare Turnstile challenge"
+description: "Detects attachments containing QR codes that redirect to Cloudflare Turnstile challenge pages, which may be used to bypass security measures or facilitate malicious redirects."
+type: "rule"
+severity: "low"
+source: |
+    type.inbound
+    and length(recipients.to) == 1
+    and recipients.to[0].email.domain.valid
+    and any(attachments,
+            // Office documents
+            .file_extension in $file_extensions_macros
+            and any(file.explode(.),
+                    .scan.qr.type == "url"
+                    and regex.icontains(ml.link_analysis(.scan.qr.url).final_dom.raw,
+                                        'challenges\.cloudflare\.com/turnstile/v0/api\.js'
+                    )
+            )
+            or (
+              // pdf or images
+              (
+                .file_type == "pdf" or .file_type in $file_types_images
+              )
+              //
+              // This rule makes use of a beta feature and is subject to change without notice
+              // using the beta feature in custom rules is not suggested until it has been formally released
+              //
+              and any(beta.scan_qr(.).items,
+                      .type is not null
+                      and regex.icontains(ml.link_analysis(.url).final_dom.raw,
+                                          'challenges\.cloudflare\.com/turnstile/v0/api\.js'
+                      )
+              )
+            )
+    )
+tags:
+  - "Attack surface reduction"
+  - pr_author_hadojae
+  - created_from_open_prs
+  - rule_status_added
+attack_types:
+  - "Credential Phishing"
+  - "Malware/Ransomware"
+tactics_and_techniques:
+  - "QR code"
+  - "Evasion"
+detection_methods:
+  - "File analysis"
+  - "Archive analysis"
+  - "QR code analysis"
+  - "URL analysis"
+  - "Threat intelligence"
+id: "8fa21aa0-2915-54e2-a853-adf7995937ba"
+references:
+  - https://github.com/sublime-security/sublime-rules/pull/4256
