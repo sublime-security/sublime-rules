@@ -4,7 +4,6 @@ type: "rule"
 severity: "high"
 source: |
   type.inbound
-  and length(attachments) >= 0
   and (
     // no previous threads
     length(body.previous_threads) == 0
@@ -17,23 +16,27 @@ source: |
         or length(body.previous_threads) > 0
       )
     )
+    // undisclosed or invalid recipients
+    or any(recipients.to, .email.domain.valid == false)
   )
-  and regex.icontains(body.html.raw, 'zoominfo.com')
-  
+  and (
+    strings.icontains(body.html.raw, 'zoominfo.com')
+    or strings.icontains(sender.display_name, 'zoominfo')
+  )
   // ml.nlu classifying emails based malicious contents
   and (
     any(ml.nlu_classifier(body.current_thread.text).entities,
         .name == "financial" and .text == "payments"
     )
     or any(ml.nlu_classifier(body.current_thread.text).intents,
-           .name == "bec" and .confidence in ("medium")
+           .name == "bec" and .confidence in ("medium", "high")
     )
     or any(ml.nlu_classifier(body.current_thread.text).topics,
            .name == "Payment Information" and .confidence in ("high")
-    )
-    or any(ml.nlu_classifier(body.current_thread.text).topics,
-           .name == "Request to View Invoice"
-           and .confidence in ("medium", "high")
+           or (
+             .name == "Request to View Invoice"
+             and .confidence in ("medium", "high")
+           )
     )
   )
   // negate highly trusted sender domains unless they fail DMARC authentication
@@ -57,4 +60,4 @@ detection_methods:
 id: "a6577bf9-a076-5f61-8e28-5f9e2404890f"
 og_id: "d16d3aa4-1223-5f33-ad35-ba35686b208d"
 testing_pr: 4242
-testing_sha: 813e326283d840cf05e63bf4c455bd77b2314d80
+testing_sha: 9fc9170ff88f54475de0b53e33213e9fd342c7fe
