@@ -4,39 +4,26 @@ type: "rule"
 severity: "medium"
 source: |
   type.inbound
-  and length(attachments) >= 0
   and (
-    strings.icontains(sender.display_name, "Canada Revenue Agency")
-    or regex.icontains(subject.subject,
-                       'New mail from the Canada Revenue Agency*'
-    )
-    or regex.icontains(subject.subject,
-                       "Nouveau courrier de l'Agence du revenu du Canada*"
-    )
-    or regex.icontains(subject.subject, "T4 form*")
-    or regex.icontains(subject.subject, "T4 slip*")
+    strings.icontains(sender.display_name, 'Canada Revenue Agency')
+    or strings.icontains(sender.display_name, 'CRA')
   )
   and (
-    any(filter(attachments, .file_type == "jpg"),
+    any(filter(attachments, .file_type == "pdf"),
         any(file.explode(.),
-            any(.scan.strings.strings,
-                any(['s TR, L e T', 'ey oo Canada.', '(anada', ], .. =~ .)
+            .scan.pdf_obj_hash.object_hash in (
+              "d78fe5b3970f3fc62903a9a718ad13b9",
+              "e63a2fcd4f7c82df5e42e30cf5b18675",
+              "242063f5800d21c276b1f9c904b32013",
+              "7ef09f07baf4d959b980e5638424888b"
             )
+            or any(.scan.url.urls, .domain.root_domain == 'vercel.app')
         )
     )
-    or (
-      any(filter(attachments, .file_type == "pdf"),
-          any(file.explode(.),
-              .scan.pdf_obj_hash.object_hash in (
-                "d78fe5b3970f3fc62903a9a718ad13b9",
-                "e63a2fcd4f7c82df5e42e30cf5b18675",
-                "242063f5800d21c276b1f9c904b32013",
-                "7ef09f07baf4d959b980e5638424888b"
-              )
-              or any(.scan.url.urls, .domain.root_domain == 'vercel.app')
-          )
-      )
-    )
+  )
+  and any(ml.nlu_classifier(body.current_thread.text).topics,
+          .name == "Reminders and Notifications" and .confidence in ("medium")
+          or (.name == "Security and Authentication" and .confidence in ("high"))
   )
 
 attack_types:
@@ -55,4 +42,4 @@ detection_methods:
 id: "a1af76b1-6080-5489-bf8b-c5a7b7cbb725"
 og_id: "72607c4c-52dc-5df6-b547-54ee321b7a7a"
 testing_pr: 4126
-testing_sha: bf10f2acc0dbb5043793d095af1319f902bed184
+testing_sha: 32fcb603bac93a66ca8cb024e761ba16274357b2
