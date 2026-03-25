@@ -1,0 +1,62 @@
+name: "PR# 4265 - Service abuse: Microsoft Power Apps callback scam"
+description: "Detects callback scam messages sent through Microsoft Power Apps that impersonate well-known brands like McAfee, Norton, Geek Squad, PayPal, or other services, containing suspicious transaction-related language and phone numbers to solicit victim contact."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and sender.email.email == "powerapps-noreply@microsoft.com"
+  and (
+    any(ml.nlu_classifier(body.current_thread.text).intents,
+        .name == "callback_scam" and .confidence != "low"
+    )
+    or (
+      regex.icontains(body.current_thread.text,
+                      (
+                        "mcafee|n[o0]rt[o0]n|geek.{0,5}squad|paypal|ebay|symantec|best buy|lifel[o0]ck"
+                      )
+      )
+      and (
+        3 of (
+          strings.ilike(body.current_thread.text, '*purchase*'),
+          strings.ilike(body.current_thread.text, '*payment*'),
+          strings.ilike(body.current_thread.text, '*transaction*'),
+          strings.ilike(body.current_thread.text, '*subscription*'),
+          strings.ilike(body.current_thread.text, '*antivirus*'),
+          strings.ilike(body.current_thread.text, '*order*'),
+          strings.ilike(body.current_thread.text, '*support*'),
+          strings.ilike(body.current_thread.text, '*receipt*'),
+          strings.ilike(body.current_thread.text, '*invoice*'),
+          strings.ilike(body.current_thread.text, '*call*'),
+          strings.ilike(body.current_thread.text, '*cancel*'),
+          strings.ilike(body.current_thread.text, '*renew*'),
+          strings.ilike(body.current_thread.text, '*refund*'),
+          strings.ilike(body.current_thread.text, '*host key*')
+        )
+      )
+      // phone number regex
+      and any([body.current_thread.text, subject.subject],
+              regex.icontains(.,
+                              '\+?([ilo0-9]{1}.)?\(?[ilo0-9]{3}?\)?.[ilo0-9]{3}.?[ilo0-9]{4}',
+                              '\+?([ilo0-9]{1,2})?\s?\(?\d{3}\)?[\s\.\-⋅]{0,5}[ilo0-9]{3}[\s\.\-⋅]{0,5}[ilo0-9]{4}'
+              )
+      )
+    )
+  )
+
+attack_types:
+  - "Callback Phishing"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Out of band pivot"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Natural Language Understanding"
+  - "Sender analysis"
+id: "ca7fbafe-47f5-5ed8-a371-8895a1bdd740"
+tags:
+  - created_from_open_prs
+  - rule_status_added
+  - pr_author_markmsublime
+references:
+  - https://github.com/sublime-security/sublime-rules/pull/4265
