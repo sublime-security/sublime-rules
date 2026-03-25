@@ -1,0 +1,73 @@
+name: "PR# 4262 - Brand impersonation: Wells Fargo"
+description: |
+  Impersonation of Wells Fargo Bank.
+references:
+  - "https://www.americanbanker.com/news/wells-fargo-customers-targeted-with-phishing-attacks-using-calendar-invites"
+  - "https://www.wellsfargo.com/biz/help/faqs/credit-card-rewards/"
+  - https://github.com/sublime-security/sublime-rules/pull/4262
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and (
+    sender.display_name =~ 'wellsfargo'
+    or strings.ilevenshtein(strings.replace_confusables(sender.display_name),
+                            'wellsfargo'
+    ) <= 1
+    or regex.icontains(strings.replace_confusables(sender.display_name),
+                       'we(ll|ii)s?\s?farg(o|o͙)'
+    )
+    or strings.ilike(sender.email.domain.domain, '*wellsfargo*')
+    or strings.ilike(subject.subject, '*wells fargo security*')
+    or strings.ilike(body.plain.raw, '*wells fargo security team*')
+    or strings.ilike(body.html.inner_text, '*wells fargo security team*')
+    // Wells Fargo & Company (WFC)
+    or strings.ilike(sender.display_name,
+                     '*WFC*Bank*',
+                     '*WFC*Team*',
+                     'WFC*Security*'
+    )
+  )
+  and sender.email.domain.root_domain not in~ (
+    'wellsfargo.com',
+    'wellsfargoadvisors.com',
+    'transunion.com',
+    'wellsfargoemail.com',
+    'wellsfargorewards.com',
+    'comcast-spectacor.com',
+    'investordelivery.com',
+    'comcastspectacor.com',
+    'wfadvisors.com',
+    'wellsfargomerchantservicesllc.com'
+  )
+  and (
+    sender.email.email not in $recipient_emails
+    or regex.icontains(sender.email.email, "no.?reply")
+  )
+  
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and not headers.auth_summary.dmarc.pass
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+    or sender.email.email in (
+      "drive-shares-noreply@google.com",
+      "drive-shares-dm-noreply@google.com"
+    ) // Google Drive abuse has been observed
+  )
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Lookalike domain"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Sender analysis"
+id: "168442db-720e-526d-a3ff-86deaadac59d"
+tags:
+  - created_from_open_prs
+  - rule_status_modified
+  - pr_author_peterdj45
