@@ -1,0 +1,148 @@
+name: "Malware: Invisible Unicode payload in email body or attachment (Glassworm-style)"
+description: |
+  Detects emails carrying Glassworm-style invisible Unicode character payloads
+  embedded in the email body or text-based attachments.
+
+  Glassworm hides malicious execution payloads inside invisible Unicode codepoints
+  (zero-width spaces, bidirectional control characters, tag characters, and private
+  use area codepoints) that render as blank space in every editor but can carry
+  executable instructions or C2 communication strings.
+
+  Active campaign as of March 2026. Confirmed across 151+ GitHub repositories,
+  npm packages, and VS Code extensions.
+
+  Based on original research: "The Invisible Threat — Glassworm & Unicode Supply Chain Attack"
+  by Yana Ivanov (2026).
+
+  References:
+  - https://yana-ivanov.github.io/cybersecurity-portfolio/analysis/glassworm_analysis.html
+  - MITRE ATT&CK T1027 (Obfuscated Files or Information)
+  - MITRE ATT&CK T1027.005 (Indicator Removal from Tools)
+
+severity: critical
+type: rule
+authors:
+  - name: Yana Ivanov
+    twitter: "@yanaivanov"
+
+source: |
+  type.inbound
+
+  // -----------------------------------------------------------------------
+  // BLOCK 1: Invisible Unicode codepoints in the email body
+  //
+  // These character ranges are invisible in all standard rendering contexts
+  // but are processable by code. Their presence in an email body is highly
+  // anomalous — legitimate email has no reason to contain these characters.
+  //
+  // Ranges detected:
+  //   U+200B–U+200F   Zero-width spaces and directional marks
+  //   U+2028–U+2029   Line/paragraph separator (invisible in HTML)
+  //   U+202A–U+202E   Bidirectional control characters (LRE, RLE, PDF, etc.)
+  //   U+2060–U+2064   Word joiner, invisible math operators
+  //   U+FEFF          Zero-width no-break space (BOM — anomalous mid-body)
+  //   U+FE00–U+FE0F   Variation Selectors 1–16 (confirmed Glassworm PUA range)
+  //   U+E0000–U+E007F Tag characters (language tags, invisible in all renderers)
+  //   U+E0100–U+E01EF Variation Selectors Supplement (confirmed Glassworm PUA range)
+  //   U+FFF9–U+FFFB   Interlinear annotation characters
+  // -----------------------------------------------------------------------
+  and (
+    regex.icontains(
+      coalesce(body.html.inner_text, body.plain.raw, ""),
+      '[\u200b-\u200f\u2028-\u2029\u202a-\u202e\u2060-\u2064\ufe00-\ufe0f\ufeff\ufff9-\ufffb]'
+    )
+
+    // Tag block (U+E0000–U+E007F) and Variation Selectors Supplement (U+E0100–U+E01EF)
+    // Both confirmed Glassworm PUA ranges — render as zero-width in all editors
+    or regex.icontains(
+      coalesce(body.html.inner_text, body.plain.raw, ""),
+      '[\U000E0000-\U000E007F]'
+    )
+
+    or regex.icontains(
+      coalesce(body.html.inner_text, body.plain.raw, ""),
+      '[\U000E0100-\U000E01EF]'
+    )
+
+    // Bidirectional override specifically (RLO U+202E) — used to reverse filenames
+    // e.g. "document_gpj.exe" rendered as "document_exe.jpg"
+    or regex.icontains(
+      coalesce(body.html.inner_text, body.plain.raw, ""),
+      '\u202e'
+    )
+
+    // -----------------------------------------------------------------------
+    // BLOCK 2: Invisible Unicode in text-based attachments
+    // Glassworm specifically targeted source code files distributed via email
+    // (e.g. .js, .py, .ts, .json, .yml files containing hidden payloads).
+    // -----------------------------------------------------------------------
+    or any(attachments,
+      .file_extension in~ ("js", "ts", "py", "json", "yml", "yaml", "txt", "md", "sh", "ps1")
+      and any(file.explode(.),
+        regex.icontains(.scan.strings.strings,
+          '[\u200b-\u200f\u202a-\u202e\u2060-\u2064\ufe00-\ufe0f\ufeff]'
+        )
+        or regex.icontains(.scan.strings.strings,
+          '[\U000E0000-\U000E007F]'
+        )
+        or regex.icontains(.scan.strings.strings,
+          '[\U000E0100-\U000E01EF]'
+        )
+      )
+    )
+  )
+
+  // -----------------------------------------------------------------------
+  // BLOCK 3: Blockchain C2 indicators
+  // Glassworm used blockchain transactions as covert C2 channels.
+  // Emails referencing blockchain RPC endpoints alongside invisible Unicode
+  // are a strong compound indicator of active campaign activity.
+  // -----------------------------------------------------------------------
+  and (
+    // Flag standalone if invisible Unicode is present (Block 1 is sufficient)
+    // This block adds blockchain C2 as an amplifying signal for threat hunting
+    true
+    or strings.ilike(body.plain.raw, "*ethers.getDefaultProvider*")
+    or strings.ilike(body.plain.raw, "*web3.eth.getTransaction*")
+    or regex.icontains(body.plain.raw, 'infura\.io|alchemy\.com|ankr\.com|quicknode\.com')
+  )
+
+  // -----------------------------------------------------------------------
+  // Exclude known safe senders to reduce noise on developer mailing lists
+  // -----------------------------------------------------------------------
+  and not (
+    sender.email.domain.root_domain in $high_trust_sender_root_domains
+    and not any([
+        regex.icontains(coalesce(body.html.inner_text, body.plain.raw, ""), '[\u202e]'),
+        regex.icontains(coalesce(body.html.inner_text, body.plain.raw, ""), '[\U000E0000-\U000E007F]'),
+        regex.icontains(coalesce(body.html.inner_text, body.plain.raw, ""), '[\U000E0100-\U000E01EF]'),
+        regex.icontains(coalesce(body.html.inner_text, body.plain.raw, ""), '[\ufe00-\ufe0f]')
+      ], .
+    )
+  )
+
+tags:
+  - "Glassworm"
+  - "Unicode"
+  - "Invisible Characters"
+  - "Supply Chain"
+  - "Obfuscation"
+  - "Blockchain C2"
+  - "Zero-Width"
+  - "BiDi Override"
+
+attack_types:
+  - "Malware/Ransomware"
+  - "Callback Phishing"
+
+tactics_and_techniques:
+  - "Evasion"
+  - "Obfuscation"
+  - "Attachment: Code"
+
+false_positives:
+  - "Extremely rare. Legitimate emails have essentially no reason to contain the
+     confirmed Glassworm PUA ranges (U+FE00–U+FE0F, U+E0000–U+E007F, U+E0100–U+E01EF).
+     Zero-width spaces (U+200B) occasionally appear in copy-pasted rich text — if
+     noise is observed, tune by scoping detection to the confirmed PUA ranges only
+     for highest precision with near-zero false positives."

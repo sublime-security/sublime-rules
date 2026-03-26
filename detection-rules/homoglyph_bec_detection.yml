@@ -1,0 +1,98 @@
+name: "BEC: Unicode homoglyph domain spoofing"
+description: |
+  Detects Business Email Compromise (BEC) attacks using Unicode homoglyph characters
+  in the sender's display name or domain to impersonate trusted organizations.
+
+  Homoglyph attacks replace standard ASCII characters with visually identical Unicode
+  lookalikes (e.g., Cyrillic 'а' U+0430 replacing Latin 'a' U+0061) to register
+  spoofed domains that appear legitimate to the human eye.
+
+  Based on original research: "The Identical Lie — Unicode Homoglyph Attacks & BEC"
+  by Yana Ivanov (2026). $55.5 billion lost over the past decade to BEC.
+
+  References:
+  - https://yana-ivanov.github.io/cybersecurity-portfolio/analysis/homoglyph_bec_analysis.html
+  - MITRE ATT&CK T1566.002 (Spearphishing Link)
+  - FBI IC3 BEC Advisory (2024)
+
+severity: high
+type: rule
+authors:
+  - name: Yana Ivanov
+    twitter: "@yanaivanov"
+
+source: |
+  type.inbound
+
+  // -----------------------------------------------------------------------
+  // BLOCK 1: Unicode homoglyphs in the sender display name
+  // Detects Cyrillic, Greek, and other confusable scripts mixed with Latin.
+  // Attackers use these to make display names look like "Microsoft" or "PayPal"
+  // while the underlying codepoints are entirely different characters.
+  // -----------------------------------------------------------------------
+  and (
+    // Cyrillic confusables (most common in BEC — Russian-origin threat actors)
+    // Cyrillic chars that look identical to Latin: а е о р с х у і
+    regex.icontains(sender.display_name, '[\u0430\u0435\u043e\u0440\u0441\u0445\u0443\u0456]')
+
+    // Greek confusables: Α Β Ε Ζ Η Ι Κ Μ Ν Ο Ρ Τ Υ Χ ο
+    or regex.icontains(sender.display_name, '[\u0391\u0392\u0395\u0396\u0397\u0399\u039a\u039c\u039d\u039f\u03a1\u03a4\u03a5\u03a7\u03bf]')
+
+    // Mixed-script sender domain (Latin + non-Latin codepoints in the domain itself)
+    // A legitimate domain uses only ASCII; any Unicode in a domain is suspicious.
+    or regex.icontains(sender.email.domain.domain, '[^\x00-\x7F]')
+
+    // Punycode domain (xn--) — the encoded form of an IDN homoglyph domain
+    // e.g. xn--pple-43d.com renders as "аpple.com" with Cyrillic а
+    or strings.istarts_with(sender.email.domain.domain, 'xn--')
+  )
+
+  // -----------------------------------------------------------------------
+  // BLOCK 2: BEC financial or urgency context
+  // Narrows to emails that carry the hallmarks of a wire fraud attempt.
+  // Homoglyph spoofing without financial context could be newsletter spoofing;
+  // with financial context it is almost certainly BEC.
+  // -----------------------------------------------------------------------
+  and (
+    strings.ilike(subject.subject, "*wire transfer*")
+    or strings.ilike(subject.subject, "*urgent payment*")
+    or strings.ilike(subject.subject, "*invoice*")
+    or strings.ilike(subject.subject, "*remittance*")
+    or strings.ilike(subject.subject, "*bank account*")
+    or strings.ilike(subject.subject, "*ACH*")
+    or strings.ilike(subject.subject, "*payment confirmation*")
+    or strings.ilike(body.plain.raw, "*wire transfer*")
+    or strings.ilike(body.plain.raw, "*routing number*")
+    or strings.ilike(body.plain.raw, "*account number*")
+    or strings.ilike(body.plain.raw, "*please transfer*")
+    or strings.ilike(body.plain.raw, "*send payment*")
+    or strings.ilike(body.plain.raw, "*update.*banking*")
+  )
+
+  // -----------------------------------------------------------------------
+  // BLOCK 3: Sender is not a known trusted source
+  // Reduces false positives from legitimate bulk senders (e.g. accounting SaaS)
+  // -----------------------------------------------------------------------
+  and sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  and sender.email.domain.root_domain not in $org_domains
+
+tags:
+  - "BEC"
+  - "Homoglyph"
+  - "Unicode"
+  - "Wire Fraud"
+  - "Impersonation"
+  - "IDN"
+  - "Punycode"
+
+attack_types:
+  - "BEC/Fraud"
+  - "Impersonation: Brand"
+
+tactics_and_techniques:
+  - "Social engineering"
+  - "Impersonation: Display name"
+
+false_positives:
+  - "Rare: Legitimate emails from internationalized domains (IDN) that use punycode
+     but are well-known senders. Tune by adding to $high_trust_sender_root_domains."
