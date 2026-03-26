@@ -52,6 +52,19 @@ source: |
       ) >= 2
     )
   )
+  // negate legitimate replies and forwards
+  and (
+    (
+      (
+        length(headers.references) > 0
+        or not any(headers.hops,
+                   any(.fields, strings.ilike(.name, "In-Reply-To"))
+        )
+      )
+      and not (subject.is_reply or subject.is_forward)
+    )
+    or length(headers.references) == 0
+  )
   // negate newsletters and webinars
   and not any(ml.nlu_classifier(body.current_thread.text).topics,
               .name in ("Newsletters and Digests", "Events and Webinars")
@@ -61,11 +74,11 @@ source: |
     sender.email.domain.root_domain in (
       "robinhood.com",
       "robinhood.org",
-      "rocketlane.com", // unrelated domain
+      "duck.com", // unrelated domain
       "robinhoodauctions.com", // unrelated domain
       "bitstamp.net" // robinhood acquisition
     )
-    and headers.auth_summary.dmarc.pass
+    and coalesce(headers.auth_summary.dmarc.pass, false)
   )
 
 attack_types:
