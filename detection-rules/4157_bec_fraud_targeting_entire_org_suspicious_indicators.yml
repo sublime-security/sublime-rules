@@ -23,11 +23,8 @@ source: |
               )
   )
   and not (
-    sender.email.domain.root_domain in (
-      "proofpointessentials.com",
-      "tripadvisor.com"
-    )
-    and headers.auth_summary.dmarc.pass
+    sender.email.domain.root_domain in ("tripadvisor.com")
+    and coalesce(headers.auth_summary.dmarc.pass, false)
   )
   // At least 2 suspicious indicators
   and 2 of (
@@ -55,7 +52,7 @@ source: |
     ),
     // blank subject
     (
-      subject.subject == ''
+      subject.base is null or regex.imatch(subject.base, '\s*')
     ),
     // QR code link in attachment contains recipient email address
     (
@@ -70,7 +67,9 @@ source: |
                       .email.domain.valid
                       and (
                         strings.icontains(..scan.qr.url.url, .email.email)
-                        or any(beta.scan_base64(..scan.qr.url.url, format="url"),
+                        or any(strings.scan_base64(..scan.qr.url.url,
+                                                   format="url"
+                               ),
                                strings.icontains(., ..email.email)
                         )
                       )
@@ -110,4 +109,4 @@ detection_methods:
 id: "6b0ac003-4240-569a-80c6-34f202fc5f9e"
 og_id: "c14d282b-a7f4-57ac-89d2-a28dc650ec08"
 testing_pr: 4157
-testing_sha: b3e1cc1c1182e165880046bbf5ac4234353cb2bf
+testing_sha: 74923fce2eb7ccc1954d14686bb18e2c633cfe9b
