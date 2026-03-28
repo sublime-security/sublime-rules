@@ -49,7 +49,8 @@ source: |
     // suspicious sender display name
     or (
       regex.icontains(sender.display_name,
-                      'Accounts? (?:Payable (?:Dep(\.|t\.?|artment)|e?Receipt)|(Co[[:punct:]]?ordinator|Admin|Manager|Payee))'
+                      'Accounts? (?:Payable (?:Dep(\.|t\.?|artment)|e?Receipt)|(Co[[:punct:]]?ordinator|Admin|Manager|Payee))',
+                      '(?:pay(ment|([[:punct:]]|\s?)app)|EFT|ACH|deposit|remit(tance)?|settle(ment)?) (?:noti(ce|fication)|confirm(ation)?)'
       )
       // sender email listed as a recipient or recipients undisclosed/null
       and (
@@ -59,7 +60,10 @@ source: |
         )
         // non-benign nlu intent 
         or any(ml.nlu_classifier(body.current_thread.text).intents,
-               .name != "benign"
+               // callback phishing is outside the scope of this rule
+               (
+                 .name != "benign" and .name != "callback_scam"
+               )
         )
       )
     )
@@ -81,7 +85,6 @@ source: |
     or sender.email.domain.root_domain not in $high_trust_sender_root_domains
   )
   and not profile.by_sender().any_messages_benign
-
 attack_types:
   - "BEC/Fraud"
 tactics_and_techniques:
