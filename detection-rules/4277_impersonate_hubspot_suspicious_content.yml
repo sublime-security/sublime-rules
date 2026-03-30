@@ -1,0 +1,69 @@
+name: "PR# 4277 - Brand impersonation: HubSpot with QR code or suspicious content"
+description: "Detects messages impersonating HubSpot by using the company name in the sender display name and including HubSpot-related content or addresses, while containing suspicious elements like QR codes, unsubscribe manipulation language, or account reconnection requests. Legitimate HubSpot communications are excluded through domain and authentication verification."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and strings.icontains(sender.display_name, 'hubspot')
+  and 2 of (
+    regex.contains(body.current_thread.text, '(?:HubSpot, Inc.|HubSpot)'),
+    strings.icontains(body.current_thread.text, '2 Canal Park Cambridge'),
+    strings.icontains(body.current_thread.text, '25 first street'),
+    strings.icontains(body.current_thread.text, 'MA 02141')
+  )
+  and (
+    // contains a QR code
+    //
+    // This rule makes use of a beta feature and is subject to change without notice
+    // using the beta feature in custom rules is not suggested until it has been formally released
+    //
+    (
+      beta.scan_qr(file.message_screenshot()).found
+      and any(beta.scan_qr(file.message_screenshot()).items, .type == "url")
+    )
+    or strings.icontains(body.current_thread.text, "you can't unsubscribe")
+    or regex.icontains(body.current_thread.text,
+                       '(?:reconnect.{0,200}account|deactivat)'
+    )
+  )
+  // exclude legitimate HubSpot sends
+  and not (
+    (
+      (
+        strings.iends_with(sender.email.domain.root_domain, 'hubspot.com')
+        or strings.iends_with(sender.email.domain.root_domain, 'hubspotqa.com')
+      )
+      and coalesce(headers.auth_summary.dmarc.pass, false)
+    )
+    or (
+      (
+        strings.iends_with(headers.return_path.domain.root_domain, 'hubspot.com')
+        or strings.icontains(headers.message_id, '@notifybf')
+        or strings.icontains(headers.message_id, '.hubspot.com')
+      )
+      and (
+        any(headers.domains, strings.iends_with(.root_domain, 'hubspot.com'))
+        or any(headers.ips,
+               strings.icontains(headers.from.email.email, 'hubspot')
+        )
+      )
+    )
+  )
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "QR code"
+  - "Social engineering"
+detection_methods:
+  - "Sender analysis"
+  - "Content analysis"
+  - "QR code analysis"
+  - "Header analysis"
+id: "115bbcb6-186a-5982-a7b7-4f624ef04f51"
+tags:
+  - created_from_open_prs
+  - rule_status_added
+  - pr_author_IndiaAce
+references:
+  - https://github.com/sublime-security/sublime-rules/pull/4277
