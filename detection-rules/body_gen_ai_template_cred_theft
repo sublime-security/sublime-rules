@@ -1,0 +1,76 @@
+name: "Body HTML: Suspected AI-generated template indicators with credential theft intent"
+description: "Detects credential theft messages containing HTML content with multiple indicators of AI-generated web templates, including CSS emoji usage, modern styling techniques like glassmorphism effects, systematic custom properties, SaaS pricing templates, placeholder links, AI-characteristic code comments, and specific design patterns typical of automated code generation tools."
+type: "rule"
+severity: "low"
+source: |
+  type.inbound
+  and 2 of (
+    // css emoji in content property
+    regex.icontains(body.html.raw, "content:\\s*[\"'][☁✓✔✕→\\+][\"']"),
+    // perfect css reset with box-sizing
+    (
+      regex.icontains(body.html.raw,
+                      "\\*\\s*,\\s*\\*::before\\s*,\\s*\\*::after\\s*\\{"
+      )
+      and strings.icontains(body.html.raw, "box-sizing: border-box")
+      and strings.icontains(body.html.raw, "margin: 0")
+    ),
+    // glassmorphism effect (tres chic)
+    (
+      strings.icontains(body.html.raw, "backdrop-filter: blur(")
+      or strings.icontains(body.html.raw, "-webkit-backdrop-filter: blur(")
+    ),
+    // systematic css custom properties
+    (
+      strings.icontains(body.html.raw, ":root {")
+      and strings.icontains(body.html.raw, "--primary:")
+      and strings.icontains(body.html.raw, "--primary-light:")
+      and strings.icontains(body.html.raw, "--bg:")
+      and strings.icontains(body.html.raw, "--text:")
+    ),
+    // SaaS pricing template structure
+    (
+      regex.icontains(body.html.raw, "class=[\"']pricing-grid[\"']")
+      and regex.icontains(body.html.raw, "class=[\"']pricing-card[\"']")
+      and (
+        regex.icontains(body.html.raw, "class=[\"'][^\"']*featured")
+        or strings.icontains(body.html.raw, "Most Popular")
+      )
+    ),
+    // multiple placeholder hash links
+    (
+      regex.icontains(body.html.raw, "href=[\"']#[\"']")
+      and not regex.icontains(body.html.raw, "href=[\"']https?://")
+    ),
+    // clanker comments
+    any(html.xpath(body.html, '//comment()').nodes,
+        // contains ai-esque code comments like "as requested" and "replace x link"
+        regex.icontains(.raw,
+                        'keeping.{0,10}same|as.{0,10}requested|replace.{0,20}(?:url|link|below)|\(unchanged\)|new:|replace|navigation|hero section|footer'
+        )
+    ),
+    // gradient buttons with shadows
+    (
+      regex.icontains(body.html.raw, "background:\\s*linear-gradient")
+      and regex.icontains(body.html.raw, "box-shadow:.*rgba\\(")
+    ),
+    // perfect camelCase function naming
+    regex.icontains(body.html.raw,
+                    "function\\s+(toggle|update|get|set)[A-Z][a-zA-Z]+\\s*\\("
+    ),
+    // inline calculation comments
+    regex.icontains(body.html.raw, "//.*\\b(avg|estimate|calculate|rough)\\b")
+  )
+  and any(ml.nlu_classifier(body.current_thread.text).intents, .name == "cred_theft" and .confidence != "low")
+  and not sender.email.domain.root_domain in $high_trust_sender_root_domains
+tags:
+  - "Attack surface reduction"
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Social engineering"
+  - "Evasion"
+detection_methods:
+  - "HTML analysis"
+  - "Content analysis"
+  - "Natural Language Understanding"
