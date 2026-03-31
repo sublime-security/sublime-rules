@@ -32,7 +32,7 @@ authors:
 
 source: |
   type.inbound
-
+  
   // -----------------------------------------------------------------------
   // BLOCK 1: High-confidence invisible Unicode — zero threshold
   //
@@ -45,11 +45,17 @@ source: |
   and (
     (
       regex.icontains(coalesce(body.html.inner_text, body.plain.raw), '\x{202e}')
-      or regex.icontains(coalesce(body.html.inner_text, body.plain.raw), '[\x{E0000}-\x{E007F}]')
-      or regex.icontains(coalesce(body.html.inner_text, body.plain.raw), '[\x{E0100}-\x{E01EF}]')
-      or regex.icontains(coalesce(body.html.inner_text, body.plain.raw), '[\x{fff9}-\x{fffb}]')
+      or regex.icontains(coalesce(body.html.inner_text, body.plain.raw),
+                         '[\x{E0000}-\x{E007F}]'
+      )
+      or regex.icontains(coalesce(body.html.inner_text, body.plain.raw),
+                         '[\x{E0100}-\x{E01EF}]'
+      )
+      or regex.icontains(coalesce(body.html.inner_text, body.plain.raw),
+                         '[\x{fff9}-\x{fffb}]'
+      )
     )
-
+  
     // -----------------------------------------------------------------------
     // BLOCK 2: Threshold-based invisible Unicode
     //
@@ -59,12 +65,20 @@ source: |
     //   Marketing platforms inject ZW chars between email address letters
     // Threshold of 50+ filters all observed legitimate use cases.
     // -----------------------------------------------------------------------
-    or regex.icontains(coalesce(body.html.inner_text, body.plain.raw), '[\x{200b}-\x{200f}]{50,}')
-    or regex.icontains(coalesce(body.html.inner_text, body.plain.raw), '[\x{fe00}-\x{fe0f}]{50,}')
-    or regex.icontains(coalesce(body.html.inner_text, body.plain.raw), '[\x{202a}-\x{202d}]{50,}')
-    or regex.icontains(coalesce(body.html.inner_text, body.plain.raw), '[\x{2060}-\x{2064}]{50,}')
+    or regex.icontains(coalesce(body.html.inner_text, body.plain.raw),
+                       '[\x{200b}-\x{200f}]{50,}'
+    )
+    or regex.icontains(coalesce(body.html.inner_text, body.plain.raw),
+                       '[\x{fe00}-\x{fe0f}]{50,}'
+    )
+    or regex.icontains(coalesce(body.html.inner_text, body.plain.raw),
+                       '[\x{202a}-\x{202d}]{50,}'
+    )
+    or regex.icontains(coalesce(body.html.inner_text, body.plain.raw),
+                       '[\x{2060}-\x{2064}]{50,}'
+    )
   )
-
+  
   // -----------------------------------------------------------------------
   // BLOCK 3: Blockchain C2 amplifying signals
   //
@@ -75,9 +89,11 @@ source: |
     true
     or strings.ilike(body.plain.raw, "*ethers.getDefaultProvider*")
     or strings.ilike(body.plain.raw, "*web3.eth.getTransaction*")
-    or regex.icontains(body.plain.raw, 'infura\.io|alchemy\.com|ankr\.com|quicknode\.com')
+    or regex.icontains(body.plain.raw,
+                       'infura\.io|alchemy\.com|ankr\.com|quicknode\.com'
+    )
   )
-
+  
   // -----------------------------------------------------------------------
   // Exclusions: Known safe senders
   // High-trust senders excluded UNLESS they contain zero-threshold indicators.
@@ -85,15 +101,26 @@ source: |
   and not (
     sender.email.domain.root_domain in $high_trust_sender_root_domains
     and not any([
-        regex.icontains(coalesce(body.html.inner_text, body.plain.raw), '[\x{202e}]'),
-        regex.icontains(coalesce(body.html.inner_text, body.plain.raw), '[\x{E0000}-\x{E007F}]'),
-        regex.icontains(coalesce(body.html.inner_text, body.plain.raw), '[\x{E0100}-\x{E01EF}]'),
-        regex.icontains(coalesce(body.html.inner_text, body.plain.raw), '[\x{fe00}-\x{fe0f}]{50,}'),
-        regex.icontains(coalesce(body.html.inner_text, body.plain.raw), '[\x{200b}-\x{200f}]{50,}')
-      ], .
+                  regex.icontains(coalesce(body.html.inner_text, body.plain.raw),
+                                  '[\x{202e}]'
+                  ),
+                  regex.icontains(coalesce(body.html.inner_text, body.plain.raw),
+                                  '[\x{E0000}-\x{E007F}]'
+                  ),
+                  regex.icontains(coalesce(body.html.inner_text, body.plain.raw),
+                                  '[\x{E0100}-\x{E01EF}]'
+                  ),
+                  regex.icontains(coalesce(body.html.inner_text, body.plain.raw),
+                                  '[\x{fe00}-\x{fe0f}]{50,}'
+                  ),
+                  regex.icontains(coalesce(body.html.inner_text, body.plain.raw),
+                                  '[\x{200b}-\x{200f}]{50,}'
+                  )
+                ],
+                .
     )
   )
-
+  
   // -----------------------------------------------------------------------
   // Exclusions: Known marketing/ESP sender domains
   //
@@ -104,19 +131,37 @@ source: |
   // -----------------------------------------------------------------------
   and not (
     sender.email.domain.root_domain in~ (
-      "allmodern.com", "wayfair.com", "uniqlo.com", "hotels.com",
-      "depositphotos.com", "mailchimp.com", "klaviyo.com", "beehiiv.com",
-      "substack.com", "hubspot.com", "constantcontact.com", "sendinblue.com",
-      "mpix.com", "womanwithin.com", "tonecheer.com", "bgca.org"
+      "allmodern.com",
+      "wayfair.com",
+      "uniqlo.com",
+      "hotels.com",
+      "depositphotos.com",
+      "mailchimp.com",
+      "klaviyo.com",
+      "beehiiv.com",
+      "substack.com",
+      "hubspot.com",
+      "constantcontact.com",
+      "sendinblue.com",
+      "mpix.com",
+      "womanwithin.com",
+      "tonecheer.com",
+      "bgca.org"
     )
     and not any([
-        regex.icontains(coalesce(body.html.inner_text, body.plain.raw), '[\x{202e}]'),
-        regex.icontains(coalesce(body.html.inner_text, body.plain.raw), '[\x{E0000}-\x{E007F}]'),
-        regex.icontains(coalesce(body.html.inner_text, body.plain.raw), '[\x{E0100}-\x{E01EF}]')
-      ], .
+                  regex.icontains(coalesce(body.html.inner_text, body.plain.raw),
+                                  '[\x{202e}]'
+                  ),
+                  regex.icontains(coalesce(body.html.inner_text, body.plain.raw),
+                                  '[\x{E0000}-\x{E007F}]'
+                  ),
+                  regex.icontains(coalesce(body.html.inner_text, body.plain.raw),
+                                  '[\x{E0100}-\x{E01EF}]'
+                  )
+                ],
+                .
     )
   )
-
 tags:
   - "Glassworm"
   - "Unicode"
@@ -158,3 +203,4 @@ false_positives:
   - "U+E0100-U+E01EF (VS Supplement) zero-threshold retained pending broader
      testing. Operators serving large CJK user bases may apply 3+ threshold
      if noise is observed."
+id: "5f172ca7-22a3-5a40-99c2-6c18154c3c2d"
