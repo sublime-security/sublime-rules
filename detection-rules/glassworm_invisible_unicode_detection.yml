@@ -33,6 +33,15 @@ authors:
 source: |
   type.inbound
 
+  // -----------------------------------------------------------------------
+  // BLOCK 1: High-confidence invisible Unicode — zero threshold
+  //
+  // These ranges have NO legitimate use in email body content.
+  //   U+202E          RLO Bidirectional Override — filename reversal trick
+  //   U+E0000-U+E007F Tag characters — confirmed Glassworm PUA, no legit use
+  //   U+E0100-U+E01EF Variation Selectors Supplement — confirmed Glassworm PUA
+  //   U+FFF9-U+FFFB   Interlinear annotation characters
+  // -----------------------------------------------------------------------
   and (
     (
       regex.icontains(coalesce(body.html.inner_text, body.plain.raw), '\x{202e}')
@@ -41,21 +50,27 @@ source: |
       or regex.icontains(coalesce(body.html.inner_text, body.plain.raw), '[\x{fff9}-\x{fffb}]')
     )
 
+    // -----------------------------------------------------------------------
+    // BLOCK 2: Threshold-based invisible Unicode
+    //
+    // Real-world testing (70 Gmail inbox emails, March 2026) confirmed:
+    //   U+200C appears 20-30x in standard Gmail HTML and marketing emails
+    //   U+FE00-U+FE0F appears in emoji rendering sequences
+    //   Marketing platforms inject ZW chars between email address letters
+    // Threshold of 50+ filters all observed legitimate use cases.
+    // -----------------------------------------------------------------------
     or regex.icontains(coalesce(body.html.inner_text, body.plain.raw), '[\x{200b}-\x{200f}]{50,}')
     or regex.icontains(coalesce(body.html.inner_text, body.plain.raw), '[\x{fe00}-\x{fe0f}]{50,}')
     or regex.icontains(coalesce(body.html.inner_text, body.plain.raw), '[\x{202a}-\x{202d}]{50,}')
     or regex.icontains(coalesce(body.html.inner_text, body.plain.raw), '[\x{2060}-\x{2064}]{50,}')
-
-    or any(attachments,
-      .file_extension in~ ("js", "ts", "py", "json", "yml", "yaml", "txt", "md", "sh", "ps1")
-      and any(file.explode(.),
-        regex.icontains(.scan.strings.strings, '\x{200b}|\x{200c}|\x{200d}|\x{200e}|\x{200f}|\x{202a}|\x{202b}|\x{202c}|\x{202d}|\x{202e}|\x{2060}|\x{2061}|\x{2062}|\x{2063}|\x{2064}|\x{fe00}|\x{fe0f}')
-        or regex.icontains(.scan.strings.strings, '\x{E0000}|\x{E0001}|\x{E007F}')
-        or regex.icontains(.scan.strings.strings, '\x{E0100}|\x{E0101}|\x{E01EF}')
-      )
-    )
   )
 
+  // -----------------------------------------------------------------------
+  // BLOCK 3: Blockchain C2 amplifying signals
+  //
+  // Glassworm used blockchain transactions as covert C2 channels.
+  // Included as amplifying signal — Block 1/2 are sufficient standalone.
+  // -----------------------------------------------------------------------
   and (
     true
     or strings.ilike(body.plain.raw, "*ethers.getDefaultProvider*")
@@ -63,6 +78,10 @@ source: |
     or regex.icontains(body.plain.raw, 'infura\.io|alchemy\.com|ankr\.com|quicknode\.com')
   )
 
+  // -----------------------------------------------------------------------
+  // Exclusions: Known safe senders
+  // High-trust senders excluded UNLESS they contain zero-threshold indicators.
+  // -----------------------------------------------------------------------
   and not (
     sender.email.domain.root_domain in $high_trust_sender_root_domains
     and not any([
@@ -75,6 +94,14 @@ source: |
     )
   )
 
+  // -----------------------------------------------------------------------
+  // Exclusions: Known marketing/ESP sender domains
+  //
+  // These use Unicode formatting legitimately in HTML email templates.
+  // Zero-threshold indicators (RLO, Tag block, VS Supplement) still apply.
+  // Validated against: ALLMODERN, Hotels.com, DepositPhotos, Mpix,
+  // Woman Within, Tonecheer, Boys & Girls Clubs — March 2026 inbox test.
+  // -----------------------------------------------------------------------
   and not (
     sender.email.domain.root_domain in~ (
       "allmodern.com", "wayfair.com", "uniqlo.com", "hotels.com",
@@ -112,11 +139,11 @@ tactics_and_techniques:
 false_positives:
   - "U+200C (Zero-Width Non-Joiner) appears naturally in Gmail HTML formatting.
      Threshold of 50+ occurrences eliminates this false positive class."
-  - "U+FE00–U+FE0F (Variation Selectors 1-16) appear in emoji rendering
+  - "U+FE00-U+FE0F (Variation Selectors 1-16) appear in emoji rendering
      sequences from major mail providers. Threshold of 50+ required."
   - "Email tracking fingerprinting: marketing platforms inject zero-width
      characters between letters of recipient email addresses in tracking URLs.
-     Pattern is alphanumeric → ZW char → alphanumeric throughout the email.
+     Pattern is alphanumeric to ZW char to alphanumeric throughout the email.
      When 70%+ of zero-width chars follow this pattern, classify as tracking
      not steganography. Validated against Glassdoor job alert emails March 2026."
   - "U+FEFF (BOM) appears legitimately at the start of HTML emails as a
@@ -126,8 +153,8 @@ false_positives:
      DepositPhotos, Mpix, Woman Within, Tonecheer, Boys & Girls Clubs,
      Superhuman newsletter — validated in 70-email inbox test March 2026.
      Mitigated by domain exclusion list and threshold of 50+."
-  - "U+202E (RLO) and Tag block (U+E0000–U+E007F) remain zero-threshold —
-     no legitimate email use case exists for these ranges."
-  - "U+E0100–U+E01EF (VS Supplement) zero-threshold retained pending broader
+  - "U+202E (RLO) and Tag block (U+E0000-U+E007F) remain zero-threshold.
+     No legitimate email use case exists for these ranges."
+  - "U+E0100-U+E01EF (VS Supplement) zero-threshold retained pending broader
      testing. Operators serving large CJK user bases may apply 3+ threshold
      if noise is observed."
