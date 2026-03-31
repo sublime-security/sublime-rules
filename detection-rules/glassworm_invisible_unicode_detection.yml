@@ -33,15 +33,6 @@ authors:
 source: |
   type.inbound
 
-  // -----------------------------------------------------------------------
-  // BLOCK 1: High-confidence invisible Unicode — zero threshold
-  //
-  // These ranges have NO legitimate use in email body content.
-  //   U+202E          RLO Bidirectional Override — filename reversal trick
-  //   U+E0000–U+E007F Tag characters — confirmed Glassworm PUA, no legit use
-  //   U+E0100–U+E01EF Variation Selectors Supplement — confirmed Glassworm PUA
-  //   U+FFF9–U+FFFB   Interlinear annotation characters
-  // -----------------------------------------------------------------------
   and (
     (
       regex.icontains(coalesce(body.html.inner_text, body.plain.raw), '\x{202e}')
@@ -50,35 +41,21 @@ source: |
       or regex.icontains(coalesce(body.html.inner_text, body.plain.raw), '[\x{fff9}-\x{fffb}]')
     )
 
-    // -----------------------------------------------------------------------
-    // BLOCK 2: Threshold-based invisible Unicode
-    //
-    // Real-world testing (70 Gmail inbox emails, March 2026) confirmed:
-    //   U+200C appears 5-10x in standard Gmail HTML — not suspicious alone
-    //   U+FE00–U+FE0F appears in emoji rendering sequences
-    // Threshold of 50+ filters all observed legitimate use.
-    // -----------------------------------------------------------------------
     or regex.icontains(coalesce(body.html.inner_text, body.plain.raw), '[\x{200b}-\x{200f}]{50,}')
     or regex.icontains(coalesce(body.html.inner_text, body.plain.raw), '[\x{fe00}-\x{fe0f}]{50,}')
     or regex.icontains(coalesce(body.html.inner_text, body.plain.raw), '[\x{202a}-\x{202d}]{50,}')
     or regex.icontains(coalesce(body.html.inner_text, body.plain.raw), '[\x{2060}-\x{2064}]{50,}')
 
-    // -----------------------------------------------------------------------
-    // BLOCK 3: Invisible Unicode in text-based attachments — no threshold
-    // -----------------------------------------------------------------------
     or any(attachments,
       .file_extension in~ ("js", "ts", "py", "json", "yml", "yaml", "txt", "md", "sh", "ps1")
       and any(file.explode(.),
-        regex.icontains(.scan.strings.strings, '[\x{200b}-\x{200f}\x{202a}-\x{202e}\x{2060}-\x{2064}\x{fe00}-\x{fe0f}]')
-        or regex.icontains(.scan.strings.strings, '[\x{E0000}-\x{E007F}]')
-        or regex.icontains(.scan.strings.strings, '[\x{E0100}-\x{E01EF}]')
+        regex.icontains(.scan.strings.strings, '\x{200b}|\x{200c}|\x{200d}|\x{200e}|\x{200f}|\x{202a}|\x{202b}|\x{202c}|\x{202d}|\x{202e}|\x{2060}|\x{2061}|\x{2062}|\x{2063}|\x{2064}|\x{fe00}|\x{fe0f}')
+        or regex.icontains(.scan.strings.strings, '\x{E0000}|\x{E0001}|\x{E007F}')
+        or regex.icontains(.scan.strings.strings, '\x{E0100}|\x{E0101}|\x{E01EF}')
       )
     )
   )
 
-  // -----------------------------------------------------------------------
-  // BLOCK 4: Blockchain C2 amplifying signals
-  // -----------------------------------------------------------------------
   and (
     true
     or strings.ilike(body.plain.raw, "*ethers.getDefaultProvider*")
@@ -86,10 +63,6 @@ source: |
     or regex.icontains(body.plain.raw, 'infura\.io|alchemy\.com|ankr\.com|quicknode\.com')
   )
 
-  // -----------------------------------------------------------------------
-  // Exclusions: Known safe senders
-  // High-trust senders excluded UNLESS they contain zero-threshold indicators.
-  // -----------------------------------------------------------------------
   and not (
     sender.email.domain.root_domain in $high_trust_sender_root_domains
     and not any([
@@ -102,13 +75,6 @@ source: |
     )
   )
 
-  // -----------------------------------------------------------------------
-  // Exclusions: Known marketing/ESP sender domains
-  // These use Unicode formatting legitimately in HTML email templates.
-  // Zero-threshold indicators (RLO, Tag block, VS Supplement) still apply.
-  // Validated against: ALLMODERN, Hotels.com, DepositPhotos, Mpix,
-  // Woman Within, Tonecheer, Boys & Girls Clubs — March 2026 inbox test.
-  // -----------------------------------------------------------------------
   and not (
     sender.email.domain.root_domain in~ (
       "allmodern.com", "wayfair.com", "uniqlo.com", "hotels.com",
