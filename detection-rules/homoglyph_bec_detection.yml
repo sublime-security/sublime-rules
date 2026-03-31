@@ -19,40 +19,20 @@ severity: high
 type: rule
 authors:
   - name: Yana Ivanov
-    twitter: "@yanaivanov"
 
 source: |
   type.inbound
 
-  // -----------------------------------------------------------------------
-  // BLOCK 1: Unicode homoglyphs in the sender display name
-  // Detects Cyrillic, Greek, and other confusable scripts mixed with Latin.
-  // Attackers use these to make display names look like "Microsoft" or "PayPal"
-  // while the underlying codepoints are entirely different characters.
-  // -----------------------------------------------------------------------
   and (
-    // Cyrillic confusables (most common in BEC — Russian-origin threat actors)
-    // Cyrillic chars that look identical to Latin: а е о р с х у і
-    regex.icontains(sender.display_name, '[\u0430\u0435\u043e\u0440\u0441\u0445\u0443\u0456]')
+    regex.icontains(sender.display_name, '[\x{430}\x{435}\x{43e}\x{440}\x{441}\x{445}\x{443}\x{456}]')
 
-    // Greek confusables: Α Β Ε Ζ Η Ι Κ Μ Ν Ο Ρ Τ Υ Χ ο
-    or regex.icontains(sender.display_name, '[\u0391\u0392\u0395\u0396\u0397\u0399\u039a\u039c\u039d\u039f\u03a1\u03a4\u03a5\u03a7\u03bf]')
+    or regex.icontains(sender.display_name, '[\x{391}\x{392}\x{395}\x{396}\x{397}\x{399}\x{39a}\x{39c}\x{39d}\x{39f}\x{3a1}\x{3a4}\x{3a5}\x{3a7}\x{3bf}]')
 
-    // Mixed-script sender domain (Latin + non-Latin codepoints in the domain itself)
-    // A legitimate domain uses only ASCII; any Unicode in a domain is suspicious.
     or regex.icontains(sender.email.domain.domain, '[^\x00-\x7F]')
 
-    // Punycode domain (xn--) — the encoded form of an IDN homoglyph domain
-    // e.g. xn--pple-43d.com renders as "аpple.com" with Cyrillic а
     or strings.istarts_with(sender.email.domain.domain, 'xn--')
   )
 
-  // -----------------------------------------------------------------------
-  // BLOCK 2: BEC financial or urgency context
-  // Narrows to emails that carry the hallmarks of a wire fraud attempt.
-  // Homoglyph spoofing without financial context could be newsletter spoofing;
-  // with financial context it is almost certainly BEC.
-  // -----------------------------------------------------------------------
   and (
     strings.ilike(subject.subject, "*wire transfer*")
     or strings.ilike(subject.subject, "*urgent payment*")
@@ -69,10 +49,6 @@ source: |
     or strings.ilike(body.plain.raw, "*update.*banking*")
   )
 
-  // -----------------------------------------------------------------------
-  // BLOCK 3: Sender is not a known trusted source
-  // Reduces false positives from legitimate bulk senders (e.g. accounting SaaS)
-  // -----------------------------------------------------------------------
   and sender.email.domain.root_domain not in $high_trust_sender_root_domains
   and sender.email.domain.root_domain not in $org_domains
 
