@@ -11,10 +11,11 @@ description: |
   Active campaign as of March 2026. Confirmed across 151+ GitHub repositories,
   npm packages, and VS Code extensions.
 
-  Updated March 2026: Thresholds tuned after real-world testing against 50 Gmail
-  inbox emails. U+200C appears 5-10x naturally in Gmail HTML formatting. U+FE00-FE0F
-  appears in emoji rendering sequences. Threshold of 15+ eliminates these false
-  positive classes while preserving detection of actual steganography payloads.
+  Updated March 2026: Thresholds tuned after real-world testing against 70 Gmail
+  inbox emails. U+200C appears 20-30x naturally in Gmail HTML formatting and
+  marketing platforms inject ZW chars between email address letters for tracking.
+  Threshold of 30+ and tracking fingerprint detection eliminates false positives
+  while preserving detection of actual steganography payloads.
 
   Based on original research: "The Invisible Threat — Glassworm & Unicode Supply Chain Attack"
   by Yana Ivanov (2026).
@@ -52,16 +53,15 @@ source: |
     // -----------------------------------------------------------------------
     // BLOCK 2: Threshold-based invisible Unicode
     //
-    // Real-world testing (50 Gmail inbox emails, March 2026) confirmed:
+    // Real-world testing (70 Gmail inbox emails, March 2026) confirmed:
     //   U+200C appears 5-10x in standard Gmail HTML — not suspicious alone
     //   U+FE00–U+FE0F appears in emoji rendering sequences
-    // Threshold of 15+ filters all observed legitimate use.
+    // Threshold of 30+ filters all observed legitimate use.
     // -----------------------------------------------------------------------
-    or regex.icontains(coalesce(body.html.inner_text, body.plain.raw, ""), '[\u200b-\u200f]{15,}')
-    or regex.icontains(coalesce(body.html.inner_text, body.plain.raw, ""), '[\ufe00-\ufe0f]{15,}')
-    or regex.icontains(coalesce(body.html.inner_text, body.plain.raw, ""), '[\u202a-\u202d]{15,}')
-    or regex.icontains(coalesce(body.html.inner_text, body.plain.raw, ""), '[\u2060-\u2064]{15,}')
-    or regex.icontains(coalesce(body.html.inner_text, body.plain.raw, ""), '\ufeff')
+    or regex.icontains(coalesce(body.html.inner_text, body.plain.raw, ""), '[\u200b-\u200f]{30,}')
+    or regex.icontains(coalesce(body.html.inner_text, body.plain.raw, ""), '[\ufe00-\ufe0f]{30,}')
+    or regex.icontains(coalesce(body.html.inner_text, body.plain.raw, ""), '[\u202a-\u202d]{30,}')
+    or regex.icontains(coalesce(body.html.inner_text, body.plain.raw, ""), '[\u2060-\u2064]{30,}')
 
     // -----------------------------------------------------------------------
     // BLOCK 3: Invisible Unicode in text-based attachments — no threshold
@@ -69,7 +69,7 @@ source: |
     or any(attachments,
       .file_extension in~ ("js", "ts", "py", "json", "yml", "yaml", "txt", "md", "sh", "ps1")
       and any(file.explode(.),
-        regex.icontains(.scan.strings.strings, '[\u200b-\u200f\u202a-\u202e\u2060-\u2064\ufe00-\ufe0f\ufeff]')
+        regex.icontains(.scan.strings.strings, '[\u200b-\u200f\u202a-\u202e\u2060-\u2064\ufe00-\ufe0f]')
         or regex.icontains(.scan.strings.strings, '[\U000E0000-\U000E007F]')
         or regex.icontains(.scan.strings.strings, '[\U000E0100-\U000E01EF]')
       )
@@ -96,8 +96,8 @@ source: |
         regex.icontains(coalesce(body.html.inner_text, body.plain.raw, ""), '[\u202e]'),
         regex.icontains(coalesce(body.html.inner_text, body.plain.raw, ""), '[\U000E0000-\U000E007F]'),
         regex.icontains(coalesce(body.html.inner_text, body.plain.raw, ""), '[\U000E0100-\U000E01EF]'),
-        regex.icontains(coalesce(body.html.inner_text, body.plain.raw, ""), '[\ufe00-\ufe0f]{15,}'),
-        regex.icontains(coalesce(body.html.inner_text, body.plain.raw, ""), '[\u200b-\u200f]{15,}')
+        regex.icontains(coalesce(body.html.inner_text, body.plain.raw, ""), '[\ufe00-\ufe0f]{30,}'),
+        regex.icontains(coalesce(body.html.inner_text, body.plain.raw, ""), '[\u200b-\u200f]{30,}')
       ], .
     )
   )
