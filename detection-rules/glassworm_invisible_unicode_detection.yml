@@ -14,7 +14,7 @@ description: |
   Updated March 2026: Thresholds tuned after real-world testing against 70 Gmail
   inbox emails. U+200C appears 20-30x naturally in Gmail HTML formatting and
   marketing platforms inject ZW chars between email address letters for tracking.
-  Threshold of 30+ and tracking fingerprint detection eliminates false positives
+  Threshold of 50+ and tracking fingerprint detection eliminates false positives
   while preserving detection of actual steganography payloads.
 
   Based on original research: "The Invisible Threat — Glassworm & Unicode Supply Chain Attack"
@@ -56,12 +56,12 @@ source: |
     // Real-world testing (70 Gmail inbox emails, March 2026) confirmed:
     //   U+200C appears 5-10x in standard Gmail HTML — not suspicious alone
     //   U+FE00–U+FE0F appears in emoji rendering sequences
-    // Threshold of 30+ filters all observed legitimate use.
+    // Threshold of 50+ filters all observed legitimate use.
     // -----------------------------------------------------------------------
-    or regex.icontains(coalesce(body.html.inner_text, body.plain.raw, ""), '[\u200b-\u200f]{30,}')
-    or regex.icontains(coalesce(body.html.inner_text, body.plain.raw, ""), '[\ufe00-\ufe0f]{30,}')
-    or regex.icontains(coalesce(body.html.inner_text, body.plain.raw, ""), '[\u202a-\u202d]{30,}')
-    or regex.icontains(coalesce(body.html.inner_text, body.plain.raw, ""), '[\u2060-\u2064]{30,}')
+    or regex.icontains(coalesce(body.html.inner_text, body.plain.raw, ""), '[\u200b-\u200f]{50,}')
+    or regex.icontains(coalesce(body.html.inner_text, body.plain.raw, ""), '[\ufe00-\ufe0f]{50,}')
+    or regex.icontains(coalesce(body.html.inner_text, body.plain.raw, ""), '[\u202a-\u202d]{50,}')
+    or regex.icontains(coalesce(body.html.inner_text, body.plain.raw, ""), '[\u2060-\u2064]{50,}')
 
     // -----------------------------------------------------------------------
     // BLOCK 3: Invisible Unicode in text-based attachments — no threshold
@@ -96,8 +96,30 @@ source: |
         regex.icontains(coalesce(body.html.inner_text, body.plain.raw, ""), '[\u202e]'),
         regex.icontains(coalesce(body.html.inner_text, body.plain.raw, ""), '[\U000E0000-\U000E007F]'),
         regex.icontains(coalesce(body.html.inner_text, body.plain.raw, ""), '[\U000E0100-\U000E01EF]'),
-        regex.icontains(coalesce(body.html.inner_text, body.plain.raw, ""), '[\ufe00-\ufe0f]{30,}'),
-        regex.icontains(coalesce(body.html.inner_text, body.plain.raw, ""), '[\u200b-\u200f]{30,}')
+        regex.icontains(coalesce(body.html.inner_text, body.plain.raw, ""), '[\ufe00-\ufe0f]{50,}'),
+        regex.icontains(coalesce(body.html.inner_text, body.plain.raw, ""), '[\u200b-\u200f]{50,}')
+      ], .
+    )
+  )
+
+  // -----------------------------------------------------------------------
+  // Exclusions: Known marketing/ESP sender domains
+  // These use Unicode formatting legitimately in HTML email templates.
+  // Zero-threshold indicators (RLO, Tag block, VS Supplement) still apply.
+  // Validated against: ALLMODERN, Hotels.com, DepositPhotos, Mpix,
+  // Woman Within, Tonecheer, Boys & Girls Clubs — March 2026 inbox test.
+  // -----------------------------------------------------------------------
+  and not (
+    sender.email.domain.root_domain in~ (
+      "allmodern.com", "wayfair.com", "uniqlo.com", "hotels.com",
+      "depositphotos.com", "mailchimp.com", "klaviyo.com", "beehiiv.com",
+      "substack.com", "hubspot.com", "constantcontact.com", "sendinblue.com",
+      "mpix.com", "womanwithin.com", "tonecheer.com", "bgca.org"
+    )
+    and not any([
+        regex.icontains(coalesce(body.html.inner_text, body.plain.raw, ""), '[\u202e]'),
+        regex.icontains(coalesce(body.html.inner_text, body.plain.raw, ""), '[\U000E0000-\U000E007F]'),
+        regex.icontains(coalesce(body.html.inner_text, body.plain.raw, ""), '[\U000E0100-\U000E01EF]')
       ], .
     )
   )
@@ -123,9 +145,9 @@ tactics_and_techniques:
 
 false_positives:
   - "U+200C (Zero-Width Non-Joiner) appears naturally in Gmail HTML formatting.
-     Threshold of 30+ occurrences eliminates this false positive class."
+     Threshold of 50+ occurrences eliminates this false positive class."
   - "U+FE00–U+FE0F (Variation Selectors 1-16) appear in emoji rendering
-     sequences from major mail providers. Threshold of 30+ required."
+     sequences from major mail providers. Threshold of 50+ required."
   - "Email tracking fingerprinting: marketing platforms inject zero-width
      characters between letters of recipient email addresses in tracking URLs.
      Pattern is alphanumeric → ZW char → alphanumeric throughout the email.
@@ -133,6 +155,11 @@ false_positives:
      not steganography. Validated against Glassdoor job alert emails March 2026."
   - "U+FEFF (BOM) appears legitimately at the start of HTML emails as a
      standard encoding marker. Exclude from email body scanning."
+  - "Rich HTML marketing emails from legitimate senders use Unicode formatting
+     characters in templates. Confirmed senders: ALLMODERN, Hotels.com,
+     DepositPhotos, Mpix, Woman Within, Tonecheer, Boys & Girls Clubs,
+     Superhuman newsletter — validated in 70-email inbox test March 2026.
+     Mitigated by domain exclusion list and threshold of 50+."
   - "U+202E (RLO) and Tag block (U+E0000–U+E007F) remain zero-threshold —
      no legitimate email use case exists for these ranges."
   - "U+E0100–U+E01EF (VS Supplement) zero-threshold retained pending broader
