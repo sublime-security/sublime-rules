@@ -1,0 +1,32 @@
+name: "Attachment: Cold outreach with invitation subject and not attachment"
+description: "Detects inbound messages with invitation-related subjects that request recipients to view attachments, contain no links, and are classified as B2B cold outreach with high confidence. Messages either have no attachments or contain a single image attachment."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and strings.icontains(subject.subject, 'invit')
+  and length(body.links) == 0
+  // please find attached language
+  and regex.icontains(body.current_thread.text,
+                      '(?:please|find|view).{0,50}attached'
+  )
+  // all attachments are images or there are 0 attachments
+  and (
+    (
+      length(attachments) == 1
+      and all(attachments, .file_type in $file_types_images)
+    )
+    or length(attachments) == 0
+  )
+  and any(ml.nlu_classifier(body.current_thread.text).topics,
+          .name == "B2B Cold Outreach" and .confidence == "high"
+  )
+attack_types:
+  - "Spam"
+tactics_and_techniques:
+  - "Social engineering"
+  - "Image as content"
+detection_methods:
+  - "Content analysis"
+  - "Natural Language Understanding"
+  - "File analysis"
