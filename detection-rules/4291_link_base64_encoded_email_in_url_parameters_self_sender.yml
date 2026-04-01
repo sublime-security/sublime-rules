@@ -1,0 +1,34 @@
+name: "PR# 4291 - Link: Self-sender with base64 encoded email in URL parameters"
+description: "Detects messages where the sender emails themselves and includes their own email address encoded in base64 within URL query parameters. This technique is commonly used to bypass security filters and deliver malicious links while appearing to come from a trusted internal source."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  // self sender
+  and length(recipients.to) == 1
+  and sender.email.email == recipients.to[0].email.email
+  and any(body.current_thread.links,
+          any(values(.href_url.query_params_decoded),
+              any(., strings.decode_base64(.) == sender.email.email)
+          )
+  )
+  and not (sender.email.email is null or regex.imatch(sender.email.email, '\s*'))
+  
+
+attack_types:
+  - "BEC/Fraud"
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Evasion"
+  - "Social engineering"
+detection_methods:
+  - "Header analysis"
+  - "Sender analysis"
+  - "URL analysis"
+id: "ea1e6be9-382c-5eaa-a417-a30fcd1b2b22"
+tags:
+  - created_from_open_prs
+  - rule_status_added
+  - pr_author_D-Bolton
+references:
+  - https://github.com/sublime-security/sublime-rules/pull/4291
