@@ -1,0 +1,31 @@
+name: "Link: Self-sender with base64 encoded email in URL parameters"
+description: "Detects messages where the sender emails themselves and includes their own email address encoded in base64 within URL query parameters. This technique is commonly used to bypass security filters and deliver malicious links while appearing to come from a trusted internal source."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  // self sender
+  and length(recipients.to) == 1
+  and sender.email.email == recipients.to[0].email.email
+  and any(body.current_thread.links,
+          any(values(.href_url.query_params_decoded),
+              any(., strings.decode_base64(.) == sender.email.email)
+          )
+  )
+  and not (sender.email.email is null or regex.imatch(sender.email.email, '\s*'))
+  
+
+attack_types:
+  - "BEC/Fraud"
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Evasion"
+  - "Social engineering"
+detection_methods:
+  - "Header analysis"
+  - "Sender analysis"
+  - "URL analysis"
+id: "ea1e6be9-382c-5eaa-a417-a30fcd1b2b22"
+og_id: "1469d5f9-37b2-56d6-8a38-cd37099abcd6"
+testing_pr: 4291
+testing_sha: a23e29b4c4edf231f40980bcc00936c2054f9781
