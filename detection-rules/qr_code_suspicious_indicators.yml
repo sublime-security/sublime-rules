@@ -7,7 +7,7 @@ source: |
   type.inbound
   and (
     (
-      length(attachments) <= 3
+      length(attachments) <= 5
       or (
         any(attachments, length(ml.logo_detect(.).brands) > 0)
         and length(attachments) <= 10
@@ -171,10 +171,14 @@ source: |
                         "activity.*acc(oun)?t",
                         "almost.full",
                         "app[li]e.[il]d",
+                        "approcal notice",
                         "authenticate.*account",
                         "been.*suspend",
+                        "benefits? (?:open )?enrollment",
+                        "benefit adjustment",
                         "bonus",
                         "clos.*of.*account.*processed",
+                        "compensation summary",
                         "confirm.your.account",
                         "courier.*able",
                         "crediential.*notif",
@@ -190,19 +194,23 @@ source: |
                         "e.?ma[il1]{2}.*server",
                         "e.?ma[il1]{2}.*suspend",
                         "email.update",
+                        "employee pay (?:raise|notice)",
                         "faxed you",
                         "fraud(ulent)?.*charge",
                         "from.helpdesk",
+                        "following up on our conversation",
                         "fu[il1]{2}.*ma[il1]+[ -]?box",
                         "has.been.*suspended",
                         "has.been.limited",
                         "have.locked",
                         "he[li]p ?desk upgrade",
                         "heipdesk",
+                        "hr[ _-]portal",
                         "i[il]iega[il]",
                         "ii[il]ega[il]",
                         "incoming e?mail",
                         "incoming.*fax",
+                        "job achievment",
                         "lock.*security",
                         "ma[il1]{1}[ -]?box.*quo",
                         "ma[il1]{2}[ -]?box.*fu[il1]",
@@ -214,6 +222,7 @@ source: |
                         "mail.update.required",
                         "mails.*pending",
                         "messages.*pending",
+                        "missed call",
                         "missed.*shipping.*notification",
                         "missed.shipment.notification",
                         "must.update.your.account",
@@ -225,12 +234,16 @@ source: |
                         "on google docs with you",
                         "online doc",
                         "password.*compromised",
+                        "pay adjustment",
                         "payment advice",
                         "periodic maintenance",
+                        "policy handbook",
                         "potential(ly)? unauthorized",
                         "refund not approved",
                         "report",
+                        "review approval",
                         "revised.*policy",
+                        "salary (?:adjustmant|revision)",
                         "scam",
                         "scanned.?invoice",
                         "secured?.update",
@@ -256,6 +269,7 @@ source: |
                         "upgrade.notice",
                         "urgent message",
                         "urgent.verification",
+                        '\bv[ _-]?mail\b',
                         "v[il1]o[li1]at[il1]on security",
                         "va[il1]{1}date.*ma[il1]{2}[ -]?box",
                         "verification ?-?require",
@@ -290,18 +304,20 @@ source: |
                            "Deal",
                            "Discount",
                            "Director",
+                           "DocsOnline",
                            "Exclusive",
                            "Executive",
                            "Fax",
                            "Free",
                            "Gift",
-                           "/bHR/b",
+                           '\bHR\b',
                            "Helpdesk",
                            "Human Resources",
                            "Immediate",
                            "Important",
                            "Info",
                            "Information",
+                           "Internal Communication",
                            "Invoice",
                            '\bIT\b',
                            "Legal",
@@ -320,6 +336,7 @@ source: |
                            "Premium",
                            "Prize",
                            "Receipt",
+                           "Received via",
                            "Refund",
                            "Registrar",
                            "Required",
@@ -343,6 +360,7 @@ source: |
                            "VIP",
                            "Webmaster",
                            "Winner",
+                           '(?:Operational|Program|Quality|Strategic|Organizational) (?:Monitoring|Development|Coordination|Integration|Alignment|Planning|Evaluation) and (?:Operational|Program|Quality|Strategic|Organizational) (?:Monitoring|Development|Coordination|Integration|Alignment|Planning|Evaluation)'
         )
       )
       or (
@@ -382,17 +400,17 @@ source: |
   )
   
   // sender profile is new or outlier
-  and (
-    profile.by_sender_email().any_messages_malicious_or_spam
-    or (
-      sender.email.domain.domain in $org_domains
-      and not coalesce(headers.auth_summary.dmarc.pass, false)
+    and (
+      profile.by_sender_email().any_messages_malicious_or_spam
+      or (
+        sender.email.domain.domain in $org_domains
+        and not coalesce(headers.auth_summary.dmarc.pass, false)
+      )
+      or (
+        profile.by_sender_email().prevalence in ("new", "outlier")
+        and not profile.by_sender_email().solicited
+      )
     )
-    or (
-      profile.by_sender_email().prevalence in ("new", "outlier")
-      and not profile.by_sender_email().solicited
-    )
-  )
   and not profile.by_sender_email().any_messages_benign
   // negate highly trusted sender domains unless they fail DMARC authentication
   and not (
