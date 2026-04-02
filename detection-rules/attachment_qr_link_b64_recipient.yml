@@ -13,20 +13,32 @@ source: |
   )
   and any(attachments,
           (
-            .file_type in $file_types_images
-            or .file_extension in $file_extensions_macros
-            or .file_type == "pdf"
+            .file_extension in $file_extensions_macros
+            and any(file.explode(.),
+                    any(recipients.to,
+                        .email.domain.valid
+                        and any(beta.scan_base64(..scan.qr.url.url,
+                                                 format="url",
+                                                 ignore_padding=true
+                                ),
+                                strings.icontains(., ..email.email)
+                        )
+                    )
+            )
           )
-          and any(file.explode(.),
-                  any(recipients.to,
-                      .email.domain.valid
-                      and any(beta.scan_base64(..scan.qr.url.url,
-                                               format="url",
-                                               ignore_padding=true
-                              ),
-                              strings.icontains(., ..email.email)
-                      )
-                  )
+          or (
+            (.file_type in $file_types_images or .file_type == "pdf")
+            and any(internal.qr_scan(., pipeline="new").items,
+                    any(recipients.to,
+                        .email.domain.valid
+                        and any(strings.scan_base64(..url.url,
+                                                    format="url",
+                                                    ignore_padding=true
+                                ),
+                                strings.icontains(., ..email.email)
+                        )
+                    )
+            )
           )
   )
   and not profile.by_sender_email().any_messages_benign
