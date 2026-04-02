@@ -5,22 +5,57 @@ type: "rule"
 severity: "high"
 source: |
   type.inbound
-  and length(filter(attachments,
-                    .file_type in $file_types_images or .file_type == "pdf"
+  and (
+    (
+      0 < length(filter(attachments,
+                        .file_type in $file_types_images or .file_type == "pdf"
+                 )
+      ) < 10
+    )
+    or (
+      length(filter(attachments,
+                    .file_extension == "ics" or .content_type == "text/calendar"
              )
-  ) < 10
-  and any(attachments,
-          (.file_type in $file_types_images or .file_type == "pdf")
-          and any(file.explode(.),
-                  regex.icontains(.scan.ocr.raw,
-                                  "trying to reach you.*microsoft teams"
+      ) == 1
+      and not any(body.links,
+                  .display_text == "Join the meeting now"
+                  and (
+                    .href_url.domain.domain == "teams.microsoft.com"
+                    // account for URL rewrites
+                    or any(.href_url.query_params_decoded["domain"],
+                           strings.parse_domain(.).domain == "teams.microsoft.com"
+                    )
                   )
+      )
+    )
+  )
+  and any(attachments,
+          (
+            (.file_type in $file_types_images or .file_type == "pdf")
+            and any(file.explode(.),
+                    regex.icontains(.scan.ocr.raw,
+                                    "trying to reach you.*microsoft teams",
+                                    "microsoft teams.*meeting (recording|event)"
+                    )
+            )
+          )
+          or (
+            (.file_extension == "ics" or .content_type == "text/calendar")
+            and any(file.explode(.),
+                    regex.icontains(.scan.strings.raw,
+                                    "trying to reach you.*microsoft teams",
+                                    "microsoft teams.{0,10}meeting.{0,10}(recording|event)"
+                    )
+            )
           )
   )
-  and sender.email.domain.root_domain not in (
-    "microsoft.com",
-    "microsoftsupport.com",
-    "office.com"
+  and (
+    sender.email.domain.root_domain not in (
+      "microsoft.com",
+      "microsoftsupport.com",
+      "office.com"
+    )
+    or not sender.email.domain.valid
   )
 attack_types:
   - "Credential Phishing"
