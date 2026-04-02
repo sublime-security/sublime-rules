@@ -7,8 +7,8 @@ source: |
   type.inbound
   and (
     // If authentication fails at all during a bomb, we always want to remediate
-    not headers.auth_summary.dmarc.pass
-    or not headers.auth_summary.spf.pass
+    not coalesce(headers.auth_summary.dmarc.pass, false)
+    or not coalesce(headers.auth_summary.spf.pass, false)
 
     // Otherwise, we need to check for content or other heuristics to identify messages
     // that are noisy within the bomb. To prevent overreach, we ignore cases where this
@@ -53,6 +53,57 @@ source: |
                        '(\[[^\]]+\]\s?){0,3}(re|fwd?|automat.*)\s?:.*'
           ) == true
           and (length(headers.references) == 0 or headers.in_reply_to is null) == true
+        )
+        // common local-part of generic mailboxes used to send signup/confirmation emails
+        or sender.email.local_part in (
+          'noreply',
+          'newsletter',
+          'contact',
+          'admin',
+          'support',
+          'info',
+          'validation',
+          'mailer',
+          'mail',
+          'bounce',
+          'notifications',
+          'notification',
+          'donotreply'
+        )
+        // regex patterns for local part used to send signup/confirmation emails
+        or regex.icontains(sender.email.local_part, '(?:subscri|no.reply)')
+        or regex.icontains(sender.display_name, '(?:subscri|no.reply)')
+        // links that indicate account confirmation/signups/magic links/etc
+        or any(body.links,
+               regex.icontains(.href_url.url,
+                               '(?:verif|confirm|activat|validate|register|registrat|sign.?up|opt.?in|token|otp)'
+               )
+        )
+        // signup subject patterns
+        or regex.icontains(subject.base,
+                           "password.reset|reset.your.password|new.password|confirm|verif|activat",
+                           "bestätigen|anmeld|réinitialisation|cadastro|abonnement|register|registrat|inscript",
+                           "welcom|subscription|newsletter|otp|подтвер|aanmelding|confermi|conferma",
+                           "confirmação|confirmar|activa|bem-vindo",
+                           // Extended patterns from miss analysis
+                           "one.time.pass", // "Your One Time Password"
+                           "sign.?in.code|code.to.sign", // "Here's your code to sign in"
+                           "sorry.to.see.you", // "We're sorry to see you go"
+                           "unknown.account", // "Unknown Account"
+                           "subscri.request", // "Swann Communications UK subscribe request"
+                           "account.{0,20}request", 
+                           "unsubscri", // English unsubscribe confirmations
+                           "sign.?up", // sign up / signup
+                           "reset.password", // "Reset Password (Unregistered User)"
+                           "new.account|account.invitation", // "New Account", "...  Store account invitation"
+                           "2fa|two.factor|authentication.code", // "iCounty - 2FA Authentication Code"
+                           "konfirm|langganan", // Indonesian confirm/subscribe
+                           "signing.up|signed.up", // "Thanks for signing up!"
+                           "login.code|access.code", // "Cloudflare Access login code for ..."
+                           "確認", // Japanese "confirm/verify" — reuters.com メールアドレスの確認
+                           "a (?:été|était) créé|compte.*créé", // French "has been created"
+                           "you.re on the list|you.re now on|you.re in", // retail newsletter enrollment — "You're on the list."
+                           "request.{0,20}account",
         )
       )
 
