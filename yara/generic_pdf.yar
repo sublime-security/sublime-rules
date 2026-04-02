@@ -18,22 +18,6 @@ rule w9_pdf_01 {
     meta:
         author = "kyle eaton"
         date = "2026-01-23"
-        description = "matching PDF observed in fake w9/invoice campaigns. Focusing on some of the object values found in the w9 lures."
-    strings:
-        $header = {25 50 44 46 2D 31 2E}
-        $lw_01 = {2F 4C 57 20 31 2E 35 32 36 39 39 39 39 35 0A 2F 4D 4C 20 31 30} 
-        $lw_02 = {2F 4C 57 20 2E 37 36 33 30 30 30 30 31 0A 2F 4D 4C 20 31 30}
-        $lw_03 = {2F 4C 57 20 31 2E 31 34 34 39 39 39 39 38 0A 2F 4D 4C 20 31 30} 
-    condition:
-        $header at 0
-        and any of ($lw_*)
-}
-
-// testing rule - merge over the above: w9_pdf_01
-rule TESTING_w9_pdf_01 {
-    meta:
-        author = "kyle eaton"
-        date = "2026-01-23"
         updated = "2026-03-10"
         description = "matching PDF observed in fake w9/invoice campaigns. Focusing on some of the object values found in the w9 lures, as well as some of the embedded images."
     strings:
