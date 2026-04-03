@@ -4,7 +4,7 @@ description: |
 type: "rule"
 severity: "high"
 source: |
-  type.inbound
+type.inbound
   and (
     (
       length(attachments) <= 3
@@ -16,71 +16,136 @@ source: |
     and (
       any(attachments,
           (
-            .file_type in $file_types_images
-            or .file_extension in $file_extensions_macros
-            or .file_type == "pdf"
+            (.file_type in $file_types_images or .file_type == "pdf")
+            and (
+              any(internal.qr_scan(., pipeline="new").items,
+                  (
+                    .type is not null
+                    and regex.contains(.data, '\.')
+                    and not strings.starts_with(.data,
+                                                "https://qr.skyqr.co.za/"
+                    )
+                    and not (
+                      strings.icontains(.data, ',') and .type == 'undefined'
+                    )
+                    // not a json string
+                    and not (
+                      strings.starts_with(.data, '{')
+                      and strings.ends_with(.data, '}')
+                    )
+                    // exclude contact cards
+                    and not strings.istarts_with(.data, "BEGIN:VCARD")
+
+                    // negate QR codes to legit Servicio de Administración Tributaria (SAT) Gov links
+                    and not (
+                      .url.domain.root_domain is not null
+                      and .url.domain.root_domain in ('sat.gob.mx')
+                    )
+                    and not (
+                      .data is not null
+                      and strings.icontains(.data, 'sat.gob.mx')
+                    )
+                  )
+              )
+              or (
+                regex.icontains(beta.ocr(.).text, 'scan|camera')
+                and regex.icontains(beta.ocr(.).text, '\bQR\b|Q\.R\.|barcode')
+              )
+            )
+            // exclude images taken with mobile cameras and screenshots from android
+            and not any(beta.parse_exif(.).fields,
+                        .key == "Model"
+                        or (
+                          .key == "Software"
+                          and strings.starts_with(.value, "Android")
+                        )
+            )
+            // exclude images taken with mobile cameras and screenshots from Apple
+            and not any(beta.parse_exif(.).fields,
+                        .key == "DeviceManufacturer"
+                        and .value == "Apple Computer Inc."
+            )
+            // exclude images from WhatsApp (mobile)
+            and not regex.match(.file_name,
+                                'WhatsApp Image \d\d\d\d-\d\d-\d\d at.*.jpe?g'
+            )
+            and not (
+              (
+                beta.parse_exif(.).image_height > 3000
+                and beta.parse_exif(.).image_height is not null
+              )
+              or (
+                beta.parse_exif(.).image_width > 3000
+                and beta.parse_exif(.).image_width is not null
+              )
+            )
           )
-          and (
-            any(file.explode(.),
-                (
-                  .scan.qr.type is not null
-                  and regex.contains(.scan.qr.data, '\.')
-                  and not strings.starts_with(.scan.qr.data,
-                                              "https://qr.skyqr.co.za/"
-                  )
-                  and not (
-                    strings.icontains(.scan.qr.data, ',')
-                    and .scan.qr.type == 'undefined'
-                  )
-                  // not a json string
-                  and not (
-                    strings.starts_with(.scan.qr.data, '{')
-                    and strings.ends_with(.scan.qr.data, '}')
-                  )
-                  // exclude images taken with mobile cameras and screenshots from android
-                  and not any(.scan.exiftool.fields,
-                              .key == "Model"
-                              or (
-                                .key == "Software"
-                                and strings.starts_with(.value, "Android")
-                              )
-                  )
-                  // exclude images taken with mobile cameras and screenshots from Apple
-                  and not any(.scan.exiftool.fields,
-                              .key == "DeviceManufacturer"
-                              and .value == "Apple Computer Inc."
-                  )
-                  // exclude images from WhatsApp (mobile)
-                  and not regex.match(.file_name,
-                                      'WhatsApp Image \d\d\d\d-\d\d-\d\d at.*.jpe?g'
-                  )
-                  and not (
-                    (
-                      .scan.exiftool.image_height > 3000
-                      and .scan.exiftool.image_height is not null
+
+          // need to use file.explode for macros
+          or (
+            (.file_extension in $file_extensions_macros)
+            and (
+              any(file.explode(.),
+                  (
+                    .scan.qr.type is not null
+                    and regex.contains(.scan.qr.data, '\.')
+                    and not strings.starts_with(.scan.qr.data,
+                                                "https://qr.skyqr.co.za/"
                     )
-                    or (
-                      .scan.exiftool.image_width > 3000
-                      and .scan.exiftool.image_width is not null
+                    and not (
+                      strings.icontains(.scan.qr.data, ',')
+                      and .scan.qr.type == 'undefined'
+                    )
+                    // not a json string
+                    and not (
+                      strings.starts_with(.scan.qr.data, '{')
+                      and strings.ends_with(.scan.qr.data, '}')
+                    )
+                    // exclude images taken with mobile cameras and screenshots from android
+                    and not any(.scan.exiftool.fields,
+                                .key == "Model"
+                                or (
+                                  .key == "Software"
+                                  and strings.starts_with(.value, "Android")
+                                )
+                    )
+                    // exclude images taken with mobile cameras and screenshots from Apple
+                    and not any(.scan.exiftool.fields,
+                                .key == "DeviceManufacturer"
+                                and .value == "Apple Computer Inc."
+                    )
+                    // exclude images from WhatsApp (mobile)
+                    and not regex.match(.file_name,
+                                        'WhatsApp Image \d\d\d\d-\d\d-\d\d at.*.jpe?g'
+                    )
+                    and not (
+                      (
+                        .scan.exiftool.image_height > 3000
+                        and .scan.exiftool.image_height is not null
+                      )
+                      or (
+                        .scan.exiftool.image_width > 3000
+                        and .scan.exiftool.image_width is not null
+                      )
+                    )
+                    // exclude contact cards
+                    and not strings.istarts_with(.scan.qr.data, "BEGIN:VCARD")
+
+                    // negate QR codes to legit Servicio de Administración Tributaria (SAT) Gov links
+                    and not (
+                      .scan.qr.url.domain.root_domain is not null
+                      and .scan.qr.url.domain.root_domain in ('sat.gob.mx')
+                    )
+                    and not (
+                      .scan.qr.data is not null
+                      and strings.icontains(.scan.qr.data, 'sat.gob.mx')
                     )
                   )
-                  // exclude contact cards
-                  and not strings.istarts_with(.scan.qr.data, "BEGIN:VCARD")
-  
-                  // negate QR codes to legit Servicio de Administración Tributaria (SAT) Gov links
-                  and not (
-                    .scan.qr.url.domain.root_domain is not null
-                    and .scan.qr.url.domain.root_domain in ('sat.gob.mx')
+                  or (
+                    regex.icontains(.scan.ocr.raw, 'scan|camera')
+                    and regex.icontains(.scan.ocr.raw, '\bQR\b|Q\.R\.|barcode')
                   )
-                  and not (
-                    .scan.qr.data is not null
-                    and strings.icontains(.scan.qr.data, 'sat.gob.mx')
-                  )
-                )
-                or (
-                  regex.icontains(.scan.ocr.raw, 'scan|camera')
-                  and regex.icontains(.scan.ocr.raw, '\bQR\b|Q\.R\.|barcode')
-                )
+              )
             )
           )
       )
@@ -98,7 +163,7 @@ source: |
           // ignore image height/width if there is excessive whitespace padding
           or regex.contains(body.html.raw, '\"padding:0px 0px \d{3,4}px 0px')
         )
-        and any(beta.scan_qr(file.message_screenshot()).items,
+        and any(internal.qr_scan(file.message_screenshot(), pipeline="new").items,
                 .type is not null
                 and regex.contains(.data, '\.')
                 // exclude contact cards
@@ -353,34 +418,44 @@ source: |
         and length(recipients.cc) == 0
         and length(recipients.bcc) == 0
       )
-      or any(beta.scan_qr(file.message_screenshot()).items,
+      or any(internal.qr_scan(file.message_screenshot()).items,
              (
                .url.domain.tld in $suspicious_tlds
                and .url.domain.root_domain != "app.link"
              )
-             // linkanalysis phishing disposition
-             or ml.link_analysis(.url).credphish.disposition == "phishing"
+      // linkanalysis phishing disposition
+      //    or ml.link_analysis(.url).credphish.disposition == "phishing"
       )
       or any(attachments,
              (
-               .file_type in $file_types_images
-               or .file_extension in $file_extensions_macros
-               or .file_type == "pdf"
+               (.file_type in $file_types_images or .file_type == "pdf")
+               and any(internal.qr_scan(., pipeline="new").items,
+                       (
+                         .url.domain.tld in $suspicious_tlds
+                         and .url.domain.root_domain != "app.link"
+                         and .url.domain.root_domain != "qr.link"
+                         and .url.domain.root_domain != "skyqr.co.za"
+                       )
+                       and .url.domain.root_domain not in $org_domains
+               )
              )
-             and any(file.explode(.),
-                     (
-                       .scan.qr.url.domain.tld in $suspicious_tlds
-                       and .scan.qr.url.domain.root_domain != "app.link"
-                       and .scan.qr.url.domain.root_domain != "qr.link"
-                       and .scan.qr.url.domain.root_domain != "skyqr.co.za"
-                     )
-                     and .scan.qr.url.domain.root_domain not in $org_domains
+             or (
+               (.file_extension in $file_extensions_macros)
+               and any(file.explode(.),
+                       (
+                         .scan.qr.url.domain.tld in $suspicious_tlds
+                         and .scan.qr.url.domain.root_domain != "app.link"
+                         and .scan.qr.url.domain.root_domain != "qr.link"
+                         and .scan.qr.url.domain.root_domain != "skyqr.co.za"
+                       )
+                       and .scan.qr.url.domain.root_domain not in $org_domains
+               )
              )
       )
       or sender.email.domain.tld in $suspicious_tlds
     )
   )
-  
+
   // sender profile is new or outlier
   and (
     profile.by_sender_email().any_messages_malicious_or_spam
