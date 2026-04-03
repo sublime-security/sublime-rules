@@ -23,12 +23,11 @@ source: |
            strings.starts_with(.name, "Google")
     )
   )
-  and any(attachments,
-          (
-            .file_type in $file_types_images
-            or .file_type == "pdf"
-            or .file_type in $file_extensions_macros
-          )
+  and (
+    // QR code is in the attachments
+    any(attachments,
+        (
+          (.file_type in $file_extensions_macros)
           and (
             any(file.explode(.),
                 regex.icontains(.scan.ocr.raw, 'scan|camera')
@@ -38,18 +37,33 @@ source: |
                    .scan.qr.type is not null
                    and regex.contains(.scan.qr.data, '\.')
             )
-            or (
-              //
-              // This rule makes use of a beta feature and is subject to change without notice
-              // using the beta feature in custom rules is not suggested until it has been formally released
-              //
-              beta.parse_exif(file.message_screenshot()).image_height < 2000
-              and beta.parse_exif(file.message_screenshot()).image_width < 2000
-              and any(beta.scan_qr(file.message_screenshot()).items,
-                      .type is not null and regex.contains(.data, '\.')
-              )
+          )
+        )
+        or (
+          (.file_type in $file_types_images or .file_type == "pdf")
+          and (
+            (
+              regex.icontains(beta.ocr(.).text, 'scan|camera')
+              and regex.icontains(beta.ocr(.).text, '\bQR\b|Q\.R\.|barcode')
+            )
+            or any(internal.qr_scan(.).items,
+                   .type is not null and regex.contains(.data, '\.')
             )
           )
+        )
+    )
+    // OR the QR code is in the body of the message
+    or (
+      //
+      // This rule makes use of a beta feature and is subject to change without notice
+      // using the beta feature in custom rules is not suggested until it has been formally released
+      //
+      beta.parse_exif(file.message_screenshot()).image_height < 2000
+      and beta.parse_exif(file.message_screenshot()).image_width < 2000
+      and any(internal.qr_scan(file.message_screenshot(), pipeline="new").items,
+              .type is not null and regex.contains(.data, '\.')
+      )
+    )
   )
   and (
     not profile.by_sender().solicited
@@ -59,7 +73,7 @@ source: |
     )
   )
   and not profile.by_sender().any_messages_benign
-  
+
   // negate highly trusted sender domains unless they fail DMARC authentication
   and (
     (
