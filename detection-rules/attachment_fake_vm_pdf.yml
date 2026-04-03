@@ -19,17 +19,18 @@ source: |
           // the NLU detected language is english
           and ml.nlu_classifier(beta.ocr(.).text).language == "english"
           and length(beta.ocr(.).text) > 100
-          and any(beta.ml_topic(beta.ocr(.).text).topics,
+          and any(ml.nlu_classifier(beta.ocr(.).text).topics,
                   .confidence == "high"
                   and .name == "Voicemail Call and Missed Call Notifications"
           )
           and beta.ocr(.).success
           // contains a link or QR code
-          and any(file.explode(.),
-                  0 < length(.scan.pdf.urls) <= 2 or .scan.qr.url.url is not null
+          and (
+            any(file.explode(.), 0 < length(.scan.pdf.urls) <= 2)
+            or internal.qr_scan(., pipeline="new").found
           )
           // there is only a single page
-          and any(file.explode(.), .depth == 0 and .scan.exiftool.page_count == 1)
+          and beta.parse_exif(.).page_count == 1
   )
 attack_types:
   - "Credential Phishing"
