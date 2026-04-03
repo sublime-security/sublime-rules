@@ -14,7 +14,8 @@ source: |
     and (
       // short or null message body
       (
-        length(body.current_thread.text) < 500 or body.current_thread.text is null
+        length(body.current_thread.text) < 500
+        or body.current_thread.text is null
       )
       // ignore disclaimers in body length calculation
       or (
@@ -51,13 +52,13 @@ source: |
                   and regex.icontains(., '\bQR\b|Q\.R\.|barcode')
               )
           )
-          or any(file.explode(.),
-                 .scan.qr.type == "url" and .scan.qr.url.domain.valid
+          or any(internal.qr_scan(.).items,
+                 .type == "url" and .url.domain.valid
           )
         )
         // conditions for text
         and any(file.explode(.),
-                // review/change terms in file content      
+                // review/change terms in file content
                 any([.scan.strings.raw, .scan.ocr.raw],
                     (
                       regex.icontains(.,
@@ -101,7 +102,7 @@ source: |
       and not coalesce(headers.auth_summary.dmarc.pass, false)
     )
   )
-  
+
   // negate highly trusted sender domains unless they fail DMARC authentication
   and (
     (
