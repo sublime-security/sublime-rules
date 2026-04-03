@@ -1,0 +1,28 @@
+name: "Body HTML: Hidden conversation thread indicators in HTML"
+description: "Detects messages instances of email header fields (From, To, Date) and recipient email addresses hidden within the HTML source code that are not visible in the displayed text, potentially indicating thread hijacking or conversation spoofing."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and strings.icontains(body.html.inner_text, 'from:')
+  and strings.icontains(body.html.inner_text, 'to:')
+  and strings.icontains(body.html.inner_text, 'date:')
+  and strings.icount(body.html.inner_text, strings.concat('<', recipients.to[0].email.email, '>')) >= 2
+  and not (
+    strings.icontains(body.html.display_text, 'from:')
+    and strings.icontains(body.html.display_text, 'to:')
+    and strings.icontains(body.html.display_text, 'date:')
+  )
+  and strings.icount(body.html.display_text, strings.concat('<', recipients.to[0].email.email, '>')) == 0
+  and not headers.return_path.domain.subdomain == 'gerritcodereview.bounces'
+
+attack_types:
+  - "BEC/Fraud"
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Evasion"
+  - "HTML smuggling"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "HTML analysis"
