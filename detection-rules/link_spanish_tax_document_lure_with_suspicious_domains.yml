@@ -1,0 +1,40 @@
+name: "Link: Spanish tax document lure with suspicious domains"
+description: "Detects messages containing Spanish tax document language that link to suspicious domains including URL shorteners, free file hosts, or newly registered domains."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and 0 < length(body.links) < 15
+  and length(recipients.to) == 1
+  and recipients.to[0].email.domain.valid
+  // spanish tax document phrases
+  and regex.icontains(body.current_thread.text, '(?:Acessar Documento|Documento Fiscal|documento tributario|documento de impuestos|comprobante fiscal|constancia fiscal|declaración de impuestos|formulario fiscal|documentación fiscal|registro fiscal|certificado fiscal)')
+  // suspicious domains
+  and any(body.links,
+          .parser == 'hyperlink'
+          and (
+            .href_url.domain.domain in $url_shorteners
+            or .href_url.domain.root_domain in $url_shorteners
+            or .href_url.domain.domain in $free_file_hosts
+            or .href_url.domain.root_domain in $free_file_hosts
+            or .href_url.domain.domain in $free_subdomain_hosts
+            or .href_url.domain.root_domain in $free_subdomain_hosts
+            or .href_url.domain.domain in $self_service_creation_platform_domains
+            or .href_url.domain.root_domain in $self_service_creation_platform_domains
+            or .href_url.domain.tld in $suspicious_tlds
+            or network.whois(.href_url.domain).days_old < 30
+          )
+  )
+
+attack_types:
+  - "BEC/Fraud"
+  - "Credential Phishing"
+  - "Malware/Ransomware"
+tactics_and_techniques:
+  - "Free file host"
+  - "Free subdomain host"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "URL analysis"
+  - "Whois"
