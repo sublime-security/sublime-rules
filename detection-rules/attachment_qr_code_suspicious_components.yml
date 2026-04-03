@@ -37,7 +37,7 @@ source: |
       )
     )
   )
-  
+
   // Inspects image attachments for QR codes
   and any(attachments,
           (
@@ -53,16 +53,16 @@ source: |
                   // pass the QR URL to LinkAnalysis
                   any([ml.link_analysis(.scan.qr.url)],
                       .credphish.disposition == "phishing"
-  
+
                       // any routing traverses via $suspicious_tld list
                       or any(.redirect_history, .domain.tld in $suspicious_tlds)
-  
+
                       // effective destination in $suspicious_tld list
                       or .effective_url.domain.tld in $suspicious_tlds
-  
+
                       // or the effective destination domain is in $abuse_ch_urlhaus_domains_trusted_reporters
                       or .effective_url.domain.root_domain in $abuse_ch_urlhaus_domains_trusted_reporters
-  
+
                       // or any files downloaded are zips or executables
                       or any(.files_downloaded,
                              .file_extension in $file_extensions_common_archives
@@ -70,10 +70,12 @@ source: |
                       )
                   )
                   or (
-  
+
                     // or the QR code's root domain is a url_shortener
-                    .scan.qr.url.domain.root_domain in $url_shorteners
-                    or .scan.qr.url.domain.root_domain in $social_landing_hosts
+                    (
+                      .scan.qr.url.domain.root_domain in $url_shorteners
+                      or .scan.qr.url.domain.root_domain in $social_landing_hosts
+                    )
                     and (
                       not (
                         any(ml.nlu_classifier(body.current_thread.text).intents,
@@ -97,7 +99,7 @@ source: |
                         )
                       )
                     )
-  
+
                     // exclude google maps
                     and not strings.starts_with(.scan.qr.url.url,
                                                 'https://goo.gl/maps'
@@ -106,7 +108,7 @@ source: |
                                                 'https://maps.app.goo.gl'
                     )
                   )
-  
+
                   // the QR code url is a bing open redirect
                   or (
                     .scan.qr.url.domain.root_domain == 'bing.com'
@@ -115,29 +117,29 @@ source: |
                   // QR code contains non ascii chars
                   or regex.contains(.scan.qr.url.url, '[^\x00-\x7F]')
                   or (
-  
+
                     // usap-dc open redirect
                     .scan.qr.url.domain.root_domain == "usap-dc.org"
                     and .scan.qr.url.path =~ "/tracker"
                     and strings.starts_with(.scan.qr.url.query_params,
                                             "type=dataset&url=http"
                     )
-                    // the QR code contains the email address of a recipient
-                    // allowing for base64 encoded variants
-                    or (
-                      any(filter(recipients.to, .email.domain.valid),
-                          strings.icontains(..scan.qr.url.url, .email.email)
-                          or any(beta.scan_base64(..scan.qr.url.url,
-                                                  ignore_padding=true
-                                 ),
-                                 strings.icontains(., ..email.email)
-                          )
-                          or any(beta.scan_base64(..scan.qr.url.fragment,
-                                                  ignore_padding=true
-                                 ),
-                                 strings.icontains(., ..email.email)
-                          )
-                      )
+                  )
+                  // the QR code contains the email address of a recipient
+                  // allowing for base64 encoded variants
+                  or (
+                    any(filter(recipients.to, .email.domain.valid),
+                        strings.icontains(..scan.qr.url.url, .email.email)
+                        or any(strings.scan_base64(..scan.qr.url.url,
+                                                   ignore_padding=true
+                               ),
+                               strings.icontains(., ..email.email)
+                        )
+                        or any(strings.scan_base64(..scan.qr.url.fragment,
+                                                   ignore_padding=true
+                               ),
+                               strings.icontains(., ..email.email)
+                        )
                     )
                   )
                 )
@@ -158,7 +160,7 @@ source: |
       and not coalesce(headers.auth_summary.dmarc.pass, false)
     )
   )
-  
+
   // negate highly trusted sender domains unless they fail DMARC authentication
   and (
     (
