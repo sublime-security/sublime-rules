@@ -50,10 +50,14 @@ source: |
         ).domain.root_domain in $free_email_providers
         or strings.parse_email(network.whois(.href_url.domain).technical_email).domain.root_domain in $free_email_providers
     ),
+    // all links utilize a url shortener
+    all(body.links, .href_url.domain.root_domain in $url_shorteners),
     // freemail reply-to
     any(headers.reply_to, .email.domain.root_domain in $free_email_providers),
     // link with display text, but no tracking info (unusual for legitimate marketing)
-    any(body.links, .display_text is not null and .href_url.path is null)
+    any(body.links, .display_text is not null and .href_url.path is null),
+    // presence of Javascript inside of the message
+    regex.contains(body.html.raw, '<script[\s>]')
   )
 tags:
  - "Attack surface reduction"
