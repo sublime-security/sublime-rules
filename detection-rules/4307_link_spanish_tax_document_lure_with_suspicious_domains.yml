@@ -1,56 +1,20 @@
-name: "PR# 4307 - Link: Tax document lure (Multi-Language) with suspicious domains"
-description: "Detects messages in various languages containing tax document phrases that link to suspicious domains including URL shorteners, free file hosts, or newly registered domains."
+name: "PR# 4307 - Link: Tax document lure Portuguese/Spanish with suspicious domains"
+description: "Detects messages in Portuguese/Spanish containing tax document phrases that link to suspicious domains including URL shorteners, free file hosts, or newly registered domains."
 type: "rule"
-severity: "high"
+severity: "medium"
 source: |
   type.inbound
   and 0 < length(body.links) < 15
   and length(recipients.to) == 1
   and recipients.to[0].email.domain.valid
   and (
-    // italian tax document phrases
-    regex.icontains(body.current_thread.text,
-                    '(?:documento fiscale|documento tributario|documento delle imposte|modulo fiscale|dichiarazione dei redditi|documentazione fiscale|certificato fiscale|ricevuta fiscale|prova fiscale|atto fiscale|registro fiscale|pratica fiscale|carta fiscale|carte fiscali)'
-    )
-    // italian tax document phrases
-    or regex.icontains(body.current_thread.text,
-                       '(?:Steuerdokument|Steuerunterlage|Steuerdokumente|Steuerformular|Steuerbescheid|Steuererklärung|Steuerunterlagen|Steuerbeleg|Steuernachweis|steuerliche Unterlagen|Finanzamtsunterlagen|Abgabenunterlagen|Steuerpapier|Steuerpapiere)'
-    )
-    // french tax document phrases
-    or regex.icontains(body.current_thread.text,
-                       '(?:document fiscal|document d\x27impôt|document d\x27impôts|document fiscal officiel|formulaire fiscal|déclaration d\x27impôt|déclaration d\x27impôts|déclaration fiscale|documents fiscaux|documentation fiscale|justificatif fiscal|attestation fiscale|certificat fiscal|avis d\x27imposition|avis fiscal)'
-    )
     // portuguese tax document phrases
-    or regex.icontains(body.current_thread.text,
-                       '(?:documento fiscal|documento tributário|documento de imposto|documento de impostos|formulário fiscal|declaração de imposto|declaração de impostos|declaração fiscal|documentação fiscal|comprovante fiscal|certidão fiscal|certificado fiscal|registro fiscal|comprovativo fiscal)'
+    regex.icontains(body.current_thread.text,
+                    '(?:documento fiscal|documento tributário|documento de imposto|documento de impostos|formulário fiscal|declaração de imposto|declaração de impostos|declaração fiscal|documentação fiscal|comprovante fiscal|certidão fiscal|certificado fiscal|registro fiscal|comprovativo fiscal)'
     )
     // spanish tax document phrases
     or regex.icontains(body.current_thread.text,
                        '(?:Acessar Documento|Documento Fiscal|documento tributario|documento de impuestos|comprobante fiscal|constancia fiscal|declaración de impuestos|formulario fiscal|documentación fiscal|registro fiscal|certificado fiscal)'
-    )
-    // turkish tax document phrases
-    or regex.icontains(body.current_thread.text,
-                       '(?:vergi belgesi|vergi belgeleri|vergi dokümanı|vergi dokümanları|vergi evrakı|vergi evrakları|vergi beyannamesi|vergi formu|vergi makbuzu|mali belge|mali evrak|vergi kaydı|vergi kayıt belgesi)'
-    )
-    // chinese tax document phrases
-    or regex.icontains(body.current_thread.text,
-                       '(?:税务文件|税务资料|税务证明|纳税文件|纳税资料|纳税证明|税务表格|税表|报税文件|报税资料|报税表格|税单|完税证明|完税文件|稅務文件|稅務資料|稅務證明|納稅文件|納稅資料|納稅證明|稅務表格|稅表|報稅文件|報稅資料|報稅表格|稅單|完稅證明|完稅文件)'
-    )
-    // korean tax document phrases
-    or regex.icontains(body.current_thread.text,
-                       '(?:税务文件|税务资料|税务证明|纳税文件|纳税资料|纳税证明|税务表格|税表|报税文件|报税资料|报税表格|税单|完税证明|完税文件|稅務文件|稅務資料|稅務證明|納稅文件|納稅資料|納稅證明|稅務表格|稅表|報稅文件|報稅資料|報稅表格|稅單|完稅證明|完稅文件)'
-    )
-    // japanese tax document phrases
-    or regex.icontains(body.current_thread.text,
-                       '(?:税務書類|税務文書|税務資料|納税書類|納税文書|納税資料|税申告書|納税申告書|税務申告書|税務フォーム|税務証明書|納税証明書|課税証明書|税関連書類)'
-    )
-    // thai tax document phrases
-    or regex.icontains(body.current_thread.text,
-                       '(?:เอกสารภาษี|เอกสารด้านภาษี|เอกสารทางภาษี|เอกสารสรรพากร|แบบฟอร์มภาษี|แบบแสดงรายการภาษี|เอกสารยื่นภาษี|เอกสารการยื่นภาษี|เอกสารชำระภาษี|หลักฐานภาษี|หลักฐานการเสียภาษี|หนังสือรับรองภาษี|หนังสือรับรองการหักภาษี ณ ที่จ่าย|ใบเสร็จภาษี|ใบกำกับภาษี)'
-    )
-    // english (uk) tax document phrases
-    or regex.icontains(body.current_thread.text,
-                       '(?:tax (?:paperwork|document|form|return|record|certificate|statement|notice)s?|HMRC (?:form|letter|document)s?)'
     )
   )
   
@@ -69,6 +33,16 @@ source: |
             or .href_url.domain.tld in $suspicious_tlds
             or network.whois(.href_url.domain).days_old < 30
           )
+          and not .href_url.domain.root_domain in ('sharepoint.com', 'box.com')
+  )
+  
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and (
+    coalesce(sender.email.domain.root_domain in $high_trust_sender_root_domains
+             and not headers.auth_summary.dmarc.pass,
+             false
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
   )
 attack_types:
   - "BEC/Fraud"
