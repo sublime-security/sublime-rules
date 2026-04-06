@@ -1,0 +1,32 @@
+name: "PR# 4312 - Abuse: Cloudflare Workers Hosted EvilTokens Domain Structure"
+description: "Detects messages containing links to Cloudflare Workers domains that follow naming patterns designed to impersonate legitimate services such as Adobe, DocuSign, OneDrive, SharePoint, and voicemail systems. These domains use suspicious alphanumeric identifiers and may be used to deceive recipients into believing they are accessing trusted services."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and length(recipients.to) == 1
+  and recipients.to[0].email.domain.valid
+  and any(body.links,
+          // eviltokens cloudflare workers domain struct
+          (
+            strings.iends_with(.href_url.domain.domain, '-account.workers.dev')
+            and regex.icontains(.href_url.domain.domain,
+                                '^(?:(?:page-)?adobe|calendar_invite|(?:page-)?docusign|fax|quarantine|onedrive|page-password|sharepoint|voicemail|index)-[a-z0-9]{3}\.[a-z0-9-]{3,}'
+            )
+          )
+  )
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Evasion"
+  - "Social engineering"
+detection_methods:
+  - "URL analysis"
+id: "d089bff3-3652-5688-aefa-49f130dc666e"
+tags:
+  - created_from_open_prs
+  - rule_status_added
+  - pr_author_hadojae
+references:
+  - https://github.com/sublime-security/sublime-rules/pull/4312
