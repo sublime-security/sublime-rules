@@ -4,10 +4,7 @@ type: "rule"
 severity: "medium"
 source: |
   type.inbound
-  and (
-    strings.icontains(sender.display_name, 'Canada Revenue Agency')
-    or strings.icontains(sender.display_name, 'CRA')
-  )
+  and regex.icontains(sender.display_name, '(?:Canada Revenue Agency|\bCRA\b)')
   and (
     any(filter(attachments, .file_type == "pdf"),
         any(file.explode(.),
@@ -21,11 +18,15 @@ source: |
         )
     )
   )
+  and length(attachments) == 1
   and any(ml.nlu_classifier(body.current_thread.text).topics,
-          .name == "Reminders and Notifications" and .confidence in ("medium")
-          or (.name == "Security and Authentication" and .confidence in ("high"))
+          .name in ("Reminders and Notifications", "Security and Authentication")
+          and .confidence != "low"
   )
-
+  and not (
+    sender.email.domain.root_domain == 'cra-arc.gc.ca'
+    and coalesce(headers.auth_summary.dmarc.pass, false)
+  )
 attack_types:
   - "BEC/Fraud"
   - "Credential Phishing"
