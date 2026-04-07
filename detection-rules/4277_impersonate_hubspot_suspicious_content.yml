@@ -11,19 +11,20 @@ source: |
     strings.icontains(body.current_thread.text, '25 first street'),
     strings.icontains(body.current_thread.text, 'MA 02141')
   )
-  and (
-    // contains a QR code
-    //
-    // This rule makes use of a beta feature and is subject to change without notice
-    // using the beta feature in custom rules is not suggested until it has been formally released
-    //
-    (
-      beta.scan_qr(file.message_screenshot()).found
-      and any(beta.scan_qr(file.message_screenshot()).items, .type == "url")
-    )
-    or strings.icontains(body.current_thread.text, "you can't unsubscribe")
-    or regex.icontains(body.current_thread.text,
-                       '(?:reconnect.{0,200}account|deactivat)'
+  and 2 of (
+    any(ml.nlu_classifier(body.current_thread.text).topics,
+        .name in (
+          "Security and Authentication",
+          "Software and App Updates",
+          "Customer Service and Support"
+        )
+        and .confidence != "low"
+    ),
+    any(ml.nlu_classifier(body.current_thread.text).intents,
+        .name == "cred_theft" and .confidence != "low"
+    ),
+    regex.icontains(body.current_thread.text,
+                    '(?:account|disactiv|deactiv|disabl|delet|profile)'
     )
   )
   // exclude legitimate HubSpot sends
@@ -43,11 +44,13 @@ source: |
       )
       and (
         any(headers.domains, strings.iends_with(.root_domain, 'hubspot.com'))
-        or any(headers.ips,
-               strings.icontains(headers.from.email.email, 'hubspot')
-        )
+        or strings.icontains(headers.from.email.email, 'hubspot')
       )
     )
+  )
+  and not (
+    sender.email.domain.root_domain in $high_trust_sender_root_domains
+    and coalesce(headers.auth_summary.dmarc.pass, false)
   )
 attack_types:
   - "Credential Phishing"
@@ -63,4 +66,4 @@ detection_methods:
 id: "115bbcb6-186a-5982-a7b7-4f624ef04f51"
 og_id: "5df09a5b-8a87-59be-9a73-bd8765dbcc20"
 testing_pr: 4277
-testing_sha: 9b25daab3261acdbe445146e134aedc52ec173f6
+testing_sha: 066d3a097f7f7b363260975d00a08499eaf6aa25
