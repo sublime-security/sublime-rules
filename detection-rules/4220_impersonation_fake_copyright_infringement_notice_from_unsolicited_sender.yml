@@ -4,7 +4,10 @@ type: "rule"
 severity: "medium"
 source: |
   type.inbound
-  and length(body.current_thread.text) < 5000
+  and (
+    length(body.current_thread.text) < 5000
+    and sum(map(body.previous_threads, length(.text))) < 5000
+  )
   and 0 < length(body.links) < 10
   
   // common strings in subject or base
@@ -39,31 +42,73 @@ source: |
       strings.ilike(sender.display_name, '*Matter*')
     )
   )
-  // nlu in place of strings matches
+  
+  // body strings with nlu enrichment
   and (
-    any(ml.nlu_classifier(body.plain.raw).topics, .name == "Legal and Compliance")
-    and any(ml.nlu_classifier(body.plain.raw).intents, .name != "benign")
+    (
+      regex.icontains(body.html.display_text,
+                      'infring(?:(?:e|ment)|ing)|copyright|intellectual property|protected works?'
+      )
+      and regex.icontains(body.html.display_text,
+                          '\W(?:pdf|docx)|infringing link|proof of rights record|documentation|reference'
+      )
+    )
+    and 3 of (
+      // representation
+      regex.icontains(body.html.display_text,
+                      'we (?:represent|act for)|on behalf of|(?:legal|authorized) (?:proxy|representative|counsel)'
+      ),
+  
+      // threat
+      regex.icontains(body.html.display_text,
+                      '(?:hereby|formal(?:ly)?) (?:noti(?:fy|fies)|informs?) you|legal (?:proceeding|remedie|action)s?|civil litigation|damages|(?:official|formal) (?:noti(?:ce|fication)|declaration)|(?:authorization|justification) for us(?:e|age)|legal claim'
+      ),
+  
+      // demand
+      regex.icontains(body.html.display_text,
+                      'remedial requirements?|action required|required actions?|failure to comply|evaluate|\breview\b'
+      ),
+      regex.icontains(body.html.display_text,
+                      '(?:written|receive).(?:confirmation|reply)|confirm(ing)? completion|confirm.{0,15}in writing'
+      ),
+  
+      // evidence
+      regex.icontains(body.html.display_text,
+                      '(?:supporting|evidentiary).(?:file|record|context|materials)|evidence|rights holder.?[-:]'
+      ),
+    )
+    and (
+      (
+        any(ml.nlu_classifier(body.current_thread.text).topics,
+            .name == "Legal and Compliance"
+        )
+        and not any(ml.nlu_classifier(body.current_thread.text).topics,
+                    .name == "Events and Webinars"
+        )
+      )
+      or (
+        any(body.previous_threads,
+            any(ml.nlu_classifier(.text).topics, .name == "Legal and Compliance")
+        )
+        and not (
+          any(body.previous_threads,
+              any(ml.nlu_classifier(.text).topics, .name == "Events and Webinars")
+          )
+        )
+      )
+    )
   )
   
   // negate legitimate conversations
   and not (subject.is_reply or subject.is_forward)
   
-  // negate highly trusted sender domains unless they fail DMARC authentication
-  and (
-    (
-      sender.email.domain.root_domain in $high_trust_sender_root_domains
-      and not headers.auth_summary.dmarc.pass
-    )
-    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
-  )
-  
   // remove phrase from legitimate complaint
-  and not regex.icontains(body.current_thread.text,
+  and not regex.icontains(body.html.display_text,
                           '(?:we are passing the notice below|content has been removed|removed from our website|notice of intended action|I have not granted|I am the original creator|content you reported has been removed|complaint will be carefully reviewed|provide a list of violations|document confirming your right to act)'
   )
   
   // not copyright reports
-  and not regex.icontains(body.current_thread.text,
+  and not regex.icontains(body.html.display_text,
                           '(?:confirmation|received).{0,100}copyright report'
   )
   
@@ -78,8 +123,10 @@ source: |
                   )
               )
   )
-  and not strings.icontains(sender.email.domain.root_domain, 'edwinjamesip.com')
-
+  and not (
+    sender.email.domain.root_domain in ("edwinjamesip.com", "githubsupport.com")
+    and headers.auth_summary.dmarc.pass
+  )
 attack_types:
   - "BEC/Fraud"
   - "Extortion"
