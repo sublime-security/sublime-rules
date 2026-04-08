@@ -1,0 +1,105 @@
+name: Update IOC Rules
+
+on:
+  schedule:
+    - cron: '0 0 * * *'  # Daily at midnight UTC
+  workflow_dispatch:      # Allow manual triggering
+
+env:
+  PYTHON_VERSION: "3.11"
+
+jobs:
+  update-ioc-rules:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write       # Push to automated-ioc-updates branch
+      pull-requests: write  # Create/update PR
+
+    steps:
+      - name: Checkout sublime-rules repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Full history for branch operations
+
+      - name: Checkout IOC management repository
+        uses: actions/checkout@v4
+        with:
+          repository: sublime-security/ioc_management
+          token: ${{ github.token }}  # Works because ioc_management is internal
+          path: ioc-repo
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: |
+          cd ioc-repo
+          pip install -r requirements.txt
+
+      - name: Configure git for IOC repo metadata commits
+        run: |
+          cd ioc-repo
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Parse IOCs and generate rule files
+        run: |
+          cd ioc-repo
+          python scripts/main.py --log-level INFO
+
+      - name: Commit CSV metadata back to ioc_management repo
+        run: |
+          cd ioc-repo
+          git add iocs/csv/
+          if ! git diff --cached --quiet; then
+            git commit -m "chore: Auto-populate IOC metadata (added_date, sha256)"
+            git push origin main
+          else
+            echo "No metadata changes to commit"
+          fi
+
+      - name: Create or switch to automated-ioc-updates branch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git fetch --all
+          if git show-ref --quiet refs/remotes/origin/automated-ioc-updates; then
+            git checkout automated-ioc-updates
+            git pull origin automated-ioc-updates
+          else
+            git checkout -b automated-ioc-updates
+          fi
+
+      - name: Copy generated YML files to detection-rules
+        run: |
+          mkdir -p detection-rules/
+          cp ioc-repo/iocs/yml/*.yml detection-rules/
+
+      - name: Commit changes to sublime-rules
+        id: commit
+        run: |
+          git add detection-rules/observed_malicious_*.yml
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            git commit -m "chore: Update observed IOC rules - $(date -I)"
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Push branch to sublime-rules
+        if: steps.commit.outputs.changed == 'true'
+        run: |
+          git push --force origin automated-ioc-updates
+
+      - name: Create or update PR
+        if: steps.commit.outputs.changed == 'true'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          TARGET_REPOSITORY: ${{ github.repository }}  # sublime-security/sublime-rules
+        run: |
+          cd ioc-repo
+          python scripts/manage_pr.py --log-level INFO
