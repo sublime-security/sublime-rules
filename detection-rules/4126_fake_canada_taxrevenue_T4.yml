@@ -5,6 +5,16 @@ severity: "medium"
 source: |
   type.inbound
   and regex.icontains(sender.display_name, '(?:Canada Revenue Agency|\bCRA\b)')
+  and (
+    length(attachments) == 1
+    or any(body.links, network.whois(.href_url.domain).days_old <= 365)
+    or network.whois(sender.email.domain).days_old <= 30
+    or any(body.links,
+           regex.icontains(.href_url.path,
+                           '\.(msi|exe|lnk|js|vbs|bat|cmd|ps1|hta|wsf|scr)$'
+           )
+    )
+  )
   and any(ml.nlu_classifier(body.current_thread.text).topics,
           .name in (
             "Reminders and Notifications",
