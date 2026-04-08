@@ -1,0 +1,30 @@
+name: "Attachment: PDF with credential theft language and invalid reply-to domain"
+description: "Detects PDF attachments containing high-confidence credential theft language that references the recipient's email address, combined with an invalid reply-to domain header."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and any(headers.reply_to, not .email.domain.valid)
+  and any(attachments,
+          .file_type == 'pdf'
+          and any(file.explode(.),
+                  any(ml.nlu_classifier(.scan.strings.raw).intents,
+                      .name == 'cred_theft' and .confidence == 'high'
+                  )
+                  and strings.icontains(.scan.strings.raw,
+                                        recipients.to[0].email.email
+                  )
+          )
+  )
+
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "PDF"
+  - "Social engineering"
+  - "Spoofing"
+detection_methods:
+  - "File analysis"
+  - "Header analysis"
+  - "Natural Language Understanding"
+  - "Content analysis"
