@@ -23,7 +23,7 @@ source: |
     strings.icontains(body.html.raw, 'zoominfo.com')
     or strings.icontains(sender.display_name, 'zoominfo')
   )
-  // ml.nlu classifying emails based malicious contents
+  // ml.nlu classifying emails based on malicious contents
   and (
     any(ml.nlu_classifier(body.current_thread.text).entities,
         .name == "financial" and .text == "payments"
@@ -39,6 +39,10 @@ source: |
            )
     )
   )
+  // negate when NLU confidently classifies as benign
+  and not any(ml.nlu_classifier(body.current_thread.text).intents,
+              .name == "benign" and .confidence == "high"
+  )
   // negate highly trusted sender domains unless they fail DMARC authentication
   and (
     (
@@ -46,7 +50,7 @@ source: |
       and not headers.auth_summary.dmarc.pass
     )
     or sender.email.domain.root_domain not in $high_trust_sender_root_domains
-  )
+  )      
 attack_types:
   - "BEC/Fraud"
 tactics_and_techniques:
