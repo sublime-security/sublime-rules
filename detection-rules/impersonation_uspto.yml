@@ -1,0 +1,88 @@
+name: "Brand impersonation: United States Patent and Trademark Office"
+description: "Detects messages impersonating the United States Patent and Trademark Office (USPTO) using display name variations, confusable characters, or USPTO-related terminology in the sender or subject."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and (
+    regex.contains(sender.display_name, '^USPTO\b')
+    or strings.icontains(sender.display_name, 'Patent and Trademark Office')
+    // there are confusables in the display name
+    or (
+      strings.replace_confusables(sender.display_name) != sender.display_name
+      and strings.contains(strings.replace_confusables(sender.display_name),
+                           "USPTO"
+      )
+    )
+    // USPTO in sender domain
+    or (strings.ilike(sender.email.domain.domain, "*USPTO*"))
+    or any([sender.display_name, subject.subject],
+           regex.icontains(strings.replace_confusables(.),
+                           '(Next Steps|Application|Request|Follow([[:punct:]]|\s)Up|Rejected).*(Trademark|Patent)',
+                           '(Trademark|Patent) (Owner|Applica(nt|tion)) (Confirm|Verification)'
+           )
+    )
+  )
+  // Contains a link
+  and length(body.links) >= 1
+  
+  // Not from a .gov domain
+  and not (sender.email.domain.tld == "gov" and headers.auth_summary.dmarc.pass)
+  
+  // Additional suspicious indicator
+  and (
+    any(ml.nlu_classifier(body.current_thread.text).topics,
+        .name == "Secure Message" and .confidence == "high"
+    )
+    or (
+      regex.icontains(body.current_thread.text,
+                      '(Department of Commerce|DOC)|(Department of State|DOS)|(Federal Trade Commission|FTC)'
+      )
+      and strings.icontains(body.current_thread.text, "fee")
+    )
+    or regex.icontains(body.current_thread.text,
+                       "trademark (application|attestation)"
+    )
+    // real USPTO phone number
+    or strings.icontains(body.current_thread.text, "1-800-786-9199")
+    // USPTO mailing address
+    or 2 of (
+      strings.icontains(body.current_thread.text, "600 Dulany St"),
+      regex.icontains(body.current_thread.text, "Alexandria, (VA|Virginia)"),
+      strings.icontains(body.current_thread.text, "22314")
+    )
+  )
+  and not any(ml.nlu_classifier(body.current_thread.text).topics,
+              .name in (
+                "Newsletters and Digests",
+                "Advertising and Promotions",
+                "Events and Webinars"
+              )
+              and .confidence == "high"
+  )
+  // not a forward or reply
+  and (headers.in_reply_to is null or length(headers.references) == 0)
+  and (
+    not profile.by_sender().solicited
+    or (
+      profile.by_sender().any_messages_malicious_or_spam
+      and not profile.by_sender().any_messages_benign
+    )
+  )
+  and not (
+    sender.email.domain.root_domain in $high_trust_sender_root_domains
+    and coalesce(headers.auth_summary.dmarc.pass, false)
+  )
+
+attack_types:
+  - "BEC/Fraud"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Header analysis"
+  - "Natural Language Understanding"
+  - "Sender analysis"
+  - "URL analysis"
+id: "96b2693c-4cae-5eb8-bb00-1d204f2f50c0"
