@@ -91,11 +91,12 @@ jobs:
           base_ref=""
 
           if [[ "${GITHUB_EVENT_NAME}" == 'pull_request_target' ]]; then
-            # Ensure we have the latest base branch ref for accurate merge-base calculation
-            git fetch origin "${GITHUB_BASE_REF}:refs/remotes/origin/${GITHUB_BASE_REF}"
+            # Ensure we have the latest base branch ref for accurate merge-base calculation.
+            # Fetch from the canonical repo, not origin, because origin may be a fork with a stale main.
+            git fetch "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}.git" "${GITHUB_BASE_REF}:refs/remotes/upstream/${GITHUB_BASE_REF}"
             # Use the merge base to avoid including changes from target branch
             # that happened after this PR branch was created.
-            base_ref=$(git merge-base HEAD "origin/${GITHUB_BASE_REF}")
+            base_ref=$(git merge-base HEAD "upstream/${GITHUB_BASE_REF}")
           elif [[ "${GITHUB_EVENT_NAME}" == 'push' || "${GITHUB_EVENT_NAME}" == 'merge_group' ]]; then
             # Detect changes based on the previous commit
             base_ref="$(git rev-parse HEAD^)"
@@ -103,8 +104,10 @@ jobs:
             # Run on a target, so run for all rules.
             run_all="true"
           elif [[ "${GITHUB_EVENT_NAME}" == 'issue_comment' ]]; then
-            # Rely on comment_branch to figure out  base
-            base_ref="${STEPS_COMMENT_BRANCH_OUTPUTS_BASE_REF}"
+            # Rely on comment_branch to figure out base.
+            # Fetch from the canonical repo and compute merge-base, same as pull_request_target, to avoid issues with forks.
+            git fetch "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}.git" "${STEPS_COMMENT_BRANCH_OUTPUTS_BASE_REF}:refs/remotes/upstream/${STEPS_COMMENT_BRANCH_OUTPUTS_BASE_REF}"
+            base_ref=$(git merge-base HEAD "upstream/${STEPS_COMMENT_BRANCH_OUTPUTS_BASE_REF}")
           fi
           
           echo "##[set-output name=run_all;]$run_all"
@@ -124,6 +127,12 @@ jobs:
       - name: Check for invisible characters
         if: github.event_name != 'issue_comment'
         run: python sublime-rules-main/.github/scripts/check_invisible_chars.py
+
+      - name: Check for root_domain misuse
+        if: github.event_name != 'issue_comment'
+        run: |
+          pip install -q -r sublime-rules-main/.github/scripts/check_root_domain_literals/requirements.txt
+          python sublime-rules-main/.github/scripts/check_root_domain_literals/main.py
 
       - name: Add Rule IDs as Needed & Check for Duplicates
         if: github.event_name != 'issue_comment'
@@ -149,7 +158,7 @@ jobs:
           batch_num=0
 
           # Collect all files
-          all_files=($(ls -1 *-rules/*.yml insights/**/*.yml))
+          all_files=($(ls -1 *-rules/*.yml insights/**/*.yml exclusions/*.yml))
           total_files=${#all_files[@]}
 
           echo "Total files to validate: $total_files"
@@ -325,8 +334,14 @@ jobs:
             fi
           
             new_source=$(yq '.source' "$file")
-            old_source=$(yq '.source' "sr-main/detection-rules/$rule_id.yml" || echo '')
-            
+            old_file="sr-main/detection-rules/$rule_id.yml"
+            if [[ ! -f "$old_file" ]]; then
+              echo "$file ($rule_id) is new (not found in base)"
+              altered_rule_ids="${rule_id} ${altered_rule_ids}"
+              continue
+            fi
+            old_source=$(yq '.source' "$old_file")
+
             # We only need to care when rule source is changed. This will handle renames, tag changes, etc.
             if [[ "$new_source" != "$old_source" ]]; then
               echo "$file ($rule_id) has altered source"

@@ -1,0 +1,76 @@
+name: "Link: Multistage landing - ClickUp abuse"
+description: "Detects ClickUp documents that contain external links to suspicious domains including new domains, free file hosts, URL shorteners, or links that redirect to phishing pages or contain captchas."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and any(body.current_thread.links,
+          .href_url.domain.domain == "doc.clickup.com"
+          and (
+            // landing page has been removed
+            strings.istarts_with(ml.link_analysis(.).final_dom.display_text,
+                                 'This page is currently unavailable'
+            )
+            // inspection of links within the doc.clickup.com
+            or any(filter(ml.link_analysis(.).final_dom.links,
+                          .href_url.domain.root_domain != 'clickup.com'
+                          and .href_url.domain.root_domain not in $org_domains
+                   ),
+                   (
+                     // any of those links domains are new
+                     network.whois(.href_url.domain).days_old < 30
+                     // go to free file hosts
+                     or .href_url.domain.root_domain in $free_file_hosts
+                     or .href_url.domain.domain in $free_file_hosts
+  
+                     // go to free subdomains hosts
+                     or (
+                       .href_url.domain.root_domain in $free_subdomain_hosts
+                       // where there is a subdomain
+                       and .href_url.domain.subdomain is not null
+                       and .href_url.domain.subdomain != "www"
+                     )
+                     // go to url shorteners
+                     or .href_url.domain.root_domain in $url_shorteners
+                     or .href_url.domain.root_domain in $social_landing_hosts
+                     or .href_url.domain.domain in $url_shorteners
+                     or .href_url.domain.domain in $social_landing_hosts
+                     // or the page has been taken down
+                     or (
+                       // find any links that mention common "action" words
+                       regex.icontains(.display_text,
+                                       '(?:view|click|show|access|download|goto|Validate|Va[il]idar|login|verify|account)'
+                       )
+                       and (
+                         // and when visiting those links, are phishing
+                         ml.link_analysis(., mode="aggressive").credphish.disposition == "phishing"
+  
+                         // hit a captcha page
+                         or ml.link_analysis(., mode="aggressive").credphish.contains_captcha
+  
+                         // or the page redirects to common website, observed when evasion happens
+                         or (
+                           length(ml.link_analysis(., mode="aggressive").redirect_history
+                           ) > 0
+                           and ml.link_analysis(., mode="aggressive").effective_url.domain.root_domain in $tranco_10k
+                         )
+                       )
+                     )
+                   )
+            )
+          )
+  )
+
+attack_types:
+  - "Credential Phishing"
+  - "Malware/Ransomware"
+tactics_and_techniques:
+  - "Evasion"
+  - "Free file host"
+  - "Free subdomain host"
+  - "Open redirect"
+detection_methods:
+  - "URL analysis"
+  - "Whois"
+  - "Content analysis"
+id: "78a5d035-8003-59e5-821d-4d6d5c40c4da"

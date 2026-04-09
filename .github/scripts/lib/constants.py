@@ -8,6 +8,8 @@ AUTHOR_MEMBERSHIP_EXCLUSION_LABEL = 'test-rules:excluded:author_membership'
 MANUAL_EXCLUSION_LABEL = 'test-rules:excluded:manual'
 BULK_PR_LABEL = 'test-rules:excluded:bulk_rules'
 LINK_ANALYSIS_EXCLUSION_LABEL = 'test-rules:excluded:link_analysis'
+SHARED_SAMPLES_AUTHOR_MEMBERSHIP_EXCLUSION_LABEL = 'shared-samples:excluded:author_membership'
+SHARED_SAMPLES_BULK_PR_LABEL = 'shared-samples:excluded:bulk_rules'
 HUNTING_REQUIRED_LABEL = 'hunting-required'
 DO_NOT_MERGE_LABEL = 'do-not-merge'
 
