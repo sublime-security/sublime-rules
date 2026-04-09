@@ -4,6 +4,7 @@ type: "rule"
 severity: "medium"
 source: |
   type.inbound
+  // HubSpot impersonation indicators
   and strings.icontains(sender.display_name, 'hubspot')
   and 2 of (
     regex.contains(body.current_thread.text, '(?:HubSpot, Inc.|HubSpot)'),
@@ -11,21 +12,13 @@ source: |
     strings.icontains(body.current_thread.text, '25 first street'),
     strings.icontains(body.current_thread.text, 'MA 02141')
   )
-  and 2 of (
-    any(ml.nlu_classifier(body.current_thread.text).topics,
-        .name in (
-          "Security and Authentication",
-          "Software and App Updates",
-          "Customer Service and Support"
-        )
-        and .confidence != "low"
-    ),
-    any(ml.nlu_classifier(body.current_thread.text).intents,
-        .name == "cred_theft" and .confidence != "low"
-    ),
-    regex.icontains(body.current_thread.text,
-                    '(?:account|disactiv|deactiv|disabl|delet|profile)'
-    )
+  // nlu cred theft
+  and any(ml.nlu_classifier(body.current_thread.text).intents,
+          .name == "cred_theft" and .confidence != "low"
+  )
+  // account/profile language
+  and regex.icontains(body.current_thread.text,
+                      '(?:deactiv|delet|disabl|profile|review|proposal|document|efax|restore|[o0]pen|secure|messaging|reset|account|verify|login|notification|alert|urgent|immediate|access|support|\bupdate\b|download|attachment|service|payment|remittance|invoice|rfp|rfi|pdf|doc)'
   )
   // exclude legitimate HubSpot sends
   and not (
@@ -66,4 +59,4 @@ detection_methods:
 id: "115bbcb6-186a-5982-a7b7-4f624ef04f51"
 og_id: "5df09a5b-8a87-59be-9a73-bd8765dbcc20"
 testing_pr: 4277
-testing_sha: 066d3a097f7f7b363260975d00a08499eaf6aa25
+testing_sha: 14609276fce4c8a013ac4fb0c1f185e68cf89904
