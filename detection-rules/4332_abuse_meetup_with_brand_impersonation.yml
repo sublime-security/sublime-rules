@@ -1,0 +1,36 @@
+name: "Service abuse: Meetup.com redirect with brand impersonation"
+description: "Detects messages abusing Meetup.com's click tracking service with lengthy redirect URLs while impersonating legitimate Meetup communications. The rule identifies suspicious links to clicks.meetup.com with URLs exceeding 300 characters, excludes legitimate Meetup emails by checking for their branding elements, and filters out high-trust authenticated senders."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  // we check 'body links' as this campaign has been observed abusing fake threads
+  and any(body.links,
+          .href_url.domain.domain == "clicks.meetup.com"
+          // lengthy url hints at redirect the circus that occurs
+          and length(.href_url.url) > 300
+  )
+  // negate legit meetup.com by cheecking for their logo
+  and not any(html.xpath(body.html, '//img/@src').nodes,
+              strings.icontains(.raw, 'meetupstatic')
+  )
+  // negate high trust senders that pass auth
+  and not (
+    sender.email.domain.root_domain in $high_trust_sender_root_domains
+    and coalesce(headers.auth_summary.dmarc.pass, false)
+  )
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Open redirect"
+  - "Impersonation: Brand"
+  - "Evasion"
+detection_methods:
+  - "URL analysis"
+  - "HTML analysis"
+  - "Content analysis"
+  - "Sender analysis"
+id: "faa971ae-f87a-5d5f-8428-0aa7cd338f9a"
+og_id: "83f6f162-ec75-5f0b-acd0-c566beda545a"
+testing_pr: 4332
+testing_sha: 46013460386f3bd60ae518f47c60aeb848c5b7c4
