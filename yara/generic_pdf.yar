@@ -111,3 +111,96 @@ rule rmm_pdf_lure {
         $header at 0 and
         $link1
 }
+
+rule SAI_Global_ISO9001_Logo_PDF_Fuzzy                                                                                                                                    
+{                                                                                                                                                                       
+   meta:
+       author = "brandon murphy"
+       date = "2026-04-09"
+       description = "fuzzy detection of SAI Global ISO 9001 logo variants in PDFs (re-encoded, resized)"
+
+  strings:
+        // PDF markers
+        $pdf_header   = "%PDF"
+        $is_image     = "/Subtype /Image"
+        $is_jpeg      = "/Filter /DCTDecode"
+
+        // JPEG quantization table — shorter anchor (16 bytes from luma QT)
+        // This specific sequence of QT values is rare and survives minor edits
+        $qt_anchor = {
+            14 14 14 14 15 14 17 19
+            19 17 1F 22 1E 22 1F 2E
+        }
+
+        // SOF progressive marker with 1024x768
+        $sof_1024x768 = { FF C2 00 11 08 03 00 04 00 }
+
+        // Alternate: SOF baseline with 1024x768
+        $sof_baseline = { FF C0 00 11 08 03 00 04 00 }
+
+        // Unique scan-data byte patterns (mid-stream anchors)
+        // From ~25% into the JPEG scan data
+        $scan_mid1 = { 14 20 31 41 51 53 60 71 15 40 52 72 22 33 34 35 }
+        // From ~50% into the JPEG scan data
+        $scan_mid2 = { E6 0F 4A FA F9 6D 97 45 75 C8 69 DD 9D 8B 31 CC }
+
+    condition:
+        $pdf_header at 0 and
+        $is_image and $is_jpeg and
+        (
+            // High confidence: QT match + dimensions
+            ($qt_anchor and ($sof_1024x768 or $sof_baseline))
+            or
+            // Medium confidence: QT match + scan data anchor
+            ($qt_anchor and ($scan_mid1 or $scan_mid2))
+        )
+}
+
+rule Phishing_PDF_Split_QR_Code_Pair
+{
+   meta:
+       author = "brandon murphy"
+       date = "2026-04-09"
+       description = "PDF containing two 165x330 JPEG images — a vertically split QR code pair"
+
+    strings:
+        $pdf = "%PDF"
+
+        // --- PDF object layer ---
+        // Image XObject definitions for the QR halves.
+        // Both objects declare the same dimensions + JPEG filter.
+        $qr_width    = "/Width 165"
+        $qr_height   = "/Height 330"
+        $jpeg_filter = "/Filter /DCTDecode"
+        $xobj_image  = "/Subtype /Image"
+
+        // --- JPEG layer ---
+        // SOF0 (baseline) marker encoding exactly 165x330:
+        //   FF C0       = SOF0 marker
+        //   00 11       = segment length (17 bytes)
+        //   08          = 8-bit precision
+        //   01 4A       = height 330
+        //   00 A5       = width 165
+        //   03          = 3 components (YCbCr)
+        //   01 22 00    = component 1: Y, 2x2 sampling, QT 0
+        //   02 11 01    = component 2: Cb, 1x1 sampling, QT 1
+        //   03 11 01    = component 3: Cr, 1x1 sampling, QT 1
+        $sof0_165x330 = {
+            FF C0 00 11 08 01 4A 00 A5 03 01 22 00 02 11 01 03 11 01
+        }
+
+    condition:
+        $pdf at 0 and
+
+        // Two QR-half image objects in the PDF
+        #qr_width  >= 2 and
+        #qr_height >= 2 and
+
+        // Both are JPEG XObject images
+        $jpeg_filter and
+        $xobj_image and
+
+        // The actual JPEG SOF0 marker with 165x330 appears twice
+        #sof0_165x330 >= 2
+}
+
