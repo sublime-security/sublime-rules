@@ -10,10 +10,10 @@ source: |
   and (
     // orgs can have docusign.company.com
     strings.ilike(sender.email.email, '*docusign.net*', '*docusign.com*')
-  
+
     // if the above is true, you'll see a "via Docusign"
     or strings.ilike(sender.display_name, '*docusign*')
-  
+
     // detects 1 character variations,
     // such as DocuSlgn (with an "L" instead of an "I")
     or strings.ilevenshtein(sender.display_name, "docusign") == 1
@@ -53,7 +53,9 @@ source: |
                              'Please use the link above to Docusign'
         )
         or strings.icontains(body.current_thread.text, 'Review on Docusign')
-        or strings.icontains(body.current_thread.text, 'Completed with Docusign')
+        or strings.icontains(body.current_thread.text,
+                             'Completed with Docusign'
+        )
         or strings.icontains(body.current_thread.text, 'Completed on Docusign')
         or strings.icontains(body.current_thread.text, 'Complete with Docusign')
         or strings.icontains(body.current_thread.text,
@@ -81,7 +83,9 @@ source: |
         or strings.icontains(body.current_thread.text,
                              'review via DocuSign Electronic Signature'
         )
-        or strings.icontains(body.current_thread.text, 'sent to you by DocuSign')
+        or strings.icontains(body.current_thread.text,
+                             'sent to you by DocuSign'
+        )
         or strings.icontains(body.current_thread.text, 'Processed by DocuSign')
         or strings.icontains(body.current_thread.text,
                              'Please read and sign the document'
@@ -113,7 +117,7 @@ source: |
                            'Sign\s*(?:and\s*|&\s*)Return.{0,40}docusign',
                            'Sign\s*(?:and\s*|&\s*)Return.docusign.{0,40}'
         )
-  
+
         // additional context from subject.subject
         or strings.icontains(subject.subject, 'complete with docusign')
         or strings.icontains(subject.subject, 'signature request')
@@ -145,7 +149,9 @@ source: |
             regex.icontains(body.html.raw,
                             'Powered by.{0,6}(?:\s*<\/?[^\>]+\>\s*)+<img[^\>]+(?:src="https:\/\/docucdn-a\.akamaihd\.net\/[^\"]+email-logo.png"|alt="DocuSign")'
             )
-            or regex.icontains(body.current_thread.text, 'Powered by\s*DocuSign')
+            or regex.icontains(body.current_thread.text,
+                               'Powered by\s*DocuSign'
+            )
           )
           // limit it to where the powered by is within the current thread
           and strings.icontains(body.current_thread.text, 'Powered by')
@@ -194,7 +200,7 @@ source: |
         or strings.icontains(body.current_thread.text,
                              'a secure link to DocuSign'
         )
-  
+
         // footer links
         or (
           length(filter(body.links,
@@ -259,7 +265,7 @@ source: |
         )
         // image contains an alt text of docusign
         or any(html.xpath(body.html, '//img/@alt').nodes, .raw =~ "docusign")
-  
+
         // Basic variations with HTML encoding
         // use of regex extract allows
         or any(regex.iextract(body.html.raw,
@@ -273,14 +279,14 @@ source: |
                ),
                .full_match !~ "docusign"
         )
-  
+
         // Look for HTML entities for each letter in sequence
         or any(regex.iextract(body.html.raw,
                               '(?:D|&#68;|&#x44;)(?:o|о|&#111;|&#x6f;|&#1086;|&#x43e;|&#959;|&#x3bf;)(?:c|с|&#99;|&#x63;|&#1089;|&#x441;|&#1010;|&#231;|&#x67;|&#265;|&#x109;)(?:u|&#117;|&#x75;|&#1091;|&#x443;|&#965;|&#x3c5;)(?:s|&#115;|&#x73;|&#1109;|&#x455;)(?:i|і|&#105;|&#x69;|&#1110;|&#x456;|&#305;|&#x131;)(?:g|&#103;|&#x67;|&#609;|&#x261;|&#287;|&#x11f;)(?:n|&#110;|&#x6e;|&#1085;|&#x43d;|&#951;|&#x3b7;)'
                ),
                .full_match !~ "docusign"
         )
-  
+
         // Handle repeated HTML entities and variation selectors (using Unicode class)
         or any(regex.iextract(body.html.raw,
                               'D(?:&#[0-9]{1,7};)*\p{Mn}*o(?:&#[0-9]{1,7};)*\p{Mn}*c(?:&#[0-9]{1,7};)*\p{Mn}*u(?:&#[0-9]{1,7};)*\p{Mn}*[Ss](?:&#[0-9]{1,7};)*\p{Mn}*i(?:&#[0-9]{1,7};)*\p{Mn}*g(?:&#[0-9]{1,7};)*\p{Mn}*n'
@@ -302,7 +308,7 @@ source: |
       )
     )
   )
-  
+
   // identifies the main CTA in the email, eg "Review now" or "Review document"
   // this should always be a known docusign domain,
   // even with branded docusign subdomains
@@ -335,6 +341,7 @@ source: |
                  or strings.icontains(.display_text, "document")
                  or strings.icontains(.display_text, "docusign")
                  or strings.icontains(.display_text, "Review on Docusign")
+                 or strings.icontains(.display_text, "view form")
                  or (
                    strings.icontains(.display_text, "Sign")
                    and regex.icontains(.display_text, '(?:in\b|now)')
@@ -398,13 +405,13 @@ source: |
            )
     )
   )
-  
+
   // negate highly trusted sender domains if they pass DMARC authentication
   and not (
     sender.email.domain.root_domain in $high_trust_sender_root_domains
     and coalesce(headers.auth_summary.dmarc.pass, false)
   )
-  
+
   // negation for messages traversing docusign.net
   // happens with custom sender domains
   and not (
@@ -412,7 +419,7 @@ source: |
     and headers.auth_summary.spf.pass
     and headers.auth_summary.dmarc.pass
   )
-  
+
   // adding negation for messages originating from docusigns api
   // and the sender.display.name contains "via"
   and not (
