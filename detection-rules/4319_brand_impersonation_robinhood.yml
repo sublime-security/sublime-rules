@@ -67,10 +67,19 @@ source: |
       )
       or length(headers.references) == 0
     )
+    and (
+      (
+        profile.by_sender().prevalence != "common"
+        and not profile.by_sender().solicited
+      )
+    )
     // negate newsletters and webinars
     and not any(ml.nlu_classifier(body.current_thread.text).topics,
                 .name in ("Newsletters and Digests", "Events and Webinars")
                 and .confidence == "high"
+    )
+    and not any(ml.nlu_classifier(body.current_thread.text).intents,
+                .name == "benign" and .confidence == "high"
     )
     and not (
       sender.email.domain.root_domain in (
@@ -82,6 +91,14 @@ source: |
       )
       and coalesce(headers.auth_summary.dmarc.pass, false)
     )
+  )
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and not headers.auth_summary.dmarc.pass
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
   )
 
 attack_types:
@@ -97,4 +114,4 @@ detection_methods:
 id: "3bd8298b-379b-5214-b94d-d2237ed502ad"
 og_id: "7c8eca19-63ac-5cd3-a92b-4fb34b526683"
 testing_pr: 4319
-testing_sha: 85b66a14415a44d94beb866e34ca8cfa17da5821
+testing_sha: e21564444b149aeb12c574c68d4d5c1cd42c1b0d
