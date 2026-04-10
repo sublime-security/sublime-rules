@@ -156,106 +156,97 @@ rule SAI_Global_ISO9001_Logo_PDF_Fuzzy
         )
 }
 
-rule Phishing_PDF_Split_QR_Code_Pair_330
-  {
-      meta:                                                                                                                                                                  
-          author = "brandon murphy"
-          date = "2026-04-09"                                                                                                                                                
-          updated = "2026-04-10"                                                                                                                                           
-          description = "PDF containing two 165x330 JPEG images — a vertically split QR code pair"                                                                           
+rule Phishing_PDF_Split_QR_Code_Pair_330                                                                                                                                 
+{                                                                                                                                                                          
+  meta:                                                                                                                                                                  
+      author = "brandon murphy"                                                                                                                                          
+      date = "2026-04-09"                                                                                                                                                
+      updated = "2026-04-10"                                                                                                                                             
+      description = "PDF containing two 165x330 JPEG images — a vertically split QR code pair"                                                                           
+                                                                                                                                                                         
+  strings:                                                                                                                                                               
+      $header = {25 50 44 46 2d 31 2e}                                                                                                                                   
+                                                                                                                                                                         
+      // --- PDF object layer ---                                                                                                                                        
+      // Image XObject definitions for the QR halves.                                                                                                                    
+      // Both objects declare the same dimensions + JPEG filter.                                                                                                         
+      $w = "/Width 165"                                                                                                                                                  
+      $h = "/Height 330"                                                                                                                                                 
+      $jpeg_filter = "/Filter /DCTDecode"                                                                                                                                
+      $xobj_image = "/Subtype /Image"                                                                                                                                    
+                                                                                                                                                                         
+      // --- JPEG layer ---                                                                                                                                              
+      // SOF0 (baseline) marker encoding exactly 165x330:                                                                                                                
+      //   ff c0       = SOF0 marker                                                                                                                                     
+      //   00 11       = segment length (17 bytes)                                                                                                                       
+      //   08          = 8-bit precision                                                                                                                                 
+      //   01 4a       = height 330                                                                                                                                      
+      //   00 a5       = width 165                                                                                                                                       
+      //   03          = 3 components (YCbCr)                                                                                                                            
+      //   01 22 00    = component 1: Y, 2x2 sampling, QT 0                                                                                                              
+      //   02 11 01    = component 2: Cb, 1x1 sampling, QT 1                                                                                                             
+      //   03 11 01    = component 3: Cr, 1x1 sampling, QT 1                                                                                                             
+      $sof0 = {ff c0 00 11 08 01 4a 00 a5 03 01 22 00 02 11 01 03 11 01}                                                                                                 
+                                                                                                                                                                         
+  condition:                                                                                                                                                             
+      $header at 0 and                                                                                                                                                   
+                                                                                                                                                                         
+      // Both are JPEG XObject images                                                                                                                                    
+      $jpeg_filter and                                                                                                                                                   
+      $xobj_image and                                                                                                                                                    
+                                                                                                                                                                         
+      // Exactly two QR-half image objects in the PDF                                                                                                                    
+      #sof0 == 2 and                                                                                                                                                     
+      #w == 2 and                                                                                                                                                        
+      #h == 2 and                                                                                                                                                        
+                                                                                                                                                                         
+      // The two JPEG SOF0 markers appear within 100KB of each other                                                                                                     
+      @sof0[2] - @sof0[1] < 102400                                                                                                                                       
+}                                                                                                                                                                          
                                                                                                                                                                              
-      strings:                                                                                                                                                               
-          $header = {25 50 44 46 2d 31 2e}                                                                                                                                   
-                                                                                                                                                                             
-          // --- PDF object layer ---                                                                                                                                      
-          // Image XObject definitions for the QR halves.                                                                                                                    
-          // Both objects declare the same dimensions + JPEG filter.                                                                                                       
-          $w = "/Width 165"
-          $h = "/Height 330"
-          $jpeg_filter = "/Filter /DCTDecode"                                                                                                                                
-          $xobj_image = "/Subtype /Image"
-                                                                                                                                                                             
-          // --- JPEG layer ---                                                                                                                                              
-          // SOF0 (baseline) marker encoding exactly 165x330:
-          //   ff c0       = SOF0 marker                                                                                                                                     
-          //   00 11       = segment length (17 bytes)                                                                                                                       
-          //   08          = 8-bit precision                                                                                                                                 
-          //   01 4a       = height 330                                                                                                                                      
-          //   00 a5       = width 165                                                                                                                                       
-          //   03          = 3 components (YCbCr)                                                                                                                            
-          //   01 22 00    = component 1: Y, 2x2 sampling, QT 0                                                                                                              
-          //   02 11 01    = component 2: Cb, 1x1 sampling, QT 1                                                                                                             
-          //   03 11 01    = component 3: Cr, 1x1 sampling, QT 1                                                                                                             
-          $sof0 = {ff c0 00 11 08 01 4a 00 a5 03 01 22 00 02 11 01 03 11 01}                                                                                                 
-                                                                                                                                                                             
-      condition:                                                                                                                                                             
-          $header at 0 and                                                                                                                                                   
-                                                                                                                                                                             
-          // Both are JPEG XObject images                                                                                                                                    
-          $jpeg_filter and                                                                                                                                                   
-          $xobj_image and                                                                                                                                                    
-                                                                                                                                                                             
-          // Exactly two QR-half image objects in the PDF                                                                                                                    
-          #sof0 == 2 and                                                                                                                                                     
-          #w == 2 and                                                                                                                                                        
-          #h == 2 and                                                                                                                                                        
-                                                                                                                                                                             
-          // The two JPEG SOF0 markers appear within 100KB of each other                                                                                                     
-          for any i in (1..#sof0) : (                                                                                                                                        
-              for any j in (i+1..#sof0) : (                                                                                                                                  
-                  @sof0[j] - @sof0[i] < 102400                                                                                                                               
-              )                                                                                                                                                              
-          )                                                                                                                                                                  
-  }                                                                                                                                                                          
-                                                                                                                                                                             
-  rule Phishing_PDF_Split_QR_Code_Pair_290                                                                                                                                   
-  {
-      meta:                                                                                                                                                                  
-          author = "brandon murphy"                                                                                                                                          
-          date = "2026-04-10"                                                                                                                                                
-          description = "PDF containing two 145x290 JPEG images — a vertically split QR code pair"                                                                           
-                                                                                                                                                                             
-      strings:                                                                                                                                                               
-          $header = {25 50 44 46 2d 31 2e}                                                                                                                                   
-                                                                                                                                                                             
-          // --- PDF object layer ---                                                                                                                                        
-          // Image XObject definitions for the QR halves.                                                                                                                    
-          // Both objects declare the same dimensions + JPEG filter.                                                                                                         
-          $w = "/Width 145"                                                                                                                                                  
-          $h = "/Height 290"                                                                                                                                                 
-          $jpeg_filter = "/Filter /DCTDecode"                                                                                                                                
-          $xobj_image = "/Subtype /Image"                                                                                                                                    
-                                                                                                                                                                             
-          // --- JPEG layer ---                                                                                                                                              
-          // SOF0 (baseline) marker encoding exactly 145x290:                                                                                                                
-          //   ff c0       = SOF0 marker                                                                                                                                     
-          //   00 11       = segment length (17 bytes)                                                                                                                       
-          //   08          = 8-bit precision                                                                                                                                 
-          //   01 22       = height 290                                                                                                                                      
-          //   00 91       = width 145                                                                                                                                       
-          //   03          = 3 components (YCbCr)                                                                                                                            
-          //   01 22 00    = component 1: Y, 2x2 sampling, QT 0                                                                                                              
-          //   02 11 01    = component 2: Cb, 1x1 sampling, QT 1                                                                                                             
-          //   03 11 01    = component 3: Cr, 1x1 sampling, QT 1                                                                                                             
-          $sof0 = {ff c0 00 11 08 01 22 00 91 03 01 22 00 02 11 01 03 11 01}                                                                                                 
-                                                                                                                                                                             
-      condition:                                                                                                                                                             
-          $header at 0 and                                                                                                                                                   
-                                                                                                                                                                             
-          // Both are JPEG XObject images                                                                                                                                    
-          $jpeg_filter and                                                                                                                                                   
-          $xobj_image and                                                                                                                                                    
-                                                                                                                                                                             
-          // Exactly two QR-half image objects in the PDF                                                                                                                    
-          #sof0 == 2 and                                                                                                                                                     
-          #w == 2 and                                                                                                                                                        
-          #h == 2 and                                                                                                                                                        
-                                                                                                                                                                             
-          // The two JPEG SOF0 markers appear within 100KB of each other                                                                                                     
-          for any i in (1..#sof0) : (                                                                                                                                      
-              for any j in (i+1..#sof0) : (                                                                                                                                  
-                  @sof0[j] - @sof0[i] < 102400                                                                                                                               
-              )                                                                                                                                                              
-          )                                                                                                                                                                  
-  }                                                                                                                                                                          
-            
+rule Phishing_PDF_Split_QR_Code_Pair_290                                                                                                                                   
+{                                                                                                                                                                          
+  meta:                                                                                                                                                                  
+      author = "brandon murphy"                                                                                                                                          
+      date = "2026-04-10"                                                                                                                                                
+      description = "PDF containing two 145x290 JPEG images — a vertically split QR code pair"                                                                           
+                                                                                                                                                                         
+  strings:                                                                                                                                                               
+      $header = {25 50 44 46 2d 31 2e}                                                                                                                                   
+                                                                                                                                                                         
+      // --- PDF object layer ---                                                                                                                                        
+      // Image XObject definitions for the QR halves.                                                                                                                    
+      // Both objects declare the same dimensions + JPEG filter.                                                                                                         
+      $w = "/Width 145"                                                                                                                                                  
+      $h = "/Height 290"                                                                                                                                                 
+      $jpeg_filter = "/Filter /DCTDecode"                                                                                                                                
+      $xobj_image = "/Subtype /Image"                                                                                                                                    
+                                                                                                                                                                         
+      // --- JPEG layer ---                                                                                                                                              
+      // SOF0 (baseline) marker encoding exactly 145x290:                                                                                                                
+      //   ff c0       = SOF0 marker                                                                                                                                     
+      //   00 11       = segment length (17 bytes)                                                                                                                       
+      //   08          = 8-bit precision                                                                                                                                 
+      //   01 22       = height 290                                                                                                                                      
+      //   00 91       = width 145                                                                                                                                       
+      //   03          = 3 components (YCbCr)                                                                                                                            
+      //   01 22 00    = component 1: Y, 2x2 sampling, QT 0                                                                                                              
+      //   02 11 01    = component 2: Cb, 1x1 sampling, QT 1                                                                                                             
+      //   03 11 01    = component 3: Cr, 1x1 sampling, QT 1                                                                                                             
+      $sof0 = {ff c0 00 11 08 01 22 00 91 03 01 22 00 02 11 01 03 11 01}                                                                                                 
+                                                                                                                                                                         
+  condition:                                                                                                                                                             
+      $header at 0 and                                                                                                                                                   
+                                                                                                                                                                         
+      // Both are JPEG XObject images                                                                                                                                    
+      $jpeg_filter and                                                                                                                                                   
+      $xobj_image and                                                                                                                                                    
+                                                                                                                                                                         
+      // Exactly two QR-half image objects in the PDF                                                                                                                    
+      #sof0 == 2 and                                                                                                                                                     
+      #w == 2 and                                                                                                                                                        
+      #h == 2 and                                                                                                                                                        
+                                                                                                                                                                         
+      // The two JPEG SOF0 markers appear within 100KB of each other                                                                                                     
+      @sof0[2] - @sof0[1] < 102400                                                                                                                                       
+}                                                                                               
