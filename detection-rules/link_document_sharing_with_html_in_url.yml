@@ -1,27 +1,77 @@
-name: "Link: HTML url with document sharing language"
-description: "Detects messages containing generic document sharing language paired with links to HTML files that use persuasive language like 'click here' or 'open document'. This pattern is commonly used to deliver malicious HTML content disguised as legitimate document sharing."
+name: "Link: HTML credential harvesting with evasion techniques"
+description: "Detects suspicious HTML links with document-themed social engineering that employ anti-analysis evasion techniques such as right-click blocking, keyboard shortcut disabling, or redirect to throwaway object storage services with email collection forms."
 type: "rule"
-severity: "medium"
+severity: "high"
 source: |
    type.inbound
-   // generic document sharing language
-   and regex.icontains(body.current_thread.text,
-                       '(share|invite|open).{0,20}(attachment|file|access|document)',
-                       '(attachment|file|access|document|message).{0,10}(share|invite)'
-   )
-   // url contains "click me" language and ends with .html
+   // suspicious link ending in .html
    and any(filter(body.links,
-                  regex.icontains(.display_text,
-                                  '(open|click|view|reveal|sign).{0,10}(here|document|file|attach)'
+                  strings.iends_with(.href_url.url, '.html')
+                  // either document-related display text OR document language in body
+                  and (
+                    // Action-oriented document display text
+                    regex.icontains(strings.replace_confusables(.display_text),
+                                    '(open|view|download|access|review|sign|click).{0,15}(document|file|attach|here|now)'
+                    )
+                    // OR document sharing language in the body
+                    or regex.icontains(body.current_thread.text,
+                                       '(shared|sent|attached|forwarded).{0,20}(document|file|pdf)'
+                    )
                   )
            ),
-           strings.iends_with(.href_url.url, '.html')
-           and not .href_url.domain.root_domain in $high_trust_sender_root_domains
+           (
+             // not a high-trust domain
+             .href_url.domain.root_domain not in $high_trust_sender_root_domains
+             // link domain must be different from sender domain
+             and .href_url.domain.root_domain != sender.email.domain.root_domain
+             and (
+               (
+                 // right-click blocking in final dom
+                 strings.icontains(ml.link_analysis(., mode="aggressive").final_dom.raw,
+                                   'oncontextmenu="return false"'
+                 )
+                 // or custom no-select class
+                 or regex.icontains(ml.link_analysis(., mode="aggressive").final_dom.raw,
+                                    '\.no-select\s*\{'
+                 )
+                 // or keyboard shortcut blocking
+                 or regex.icontains(ml.link_analysis(., mode="aggressive").final_dom.raw,
+                                    'ctrlKey.*metaKey.*key.*==='
+                 )
+               )
+               // or suspicious redirect to throwaway object storage + email form
+               or (
+                 regex.icontains(ml.link_analysis(., mode="aggressive").final_dom.raw,
+                                 'linodeobjects\.com|digitaloceanspaces\.com'
+                 )
+                 and regex.icontains(ml.link_analysis(., mode="aggressive").final_dom.raw,
+                                     'type="email"'
+                 )
+               )
+               // or email harvesting form with hash prefill
+               or (
+                 regex.icontains(ml.link_analysis(., mode="aggressive").final_dom.raw,
+                                 'type="email"'
+                 )
+                 and regex.icontains(ml.link_analysis(., mode="aggressive").final_dom.raw,
+                                     '<form'
+                 )
+                 and regex.icontains(ml.link_analysis(., mode="aggressive").final_dom.raw,
+                                     'hash\.includes.*@|window\.location\.hash'
+                 )
+               )
+             )
+           )
    )
+   // negations
    and not (subject.is_forward or subject.is_reply)
    and not any(ml.nlu_classifier(body.current_thread.text).topics,
                .name in ("Newsletters and Digests", "Travel and Transportation")
-               and .confidence != "low"
+               and .confidence in ("medium", "high")
+   )
+   and not (
+     sender.email.domain.root_domain in $high_trust_sender_root_domains
+     and coalesce(headers.auth_summary.dmarc.pass, false)
    )
 attack_types:
   - "Credential Phishing"
