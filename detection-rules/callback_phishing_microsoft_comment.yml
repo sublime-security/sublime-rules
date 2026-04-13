@@ -5,6 +5,7 @@ severity: "medium"
 source: |
   type.inbound
   and length(attachments) == 0
+  and length(body.current_thread.text) < 1750
   
   // Legitimate MicrosoftOnline sending infrastructure
   // or invites@microsoft.com abuse
@@ -19,22 +20,6 @@ source: |
       any(ml.nlu_classifier(body.current_thread.text).intents,
           .name in ("callback_scam", "cred_theft")
           and .confidence in ("medium", "high")
- and length(attachments) == 0
- and length(body.current_thread.text) < 1750
- 
- // Legitimate MicrosoftOnline sending infrastructure
- // or invites@microsoft.com abuse
- and (
-   (
-     sender.email.domain.root_domain in ('microsoftonline.com')
-     or sender.email.email == "invites@microsoft.com"
-   )
- 
-   // Callback Phishing
-   and (
-     any(ml.nlu_classifier(body.current_thread.text).intents,
-          .name in ("callback_scam", "cred_theft")
-         and .confidence in ("medium", "high")
       )
       or 3 of (
         strings.ilike(body.current_thread.text, '*purchase*'),
