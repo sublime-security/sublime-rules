@@ -244,3 +244,48 @@ rule Phishing_PDF_Split_QR_Code_Pair_290
       // The two JPEG SOF0 markers appear within 100KB of each other                                                                                                     
       @sof0[2] - @sof0[1] < 102400                                                                                                                                       
 }                                                                                               
+
+rule Phishing_PDF_Split_QR_Code_Pair_370
+{
+    meta:
+        author = "brandon murphy"
+        date = "2026-04-10"
+        description = "PDF containing two 185x370 JPEG images — a vertically split QR code pair"
+
+    strings:
+        $header = {25 50 44 46 2d 31 2e}
+
+        // --- PDF object layer ---
+        // Image XObject definitions for the QR halves.
+        // Both objects declare the same dimensions + JPEG filter.
+        $w = "/Width 185"
+        $h = "/Height 370"
+        $jpeg_filter = "/Filter /DCTDecode"
+        $xobj_image = "/Subtype /Image"
+
+        // --- JPEG layer ---
+        // SOF0 (baseline) marker encoding exactly 185x370:
+        //   ff c0       = SOF0 marker
+        //   00 11       = segment length (17 bytes)
+        //   08          = 8-bit precision
+        //   01 72       = height 370
+        //   00 b9       = width 185
+        //   03          = 3 components (YCbCr)
+        $sof0 = {ff c0 00 11 08 01 72 00 b9 03}
+
+    condition:
+        $header at 0 and
+
+        // Both are JPEG XObject images
+        $jpeg_filter and
+        $xobj_image and
+
+        // Exactly two QR-half image objects in the PDF
+        #sof0 == 2 and
+        #w == 2 and
+        #h == 2 and
+
+        // The two JPEG SOF0 markers appear within 100KB of each other
+        @sof0[2] - @sof0[1] < 102400
+}
+
