@@ -289,3 +289,82 @@ rule Phishing_PDF_Split_QR_Code_Pair_370
         @sof0[2] - @sof0[1] < 102400
 }
 
+rule pdf_jsfck_ratio {
+    meta:
+        author      = "kyle eaton"
+        date        = "04.13.2026"
+        description = "matching PDFs which contain JS objects which have a high ratio (40%) of characters used in jsf-ck obfuscation "
+    strings:
+        $header   = { 25 50 44 46 2D 31 2E }
+        $js       = "/JS"
+        $a        = "["
+        $b        = "]"
+        $c        = "+"
+        $d        = "{"
+        $e        = "}"
+        $js_regex = /\/JS\s+?\((.*?)\)\s+?.*?>>/s
+    condition:
+        $header at 0
+        and all of them
+        and for any i in (1..#js_regex): (
+            ((#a in (@js_regex[i]..@js_regex[i] + !js_regex) + #b in (@js_regex[i]..@js_regex[i] + !js_regex) + #c in (@js_regex[i]..@js_regex[i] + !js_regex) + #d in (@js_regex[i]..@js_regex[i] + !js_regex) + #e in (@js_regex[i]..@js_regex[i] + !js_regex) * 1.0) \ !js_regex * 100) > 40
+
+        )
+}
+
+rule pdf_jsfck_strings {
+    meta:
+        author      = "kyle eaton"
+        date        = "04.13.2026"
+        description = "matching PDFs which contain JS objects using jsf-ck obfuscation."
+    strings:
+        $header   = { 25 50 44 46 2D 31 2E }
+        $js_regex = /\/JS\s+?\((.*?)\)\s+?.*?>>/s
+        $jsf01    = "({}+[])"
+        $jsf02    = "(!+[]/+[]+[])"
+        $jsf03    = "[][[]]"
+        $jsf04    = "+[![]]"
+        $jsf05    = "+[]"
+        $jsf06    = "+!+[]"
+        $jsf07    = "!+[]+!+[]"
+        $jsf08    = "[[+!+[]]]"
+    condition:
+        $header at 0
+        and $js_regex
+        and for any i in (1..#js_regex): (
+            any of ($jsf*) in (@js_regex[i]..@js_regex[i] + !js_regex)
+        )
+}
+
+rule pdf_acro_js_functions {
+    meta:
+        author      = "kyle eaton"
+        date        = "04.13.2026"
+        description = "matching PDFs which use acrobat JS functions to load content from other objects with in the PDF"
+    strings:
+        $header   = { 25 50 44 46 2D 31 2E }
+        $js_regex = /\/JS\s+?\((.*?)\)\s+?.*?>>/s
+        $acro_1   = "SOAP"
+        $acro_2   = "util"
+        $getField = "getField"
+    condition:
+        $header at 0
+        and $js_regex
+        and for any i in (1..#js_regex): (
+            any of ($acro_*) in (@js_regex[i]..@js_regex[i] + !js_regex)
+            and $getField in (@js_regex[i]..@js_regex[i] + !js_regex)
+        )
+}
+
+rule pdf_b64_encoded_var_value {
+    meta:
+        author      = "kyle eaton"
+        date        = "04.13.2026"
+        description = "matching PDFs which have b64 encoded javascript (starting with var)"
+    strings:
+        $header    = { 25 50 44 46 2D 31 2E }
+        $b64_value = " /V /dmFyI"
+    condition:
+        $header at 0
+        and
+}
