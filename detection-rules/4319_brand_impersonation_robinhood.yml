@@ -11,8 +11,7 @@ source: |
       )
       and (
         any(ml.nlu_classifier(body.current_thread.text).intents,
-            .name in ("callback_scam", "cred_theft")
-            and .confidence in ("low", "high")
+            .name in ("callback_scam", "cred_theft") and .confidence != "low"
         )
       )
       or strings.icontains(body.current_thread.text, 'The Robinhood Team')
@@ -67,19 +66,16 @@ source: |
       )
       or length(headers.references) == 0
     )
-    and (
-      (
-        profile.by_sender().prevalence != "common"
-        and not profile.by_sender().solicited
-      )
-    )
+  
     // negate newsletters and webinars
-    and not any(ml.nlu_classifier(body.current_thread.text).topics,
-                .name in ("Newsletters and Digests", "Events and Webinars")
-                and .confidence == "high"
-    )
-    and not any(ml.nlu_classifier(body.current_thread.text).intents,
-                .name == "benign" and .confidence == "high"
+    and not (
+      any(ml.nlu_classifier(body.current_thread.text).topics,
+          .name in ("Newsletters and Digests", "Events and Webinars")
+          and .confidence == "high"
+      )
+      or any(ml.nlu_classifier(body.current_thread.text).intents,
+             .name == "benign" and .confidence == "high"
+      )
     )
     and not (
       sender.email.domain.root_domain in (
@@ -100,7 +96,6 @@ source: |
     )
     or sender.email.domain.root_domain not in $high_trust_sender_root_domains
   )
-
 attack_types:
   - "Credential Phishing"
 tactics_and_techniques:
@@ -114,4 +109,4 @@ detection_methods:
 id: "3bd8298b-379b-5214-b94d-d2237ed502ad"
 og_id: "7c8eca19-63ac-5cd3-a92b-4fb34b526683"
 testing_pr: 4319
-testing_sha: e21564444b149aeb12c574c68d4d5c1cd42c1b0d
+testing_sha: fb227a6bfb3511c677f14c9a3a3aba73d678cccf
