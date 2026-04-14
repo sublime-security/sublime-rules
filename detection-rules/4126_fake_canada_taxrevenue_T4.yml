@@ -6,9 +6,13 @@ source: |
   type.inbound
   and regex.icontains(sender.display_name, '(?:Canada Revenue Agency|\bCRA\b)')
   and (
-    length(attachments) == 1
+    any(filter(attachments, .file_type == "pdf"),
+        any(file.explode(.),
+            any(.scan.url.urls, .domain.root_domain == 'vercel.app')
+        )
+    )
+    or network.whois(sender.email.domain).days_old < 90
     or any(body.links, network.whois(.href_url.domain).days_old <= 365)
-    or network.whois(sender.email.domain).days_old <= 30
     or any(body.links,
            regex.icontains(.href_url.path,
                            '\.(msi|exe|lnk|js|vbs|bat|cmd|ps1|hta|wsf|scr)$'
@@ -43,4 +47,4 @@ detection_methods:
 id: "a1af76b1-6080-5489-bf8b-c5a7b7cbb725"
 og_id: "72607c4c-52dc-5df6-b547-54ee321b7a7a"
 testing_pr: 4126
-testing_sha: 53f8684afdc2f1cb05cfce7c264d10706b0fb45e
+testing_sha: 2d98a928184b587f65b1a2bee8e07dda1d43bd74
