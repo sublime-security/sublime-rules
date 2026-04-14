@@ -6,12 +6,13 @@ default_actions: ["move_to_spam"]
 source: |
   type.inbound
   and (
+    // Path 1: Authentication failure
     // If authentication fails at all during a bomb, we always want to remediate
     not coalesce(headers.auth_summary.dmarc.pass, false)
     or not coalesce(headers.auth_summary.spf.pass, false)
-
-    // All content-based paths require basic guards: not an org-domain sender,
-    // no prior thread history, and not a legitimate reply chain.
+  
+    // Paths 2–4 share basic guards: the sender is not from the org's own domain,
+    // there is no prior thread history, and it's not a legitimate reply chain.
     or (
       sender.email.domain.root_domain not in $org_domains
       and length(body.previous_threads) == 0
@@ -21,9 +22,13 @@ source: |
         and length(headers.references) > 0
         and headers.in_reply_to is not null
       )
+  
       and (
-        // Content heuristics that indicate noisy bomb traffic, gated by sender
-        // familiarity to prevent overreach on established sender relationships.
+        // Path 2: Content heuristics + sender familiarity
+        // Matches messages that look like bomb noise (spam-like NLU topics, graymail
+        // verdicts, undisclosed recipients, fake threads, or generic sender local-parts)
+        // but only when the sender is unfamiliar — preventing overreach on established
+        // sender relationships.
         (
           (
             // Looks like known spam, welcome, newsletters, etc
@@ -45,31 +50,29 @@ source: |
                   "Security and Authentication",
                 )
             )
-
+  
             // Or it's already likely to be graymail
             or ml.attack_score().verdict not in (
               "likely_benign",
               "unknown",
               "suspicious"
             )
-
+  
             // Undisclosed recipients
             or (
               length(recipients.bcc) > 0
               or length(recipients.cc) > 0
               or not any(recipients.to, .email.domain.valid)
             )
-
+  
             // Potential fake thread
             or (
               regex.imatch(subject.subject,
                            '(\[[^\]]+\]\s?){0,3}(re|fwd?|automat.*)\s?:.*'
               ) == true
-              and (
-                length(headers.references) == 0 or headers.in_reply_to is null
-              ) == true
+              and (length(headers.references) == 0 or headers.in_reply_to is null) == true
             )
-
+  
             // common local-part of generic mailboxes used to send signup/confirmation emails
             or sender.email.local_part in (
               'noreply',
@@ -88,22 +91,23 @@ source: |
               'notifications',
               'notification'
             )
-
+  
             // regex patterns for local part used to send signup/confirmation emails
             or regex.icontains(sender.email.local_part, '(?:subscri|no.reply)')
             or regex.icontains(sender.display_name, '(?:subscri|no.reply)')
           )
-
+  
           // And the sender doesn't match any familiarity checks
           and sender.email.domain.root_domain not in $high_trust_sender_root_domains
           and not profile.by_sender_email().solicited
           and not profile.by_sender_email().any_messages_benign
           and profile.by_sender_email().days_known < 3
         )
-
-        // Transactional signals — signup confirmations, password resets, account creation,
-        // OTPs, and similar high-specificity patterns. These are strong enough to stand
-        // on their own without sender familiarity checks.
+  
+        // Path 3: Transactional signals
+        // Matches messages with high-specificity signup, account creation, password reset,
+        // or OTP patterns in the subject, body, or links. These signals are strong enough
+        // to identify bomb traffic without requiring sender familiarity checks.
         or (
           // signup subject patterns
           regex.icontains(subject.base,
@@ -203,32 +207,27 @@ source: |
                                     '(?:verif|confirm|activat|validate|register|registrat|sign.?up|opt.?in|token|otp)'
                  )
                  or any(values(.href_url.query_params_decoded),
-                        any(.,
-                            regex.icontains(.,
-                                            '(?:verif|confirm|activat|validate|register|registrat|sign.?up|opt.?in|token|otp)'
-                            )
-                        )
+                        any(., regex.icontains(., '(?:verif|confirm|activat|validate|register|registrat|sign.?up|opt.?in|token|otp)'))
                  )
           )
         )
-
-        // WordPress / PHP framework mailer headers — strong signal of form or CMS abuse.
-        // No familiarity gate needed — the mailer itself is the signal.
+  
+        // Path 4: WordPress / PHP framework mailer headers
+        // Strong signal of web form or CMS abuse — the mailer header itself identifies
+        // the message as automated output from a form submission system.
         or (
           sender.email.domain.root_domain == 'wordpress.com'
           or (
             headers.mailer is not null
             and regex.icontains(headers.mailer,
-                                'phpmailer|wpmail|wp mail smtp|easywpsmtp|post.smtp|drupal|typo3|codeigniter|nette|activecampaign|symfony|laravel|zend|cakephp|yii|enginemailer|msgsend|sailthru|sympa'
+                  'phpmailer|wpmail|wp mail smtp|easywpsmtp|post.smtp|drupal|typo3|codeigniter|nette|activecampaign|symfony|laravel|zend|cakephp|yii|enginemailer|msgsend|sailthru|sympa'
             )
           )
-          or any(headers.hops,
-                 any(.fields,
-                     .name =~ "Content-Type"
-                     and strings.icontains(.value, 'boundary="_=_swift_')
-                     and strings.iends_with(.value, '_=_"')
-                 )
-          )
+          or any(headers.hops, any(.fields,
+               .name =~ "Content-Type"
+               and strings.icontains(.value, 'boundary="_=_swift_')
+               and strings.iends_with(.value, '_=_"')
+          ))
         )
       )
     )
