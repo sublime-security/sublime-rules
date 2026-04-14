@@ -4,18 +4,24 @@ type: "rule"
 severity: "medium"
 source: |
   type.inbound
-  and (body.current_thread.text is null or length(body.current_thread.text) < 500)
+  and length(body.current_thread.text) < 2000
   and any(attachments,
-          (.file_extension in~ ("ppt", "pptx"))
-          and (
-            any(file.explode(.),
-                any(ml.nlu_classifier(.scan.strings.raw).intents,
-                    .name == "callback_scam" and .confidence != "low"
-                )
-            )
+          .file_extension in~ ("ppt", "pptx")
+          and any(file.explode(.),
+                  any(ml.nlu_classifier(.scan.strings.raw).intents,
+                      .name == "callback_scam" and .confidence != "low"
+                  )
           )
   )
-  and not sender.email.domain.root_domain in $high_trust_sender_root_domains
+  and sender.email.domain.root_domain in $free_email_providers
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and (
+    coalesce(sender.email.domain.root_domain in $high_trust_sender_root_domains
+             and not headers.auth_summary.dmarc.pass,
+             false
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
 attack_types:
   - "Callback Phishing"
 tactics_and_techniques:
@@ -26,4 +32,4 @@ detection_methods:
 id: "17aeb612-ba56-50aa-871a-110a553f3339"
 og_id: "769b3333-4cde-544c-a081-ef9a75dddd24"
 testing_pr: 4300
-testing_sha: 6f611f8b243d9f4bd642573fe1420dc9eaa48c85
+testing_sha: a76f00b606fa3c31f78cd88d45c3350789b4a17e
