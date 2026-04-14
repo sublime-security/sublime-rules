@@ -6,9 +6,13 @@ source: |
   type.inbound
   and regex.icontains(sender.display_name, '(?:Canada Revenue Agency|\bCRA\b)')
   and (
-    length(attachments) == 1
+     any(filter(attachments, .file_type == "pdf"),
+        any(file.explode(.),
+            any(.scan.url.urls, .domain.root_domain == 'vercel.app')
+        )
+    )
+    or network.whois(sender.email.domain).days_old < 90
     or any(body.links, network.whois(.href_url.domain).days_old <= 365)
-    or network.whois(sender.email.domain).days_old <= 30
     or any(body.links,
            regex.icontains(.href_url.path,
                            '\.(msi|exe|lnk|js|vbs|bat|cmd|ps1|hta|wsf|scr)$'
