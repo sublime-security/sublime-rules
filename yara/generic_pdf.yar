@@ -363,17 +363,21 @@ rule pdf_acro_js_functions {
 		)
 }
 
-rule pdf_b64_encoded_var_value {
-    meta:
-        author      = "kyle eaton"
-        date        = "04.13.2026"
-        description = "matching PDFs which have b64 encoded javascript (starting with var)"
-    strings:
-        $header    = { 25 50 44 46 2D 31 2E }
-        $b64_value = " /V /dmFyI"
-    condition:
-        $header at 0
-        and
+rule pdf_b64_js_var_eval {
+	meta:
+		author      = "kyle eaton"
+		date        = "04.13.2026"
+		description = "matching pdfs with base64 encoded javascript that either start with var, or include the eval string."
+	strings:
+		$header        = { 25 50 44 46 2D 31 2E }
+		$b64_var_start = " /V /dmFyI"
+		$eval_b64_1    = "ZXZhbC"
+		$eval_b64_2    = "V2YWwo"
+		$eval_b64_3    = "ldmFsK"
+	condition:
+		$header at 0
+		and $b64_var_start
+		and any of ($eval_b64_*)
 }
 
 rule pdf_cve_2026_34621_observed_lures {
