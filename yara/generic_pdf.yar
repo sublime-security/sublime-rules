@@ -340,20 +340,27 @@ rule pdf_acro_js_functions {
     meta:
         author      = "kyle eaton"
         date        = "04.13.2026"
-        description = "matching PDFs which use acrobat JS functions to load content from other objects with in the PDF"
-    strings:
-        $header   = { 25 50 44 46 2D 31 2E }
-        $js_regex = /\/JS\s+?\((.*?)\)\s+?.*?>>/s
-        $acro_1   = "SOAP"
-        $acro_2   = "util"
-        $getField = "getField"
-    condition:
-        $header at 0
-        and $js_regex
-        and for any i in (1..#js_regex): (
-            any of ($acro_*) in (@js_regex[i]..@js_regex[i] + !js_regex)
-            and $getField in (@js_regex[i]..@js_regex[i] + !js_regex)
-        )
+		description = "matching PDFs which use JS to load content from other objects with in the PDF OR pdfs that use exploited functions that we've observed used maliciously."
+	strings:
+		$header      = { 25 50 44 46 2D 31 2E }
+		$js_regex    = /\/JS\s+?\((.*?)\)\s+?.*?>>/s
+		$acro_1      = "SOAP"
+		$acro_2      = "util"
+		$getField    = "getField"
+		$fancy_b64_1 = "FORmFuY3lBbGVydEltcGwo"
+		$fancy_b64_2 = "QU5GYW5jeUFsZXJ0SW1wbC"
+		$fancy_b64_3 = "BTkZhbmN5QWxlcnRJbXBsK"
+	condition:
+		$header at 0
+		and $js_regex
+		and for any i in (1..#js_regex): (
+			(
+				any of ($acro_*) in (@js_regex[i]..@js_regex[i] + !js_regex)
+				and $getField in (@js_regex[i]..@js_regex[i] + !js_regex))
+			or (
+				any of ($fancy_b64_*) in (@js_regex[i]..@js_regex[i] + !js_regex)
+			)
+		)
 }
 
 rule pdf_b64_encoded_var_value {
@@ -368,3 +375,18 @@ rule pdf_b64_encoded_var_value {
         $header at 0
         and
 }
+
+rule pdf_cve_2026_34621_observed_lures {
+	meta:
+		author      = "kyle eaton"
+		date        = "04.14.2026"
+		description = "matches the lures in the PDFs observed exploiting CVE-2026-34621."
+	strings:
+		$header = { 25 50 44 46 2D 31 2E }
+		$img_1  = { ff c0 00 11 08 03 18 02 64 03 01 22 00 02 11 01 03 11 01 ff c4 00 1f 00 00 01 05 01 01 01 01 01 01 00 00 00 00 00 00 00 00 01 02 03 04 05 06 07 08 09 0a 0b ff c4 00 b5 10 00 02 01 03 03 02 04 03 05 05 04 04 00 00 01 7d 01 02 03 00 04 11 05 12 21 31 41 06 13 51 61 07 22 71 14 32 81 91 a1 08 23 42 b1 c1 15 52 d1 f0 24 33 62 72 82 09 0a 16 17 18 19 1a 25 26 27 28 29 2a 34 35 36 37 38 39 3a 43 44 45 46 47 48 49 4a 53 54 55 56 57 58 59 5a 63 64 65 66 67 68 69 6a 73 74 75 76 77 78 79 7a 83 84 85 86 87 88 89 8a 92 93 94 95 96 97 98 99 9a a2 a3 a4 a5 a6 a7 a8 a9 aa b2 b3 b4 b5 b6 b7 b8 b9 ba c2 c3 c4 c5 c6 c7 c8 c9 ca d2 d3 d4 d5 d6 d7 d8 d9 da e1 e2 e3 e4 e5 e6 e7 e8 e9 ea f1 f2 f3 f4 f5 f6 f7 f8 f9 fa ff c4 00 1f 01 00 03 01 01 01 01 01 01 01 01 01 00 00 00 00 00 00 01 02 03 04 05 06 07 08 09 0a 0b ff c4 00 b5 11 00 02 01 02 04 04 03 04 07 05 04 04 00 01 02 77 00 01 02 03 11 04 05 21 31 06 12 41 51 07 61 71 13 22 32 81 08 14 42 91 a1 b1 c1 09 23 33 52 f0 15 62 72 d1 0a 16 24 34 e1 25 f1 17 18 19 1a 26 27 28 29 2a 35 36 37 38 39 3a 43 44 45 46 47 48 49 4a 53 54 55 56 57 58 59 5a 63 64 65 66 67 68 69 6a 73 74 75 76 77 78 79 7a 82 83 84 85 86 87 88 89 8a 92 93 94 95 96 97 98 99 9a a2 a3 a4 a5 a6 a7 a8 a9 aa b2 b3 b4 b5 b6 b7 b8 b9 ba c2 c3 c4 c5 c6 c7 c8 c9 ca d2 d3 d4 d5 d6 d7 d8 d9 da e2 e3 e4 e5 e6 e7 e8 e9 ea f2 f3 f4 f5 f6 f7 f8 f9 fa ff da 00 0c 03 01 00 02 11 03 11 00 3f 00 f7 fa [1328] 0f 5a 3e d0 3d 68 02 cd 15 5b ed 03 d6 8f b4 0f 5a 00 b3 45 56 fb 40 f5 a3 ed 03 d6 80 2c d1 55 be d0 3d 68 fb 40 f5 a0 0b 34 55 6f b4 0f 5a 3e d0 3d 68 02 cd 15 5b ed 03 d6 8f b4 0f 5a 00 b3 45 56 fb 40 f5 a3 ed 03 d6 80 2c d1 55 be d0 3d 68 fb 40 f5 }
+		$img_2  = { ff c2 00 0b 08 05 59 0b a9 01 01 11 00 ff c4 00 1c 00 01 00 02 03 01 01 01 00 00 00 00 00 00 00 00 00 00 05 07 03 04 06 02 01 08 ff da 00 08 01 01 00 00 00 01 ec 2f [5400] 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 02 86 be 40 00 00 00 00 00 ae 79 38 cb 4a b5 b1 3b 92 96 9f c3 5e dc d5 6f 19 da d8 fc 0f 35 1f d6 ec c1 6f 5a 55 4e c7 7d c6 f6 fc f7 21 bf 9e 52 cf a5 2e fe 27 97 d4 d4 ec b5 bc ce 57 3e 71 6d }
+		$img_3  = { ff c0 00 11 08 03 18 02 64 03 01 22 00 02 11 01 03 11 01 ff c4 00 1f 00 00 01 05 01 01 01 01 01 01 00 00 00 00 00 00 00 00 01 02 03 04 05 06 07 08 09 0a 0b ff c4 00 b5 10 00 02 01 03 03 02 04 03 05 05 04 04 00 00 01 7d 01 02 03 00 04 11 05 12 21 31 41 06 13 51 61 07 22 71 14 32 81 91 a1 08 23 42 b1 c1 15 52 d1 f0 24 33 62 72 82 09 0a 16 17 18 19 1a 25 26 27 28 29 2a 34 35 36 37 38 39 3a 43 44 45 46 47 48 49 4a 53 54 55 56 57 58 59 5a 63 64 65 66 67 68 69 6a 73 74 75 76 77 78 79 7a 83 84 85 86 87 88 89 8a 92 93 94 95 96 97 98 99 9a a2 a3 a4 a5 a6 a7 a8 a9 aa b2 b3 b4 b5 b6 b7 b8 b9 ba c2 c3 c4 c5 c6 c7 c8 c9 ca d2 d3 d4 d5 d6 d7 d8 d9 da e1 e2 e3 e4 e5 e6 e7 e8 e9 ea f1 f2 f3 f4 f5 f6 f7 f8 f9 fa ff c4 00 1f 01 00 03 01 01 01 01 01 01 01 01 01 00 00 00 00 00 00 01 02 03 04 05 06 07 08 09 0a 0b ff c4 00 b5 11 00 02 01 02 04 04 03 04 07 05 04 04 00 01 02 77 00 01 02 03 11 04 05 21 31 06 12 41 51 07 61 71 13 22 32 81 08 14 42 91 a1 b1 c1 09 23 33 52 f0 15 62 72 d1 0a 16 24 34 e1 25 f1 17 18 19 1a 26 27 28 29 2a 35 36 37 38 39 3a 43 44 45 46 47 48 49 4a 53 54 55 56 57 58 59 5a 63 64 65 66 67 68 69 6a 73 74 75 76 77 78 79 7a 82 83 84 85 86 87 88 89 8a 92 93 94 95 96 97 98 99 9a a2 a3 a4 a5 a6 a7 a8 a9 aa b2 b3 b4 b5 b6 b7 b8 b9 ba c2 c3 c4 c5 c6 c7 c8 c9 ca d2 d3 d4 d5 d6 d7 d8 d9 da e2 e3 e4 e5 e6 e7 e8 e9 ea f2 f3 f4 f5 f6 f7 f8 f9 fa ff da 00 0c 03 01 00 02 11 03 11 00 3f 00 f7 fa [936] 28 a6 97 02 80 1d 45 47 e6 af ad 2f 98 a7 bd 00 3e 8a 6e f1 49 e6 2f ad 00 3e 8a 67 98 be b4 79 82 80 1f 45 33 cc 1e b4 9e 72 fa d0 04 94 54 7e 6a fa d2 f9 8b eb 40 0f a2 99 e6 0f 5a 3c c1 eb 40 0f a2 99 e6 2f ad 1e 62 fa d0 03 e8 a6 79 ab eb 47 98 28 }
+	condition:
+		$header at 0 and any of ($img_*)
+}
+
