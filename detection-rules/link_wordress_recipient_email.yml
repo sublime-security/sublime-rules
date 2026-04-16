@@ -1,0 +1,23 @@
+name: "Link: WordPress admin targeting with recipient identifier in URL fragment"
+description: "Detects messages containing links to WordPress administrative paths (wp-admin, wp-content, wp-includes, etc.) where the URL fragment contains base64-encoded data that includes the recipient's email address, indicating potential targeted compromise attempts."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and any(body.links,
+          regex.icontains(.href_url.path,
+                          '^\/(?:wp-(?:admin|includes|content|login|json|signup|activate|cron|mail)|xmlrpc\.php)'
+          )
+          and any(strings.scan_base64(.href_url.fragment),
+                  strings.icontains(., recipients.to[0].email.email)
+          )
+  )
+  
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Evasion"
+  - "Social engineering"
+detection_methods:
+  - "URL analysis"
+  - "Content analysis"
