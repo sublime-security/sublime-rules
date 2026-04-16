@@ -1,0 +1,57 @@
+name: "PR# 4359 - Brand impersonation: OpenAI"
+description: "Detects messages impersonating OpenAI that contain credential theft intent, sent from suspicious or malicious senders outside of legitimate OpenAI domains. The rule identifies both display name impersonation and content-based OpenAI references combined with credential theft language patterns."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and (
+    regex.icontains(sender.display_name, '\bopenai\b')
+    or (
+      any(ml.nlu_classifier(body.current_thread.text).entities,
+          .name == "sender" and strings.icontains(.text, "OpenAI")
+      )
+      and any(ml.nlu_classifier(body.current_thread.text).intents,
+              .name == "cred_theft" and .confidence != "low"
+      )
+    )
+  )
+  and not regex.icontains(sender.display_name, '\b(?:via|at|\sx\s)\b')
+  and sender.email.domain.root_domain not in~ (
+    'openai.com',
+    'c-openai.com',
+    'appleid.com'
+  )
+  and (
+    (
+      profile.by_sender().prevalence in ("new", "outlier", "rare")
+      and not profile.by_sender().solicited
+    )
+    or (
+      profile.by_sender().any_messages_malicious_or_spam
+      and not profile.by_sender().any_messages_benign
+    )
+  )
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and not coalesce(headers.auth_summary.dmarc.pass, false)
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+  
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Social engineering"
+detection_methods:
+  - "Natural Language Understanding"
+  - "Sender analysis"
+  - "Content analysis"
+id: "4f0ccd00-018b-580d-8a4d-44a5ff2e6f32"
+tags:
+  - created_from_open_prs
+  - rule_status_added
+  - pr_author_JFarina5
+references:
+  - https://github.com/sublime-security/sublime-rules/pull/4359
