@@ -1,0 +1,30 @@
+name: "Attachment: ICS file with links to newly registered domains"
+description: "Detects calendar invite attachments (ICS files) containing links to domains registered within the last 30 days, which may indicate malicious calendar invitations designed to redirect users to suspicious websites."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and any(attachments,
+          (
+            .file_extension in~ ('ics')
+            or .content_type in ("application/ics", "text/calendar")
+          )
+          //
+          // This rule makes use of a beta feature and is subject to change without notice
+          // using the beta feature in custom rules is not suggested until it has been formally released
+          //
+          and any(beta.file.parse_ics(.).events,
+                  any(.links, network.whois(.href_url.domain).days_old < 30)
+          )
+  )
+
+
+attack_types:
+  - "Credential Phishing"
+  - "Malware/Ransomware"
+tactics_and_techniques:
+  - "Social engineering"
+detection_methods:
+  - "File analysis"
+  - "URL analysis"
+  - "Whois"
