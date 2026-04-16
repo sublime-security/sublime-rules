@@ -1,0 +1,55 @@
+name: "PR# 4141 - Brand impersonation: MetaMask"
+description: "Detects inbound messages containing links where the sender impersonates MetaMask through display name manipulation and includes the MetaMask logo or suspicious language, while not being from legitimate MetaMask domains. The rule checks for credential theft patterns and validates sender authentication."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and length(body.links) > 0
+  and (
+    regex.icontains(strings.replace_confusables(sender.display_name),
+                    '\bmetamask\b',
+                    '\bmetamask\.io\b'
+    )
+    or strings.contains(strings.replace_confusables(sender.display_name),
+                        "METAMASK"
+    )
+    or strings.ilevenshtein(strings.replace_confusables(sender.display_name),
+                            'metamask'
+    ) <= 2
+  )
+  and (
+    any(ml.logo_detect(file.message_screenshot()).brands, .name == "MetaMask")
+    or any(ml.nlu_classifier(body.current_thread.text).intents,
+           .name in ("cred_theft", "callback_scam", "steal_pii")
+           and .confidence in ("high")
+    )
+  )
+  and sender.email.domain.root_domain not in~ ('metamask.io')
+  
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and not headers.auth_summary.dmarc.pass
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+
+attack_types:
+  - "BEC/Fraud"
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Social engineering"
+detection_methods:
+  - "Computer Vision"
+  - "Natural Language Understanding"
+  - "Sender analysis"
+  - "Header analysis"
+id: "6dfad265-f130-58a9-ab88-3addc7afb6f4"
+tags:
+  - created_from_open_prs
+  - rule_status_modified
+  - pr_author_MSAdministrator
+references:
+  - https://github.com/sublime-security/sublime-rules/pull/4141
