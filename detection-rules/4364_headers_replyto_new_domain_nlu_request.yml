@@ -1,0 +1,73 @@
+name: "PR# 4364 - Suspicious newly registered reply-to domain with engaging financial or urgent language"
+description: |
+  Detects messages from a mismatched newly registered Reply-to domain that contain a financial or urgent request, or a request and 
+  an NLU tag with medium to high confidence, from an untrusted sender. This technique is typically observed in Vendor impersonation.
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and length(body.current_thread.text) < 5000
+  and (
+    any(headers.reply_to,
+        // mismatched reply-to and sender domain
+        .email.domain.root_domain != sender.email.domain.root_domain
+        // newly registered reply-to domain
+        and network.whois(.email.domain).days_old <= 30
+    )
+    or (
+      network.whois(sender.email.domain).days_old < 30
+      and sender.email.domain.tld in $suspicious_tlds
+    )
+  )
+  // request is being made
+  and any(ml.nlu_classifier(body.current_thread.text).entities,
+          .name == "request"
+  )
+  // there's financial/urgency OR a tag of medium/high confidence
+  and (
+    any(ml.nlu_classifier(body.current_thread.text).entities,
+        .name in ("financial", "urgency")
+    )
+    or any(ml.nlu_classifier(body.current_thread.text).tags,
+           .name is not null and .confidence in ("medium", "high")
+    )
+  )
+  and (
+    not profile.by_sender().solicited
+  
+    // 
+    // This rule makes use of a beta feature and is subject to change without notice
+    // using the beta feature in custom rules is not suggested until it has been formally released
+    // 
+    or not beta.profile.by_reply_to().solicited
+    or (
+      profile.by_sender().any_messages_malicious_or_spam
+      and not profile.by_sender().any_messages_benign
+    )
+  )
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and not headers.auth_summary.dmarc.pass
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+attack_types:
+  - "BEC/Fraud"
+tactics_and_techniques:
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Header analysis"
+  - "Natural Language Understanding"
+  - "Sender analysis"
+  - "URL analysis"
+  - "Whois"
+id: "4e995310-f7be-5023-b58c-8d3ef959ba41"
+tags:
+  - created_from_open_prs
+  - rule_status_modified
+  - pr_author_IndiaAce
+references:
+  - https://github.com/sublime-security/sublime-rules/pull/4364
