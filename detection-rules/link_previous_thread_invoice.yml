@@ -1,0 +1,61 @@
+name: "Link: Invoice-related BEC with newly registered domain < 60 days "
+description: "Detects Business Email Compromise attacks using fake reply/forward threads containing links to newly registered domains (less than 60 days old) with invoice-related language and engaging action words. The message includes financial or payment terminology and prompts the recipient to take action through suspicious links."
+type: "rule"
+severity: "medium"
+source: |
+    type.inbound
+    and (subject.is_reply or subject.is_forward)
+    and (
+      any(body.current_thread.links, network.whois(.href_url.domain).days_old < 60)
+      and any(body.links,
+              regex.icontains(.display_text,
+                              '[VIEW|REVIEW|CLICK|DOWNLOAD|CHECK|VALIDATE]'
+              )
+      )
+      and any([body.current_thread.text],
+              regex.icontains(.,
+                              'wire transfer',
+                              'payment',
+                              'invoice',
+                              'ACH',
+                              'kindly download',
+                              'document',
+                              'kindly',
+                              'urgently',
+                              'confirm'
+              )
+      )
+      and (
+        // language attempting to engage
+        (
+          any(ml.nlu_classifier(body.current_thread.text).entities,
+              .name in ("request", "financial")
+          )
+        )
+        // invoicing language
+        and any(ml.nlu_classifier(body.current_thread.text).tags,
+                .name == "invoice"
+        )
+      )
+    )
+    // prevent benign emails
+    and any(ml.nlu_classifier(body.current_thread.text).intents, .name != "benign")
+    // negate highly trusted sender domains unless they fail DMARC authentication
+    and (
+      (
+        sender.email.domain.root_domain in $high_trust_sender_root_domains
+        and not headers.auth_summary.dmarc.pass
+      )
+      or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+    )
+
+attack_types:
+  - "BEC/Fraud"
+tactics_and_techniques:
+  - "Social engineering"
+  - "Evasion"
+  - "Spoofing"
+detection_methods:
+  - "Header analysis"
+  - "Sender analysis"
+  - "URL analysis"
