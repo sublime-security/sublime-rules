@@ -1,0 +1,55 @@
+name: "PR# 4365 - Attachment: ICS calendar file with QR code containing recipient email address"
+description: "Detects calendar attachments (.ics files) containing QR codes that include the recipient's email address in the URL, URL fragment, or base64-encoded data. This technique is commonly used to personalize credential theft attacks by embedding the target's email address within calendar invitations."
+type: "rule"
+severity: "high"
+source: |
+    type.inbound
+    and any(attachments,
+            (
+              .file_type == "ics"
+              or (
+                .file_extension == "ics"
+                or .content_type in ("application/ics", "text/calendar")
+              )
+            )
+            //
+            // This rule makes use of a beta feature and is subject to change without notice
+            // using the beta feature in custom rules is not suggested until it has been formally released
+            //
+            and any(beta.file.parse_ics(.).events,
+                    beta.scan_qr(file.html_screenshot(.description_html)).found
+                    and any(beta.scan_qr(file.html_screenshot(.description_html)).items,
+                            strings.icontains(.url.url,
+                                              recipients.to[0].email.email
+                            )
+                            or any(strings.scan_base64(.url.url, format="url"),
+                                   strings.icontains(.,
+                                                     recipients.to[0].email.email
+                                   )
+                            )
+                            or any(strings.scan_base64(.url.fragment),
+                                   strings.icontains(.,
+                                                     recipients.to[0].email.email
+                                   )
+                            )
+                    )
+            )
+    )
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "QR code"
+  - "Social engineering"
+  - "Evasion"
+detection_methods:
+  - "File analysis"
+  - "QR code analysis"
+  - "URL analysis"
+  - "Content analysis"
+id: "256a701b-2a8b-518d-8221-a184754ab4ce"
+tags:
+  - created_from_open_prs
+  - rule_status_added
+  - pr_author_zoomequipd
+references:
+  - https://github.com/sublime-security/sublime-rules/pull/4365
