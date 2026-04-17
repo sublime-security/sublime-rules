@@ -8,6 +8,7 @@ source: |
     any(ml.logo_detect(file.message_screenshot()).brands, .name == "USPS")
     or strings.icontains(sender.display_name, "USPS")
     or regex.contains(body.html.display_text, 'USPS\s*\.\s*COM')
+    or strings.icontains(body.current_thread.text, 'USPS Delivery Team')
   )
   and length(body.links) > 0
   and 3 of (
@@ -16,7 +17,8 @@ source: |
                       "*check now*",
                       "*track*",
                       "*package*",
-                      '*view your order*'
+                      '*view your order*',
+                      "*update*"
         )
     ),
     strings.ilike(body.current_thread.text,
@@ -31,6 +33,9 @@ source: |
     // impersonal greeting
     any(ml.nlu_classifier(body.current_thread.text).entities,
         .name == "recipient" and .text =~ "Customer"
+    ),
+    any(ml.nlu_classifier(body.current_thread.text).intents,
+        .name == "cred_theft" and .confidence != "low"
     ),
     // free email sender
     sender.email.domain.root_domain in $free_email_providers,

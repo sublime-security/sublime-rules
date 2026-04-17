@@ -7,19 +7,24 @@ source: |
   // a single PDF attachment
   and length(attachments) == 1
   // the subject doesn't contain fax, which is currently a common match for the topic
-  and not strings.icontains(subject.subject, 'fax')
-  and ml.nlu_classifier(subject.subject).language == "english"
-  and any(beta.ml_topic(body.current_thread.text).topics,
-          .confidence == "high"
-          and .name == "Voicemail Call and Missed Call Notifications"
+  and not strings.icontains(subject.base, 'fax')
+  and ml.nlu_classifier(body.current_thread.text).language == "english"
+  and (
+    any(ml.nlu_classifier(body.current_thread.text).topics,
+        .confidence == "high"
+        and .name == "Voicemail Call and Missed Call Notifications"
+    )
+    or any(ml.nlu_classifier(body.current_thread.text).intents,
+           .confidence == "high" and .name == "bec"
+    )
   )
   // the Topic analysis of the PDF is Voicemail
   and any(attachments,
           .file_extension == "pdf"
           // the NLU detected language is english
           and ml.nlu_classifier(beta.ocr(.).text).language == "english"
-          and length(beta.ocr(.).text) > 100
-          and any(beta.ml_topic(beta.ocr(.).text).topics,
+          and length(beta.ocr(.).text) > 95
+          and any(ml.nlu_classifier(beta.ocr(.).text).topics,
                   .confidence == "high"
                   and .name == "Voicemail Call and Missed Call Notifications"
           )
@@ -30,6 +35,10 @@ source: |
           )
           // there is only a single page
           and any(file.explode(.), .depth == 0 and .scan.exiftool.page_count == 1)
+  )
+  and not (
+    sender.email.domain.root_domain == "zendesk.com"
+    and coalesce(headers.auth_summary.dmarc.pass, false)
   )
 attack_types:
   - "Credential Phishing"
