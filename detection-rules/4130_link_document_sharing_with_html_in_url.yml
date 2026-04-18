@@ -63,12 +63,18 @@ source: |
              )
            )
    )
-   // negations
-   and not (subject.is_forward or subject.is_reply)
+   // negate forwards and replies
+   and not (
+     (length(headers.references) > 0 or headers.in_reply_to is not null)
+     and (subject.is_forward or subject.is_reply)
+     and length(body.previous_threads) >= 1
+   )
+   // negate newsletters and travel
    and not any(ml.nlu_classifier(body.current_thread.text).topics,
                .name in ("Newsletters and Digests", "Travel and Transportation")
                and .confidence in ("medium", "high")
    )
+   // negate high trusted senders that pass auth
    and not (
      sender.email.domain.root_domain in $high_trust_sender_root_domains
      and coalesce(headers.auth_summary.dmarc.pass, false)
