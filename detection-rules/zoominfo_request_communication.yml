@@ -19,24 +19,22 @@ source: |
     // undisclosed or invalid recipients
     or any(recipients.to, .email.domain.valid == false)
   )
-  and (
-    strings.icontains(body.html.raw, 'zoominfo.com')
-    or strings.icontains(sender.display_name, 'zoominfo')
+  and any(body.links,
+          (.href_url.domain.root_domain == "zoominfo.com")
+          or strings.icontains(sender.display_name, 'zoominfo')
   )
+  
   // ml.nlu classifying emails based on malicious contents
   and (
     any(ml.nlu_classifier(body.current_thread.text).entities,
         .name == "financial" and .text == "payments"
     )
     or any(ml.nlu_classifier(body.current_thread.text).intents,
-           .name == "bec" and .confidence in ("medium", "high")
+           .name == "bec" and .confidence != "low"
     )
     or any(ml.nlu_classifier(body.current_thread.text).topics,
-           .name == "Payment Information" and .confidence in ("high")
-           or (
-             .name == "Request to View Invoice"
-             and .confidence in ("medium", "high")
-           )
+           .name in ("Payment Information", "Request to View Invoice")
+           and .confidence != "low"
     )
   )
   // negate when NLU confidently classifies as benign
@@ -47,10 +45,10 @@ source: |
   and (
     (
       sender.email.domain.root_domain in $high_trust_sender_root_domains
-      and not headers.auth_summary.dmarc.pass
+      and not coalesce(headers.auth_summary.dmarc.pass, false)
     )
     or sender.email.domain.root_domain not in $high_trust_sender_root_domains
-  )      
+  )   
 attack_types:
   - "BEC/Fraud"
 tactics_and_techniques:
