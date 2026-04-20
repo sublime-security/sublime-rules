@@ -7,6 +7,9 @@ source: |
     and (subject.is_reply or subject.is_forward)
     and (
       any(body.current_thread.links, network.whois(.href_url.domain).days_old < 60)
+      and regex.icontains(subject.subject,
+                          '\b(fyi|attention|proposal|purchase|invoice|payment|wire|agreement|contract|settlement)\b'
+      )
       and any(body.links,
               regex.icontains(.display_text,
                               '[VIEW|REVIEW|CLICK|DOWNLOAD|CHECK|VALIDATE]'
@@ -32,10 +35,6 @@ source: |
               .name in ("request", "financial")
           )
         )
-        // invoicing language
-        and any(ml.nlu_classifier(body.current_thread.text).tags,
-                .name == "invoice"
-        )
       )
     )
     // prevent benign emails
@@ -44,7 +43,7 @@ source: |
     and (
       (
         sender.email.domain.root_domain in $high_trust_sender_root_domains
-        and not headers.auth_summary.dmarc.pass
+        and not coalesce(headers.auth_summary.dmarc.pass, false)
       )
       or sender.email.domain.root_domain not in $high_trust_sender_root_domains
     )
