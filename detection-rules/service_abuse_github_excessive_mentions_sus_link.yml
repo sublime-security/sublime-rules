@@ -1,0 +1,103 @@
+name: "Service abuse: GitHub notification with excessive mentions and suspicious links"
+description: "Detects messages impersonating GitHub notifications that contain excessive @ mentions (over 20) and include a single suspicious external link. The suspicious link may be from free file hosts, free subdomain hosts, URL shorteners, or newly registered domains. The rule filters out legitimate GitHub domains and internal employee communications while identifying potential abuse of GitHub's notification system."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  // actual GitHub notifications
+  and sender.email.email == "notifications@github.com"
+  and all(headers.reply_to, .email.domain.domain == "reply.github.com")
+  and headers.return_path.email == "noreply@github.com"
+  // the Message-ID field will contain the unsubscribe link in the body
+  and strings.icontains(headers.message_id,
+                        body.links[length(body.links) - 1].href_url.url
+  )
+  
+  // negating out-of-scope notification emails from github
+  and not any(recipients.cc,
+              .email.domain.root_domain == "github.com"
+              and .email.local_part in (
+                "assign",
+                "comment",
+                "review_requested",
+                "author",
+                "subscribed",
+                "state_change",
+                "team_mention"
+              )
+  )
+  
+  // do not match messages where the sender display name is in the org display names.
+  // This attempts to avoid catching internal employees commenting on org repos
+  and not any($org_display_names, . =~ sender.display_name)
+  
+  // there is only a single external link
+  and length(distinct(filter(body.links,
+                             // filter any links that go back to github
+                             .href_url.domain.root_domain not in (
+                               'github.com',
+                               'githubusercontent.com',
+                               'github.io',
+                               'githubsupport.com',
+                               'githubstatus.com'
+                             )
+                             // remove embedded images
+                             and not (
+                               strings.ends_with(.href_url.url, ".jpg")
+                               or strings.ends_with(.href_url.url, "png")
+                               or strings.ends_with(.href_url.url, ".svg")
+                               or strings.ends_with(.href_url.url, ".gif")
+                             )
+                             // remove aws codesuite links
+                             and not (
+                               .href_url.domain.root_domain == "amazon.com"
+                               and strings.istarts_with(.href_url.path,
+                                                        '/codesuite/'
+                               )
+                             )
+                      ),
+                      .href_url.domain.domain
+             )
+  ) == 1
+  
+  // that single link is suspicious
+  and any(
+          // filter any links that go back to github
+          filter(body.links,
+                 .href_url.domain.root_domain not in (
+                   'github.com',
+                   'githubusercontent.com',
+                   'github.io',
+                   'githubsupport.com',
+                   'githubstatus.com'
+                 )
+          ),
+          // see if the remaining links are within several lists
+          .href_url.domain.root_domain in $free_file_hosts
+          or (
+            .href_url.domain.root_domain in $free_subdomain_hosts
+            and .href_url.domain.subdomain is not null
+          )
+          or .href_url.domain.root_domain in $url_shorteners
+          // the domain is less than 20 days old
+          or network.whois(.href_url.domain).days_old < 20
+  )
+  
+  // The main abuse point is that they will @ multiple people in the github notification
+  and length(filter(body.current_thread.links,
+                    strings.starts_with(.display_text, "@")
+             )
+  ) > 20
+attack_types:
+  - "Credential Phishing"
+  - "Malware/Ransomware"
+tactics_and_techniques:
+  - "Free file host"
+  - "Free subdomain host"
+  - "Social engineering"
+detection_methods:
+  - "Header analysis"
+  - "URL analysis"
+  - "Sender analysis"
+  - "Whois"
+id: "4f3a766a-8284-5e89-ad55-9d71ce5eb873"
