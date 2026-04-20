@@ -1,0 +1,47 @@
+name: "Brand impersonation: Canada Revenue Agency with attachment"
+description: "Detects messages impersonating the Canada Revenue Agency (CRA) with attachments, using common tax-related subjects in both English and French, and containing CRA-related content in the message body."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and regex.icontains(sender.display_name, '(?:Canada Revenue Agency|\bCRA\b)')
+  and (
+    any(filter(attachments, .file_type == "pdf"),
+        any(file.explode(.),
+            any(.scan.url.urls, .domain.root_domain == 'vercel.app')
+        )
+    )
+    or network.whois(sender.email.domain).days_old < 90
+    or any(body.links, network.whois(.href_url.domain).days_old <= 365)
+    or any(body.links,
+           regex.icontains(.href_url.path,
+                           '\.(msi|exe|lnk|js|vbs|bat|cmd|ps1|hta|wsf|scr)$'
+           )
+    )
+  )
+  and any(ml.nlu_classifier(body.current_thread.text).topics,
+          .name in (
+            "Reminders and Notifications",
+            "Security and Authentication",
+            "Request to View Invoice"
+          )
+          and .confidence != "low"
+  )
+  and not (
+    sender.email.domain.root_domain == 'cra-arc.gc.ca'
+    and coalesce(headers.auth_summary.dmarc.pass, false)
+  )
+attack_types:
+  - "BEC/Fraud"
+  - "Credential Phishing"
+  - "Malware/Ransomware"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Social engineering"
+  - "PDF"
+detection_methods:
+  - "Content analysis"
+  - "File analysis"
+  - "Header analysis"
+  - "Sender analysis"
+id: "72607c4c-52dc-5df6-b547-54ee321b7a7a"
