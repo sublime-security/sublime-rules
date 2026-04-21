@@ -1,5 +1,5 @@
 name: "Headers: Self-sender using Microsoft CompAuth bypass with credential theft content"
-description: "Detects messages sent to self or invalid domains containing credential theft content that bypass Microsoft's CompAuth with reason 703 while failing both SPF and DMARC authentication checks."
+description: "Detects messages sent to self or invalid domains containing credential theft content that bypass Microsoft's CompAuth while failing both SPF and DMARC authentication checks."
 type: "rule"
 severity: "high"
 source: |
@@ -16,12 +16,10 @@ source: |
   and any(ml.nlu_classifier(body.current_thread.text).intents,
           .name == "cred_theft" and .confidence != "low"
   )
-  // microsoft compauth pass with a 703, but spf and dmarc fail
-  and any(headers.hops,
-          any(.fields, strings.icontains(.value, 'compauth=pass reason=703'))
-  )
-  and not coalesce(headers.auth_summary.dmarc.pass, false)
-  and not coalesce(headers.auth_summary.spf.pass, false)
+  // microsoft compauth pass, but spf and dmarc fail
+  and any(headers.hops, any(.fields, strings.icontains(.value, 'compauth=pass')))
+  and not headers.auth_summary.dmarc.pass
+  and not headers.auth_summary.spf.pass
 tags:
   - "Attack surface reduction"
 attack_types:
