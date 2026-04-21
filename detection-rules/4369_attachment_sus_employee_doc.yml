@@ -14,7 +14,7 @@ source: |
       )
       or strings.icontains(subject.base, "bonus")
       or (
-        regex.icontains(subject.base, '\bcomp(?:ensation)?\b')
+        regex.icontains(subject.base, '(?:\bcomp\b|compensation)')
         and not strings.icontains(subject.base, "broker")
       )
       or strings.icontains(subject.base, "earnings")
@@ -32,6 +32,7 @@ source: |
     )
     and (
       strings.icontains(subject.base, "access your")
+      or strings.icontains(subject.base, "acknowledg")
       or regex.icontains(subject.base, 'adjust(?:ed|ment)')
       or regex.icontains(subject.base, 'amend(?:ed|ment)')
       or strings.icontains(subject.base, "appraisal")
@@ -63,12 +64,26 @@ source: |
                          '(January|February|March|April|May|June|July|August|September|October|November|December)\s20[2,3]{1}\d{1}'
       )
     )
+    // general strings negations
+    and not (
+      strings.icontains(subject.base, "error")
+      or regex.icontains(subject.base, '\bapp(?:lication)?\b')
+    )
   )
   
   // the attachment contains pay related keywords
   and 0 < length(attachments) <= 3
   and any(attachments,
-          .file_type in ("doc", "docx", "pdf", "pptx")
+          (
+            // typical observed extentions
+            .file_extension in ("doc", "docx", "docm", "pdf", "pptx")
+            // missing extensions
+            or .file_extension is null
+            // magic bytes
+            or .file_type in ("doc", "docx", "pdf", "pptx")
+            // attached EML
+            or (.content_type == "message/rfc822" or .file_extension =~ "eml")
+          )
           and (
             (
               strings.icontains(.file_name, "benefits")
@@ -76,7 +91,7 @@ source: |
             )
             or strings.icontains(.file_name, "bonus")
             or (
-              regex.icontains(.file_name, '\bcomp(?:ensation)?\b')
+              regex.icontains(.file_name, '(?:\bcomp\b|compensation)')
               and not (strings.icontains(.file_name, "broker"))
             )
             or regex.icontains(.file_name, 'empl[o0]y(?:ment|ee)')
@@ -93,6 +108,7 @@ source: |
           )
           and (
             strings.icontains(.file_name, "access your")
+            or strings.icontains(.file_name, "acknowledg")
             or regex.icontains(.file_name, 'adjust(?:ed|ment)')
             or regex.icontains(.file_name, 'amend(?:ed|ment)')
             or strings.icontains(.file_name, "appraisal")
@@ -138,8 +154,17 @@ source: |
           )
   )
   
+  // topic negations
+  and not any(ml.nlu_classifier(body.current_thread.text).topics,
+              .name == "Newsletters and Digests"
+  )
+  
   // negate legitimate conversations
-  and not (subject.is_forward or subject.is_reply)
+  and not (
+    (length(headers.references) > 0 or headers.in_reply_to is not null)
+    and (subject.is_forward or subject.is_reply)
+    and length(body.previous_threads) >= 1
+  )
   
   // negate high trust sender domains unless they fail authentication
   and not (
