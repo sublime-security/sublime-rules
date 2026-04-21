@@ -1,0 +1,39 @@
+name: "PR# 4378 - Link: Self-sent credential theft with single character path"
+description: "Detects messages sent to oneself containing links with single character paths and credential theft language, commonly used to bypass security filters and deliver malicious content."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  // self sender
+  and length(recipients.to) == 1
+  and (
+    sender.email.email == recipients.to[0].email.email
+    or recipients.to[0].email.domain.valid == false
+  )
+  // path contains 1 character
+  and any(body.current_thread.links,
+          regex.imatch(.href_url.path, '\/[A-Za-z0-9]')
+          and .href_url.query_params is null
+          and .href_url.fragment is null
+          and .display_url.url is null
+  )
+  and any(ml.nlu_classifier(body.current_thread.text).intents,
+          .name == "cred_theft" and .confidence != "low"
+  )
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Evasion"
+  - "Social engineering"
+detection_methods:
+  - "Natural Language Understanding"
+  - "URL analysis"
+  - "Sender analysis"
+  - "Header analysis"
+id: "d47242e9-cf63-5dea-8aba-fcd6c2226b71"
+tags:
+  - created_from_open_prs
+  - rule_status_added
+  - pr_author_D-Bolton
+references:
+  - https://github.com/sublime-security/sublime-rules/pull/4378
