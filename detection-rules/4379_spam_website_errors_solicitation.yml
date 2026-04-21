@@ -67,7 +67,6 @@ source: |
    )
    or any(body.links, regex.icontains(.display_text, '\.?@?(hotmail)\.com'))
  )
- 
  // Single thread with unsubscribe link or $org_domains link
  or (
    length(body.links) <= 3
@@ -96,28 +95,28 @@ source: |
    and regex.icontains(strings.replace_confusables(body.current_thread.text),
                        "(?:site|website|page)"
    )
- )
- // Multiple thread messages
- or (
-   length(body.links) == 0
-   // small thread with less than 5 messages
-   and length(body.previous_threads) < 5
-   // check previous messages for spam characteristics
-   and any(body.previous_threads,
-           // short previous messages less than 400 chars
-           length(.text) < 400
-           and (
-             // generic greeting
-             regex.icontains(strings.replace_confusables(.text),
-                             '(?:h(?:i|ello|ey)|morning)\b'
+   // Multiple thread messages
+   or (
+     length(body.links) == 0
+     // small thread with less than 5 messages
+     and length(body.previous_threads) < 5
+     // check previous messages for spam characteristics
+     and any(body.previous_threads,
+             // short previous messages less than 400 chars
+             length(.text) < 400
+             and (
+               // generic greeting
+               regex.icontains(strings.replace_confusables(.text),
+                               '(?:h(?:i|ello|ey)|morning)\b'
+               )
+               // service offering keywords
+               and regex.icontains(strings.replace_confusables(.text),
+                                   '(?:\berror(?:\s+list)?\b|screenshot|report|plan)'
+               )
+               // previous threads written in English
+               and ml.nlu_classifier(.text).language == "english"
              )
-             // service offering keywords
-             and regex.icontains(strings.replace_confusables(.text),
-                                 '(?:\berror(?:\s+list)?\b|screenshot|report|plan)'
-             )
-             // previous threads written in English
-             and ml.nlu_classifier(.text).language == "english"
-           )
+     )
    )
  )
 tags:
