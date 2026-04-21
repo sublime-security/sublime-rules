@@ -1,0 +1,53 @@
+name: "PR# 4375 - Brand impersonation: Microsoft Teams"
+description: |
+  Impersonation of a Microsoft Teams message.
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and length(filter(attachments,
+                    .file_type in $file_types_images or .file_type == "pdf"
+             )
+  ) < 10
+  and (
+    regex.icontains(body.current_thread.text,
+                    'trying to reach you.*microsoft teams',
+                    'new message in teams'
+    )
+    or any(attachments,
+           (.file_type in $file_types_images or .file_type == "pdf")
+           and any(file.explode(.),
+                   regex.icontains(.scan.ocr.raw,
+                                   "trying to reach you.*microsoft teams"
+                   )
+           )
+    )
+  )
+  // not sent via legitimate Microsoft infra
+  and not strings.ends_with(headers.message_id, '@odspnotify>')
+  and not (
+    sender.email.domain.root_domain in (
+      "microsoft.com",
+      "microsoftsupport.com",
+      "office.com"
+    )
+    and coalesce(headers.auth_summary.dmarc.pass, false)
+  )
+
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "File analysis"
+  - "Optical Character Recognition"
+  - "Sender analysis"
+id: "7fafff75-abd3-5b8c-879f-b26b269ad768"
+tags:
+  - created_from_open_prs
+  - rule_status_modified
+  - pr_author_markmsublime
+references:
+  - https://github.com/sublime-security/sublime-rules/pull/4375
