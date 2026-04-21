@@ -42,6 +42,22 @@ source: |
         and not strings.istarts_with(subject.subject, "fwd:")
       )
     )
+    or (
+      any(ml.nlu_classifier(body.current_thread.text).entities,
+          .name == "request"
+      )
+      and sender.email.domain.root_domain in $free_email_providers
+      and any(headers.hops,
+              any(.fields,
+                  .name == "X-Forefront-Antispam-Report"
+                  and (
+                    strings.icontains(.value, "CAT:PHISH")
+                    or strings.icontains(.value, "CAT:SPOOF")
+                    or strings.icontains(.value, "CAT:HSPM")
+                  )
+              )
+      )
+    )
   )
   and (
     (
@@ -50,7 +66,7 @@ source: |
     )
     or (
       profile.by_sender().any_messages_malicious_or_spam
-      and not profile.by_sender().any_false_positives
+      and not profile.by_sender().any_messages_benign
     )
     or not headers.auth_summary.dmarc.pass
   )
@@ -72,7 +88,7 @@ source: |
     )
     or sender.email.domain.root_domain not in $high_trust_sender_root_domains
   )
-  and not profile.by_sender().any_false_positives
+  and not profile.by_sender().any_messages_benign
 attack_types:
   - "BEC/Fraud"
 tactics_and_techniques:
