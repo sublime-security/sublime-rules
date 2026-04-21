@@ -9,19 +9,31 @@ source: |
                     .file_type in $file_types_images or .file_type == "pdf"
              )
   ) < 10
-  and any(attachments,
-          (.file_type in $file_types_images or .file_type == "pdf")
-          and any(file.explode(.),
-                  regex.icontains(.scan.ocr.raw,
-                                  "trying to reach you.*microsoft teams"
-                  )
-          )
+  and (
+    regex.icontains(body.current_thread.text,
+                    'trying to reach you.*microsoft teams',
+                    'new message in teams'
+    )
+    or any(attachments,
+           (.file_type in $file_types_images or .file_type == "pdf")
+           and any(file.explode(.),
+                   regex.icontains(.scan.ocr.raw,
+                                   "trying to reach you.*microsoft teams"
+                   )
+           )
+    )
   )
-  and sender.email.domain.root_domain not in (
-    "microsoft.com",
-    "microsoftsupport.com",
-    "office.com"
+  // not sent via legitimate Microsoft infra
+  and not strings.ends_with(headers.message_id, '@odspnotify>')
+  and not (
+    sender.email.domain.root_domain in (
+      "microsoft.com",
+      "microsoftsupport.com",
+      "office.com"
+    )
+    and coalesce(headers.auth_summary.dmarc.pass, false)
   )
+
 attack_types:
   - "Credential Phishing"
 tactics_and_techniques:
