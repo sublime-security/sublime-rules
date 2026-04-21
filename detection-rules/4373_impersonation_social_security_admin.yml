@@ -61,10 +61,10 @@ source: |
            or .inner_text =~ "Social Security"
     )
   )
-
+  
   // Not from a .gov domain
   and not (sender.email.domain.tld == "gov" and headers.auth_summary.dmarc.pass)
-
+  
   // Additional suspicious indicator
   and (
     any(ml.nlu_classifier(body.current_thread.text).topics,
@@ -74,6 +74,8 @@ source: |
     or any(ml.nlu_classifier(body.current_thread.text).entities,
            .name == "org" and .text == "SSA"
     )
+    or length(body.current_thread.text) == 0
+    or body.current_thread.text is null
     or strings.icontains(body.current_thread.text, "SSA Statement Viewer")
     or strings.icontains(strings.replace_confusables(body.current_thread.text),
                          "Social Security Statement"
@@ -110,16 +112,22 @@ source: |
       )
     )
   )
-  and not any(ml.nlu_classifier(body.current_thread.text).topics,
-              .name in (
-                "Newsletters and Digests",
-                "Advertising and Promotions",
-                "Events and Webinars",
-                "Charity and Non-Profit",
-                "Political Mail"
-              )
-              and .confidence == "high"
+  and not (
+    any(ml.nlu_classifier(body.current_thread.text).topics,
+        .name in (
+          "Newsletters and Digests",
+          "Advertising and Promotions",
+          "Events and Webinars",
+          "Charity and Non-Profit",
+          "Political Mail"
+        )
+        and .confidence == "high"
+    )
+    or any(ml.nlu_classifier(body.current_thread.text).intents,
+           .name == "benign" and .confidence == "high"
+    )
   )
+  
   // not a forward or reply
   and (headers.in_reply_to is null or length(headers.references) == 0)
   and (
