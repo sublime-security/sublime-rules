@@ -1,0 +1,115 @@
+name: "DLP - PCI: US Credit Card Number (Any Network)"
+description: |
+  Detects outbound emails containing credit card numbers from any of the four major
+  US payment networks — Visa, Mastercard (5-series and 2-series BINs), American Express,
+  and Discover — in the message body or text-parseable attachments.
+
+  This combined rule is suitable for broad PCI DLP coverage. For granular per-network
+  alerting or tuning, use the individual network-specific rules instead:
+    - dlp_pci_visa_credit_card.yml
+    - dlp_pci_mastercard_credit_card.yml
+    - dlp_pci_amex_credit_card.yml
+    - dlp_pci_discover_credit_card.yml
+
+  Card number formats matched (spaces and dashes as separators are supported):
+    - Visa:       4XXX XXXX XXXX XXXX (16-digit) or 4XXX XXXX XXXXX (13-digit legacy)
+    - Mastercard: 5[1-5]XX XXXX XXXX XXXX  |  2[221-720]X XXXX XXXX XXXX
+    - Amex:       3[47]XX XXXXXX XXXXX (15-digit, standard 4-6-5 grouping)
+    - Discover:   6011 / 65XX / 64[4-9]X / 622126-622925  XXXX XXXX XXXX
+
+  Regex engine: RE2 (Golang). No PCRE lookbehind — word boundaries (\b) are used instead.
+  Attachment content is extracted via file.explode() / .scan.strings.strings.
+
+  Deploy with the "Block Delivery" action to prevent PCI data exfiltration, or run
+  passively for monitoring and audit logging.
+type: rule
+severity: high
+references:
+  - https://www.regular-expressions.info/creditcard.html
+  - https://en.wikipedia.org/wiki/Payment_card_number
+  - https://www.pcisecuritystandards.org/
+  - https://docs.sublime.security/docs/regex-module
+  - https://docs.sublime.security/docs/how-to-detect-text-in-attachments
+authors:
+  - name: Sublime Security
+tags:
+  - dlp
+  - pci
+  - credit-card
+  - visa
+  - mastercard
+  - amex
+  - american-express
+  - discover
+false_positives:
+  - Test or example card numbers used in developer documentation
+  - Masked card numbers where most digits are replaced (e.g. 4111 **** **** 1234)
+  - Numeric identifiers in financial reports that match card BIN prefixes but are not PANs
+source: |
+  type.outbound
+  and (
+    // ── Body scanning ─────────────────────────────────────────────────────────
+
+    // Visa 16-digit
+    regex.contains(body.current_thread.text, '\b4\d{3}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}\b')
+
+    // Visa 13-digit (legacy)
+    or regex.contains(body.current_thread.text, '\b4\d{3}[\s-]?\d{4}[\s-]?\d{5}\b')
+
+    // Mastercard 5-series (51–55)
+    or regex.contains(body.current_thread.text, '\b5[1-5]\d{2}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}\b')
+
+    // Mastercard 2-series BINs (2221–2720)
+    or regex.contains(body.current_thread.text,
+      '\b(?:222[1-9]|22[3-9]\d|2[3-6]\d{2}|27[01]\d|2720)\d{2}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}\b'
+    )
+
+    // Amex 15-digit (34 or 37 prefix, 4-6-5 grouping)
+    or regex.contains(body.current_thread.text, '\b3[47]\d{2}[\s-]?\d{6}[\s-]?\d{5}\b')
+
+    // Discover 6011
+    or regex.contains(body.current_thread.text, '\b6011[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}\b')
+
+    // Discover 65xx
+    or regex.contains(body.current_thread.text, '\b65\d{2}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}\b')
+
+    // Discover 644–649
+    or regex.contains(body.current_thread.text, '\b64[4-9]\d[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}\b')
+
+    // Discover/UnionPay co-branded 622126–622925
+    or regex.contains(body.current_thread.text,
+      '\b622(?:1(?:2[6-9]|[3-9]\d)|[2-8]\d{2}|9(?:[01]\d|2[0-5]))\d{2}[\s-]?\d{4}[\s-]?\d{4}\b'
+    )
+
+    // ── Attachment scanning ────────────────────────────────────────────────────
+
+    or any(attachments,
+      .file_extension in~ ('pdf', 'doc', 'docx', 'xls', 'xlsx', 'txt', 'csv', 'eml', 'msg')
+      and any(file.explode(.),
+        any(.scan.strings.strings,
+          // Visa 16-digit
+          regex.contains(., '\b4\d{3}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}\b')
+          // Visa 13-digit
+          or regex.contains(., '\b4\d{3}[\s-]?\d{4}[\s-]?\d{5}\b')
+          // Mastercard 5-series
+          or regex.contains(., '\b5[1-5]\d{2}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}\b')
+          // Mastercard 2-series
+          or regex.contains(.,
+            '\b(?:222[1-9]|22[3-9]\d|2[3-6]\d{2}|27[01]\d|2720)\d{2}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}\b'
+          )
+          // Amex
+          or regex.contains(., '\b3[47]\d{2}[\s-]?\d{6}[\s-]?\d{5}\b')
+          // Discover 6011
+          or regex.contains(., '\b6011[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}\b')
+          // Discover 65xx
+          or regex.contains(., '\b65\d{2}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}\b')
+          // Discover 644-649
+          or regex.contains(., '\b64[4-9]\d[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}\b')
+          // Discover/UnionPay 622126-622925
+          or regex.contains(.,
+            '\b622(?:1(?:2[6-9]|[3-9]\d)|[2-8]\d{2}|9(?:[01]\d|2[0-5]))\d{2}[\s-]?\d{4}[\s-]?\d{4}\b'
+          )
+        )
+      )
+    )
+  )

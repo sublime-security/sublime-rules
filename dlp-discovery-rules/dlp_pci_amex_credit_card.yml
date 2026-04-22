@@ -1,0 +1,50 @@
+name: "DLP - PCI: American Express Credit Card Number"
+description: |
+  Detects outbound emails containing American Express (Amex) credit card numbers in the
+  message body or text-parseable attachments. Amex PANs are 15 digits and start with 34
+  or 37. The standard human-readable format groups digits as XXXX XXXXXX XXXXX
+  (e.g. 3782 822463 10005), though undelimited and dash-separated variants are also matched.
+
+  Deploy this rule with the "Block Delivery" action to prevent PCI data exfiltration,
+  or in passive mode to monitor and audit outbound mail containing card numbers.
+
+  Regex engine: RE2 (Golang). No PCRE lookbehind — word boundaries (\b) are used instead.
+  Attachment content is extracted via file.explode() / .scan.strings.strings.
+type: rule
+severity: high
+references:
+  - https://www.regular-expressions.info/creditcard.html
+  - https://en.wikipedia.org/wiki/Payment_card_number
+  - https://www.pcisecuritystandards.org/
+  - https://docs.sublime.security/docs/regex-module
+  - https://docs.sublime.security/docs/how-to-detect-text-in-attachments
+authors:
+  - name: Sublime Security
+tags:
+  - dlp
+  - pci
+  - credit-card
+  - amex
+  - american-express
+false_positives:
+  - Test or example Amex card numbers (e.g. 378282246310005, 371449635398431)
+  - Masked card numbers where most digits are replaced (e.g. 3782 ****** 0005)
+  - Phone numbers or other identifiers beginning with 34 or 37 that are 15 digits long
+source: |
+  type.outbound
+  and (
+    // Body: Amex 15-digit with standard 4-6-5 grouping (spaces or dashes)
+    regex.contains(body.current_thread.text,
+      '\b3[47]\d{2}[\s-]?\d{6}[\s-]?\d{5}\b'
+    )
+
+    // Attachments: scan extracted strings from PDFs, Office docs, CSVs, etc.
+    or any(attachments,
+      .file_extension in~ ('pdf', 'doc', 'docx', 'xls', 'xlsx', 'txt', 'csv', 'eml', 'msg')
+      and any(file.explode(.),
+        any(.scan.strings.strings,
+          regex.contains(., '\b3[47]\d{2}[\s-]?\d{6}[\s-]?\d{5}\b')
+        )
+      )
+    )
+  )
