@@ -1,0 +1,49 @@
+name: "Attachment: EML with QR code redirecting to Cloudflare challenges"
+description: "Detects EML attachments containing office documents, PDFs, or images with embedded QR codes that redirect to Cloudflare challenge pages, potentially used to bypass security measures."
+type: "rule"
+severity: "low"
+source: |
+  type.inbound
+  and length(recipients.to) == 1
+  and recipients.to[0].email.domain.valid
+  and any(attachments,
+          // Email Attachments
+          any(file.parse_eml(.).attachments,
+              (
+                // looks for office docs in the attached eml
+                .file_extension in $file_extensions_macros
+                and any(file.explode(.),
+                        .scan.qr.type == "url"
+                        and regex.icontains(ml.link_analysis(.scan.qr.url).final_dom.raw,
+                                            'challenges\.cloudflare\.com',
+                        )
+                )
+              )
+              or (
+                // looks for pdfs and images in the attached eml
+                //
+                // This rule makes use of a beta feature and is subject to change without notice
+                // using the beta feature in custom rules is not suggested until it has been formally released
+                //
+                any(beta.scan_qr(.).items,
+                    .type is not null
+                    and regex.icontains(ml.link_analysis(.url).final_dom.raw,
+                                        'challenges\.cloudflare\.com'
+                    )
+                )
+              )
+          )
+  )
+
+attack_types:
+  - "Credential Phishing"
+  - "Malware/Ransomware"
+tactics_and_techniques:
+  - "Evasion"
+  - "QR code"
+detection_methods:
+  - "File analysis"
+  - "QR code analysis"
+  - "URL analysis"
+  - "Archive analysis"
+id: "86197d42-4547-57da-994d-0b798a71ea83"
