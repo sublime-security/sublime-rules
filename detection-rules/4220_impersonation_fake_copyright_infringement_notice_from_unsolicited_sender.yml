@@ -6,7 +6,7 @@ source: |
   type.inbound
   and (
     length(body.current_thread.text) < 5000
-    and sum(map(body.previous_threads, length(.text))) < 5000
+    and 0 < sum(map(body.previous_threads, length(.text))) < 5000
   )
   and 0 < length(body.links) < 10
   
@@ -100,7 +100,11 @@ source: |
   )
   
   // negate legitimate conversations
-  and not (subject.is_reply or subject.is_forward)
+  and not (
+    (length(headers.references) > 0 or headers.in_reply_to is not null)
+    and (subject.is_forward or subject.is_reply)
+    and length(body.previous_threads) >= 1
+  )
   
   // remove phrase from legitimate complaint
   and not regex.icontains(body.html.display_text,
@@ -125,7 +129,7 @@ source: |
   )
   and not (
     sender.email.domain.root_domain in ("edwinjamesip.com", "githubsupport.com")
-    and headers.auth_summary.dmarc.pass
+    and coalesce(headers.auth_summary.dmarc.pass, false)
   )
 attack_types:
   - "BEC/Fraud"
