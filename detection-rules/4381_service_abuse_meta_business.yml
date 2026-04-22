@@ -1,0 +1,54 @@
+name: "PR# 4381 - Service abuse: Facebook business with action required subject"
+description: "Detects messages from the Facebook business domain containing 'action required' in the subject line, commonly used to create urgency in impersonation attacks."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and (
+    sender.email.domain.root_domain == "facebook.com"
+    or sender.email.domain.root_domain == "facebookmail.com"
+  )
+  and 3 of (
+    strings.icontains(subject.subject, "Action required"),
+    strings.icontains(subject.subject, "invited to join"),
+    strings.icontains(subject.subject, "partner request"),
+    strings.icontains(body.current_thread.text, "You've been invited"),
+    strings.icontains(body.current_thread.text, "You're invited"),
+    strings.icontains(body.current_thread.text,
+                      "You've received a partner request"
+    ),
+    strings.icontains(body.current_thread.text,
+                      "not part of or affiliated with Meta"
+    ),
+    strings.icontains(body.current_thread.text, "Agency Partner")
+  )
+  and (
+    // and the link is recently registered
+    any(body.links, network.whois(.href_url.domain).days_old <= 30)
+    or any(body.links,
+           // if the link is still active, check if it's cred theft
+           any(ml.nlu_classifier(beta.ocr(ml.link_analysis(.).screenshot).text).intents,
+               .name == "cred_theft" and .confidence != "low"
+           )
+    )
+    // or look for the legit Meta footer address
+    or strings.icontains(body.current_thread.text,
+                         '1 Meta Way, Menlo Park, CA 94025'
+    )
+  )
+tags:
+  - "Attack surface reduction"
+  - pr_author_JFarina5
+  - created_from_open_prs
+  - rule_status_modified
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Sender analysis"
+id: "8d87bdf7-7d26-513c-a84f-6a7d642aaaf9"
+references:
+  - https://github.com/sublime-security/sublime-rules/pull/4381
