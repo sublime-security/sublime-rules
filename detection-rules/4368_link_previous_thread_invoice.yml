@@ -8,11 +8,11 @@ source: |
     and (
       any(body.current_thread.links, network.whois(.href_url.domain).days_old < 60)
       and regex.icontains(subject.subject,
-                          '\b(fyi|attention|proposal|purchase|invoice|payment|wire|agreement|contract|settlement)\b'
+                          '\b(proposal|purchase|invoice|payment|wire|agreement|contract|settlement)\b'
       )
       and any(body.links,
               regex.icontains(.display_text,
-                              '[VIEW|REVIEW|CLICK|DOWNLOAD|CHECK|VALIDATE]'
+                              '(?:VIEW|REVIEW|CLICK|DOWNLOAD|CHECK|VALIDATE)'
               )
       )
       and any([body.current_thread.text],
@@ -29,16 +29,33 @@ source: |
               )
       )
       and (
-        // language attempting to engage
-        (
+        any(ml.nlu_classifier(body.current_thread.text).intents,
+            .name == "bec" and .confidence != "low"
+        )
+        or (
           any(ml.nlu_classifier(body.current_thread.text).entities,
-              .name in ("request", "financial")
+              .name in ("urgency", "request")
           )
+        )
+        or any(ml.nlu_classifier(body.current_thread.text).tags,
+               .name in ("invoice", "payment")
         )
       )
     )
     // prevent benign emails
-    and any(ml.nlu_classifier(body.current_thread.text).intents, .name != "benign")
+    and not any(ml.nlu_classifier(body.current_thread.text).intents,
+                .name == "benign"
+    )
+    // and (
+    //   (
+    //     profile.by_sender().prevalence != "common"
+    //     and not profile.by_sender().solicited
+    //   )
+    //   or (
+    //     profile.by_sender().any_messages_malicious_or_spam
+    //     and not profile.by_sender().any_messages_benign
+    //   )
+    // )
     // negate highly trusted sender domains unless they fail DMARC authentication
     and (
       (
@@ -47,6 +64,7 @@ source: |
       )
       or sender.email.domain.root_domain not in $high_trust_sender_root_domains
     )
+    and not profile.by_sender().any_messages_benign
 
 attack_types:
   - "BEC/Fraud"
@@ -61,4 +79,4 @@ detection_methods:
 id: "51c6b50f-7a68-5ee8-9897-510d11bc255c"
 og_id: "fee020b6-4a01-5ed3-a924-b5aa4415d3e9"
 testing_pr: 4368
-testing_sha: 6ec9ac8d5b7735a0e7a7083a71e8e534f983d5c1
+testing_sha: 0e93397c19fc459f8645002eb59dfe1640852ffc
