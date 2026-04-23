@@ -1,0 +1,60 @@
+name: "DLP - PCI: Mastercard Credit Card Number"
+description: |
+  Detects outbound emails containing Mastercard credit card numbers in the message body
+  or text-parseable attachments. Covers both the traditional 5-series BINs (51–55) and the
+  expanded 2-series BINs (2221–2720) introduced in 2017. All Mastercard PANs are 16 digits,
+  optionally separated by spaces or dashes (e.g. 5500 0000 0000 0004 or 2221-0000-0000-0000).
+
+  Deploy this rule with the "Block Delivery" action to prevent PCI data exfiltration,
+  or in passive mode to monitor and audit outbound mail containing card numbers.
+
+  Regex engine: RE2 (Golang). No PCRE lookbehind — word boundaries (\b) are used instead.
+  Attachment content is extracted via file.explode() / .scan.strings.strings.
+type: rule
+severity: high
+references:
+  - https://www.regular-expressions.info/creditcard.html
+  - https://en.wikipedia.org/wiki/Payment_card_number
+  - https://www.mastercard.us/en-us/issuers/get-support/2-series-bin-expansion.html
+  - https://www.pcisecuritystandards.org/
+  - https://docs.sublime.security/docs/regex-module
+  - https://docs.sublime.security/docs/how-to-detect-text-in-attachments
+authors:
+  - name: Sublime Security
+tags:
+  - dlp
+  - pci
+  - credit-card
+  - mastercard
+false_positives:
+  - Test or example card numbers used in developer documentation (e.g. 5500000000000004)
+  - Masked card numbers where most digits are replaced (e.g. 5412 **** **** 1234)
+  - 2-series numbers may overlap with other numeric identifiers in financial reports
+source: |
+  type.outbound
+  and (
+    // Body: Mastercard 5-series (51–55 prefix, 16 digits)
+    regex.contains(body.current_thread.text,
+      '\b5[1-5]\d{2}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}\b'
+    )
+
+    // Body: Mastercard 2-series BINs (2221–2720, 16 digits)
+    // Range breakdown: 2221-2229, 2230-2299, 2300-2699, 2700-2719, 2720
+    or regex.contains(body.current_thread.text,
+      '\b(?:222[1-9]|22[3-9]\d|2[3-6]\d{2}|27[01]\d|2720)[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}\b'
+    )
+
+    // Attachments: scan extracted strings from PDFs, Office docs, CSVs, etc.
+    or any(attachments,
+      .file_extension in~ ('pdf', 'doc', 'docx', 'xls', 'xlsx', 'txt', 'csv', 'eml', 'msg')
+      and any(file.explode(.),
+        any(.scan.strings.strings,
+          regex.contains(., '\b5[1-5]\d{2}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}\b')
+          or regex.contains(.,
+            '\b(?:222[1-9]|22[3-9]\d|2[3-6]\d{2}|27[01]\d|2720)[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}\b'
+          )
+        )
+      )
+    )
+  )
+id: "32d9687a-28e1-53f3-9cfb-e9d4e0fd77ab"
