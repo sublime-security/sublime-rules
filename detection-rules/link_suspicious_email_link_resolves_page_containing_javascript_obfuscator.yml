@@ -1,0 +1,42 @@
+name: "Link: Suspicious Email Link Resolves Page Containing JavaScript Obfuscator"
+description: "Detects messages containing credential theft language and links to pages with obfuscated JavaScript code, commonly used to evade detection in credential harvesting attacks."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and 0 < length(body.links) < 10
+  and length(recipients.to) == 1
+  and recipients.to[0].email.domain.valid
+  and any(body.links,
+          // javascript obfuscator code - https://obfuscator.io/
+          regex.icontains(ml.link_analysis(.).final_dom.raw,
+                          '(?:(?:return|function|var|let|const|parseInt)\(?\s*_0x[a-f0-9]{6}.{0,50}){5}'
+          )
+          and (
+            .href_url.domain.root_domain in $free_file_hosts
+            or .href_url.domain.domain in $free_file_hosts
+            or .href_url.domain.root_domain in $free_subdomain_hosts
+            or .href_url.domain.domain in $free_subdomain_hosts
+            or .href_url.domain.root_domain in $self_service_creation_platform_domains
+            or .href_url.domain.domain in $self_service_creation_platform_domains
+            or ml.link_analysis(.).effective_url.domain.root_domain in $free_file_hosts
+            or ml.link_analysis(.).effective_url.domain.domain in $free_file_hosts
+            or ml.link_analysis(.).effective_url.domain.root_domain in $free_subdomain_hosts
+            or ml.link_analysis(.).effective_url.domain.domain in $free_subdomain_hosts
+            or ml.link_analysis(.).effective_url.domain.root_domain in $self_service_creation_platform_domains
+            or ml.link_analysis(.).effective_url.domain.domain in $self_service_creation_platform_domains
+            or regex.icontains(.href_url.query_params, 'ipfs\.io\/ipfs\/')
+          )
+  )
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Evasion"
+  - "Scripting"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Javascript analysis"
+  - "Natural Language Understanding"
+  - "URL analysis"
+id: "6cbe9562-7437-5dc1-bb5f-d40605e5c948"
