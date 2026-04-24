@@ -1,0 +1,59 @@
+name: "PR# 4398 - Brand impersonation: Spotify"
+description: |
+  Impersonation of Spotify.
+references:
+  - "https://www.phishprotection.com/blog/the-latest-popular-service-to-serve-you-up-phishing-emails-spotify/"
+  - https://github.com/sublime-security/sublime-rules/pull/4398
+type: "rule"
+severity: "low"
+source: |
+  type.inbound
+  and (
+    strings.ilike(sender.display_name, '*spotify*')
+    or strings.ilevenshtein(sender.display_name, 'spotify') <= 1
+    or strings.ilike(sender.email.domain.domain, '*spotify*')
+    or (
+      strings.icontains(body.current_thread.text, 'Spotify AB')
+      and any(ml.logo_detect(file.message_screenshot()).brands,
+              .name == "Spotify" and .confidence != "low"
+      )
+    )
+  )
+  and sender.email.domain.root_domain not in~ (
+    'spotify.com',
+    'byspotify.com',
+    'echosign.com',
+    'fromspotify.com',
+    'anchor.fm'
+  )
+  and sender.email.domain.domain not in~ ('privaterelay.appleid.com')
+  and (
+    profile.by_sender().prevalence in ("new", "outlier")
+    or (
+      profile.by_sender().any_messages_malicious_or_spam
+      and not profile.by_sender().any_messages_benign
+    )
+  )
+
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and not headers.auth_summary.dmarc.pass
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Lookalike domain"
+  - "Social engineering"
+detection_methods:
+  - "Sender analysis"
+id: "5265f3b4-c8d9-5135-9341-8c54e7650d01"
+tags:
+  - created_from_open_prs
+  - rule_status_modified
+  - pr_author_JFarina5
