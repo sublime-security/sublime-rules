@@ -1,0 +1,56 @@
+name: "PR# 4399 - Link: Suspicious Family fragment parameter with encoded recipient data"
+description: "Detects messages containing links with URL fragments that include 'Family' parameters containing base64 or hex encoded email addresses, which may indicate personalized malicious content targeting specific recipients."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and any(body.links,
+          // contains family
+          regex.icontains(.href_url.fragment, 'Fa(?:m|rn)ily=')
+          // the href_url contains a valid baes64 encoded email
+          and (
+            any(strings.scan_base64(.href_url.fragment, ignore_padding=true),
+                strings.parse_email(.).domain.valid
+                // double base64 encoded.. yup
+                or any(strings.scan_base64(., ignore_padding=true),
+                       strings.parse_email(.).domain.valid
+                )
+            )
+            or any(regex.iextract(.href_url.fragment,
+                                  'Fa(?:m|rn)ily=$?(?P<email_addy>[^&]+)'
+                   ),
+                   // plain text email addresses
+                   strings.parse_email(.named_groups["email_addy"]).domain.valid
+                   // observed hex encoded email address in addition to the base64 encoded ones
+                   or (
+                     strings.icontains(.named_groups["email_addy"], '40')
+                     and strings.icontains(.named_groups["email_addy"], '2e')
+                     and length(.named_groups["email_addy"]) % 2 == 0
+                   )
+                   // sometimes the template messes up
+                   or strings.icontains(.named_groups["email_addy"],
+                                        'sf_base64_enc'
+                   )
+                   // messed up in a different way
+                   or regex.icontains(.named_groups["email_addy"],
+                                      'Fa(?:m|rn)ily'
+                   )
+            )
+          )
+  )
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Evasion"
+  - "Encryption"
+  - "Social engineering"
+detection_methods:
+  - "URL analysis"
+  - "Content analysis"
+id: "d31c71de-866a-5aa0-9e86-ef42ae7fcf7b"
+tags:
+  - created_from_open_prs
+  - rule_status_added
+  - pr_author_zoomequipd
+references:
+  - https://github.com/sublime-security/sublime-rules/pull/4399
