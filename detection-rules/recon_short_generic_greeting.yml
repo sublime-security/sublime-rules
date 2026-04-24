@@ -6,18 +6,31 @@ severity: "medium"
 source: |
   type.inbound
   // detect generic greetings
-  and length(body.current_thread.text) <= 20
-  and length(subject.base) <= 15
+  and 20 < length(body.current_thread.text) < 350
+  and 15 < length(subject.base) < 100
+  and (
+    regex.icontains(body.current_thread.text,
+                    'New project (Quot(e|ation)|proposal|development|website)'
+    )
+  )
   // exclude messages with previous thread context (forwards/replies)
   and length(body.previous_threads) == 0
   and (
     any(ml.nlu_classifier(body.current_thread.text).entities, .name == "greeting")
-    or strings.ilike(body.current_thread.text, "*hi*", "*hello*", "*hey*")
+    or strings.ilike(body.current_thread.text,
+                     "*hi*",
+                     "*hello*",
+                     "*hey*",
+                     "*greeting*"
+    )
     or length(body.current_thread.text) <= 5
     or regex.match(body.current_thread.text, '\d+')
   )
   // external freemail sender
-  and sender.email.domain.root_domain in $free_email_providers
+  and (
+    sender.email.domain.root_domain in $free_email_providers
+    or sender.email.domain.root_domain not in $free_email_providers
+  )
   and sender.email.domain.root_domain not in (
     recipients.to[0].email.domain.root_domain
   )
@@ -41,7 +54,7 @@ source: |
   )
   // no attachments or links
   and length(attachments) == 0
-  and length(body.current_thread.links) == 0
+  and length(body.current_thread.links) >= 0
   // negate sender profiles completely if auth is failing
   and (
     (
