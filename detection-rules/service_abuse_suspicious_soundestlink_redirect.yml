@@ -1,0 +1,34 @@
+name: "Service abuse: Soundestlink redirect with suspicious indicators"
+description: "Detects messages containing Soundestlink redirect links that lack proper unsubscribe mechanisms, and lack standard mailing list headers, indicating potential abuse of the service."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and any(body.links,
+          .href_url.domain.root_domain == "soundestlink.com"
+          and not strings.istarts_with(.href_url.path, '/contactsPreferences/')
+  )
+  and length(distinct(filter(body.links,
+                             .href_url.domain.root_domain == "soundestlink.com"
+                             and not strings.istarts_with(.href_url.path,
+                                                          '/contactsPreferences/'
+                             )
+                      ),
+                      .href_url.url
+             )
+  ) == 1
+  and not any(headers.hops, any(.fields, .name =~ "List-Unsubscribe"))
+  and not (
+    any(html.xpath(body.html, '//a').nodes, .inner_text =~ "Edit Preferences")
+    and any(html.xpath(body.html, '//a').nodes, .inner_text =~ "Unsubscribe")
+  )
+
+attack_types:
+  - "Credential Phishing"
+  - "Malware/Ransomware"
+tactics_and_techniques:
+  - "Evasion"
+detection_methods:
+  - "Header analysis"
+  - "HTML analysis"
+id: "e3ca4425-96b4-5acf-9e14-503f359c2838"
