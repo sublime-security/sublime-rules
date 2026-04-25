@@ -1,0 +1,109 @@
+name: "Brand impersonation: HubSpot"
+description: "Detects messages impersonating HubSpot through display name patterns, email addresses, or logo detection, combined with suspicious content topics like security authentication, secure messaging, or credential theft language from unauthorized senders."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and (
+    (
+      // HubSpot impersonation patterns
+      strings.ilike(strings.replace_confusables(sender.display_name), '*hubspot*')
+      or strings.ilevenshtein(strings.replace_confusables(sender.display_name),
+                              'hubspot'
+      ) <= 1
+      or (
+        strings.ilike(strings.replace_confusables(sender.email.local_part),
+                      '*hubspot*'
+        )
+        and (
+          sender.display_name is null
+          or strings.ilike(strings.replace_confusables(subject.base), '*hubspot*')
+        )
+      )
+      or any(ml.logo_detect(file.message_screenshot()).brands,
+             .name == "HubSpot" and .confidence == "high"
+      )
+    )
+    and (
+      // Content analysis using ML/NLU
+      any(ml.nlu_classifier(body.current_thread.text).topics,
+          .name in (
+            "Security and Authentication",
+            "Secure Message",
+            "Reminders and Notifications",
+            "Software and App Updates",
+            "Customer Service and Support"
+          )
+          and .confidence in ("medium", "high")
+      )
+      or any(ml.nlu_classifier(beta.ocr(file.message_screenshot()).text).topics,
+             .name in (
+               "Security and Authentication",
+               "Secure Message",
+               "Reminders and Notifications",
+               "Software and App Updates",
+               "Customer Service and Support"
+             )
+             and .confidence in ("medium", "high")
+      )
+      or any(ml.nlu_classifier(body.current_thread.text).intents,
+             .name == "cred_theft" and .confidence == "high"
+      )
+      or any(ml.nlu_classifier(beta.ocr(file.message_screenshot()).text).intents,
+             .name == "cred_theft" and .confidence == "high"
+      )
+    )
+  
+    // and the sender is not in org_domains or from hubspot domains and passes auth
+    and not (
+      sender.email.domain.valid
+      and (
+        sender.email.domain.root_domain in $org_domains
+        or (
+          sender.email.domain.root_domain in (
+            "hubspot.com",
+            "hs-email.com",
+            "hubspotemail.net",
+            "hubspotqa.com",
+            "hubspotdataprivacy.net"
+          )
+        )
+      )
+      and headers.auth_summary.dmarc.pass
+    )
+  
+    // topic negation
+    and not any(ml.nlu_classifier(body.current_thread.text).topics,
+                .name in ("Newsletters and Digests")
+    )
+  
+    // negate unsubscribe links
+    and not any(body.links, strings.icontains(.display_text, "unsubscribe"))
+  
+    // negate legitimate conversations
+    and not (subject.is_reply or subject.is_forward)
+  
+    // Exclude high trust domains with valid auth and solicited senders
+    and (
+      (
+        sender.email.domain.root_domain in $high_trust_sender_root_domains
+        and not headers.auth_summary.dmarc.pass
+      )
+      or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+    )
+    and not profile.by_sender().solicited
+  )
+
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Social engineering"
+detection_methods:
+  - "Computer Vision"
+  - "Content analysis"
+  - "Natural Language Understanding"
+  - "Optical Character Recognition"
+  - "Header analysis"
+  - "Sender analysis"
+id: "be55e20c-4e53-537d-935e-583b606513b7"
