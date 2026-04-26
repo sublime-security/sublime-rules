@@ -29,8 +29,6 @@ source: |
       and all(headers.reply_to,
               .email.domain.root_domain != sender.email.domain.root_domain
               and not .email.domain.root_domain in $org_domains
-              // wetransfer includes user specific reply-to's & link display text which triggers NLU logic further within the rule
-              and not sender.email.domain.root_domain == "wetransfer.com"
       )
     )
     or (
@@ -52,35 +50,35 @@ source: |
   and (
     // Group the keyword patterns that specifically indicate RFQ/RFP
     (
-      1 of (
+      (
         // RFQ/RFP specific language patterns
         regex.icontains(body.current_thread.text,
                         '(discuss.{0,15}purchas(e|ing))'
-        ),
-        regex.icontains(body.current_thread.text,
-                        '(sign(ed?)|view).{0,10}(purchase order)|Request for (a Quot(e|ation)|Proposal)'
-        ),
-        regex.icontains(body.current_thread.text,
-                        '(please|kindly).{0,30}(?:proposal|quot(e|ation))'
-        ),
-        regex.icontains(subject.subject,
-                        '(request for (purchase|quot(e|ation))|\bRFQ\b|\bRFP\b|bid invit(e|ation))'
-        ),
-        any(attachments,
-            regex.icontains(.file_name, "(purchase.?order|Quot(e|ation))")
-        ),
-        any(ml.nlu_classifier(body.current_thread.text).tags,
-            .name == "purchase_order" and .confidence == "high"
-        ),
-        any(ml.nlu_classifier(body.current_thread.text).entities,
-            .name == "financial" and regex.imatch(.text, "rfp|rfq")
-        ),
-        any(ml.nlu_classifier(body.current_thread.text).entities,
-            .name == "request" and strings.icontains(.text, 'submit bid')
+        )
+        or regex.icontains(body.current_thread.text,
+                           '(sign(ed?)|view).{0,10}(purchase order)|Request for (a Quot(e|ation)|Proposal)'
+        )
+        or regex.icontains(body.current_thread.text,
+                           '(please|kindly).{0,30}(?:proposal|quot(e|ation))'
+        )
+        or regex.icontains(subject.subject,
+                           '(request for (purchase|quot(e|ation))|\bRFQ\b|\bRFP\b|bid invit(e|ation))'
+        )
+        or any(attachments,
+               regex.icontains(.file_name, "(purchase.?order|Quot(e|ation))")
+        )
+        or any(ml.nlu_classifier(body.current_thread.text).tags,
+               .name == "purchase_order" and .confidence == "high"
+        )
+        or any(ml.nlu_classifier(body.current_thread.text).entities,
+               .name == "financial" and regex.imatch(.text, "rfp|rfq")
+        )
+        or any(ml.nlu_classifier(body.current_thread.text).entities,
+               .name == "request" and strings.icontains(.text, 'submit bid')
         )
       )
       // Required: at least one RFQ/RFP keyword pattern
-  
+
       // Optional: at least one additional indicator (can be another keyword pattern or a non-keyword indicator)
       and (
         2 of (
@@ -109,7 +107,7 @@ source: |
           any(ml.nlu_classifier(body.current_thread.text).entities,
               .name == "financial" and regex.imatch(.text, "rfp|rfq")
           ),
-  
+
           // Non-keyword indicators
           (
             any(ml.nlu_classifier(body.current_thread.text).entities,
@@ -118,7 +116,7 @@ source: |
             and any(ml.nlu_classifier(body.current_thread.text).entities,
                     .name == "urgency"
             )
-            and not any(beta.ml_topic(body.current_thread.text).topics,
+            and not any(ml.nlu_classifier(body.current_thread.text).topics,
                         .name == "Advertising and Promotions"
                         and .confidence == "high"
             )
@@ -186,8 +184,20 @@ source: |
               )
       )
     )
+    // fake PDF file icon used as a link lure with bid solicitation language
+    or (
+      regex.icontains(subject.subject, 'project\s+summary')
+      and any(html.xpath(body.html, '//div[.//img[contains(@src,"pdf")]]//a').nodes,
+              regex.icontains(.display_text, 'project\s+summary')
+      )
+      and regex.icontains(body.current_thread.text,
+                          '(put a bid|\bbid\s+(for|on)\b|submit.{1,20}(bid|quot(e|ation))|request for (purchase|quot(e|ation))|\bRFQ\b|\bRFP\b|project\s+summary)'
+      )
+    )
   )
-  
+  // wetransfer includes user specific reply-to's & link display text which triggers NLU logic further within the rule
+  and not sender.email.domain.root_domain == "wetransfer.com"
+
   // negate highly trusted sender domains unless they fail DMARC authentication
   and (
     (
