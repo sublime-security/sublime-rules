@@ -1,0 +1,36 @@
+name: "PR# 4145 - Suspicious DocuSign share from new domain"
+description: "DocuSign shares with new reply-to addresses have been seen in recent attacks."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+
+  // message is from docusign actual
+  and sender.email.domain.root_domain == 'docusign.net'
+  and (headers.auth_summary.spf.pass or headers.auth_summary.dmarc.pass)
+
+  // new reply-to
+  and any(headers.reply_to, network.whois(.email.domain).days_old < 30)
+
+  // not a completed DocuSign
+  and not strings.istarts_with(subject.subject, "Completed:")
+tags:
+  - "Attack surface reduction"
+  - pr_author_MSAdministrator
+  - created_from_open_prs
+  - rule_status_modified
+attack_types:
+  - "BEC/Fraud"
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Evasion"
+  - "Free file host"
+  - "Impersonation: Brand"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Header analysis"
+  - "Sender analysis"
+id: "502aae37-f241-52b6-989f-20b8b2df0bd3"
+references:
+  - https://github.com/sublime-security/sublime-rules/pull/4145
