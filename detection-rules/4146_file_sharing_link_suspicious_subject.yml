@@ -1,0 +1,43 @@
+name: "PR# 4146 - File sharing link with a suspicious subject"
+description: |
+  A file sharing link in the body with a common BEC subject. This rule could be expanded to 
+  include additional BEC subjects.
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and sender.email.domain.root_domain != 'google.com'
+  and not (
+    sender.email.domain.root_domain == "dropbox.com"
+    and headers.auth_summary.dmarc.pass
+  )
+  and any(body.links,
+          (
+            .href_url.domain.domain in $free_file_hosts
+            or .href_url.domain.root_domain in $free_file_hosts
+          )
+          and not (
+            // negating Google Forms links
+            .href_url.domain.domain == "docs.google.com"
+            and strings.istarts_with(.href_url.path, "/forms/")
+          )
+          and not .href_url.domain.domain in $tenant_domains
+  )
+  and regex.icontains(subject.subject, 'immediately', 'urgent')
+  and any(ml.nlu_classifier(body.current_thread.text).intents, .name != "benign")
+attack_types:
+  - "BEC/Fraud"
+tactics_and_techniques:
+  - "Free file host"
+  - "Social engineering"
+detection_methods:
+  - "Header analysis"
+  - "Sender analysis"
+  - "URL analysis"
+id: "bd8499e6-6eb3-55d7-851f-da0af86eebe1"
+tags:
+  - created_from_open_prs
+  - rule_status_modified
+  - pr_author_MSAdministrator
+references:
+  - https://github.com/sublime-security/sublime-rules/pull/4146
