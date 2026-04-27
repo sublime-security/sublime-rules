@@ -1,0 +1,24 @@
+name: "Service abuse: Google Tag Manager debug cookie clearing with open redirect potential"
+description: "Detects messages containing links to Google Tag Manager's debug cookie clearing endpoint with suspicious URL parameters that may be exploited for open redirects, or links that have been rewritten through Google Tag Manager encoding methods."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and any(body.links,
+          (
+            .href_url.domain.root_domain == "googletagmanager.com"
+            and .href_url.path == "/debug/clearcookies"
+            and any(.href_url.query_params_decoded["url"],
+                    strings.parse_url(.).domain.valid
+            )
+          )
+          or any(.href_url.rewrite.encoders, . == "google_tag_manager")
+  )
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Open redirect"
+  - "Service abuse"
+detection_methods:
+  - "URL analysis"
+  - "Content analysis"
