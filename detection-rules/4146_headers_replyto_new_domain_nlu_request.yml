@@ -1,0 +1,54 @@
+name: "PR# 4146 - Suspicious newly registered reply-to domain with engaging financial or urgent language"
+description: |
+  Detects messages from a mismatched newly registered Reply-to domain that contain a financial or urgent request, or a request and 
+  an NLU tag with medium to high confidence, from an untrusted sender. This technique is typically observed in Vendor impersonation.
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and length(body.current_thread.text) < 5000
+  and any(headers.reply_to,
+          // mismatched reply-to and sender domain
+          .email.domain.root_domain != sender.email.domain.root_domain
+          // newly registered reply-to domain
+          and network.whois(.email.domain).days_old <= 30
+  )
+  // request is being made
+  and any(ml.nlu_classifier(body.current_thread.text).entities,
+          .name == "request"
+  )
+  // there's financial/urgency OR a tag of medium/high confidence
+  and (
+    any(ml.nlu_classifier(body.current_thread.text).entities,
+        .name in ("financial", "urgency")
+    )
+    or any(ml.nlu_classifier(body.current_thread.text).tags,
+           .name is not null and .confidence in ("medium", "high")
+    )
+  )
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and not headers.auth_summary.dmarc.pass
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+attack_types:
+  - "BEC/Fraud"
+tactics_and_techniques:
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Header analysis"
+  - "Natural Language Understanding"
+  - "Sender analysis"
+  - "URL analysis"
+  - "Whois"
+id: "c8d56e11-9535-5e51-8a4b-d6b5cb6519bb"
+tags:
+  - created_from_open_prs
+  - rule_status_modified
+  - pr_author_MSAdministrator
+references:
+  - https://github.com/sublime-security/sublime-rules/pull/4146
