@@ -19,8 +19,11 @@ source: |
       )
       // report and follow up keywords
       or (
-        strings.icontains(strings.replace_confusables(subject.subject), "report")
-        and regex.icontains(strings.replace_confusables(body.current_thread.text),
+        strings.icontains(strings.replace_confusables(subject.subject),
+                          "report"
+        )
+        and regex.icontains(strings.replace_confusables(body.current_thread.text
+                            ),
                             "(?:free|send you|can i send|may i send|let me know|interested|get back to me|reply back|just reply)"
         )
       )
@@ -39,6 +42,7 @@ source: |
   )
   // body structure and content patterns
   and (
+    // Single thread with no links
     (
       // Single thread with no links
       length(filter(body.current_thread.links,
@@ -67,17 +71,12 @@ source: |
     )
     // Single thread with unsubscribe link or $org_domains link
     or (
-      length(filter(body.current_thread.links,
-                    not (.href_url.scheme == "mailto" and .parser == "plain")
-             )
-      ) == 0
+      length(body.links) <= 3
       and (
         // unsubscribe mailto link
         regex.icontains(body.html.raw, "mailto:*[++unsubscribe@]")
         // or link to found in org_domains
-        or any(body.current_thread.links,
-               .href_url.domain.root_domain in~ $org_domains
-        )
+        or any(body.links, .href_url.domain.root_domain in~ $org_domains)
       )
       and length(body.previous_threads) == 0
       // short message between 20 and 500 chars
@@ -101,10 +100,7 @@ source: |
     )
     // Multiple thread messages
     or (
-      length(filter(body.current_thread.links,
-                    not (.href_url.scheme == "mailto" and .parser == "plain")
-             )
-      ) == 0
+      length(body.links) == 0
       // small thread with less than 5 messages
       and length(body.previous_threads) < 5
       // check previous messages for spam characteristics
