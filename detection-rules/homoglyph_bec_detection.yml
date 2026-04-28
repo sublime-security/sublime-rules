@@ -1,5 +1,5 @@
 name: "BEC: Unicode homoglyph domain spoofing"
-description: |
+description: >-
   Detects Business Email Compromise (BEC) attacks using Unicode homoglyph characters
   in the sender's display name or domain to impersonate trusted organizations.
 
@@ -9,17 +9,14 @@ description: |
 
   Based on original research: "The Identical Lie — Unicode Homoglyph Attacks & BEC"
   by Yana Ivanov (2026). $55.5 billion lost over the past decade to BEC.
-
-  References:
+references:
   - https://yana-ivanov.github.io/cybersecurity-portfolio/analysis/homoglyph_bec_analysis.html
   - MITRE ATT&CK T1566.002 (Spearphishing Link)
   - FBI IC3 BEC Advisory (2024)
-
 severity: high
 type: rule
 authors:
   - name: Yana Ivanov
-
 source: |
   type.inbound
   and (
@@ -38,17 +35,23 @@ source: |
     or strings.ilike(subject.subject, "*invoice*")
     or strings.ilike(subject.subject, "*remittance*")
     or strings.ilike(subject.subject, "*bank account*")
-    or strings.ilike(subject.subject, "*ACH*")
     or strings.ilike(subject.subject, "*payment confirmation*")
-    or strings.ilike(body.plain.raw, "*wire transfer*")
-    or strings.ilike(body.plain.raw, "*routing number*")
-    or strings.ilike(body.plain.raw, "*account number*")
-    or strings.ilike(body.plain.raw, "*please transfer*")
-    or strings.ilike(body.plain.raw, "*send payment*")
-    or strings.ilike(body.plain.raw, "*update.*banking*")
+    or strings.ilike(body.current_thread.text, "*wire transfer*")
+    or strings.ilike(body.current_thread.text, "*routing number*")
+    or strings.ilike(body.current_thread.text, "*account number*")
+    or strings.ilike(body.current_thread.text, "*please transfer*")
+    or strings.ilike(body.current_thread.text, "*send payment*")
+    or regex.icontains(body.current_thread.text, 'update.{0,30}banking')
+    or regex.icontains(subject.subject, '\bach\b')
   )
-  and sender.email.domain.root_domain not in $high_trust_sender_root_domains
-  and sender.email.domain.root_domain not in $org_domains
+  and (
+    sender.email.domain.root_domain not in $high_trust_sender_root_domains
+    and coalesce(headers.auth_summary.dmarc.pass, false)
+  )
+  and (
+    sender.email.domain.root_domain not in $org_domains
+    and coalesce(headers.auth_summary.dmarc.pass, false)
+  )
 tags:
   - "BEC"
   - "Homoglyph"
@@ -57,15 +60,12 @@ tags:
   - "Impersonation"
   - "IDN"
   - "Punycode"
-
 attack_types:
   - "BEC/Fraud"
   - "Impersonation: Brand"
-
 tactics_and_techniques:
   - "Social engineering"
   - "Impersonation: Display name"
-
 false_positives:
   - "Rare: Legitimate emails from internationalized domains (IDN) that use punycode
      but are well-known senders. Tune by adding to $high_trust_sender_root_domains."
