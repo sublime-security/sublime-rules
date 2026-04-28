@@ -1,0 +1,91 @@
+name: "BEC: Vendor invoice and payment status inquiry"
+description: "Detects business email compromise attempts using vendor impersonation tactics with financial language focused on invoice payments, account balances, and payment processing requests. The rule identifies messages containing multiple financial indicators such as payment scheduling, account status inquiries, overdue invoices, and requests for financial documentation from potentially compromised or spoofed sender domains."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and (
+    (
+      length(body.current_thread.text) < 2000
+      and 3 of (
+        regex.icontains(body.current_thread.text,
+                        "(schedule|process).{0,10} payment"
+        ),
+        regex.icontains(body.current_thread.text,
+                        "account.{0,10}(balance|status|information)"
+        ),
+        regex.icontains(body.current_thread.text,
+                        "(due|outstanding|unpaid|overdue).{0,10}invoices?"
+        ),
+        regex.icontains(body.current_thread.text,
+                        "(pending|open).{0,10}invoices?"
+        ),
+        strings.icontains(body.current_thread.text, "kindly confirm"),
+        strings.icontains(body.current_thread.text, "confim if they match"),
+        strings.icontains(body.current_thread.text, "on system"),
+        strings.icontains(body.current_thread.text, "current statement"),
+        strings.icontains(body.current_thread.text, "obtain a copy"),
+        strings.icontains(body.current_thread.text, "send all"),
+        strings.icontains(body.current_thread.text, "send your documentation"),
+        regex.icontains(body.current_thread.text, "invoices|credits|rebates"),
+        regex.icontains(body.current_thread.text, "(past due|current) invoices"),
+      )
+    )
+    or (
+      0 < length(body.previous_threads) <= 5
+      and any(body.previous_threads,
+              length(.text) < 2000
+              and 3 of (
+                regex.icontains(.text, "(schedule|process).{0,10} payment"),
+                regex.icontains(.text,
+                                "account.{0,10}(balance|status|information)"
+                ),
+                regex.icontains(.text,
+                                "(outstanding|unpaid|overdue).{0,10}invoices?"
+                ),
+                regex.icontains(.text, "(pending|open).{0,10}invoices?"),
+                strings.icontains(.text, "confirm if they match"),
+                strings.icontains(.text, "kindly confirm"),
+                strings.icontains(.text, "on system"),
+                strings.icontains(.text, "current statement"),
+                strings.icontains(.text, "obtain a copy"),
+                strings.icontains(.text, "send all"),
+                strings.icontains(.text, "send your documentation"),
+                regex.icontains(.text, "invoices|credits|rebates"),
+                regex.icontains(.text, "(past due|current) invoices"),
+              )
+      )
+    )
+  )
+  and (
+    any(ml.nlu_classifier(body.current_thread.text).entities,
+        .name == "financial" and .text == "payments"
+    )
+    or any(ml.nlu_classifier(body.current_thread.text).topics,
+           .name == "Request to View Invoice" and .confidence in ("medium")
+    )
+    or any(ml.nlu_classifier(body.current_thread.text).intents,
+           .name == "bec" and .confidence in ("medium")
+    )
+  )
+  // Free sender email
+  and (sender.email.domain.root_domain in $free_email_providers)
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and not headers.auth_summary.dmarc.pass
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+attack_types:
+  - "BEC/Fraud"
+tactics_and_techniques:
+  - "LNK"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Natural Language Understanding"
+  - "Header analysis"
+  - "Sender analysis"
+id: "5ee943cf-f1ed-58dc-8cc0-b72e8716f811"
