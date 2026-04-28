@@ -1,0 +1,24 @@
+name: "Attachment: ICS file with excessive custom properties"
+description: "ICS calendar attachment contains an unusually high number of custom X- properties, which may indicate attempts to hide malicious content or exploit calendar parsing vulnerabilities."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and any(filter(attachments,
+                 .file_type in~ ('ics')
+                 or .content_type in ("text/calendar", "application/ics")
+          ),
+          regex.icount(file.parse_text(.).text,
+                       '[\r\n]X-[^\r\n]+\x3b\s?[^\r\n]+:\s*[a-f0-9]{32,}'
+          ) > 10
+  )
+
+attack_types:
+  - "Malware/Ransomware"
+tactics_and_techniques:
+  - "Evasion"
+  - "ICS Phishing"
+detection_methods:
+  - "File analysis"
+  - "Content analysis"
+id: "3ac947bc-9db3-5505-9d7b-4cd22c9931fe"
