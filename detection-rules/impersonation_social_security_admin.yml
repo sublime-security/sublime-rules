@@ -4,7 +4,7 @@ type: "rule"
 severity: "medium"
 source: |
   type.inbound
-  and length(attachments) < 2
+  and length(attachments) < 15
   // Identifies as SSA without catching strings such as "Alyssa"
   and (
     regex.contains(sender.display_name, '^SSA\b')
@@ -68,14 +68,23 @@ source: |
   // Additional suspicious indicator
   and (
     any(ml.nlu_classifier(body.current_thread.text).topics,
-        .name == "Secure Message" and .confidence == "high"
+        .name in ("Security and Authentication", "Secure Message")
+        and .confidence == "high"
     )
+    or any(ml.nlu_classifier(body.current_thread.text).entities,
+           .name == "org" and .text == "SSA"
+    )
+    or length(body.current_thread.text) == 0
+    or body.current_thread.text is null
     or strings.icontains(body.current_thread.text, "SSA Statement Viewer")
     or strings.icontains(strings.replace_confusables(body.current_thread.text),
                          "Social Security Statement"
     )
     or regex.icontains(body.current_thread.text,
                        "(?:view|open) (?:your|the).{0,8} (statement|document)"
+    )
+    or regex.icontains(body.current_thread.text,
+                       "(?:view|open|assess|evaluate|review|conduct|read|scan)"
     )
     // real SSA phone number
     or strings.icontains(body.current_thread.text, "1-800-772-1213")
@@ -103,14 +112,22 @@ source: |
       )
     )
   )
-  and not any(ml.nlu_classifier(body.current_thread.text).topics,
-              .name in (
-                "Newsletters and Digests",
-                "Advertising and Promotions",
-                "Events and Webinars"
-              )
-              and .confidence == "high"
+  and not (
+    any(ml.nlu_classifier(body.current_thread.text).topics,
+        .name in (
+          "Newsletters and Digests",
+          "Advertising and Promotions",
+          "Events and Webinars",
+          "Charity and Non-Profit",
+          "Political Mail"
+        )
+        and .confidence == "high"
+    )
+    or any(ml.nlu_classifier(body.current_thread.text).intents,
+           .name == "benign" and .confidence == "high"
+    )
   )
+  
   // not a forward or reply
   and (headers.in_reply_to is null or length(headers.references) == 0)
   and (
