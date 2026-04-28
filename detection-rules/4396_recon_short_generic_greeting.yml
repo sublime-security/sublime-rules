@@ -21,6 +21,11 @@ source: |
     or length(body.current_thread.text) <= 5
     or regex.match(body.current_thread.text, '\d+')
   )
+  // external freemail sender
+  and (
+    sender.email.domain.root_domain in $free_email_providers
+    or any(headers.reply_to, .email.email == sender.email.email)
+  )
   and 4 of (
     strings.ilike(body.current_thread.text, '*time to discuss*'),
     strings.ilike(body.current_thread.text, '*share my ideas*'),
@@ -35,10 +40,6 @@ source: |
     ),
     // and it's likely a freemail
     any($free_email_providers, strings.icontains(body.current_thread.text, .))
-  )
-  and (
-    any(headers.reply_to, .email.email == sender.email.email)
-    or sender.email.domain.root_domain in $free_email_providers
   )
   and sender.email.domain.root_domain not in (
     recipients.to[0].email.domain.root_domain
