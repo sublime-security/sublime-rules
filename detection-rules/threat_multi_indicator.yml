@@ -1,0 +1,117 @@
+name: "Acts of Violence: Multi-indicator threat detection"
+description: "Backup detection using multiple weak signals that together suggest a threat."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and (
+    (
+      // Intent coupled directly to violence verb (prevents "i will" + separate harm noun FPs)
+      (
+        regex.icontains(body.current_thread.text,
+                        '(?:i|we)\s+(?:will|''ll|gonna|going to|am going to|shall)\s+(?:[^\r\n\x20]+\s+){0,4}(?:kill|murder|shoot|stab|hurt|harm|attack|assault|beat|destroy|eliminate|slaughter|slay|strangle|choke)'
+        )
+        or strings.icontains(body.current_thread.text, "i'm coming")
+        or strings.icontains(body.current_thread.text, "coming for you")
+      )
+      and (
+        // Target markers
+        regex.icontains(body.current_thread.text,
+                        '(?:you|your|everyone|everybody|all of you|each one|them|those people|the students|the workers)'
+        )
+      )
+    )
+    or 3 of (
+      // Future intent language
+      regex.icontains(body.current_thread.text,
+                      '(?:i|we)\s+(?:will|gonna|going to|''ll)\s+(?:[^\r\n\x20]+\s+){0,5}(?:you|them|everyone)'
+      ),
+      // Violence verbs
+      regex.icontains(body.current_thread.text,
+                      '(?:kill|murder|shoot|stab|hurt|harm|attack|assault|beat|destroy|eliminate|slaughter|slay|strangle|choke)'
+      ),
+      // Body parts (targeting specific areas)
+      regex.icontains(body.current_thread.text,
+                      '(?:your|their)\s+(?:[^\r\n\x20]+\s+){0,5}(?:head|face|neck|throat|eyes|skull|spine|brain|body)'
+      ),
+      // Weapons
+      regex.icontains(body.current_thread.text,
+                      '(?:gun|rifle|pistol|firearm|knife|blade|weapon|bomb|explosive|acid)'
+      ),
+      // Harm/suffering
+      regex.icontains(body.current_thread.text,
+                      '(?:pain|suffer|agony|blood|die|death|dead|corpse|torture)'
+      ),
+      // Stalking/finding
+      regex.icontains(body.current_thread.text,
+                      '(?:find|hunt|track|locate|coming for)\s+(?:[^\r\n\x20]+\s+){0,5}you'
+      ),
+      // Retribution
+      regex.icontains(body.current_thread.text,
+                      '(?:you|they)\s+(?:will|gonna)\s+(?:[^\r\n\x20]+\s+){0,5}(?:pay|regret|be sorry|suffer)'
+      ),
+      // Can't escape
+      regex.icontains(body.current_thread.text,
+                      '(?:can''t|cannot|won''t)\s+(?:[^\r\n\x20]+\s+){0,5}(?:hide|escape|run|get away)'
+      ),
+      // Public threat
+      regex.icontains(body.current_thread.text,
+                      '(?:news|headlines|media|world|everyone)\s+(?:will|gonna)\s+(?:[^\r\n\x20]+\s+){0,5}(?:see|know|witness)'
+      ),
+      // All caps violence (indicates severity/emotion)
+      regex.contains(body.current_thread.text,
+                     '(?:DIE|KILL|DEATH|DEAD|MURDER|SHOOT|HURT)'
+      ),
+      // Multiple victims
+      regex.icontains(body.current_thread.text,
+                      '(?:everyone|everybody|all of (?:you|them)|every (?:single )?one)'
+      ),
+      // Time pressure/urgency
+      regex.icontains(body.current_thread.text,
+                      '(?:today|tonight|tomorrow|soon|coming|on my way)'
+      )
+    )
+  )
+  and length(body.current_thread.text) > 50
+  and length(body.current_thread.text) < 10000
+  and any(ml.nlu_classifier(body.current_thread.text).topics,
+          .name == "Acts of Violence" and .confidence == "high"
+  )
+  
+  // Negate benign contexts
+  and not any(ml.nlu_classifier(body.current_thread.text).topics,
+              .name in (
+                "News and Current Events",
+                "Newsletters and Digests",
+                "Entertainment and Sports"
+              )
+              and .confidence == "high"
+  )
+  and not (
+    (
+      any(ml.nlu_classifier(body.current_thread.text).topics,
+          .name in ("Payment Information")
+      )
+      and (
+        any(ml.nlu_classifier(body.current_thread.text).intents,
+            .name == "extortion"
+        )
+      )
+    )
+    or (
+      any(ml.nlu_classifier(body.current_thread.text).intents,
+          .name == "extortion"
+      )
+      and (
+        regex.icontains(strings.replace_confusables(body.current_thread.text),
+                        '[bḆḂ]it[cĉƈ][oöة]i[nņɲ]|\bbtc\b|blockchain'
+        )
+      )
+    )
+  )
+  // Negate bulk/marketing emails with unsubscribe links
+  and not any(body.links,
+              strings.icontains(.display_text, "unsubscribe")
+              or strings.icontains(.href_url.url, "unsubscribe")
+  )
+id: "7293ccc3-2e20-5710-83e3-c2ad95b761cb"
