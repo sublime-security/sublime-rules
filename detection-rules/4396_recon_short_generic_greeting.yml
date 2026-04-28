@@ -8,11 +8,6 @@ source: |
   // detect generic greetings
   and 20 < length(body.current_thread.text) < 350
   and 15 < length(subject.base) < 100
-  and (
-    regex.icontains(body.current_thread.text,
-                    'New project (Quot(e|ation)|proposal|development|website)'
-    )
-  )
   // exclude messages with previous thread context (forwards/replies)
   and length(body.previous_threads) == 0
   and (
@@ -26,10 +21,24 @@ source: |
     or length(body.current_thread.text) <= 5
     or regex.match(body.current_thread.text, '\d+')
   )
-  // external freemail sender
+  and 4 of (
+    strings.ilike(body.current_thread.text, '*time to discuss*'),
+    strings.ilike(body.current_thread.text, '*share my ideas*'),
+    strings.ilike(body.current_thread.text, '*for free*'),
+    strings.ilike(body.current_thread.text, '*feedback*'),
+    strings.ilike(body.current_thread.text, '*kindly*'),
+    strings.ilike(body.current_thread.text, '*private email*'),
+    strings.ilike(body.current_thread.text, '*swift response*'),
+    // there's an email in the body
+    regex.contains(body.current_thread.text,
+                   "[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}"
+    ),
+    // and it's likely a freemail
+    any($free_email_providers, strings.icontains(body.current_thread.text, .))
+  )
   and (
-    sender.email.domain.root_domain in $free_email_providers
-    or sender.email.domain.root_domain not in $free_email_providers
+    any(headers.reply_to, .email.email == sender.email.email)
+    or sender.email.domain.root_domain in $free_email_providers
   )
   and sender.email.domain.root_domain not in (
     recipients.to[0].email.domain.root_domain
@@ -76,7 +85,6 @@ source: |
       or headers.auth_summary.spf.pass == false
     )
   )
-
 tags:
   - "Attack surface reduction"
   - pr_author_cybher0808
