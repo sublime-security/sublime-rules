@@ -149,15 +149,34 @@ source: |
     any(recipients.to,
         strings.icontains(body.current_thread.text, .email.domain.sld)
     ),
-    // mailto mismatch from freemailer
+  
+    // mailto display text shows email from different root domain than href target
     (
-      any(body.links,
-          .href_url.scheme == 'mailto'
-          and .display_text is not null
-          and strings.icontains(.display_text, "@")
-          and not strings.icontains(.href_url.url, .display_text)
+      any(filter(body.links, .href_url.scheme == 'mailto'),
+          .display_text is not null
+          and regex.icontains(.display_text,
+                              '[a-zA-Z0-9._+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}'
+          )
+          and not strings.icontains(.href_url.url,
+                                    regex.extract(.display_text,
+                                                  '[a-zA-Z0-9._+-]+@(?:[a-zA-Z0-9-]+\.)*(?P<root>[a-zA-Z0-9-]+\.[a-zA-Z]{2,})'
+                                    )[0].named_groups["root"]
+          )
       )
       and sender.email.domain.root_domain in $free_email_providers
+      and (
+        length(headers.references) == 0
+        or all(headers.references, strings.icontains(., ".ref@"))
+      )
+    ),
+  
+    // freemail sender using bulk or marketing mailer
+    (
+      sender.email.domain.root_domain in $free_email_providers
+      and headers.mailer is not null
+      and regex.icontains(headers.mailer,
+                          '(marketing|campaign|mass|bulk|mailer|newsletter|sendinblue|mailchimp|sendgrid|mailgun|postmark|constant.contact|hubspot|pardot|marketo|brevo|klaviyo|drip)'
+      )
     )
   )
   
@@ -187,4 +206,4 @@ detection_methods:
 id: "c836b065-538b-50f3-83d9-784d34a56e22"
 og_id: "c2e18a57-1f52-544f-bb6d-a578e286cf89"
 testing_pr: 4289
-testing_sha: ce13220d3004ab7d0239a4f131227a6546d0a663
+testing_sha: 48d65ba667f167fe4996c73e1b27017c9477b3c3
