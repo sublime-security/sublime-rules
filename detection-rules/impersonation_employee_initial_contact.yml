@@ -1,0 +1,42 @@
+name: "Impersonation: Employee using fabricated identity in initial contact"
+description: "Detects inbound messages that appear to be initial contact attempts where the sender uses a display name that doesn't match their email address, includes basic greetings referencing the subject line, and signs off with their display name. The message is short with no attachments, suggesting a social engineering setup for further communication."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  // not a reply thread — this is initial contact
+  and length(headers.references) == 0
+  // short body, no attachments — initial contact social engineering
+  and length(body.current_thread.text) < 500
+  and length(attachments) == 0
+  // contains basic greeting
+  and (
+    strings.starts_with(body.current_thread.text,
+                        strings.concat("Hey ",
+                                       regex.iextract(subject.base, '\w+')[0].full_match
+                        )
+    )
+    or strings.starts_with(body.current_thread.text,
+                           strings.concat("Hi ",
+                                          regex.iextract(subject.base, '\w+')[0].full_match
+                           )
+    )
+  )
+  // ends with the senders display name
+  and strings.ends_with(body.current_thread.text,
+                        strings.concat(sender.display_name, ".")
+  )
+  // sender display name not in the actual email address local part
+  and any(regex.iextract(sender.display_name, '\w+'),
+          .full_match not in~ (sender.email.local_part)
+  )
+  and sender.email.domain.root_domain not in ("linkedin.com")
+attack_types:
+  - "BEC/Fraud"
+tactics_and_techniques:
+  - "Impersonation: Employee"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Sender analysis"
+id: "562d02fd-c96e-5954-ae4a-a5e185f1d498"
