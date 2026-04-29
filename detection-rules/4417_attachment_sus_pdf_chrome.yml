@@ -1,0 +1,162 @@
+name: "PR# 4417 - Attachment: Suspicious PDF created with headless browser"
+description: "Detects PDF documents containing a table of contents that were generated using HeadlessChrome, Chromium with Skia/PDF, or QT with empty metadata fields - common characteristics of automated malicious document creation."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and (
+    // directly attached PDF
+    any(filter(attachments, .file_type == "pdf"),
+        (
+          // table of contents detection
+          (
+            any(file.explode(.),
+                strings.contains(.scan.ocr.raw, 'TABLE OF CONTEN')
+            )
+            // the Table of contents can be on another page
+            and any(file.explode(.),
+                    regex.icontains(.scan.ocr.raw,
+                                    '(?:[\r\n]|^)+(?:\s*1\s*(?:\.|:))?\s*Introduction'
+                    )
+                    or strings.icontains(.scan.ocr.raw, 'marked in red')
+            )
+          )
+          // heading of sections within observed documents
+          or (
+            any(file.explode(.),
+                any(.scan.strings.strings,
+                    any([
+                          'Employee Acknowledgement',
+                          'Document Summary',
+                          'appraisal overview',
+                          'accessing full appraisal',
+                        ],
+                        .. =~ .
+                    )
+                )
+            )
+          )
+        )
+        and (
+          (
+            (
+              strings.icontains(beta.parse_exif(.).creator, 'HeadlessChrome')
+              or strings.icontains(beta.parse_exif(.).creator, 'Chromium')
+            )
+            and strings.icontains(beta.parse_exif(.).producer, 'Skia/PDF')
+          )
+          or (
+            any(beta.parse_exif(.).fields,
+                .key == "Creator"
+                and (.value == "" or strings.istarts_with(.value, 'wkhtmltopdf'))
+            )
+            and any(beta.parse_exif(.).fields,
+                    .key == "Title"
+                    and (
+                      .value == ""
+                      // company handbook
+                      or .value in ('Company HandBook')
+                      // appraisal themes
+                      or strings.icontains(.value,
+                                           'Employee Performance Appraisal'
+                      )
+                    )
+            )
+            and strings.istarts_with(beta.parse_exif(.).producer, 'QT ')
+          )
+        )
+    )
+    // or within an attached EML
+    or any(filter(attachments,
+                  .content_type == "message/rfc822" or .file_extension == "eml"
+           ),
+           any(filter(file.parse_eml(.).attachments, .file_type == "pdf"),
+               (
+                 // table of contents detection
+                 (
+                   any(file.explode(.),
+                       strings.contains(.scan.ocr.raw, 'TABLE OF CONTEN')
+                   )
+                   // the Table of contents can be on another page
+                   and any(file.explode(.),
+                           regex.icontains(.scan.ocr.raw,
+                                           '(?:[\r\n]|^)+(?:\s*1\s*(?:\.|:))?\s*Introduction'
+                           )
+                           or strings.icontains(.scan.ocr.raw, 'marked in red')
+                   )
+                 )
+                 // heading of sections within observed documents
+                 or (
+                   any(file.explode(.),
+                       any(.scan.strings.strings,
+                           any([
+                                 'Employee Acknowledgement',
+                                 'Document Summary',
+                                 'appraisal overview',
+                                 'accessing full appraisal',
+                               ],
+                               .. =~ .
+                           )
+                       )
+                       // or links to free subdomain host
+                       or any(.scan.url.urls,
+                              .domain.root_domain in $free_subdomain_hosts
+                              and .domain.subdomain is not null
+                       )
+                   )
+                 )
+               )
+               and (
+                 (
+                   (
+                     strings.icontains(beta.parse_exif(.).creator,
+                                       'HeadlessChrome'
+                     )
+                     or strings.icontains(beta.parse_exif(.).creator, 'Chromium')
+                   )
+                   and strings.icontains(beta.parse_exif(.).producer, 'Skia/PDF')
+                 )
+                 or (
+                   any(beta.parse_exif(.).fields,
+                       .key == "Creator"
+                       and (
+                         .value == ""
+                         or strings.istarts_with(.value, 'wkhtmltopdf')
+                       )
+                   )
+                   and any(beta.parse_exif(.).fields,
+                           .key == "Title"
+                           and (
+                             .value == ""
+                             // company handbook
+                             or .value in ('Company HandBook')
+                             // appraisal themes
+                             or strings.icontains(.value,
+                                                  'Employee Performance Appraisal'
+                             )
+                           )
+                   )
+                   and strings.istarts_with(beta.parse_exif(.).producer, 'QT ')
+                 )
+               )
+           )
+    )
+  )
+
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Evasion"
+  - "PDF"
+detection_methods:
+  - "Content analysis"
+  - "Exif analysis"
+  - "File analysis"
+  - "Optical Character Recognition"
+id: "ca9680f8-9639-5238-a0c4-f894e2a09694"
+tags:
+  - created_from_open_prs
+  - rule_status_modified
+  - pr_author_markmsublime
+references:
+  - https://github.com/sublime-security/sublime-rules/pull/4417
