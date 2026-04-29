@@ -1,0 +1,62 @@
+name: "Brand impersonation: ZoomInfo with financial request language"
+description: "Detects messages impersonating ZoomInfo that contain financial payment language or BEC indicators, combined with fake thread characteristics such as reply/forward subjects without proper email headers or no previous conversation history."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and (
+    // no previous threads
+    length(body.previous_threads) == 0
+    // or is a fake thread
+    or (
+      (length(headers.references) == 0 or headers.in_reply_to is null)
+      and (
+        subject.is_reply
+        or subject.is_forward
+        or length(body.previous_threads) > 0
+      )
+    )
+    // undisclosed or invalid recipients
+    or any(recipients.to, .email.domain.valid == false)
+  )
+  and any(body.links,
+          (.href_url.domain.root_domain == "zoominfo.com")
+          or strings.icontains(sender.display_name, 'zoominfo')
+  )
+  
+  // ml.nlu classifying emails based on malicious contents
+  and (
+    any(ml.nlu_classifier(body.current_thread.text).entities,
+        .name == "financial" and .text == "payments"
+    )
+    or any(ml.nlu_classifier(body.current_thread.text).intents,
+           .name == "bec" and .confidence != "low"
+    )
+    or any(ml.nlu_classifier(body.current_thread.text).topics,
+           .name in ("Payment Information", "Request to View Invoice")
+           and .confidence != "low"
+    )
+  )
+  // negate when NLU confidently classifies as benign
+  and not any(ml.nlu_classifier(body.current_thread.text).intents,
+              .name == "benign" and .confidence == "high"
+  )
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and not coalesce(headers.auth_summary.dmarc.pass, false)
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )   
+attack_types:
+  - "BEC/Fraud"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Header analysis"
+  - "Natural Language Understanding"
+  - "Sender analysis"
+id: "d16d3aa4-1223-5f33-ad35-ba35686b208d"
