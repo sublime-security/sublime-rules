@@ -215,6 +215,24 @@ jobs:
 
           echo "All batches submitted successfully!"
 
+      - name: Validate YARA rules
+        if: github.event_name != 'issue_comment'
+        run: |
+          sudo apt-get install -y -qq yara > /dev/null 2>&1
+          failed=0
+          for f in yara/*.yar; do
+            echo "Validating $f..."
+            if ! yarac "$f" /dev/null; then
+              echo "::error file=$f::YARA rule failed to compile: $f"
+              failed=1
+            fi
+          done
+          if [[ $failed -eq 1 ]]; then
+            echo "One or more YARA rules failed to compile"
+            exit 1
+          fi
+          echo "All YARA rules compiled successfully!"
+
       - name: Verify no .yaml files exist
         if: github.event_name != 'issue_comment'
         run: |
