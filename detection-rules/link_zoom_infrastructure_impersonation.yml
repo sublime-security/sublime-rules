@@ -1,0 +1,61 @@
+name: "Link: Zoom infrastructure impersonation via lookalike domain"
+description: |
+  Detects emails containing links to domains that impersonate Zoom infrastructure
+  by embedding "zoom" in the subdomain or second-level domain (e.g.
+  zoom.uc01web.us, uq06webzoom.us), while not resolving to legitimate Zoom-owned
+  domains. Targets credential phishing campaigns that abuse Zoom's brand trust to
+  lure victims into entering credentials or downloading malware.
+references: []
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and any(body.links,
+          (
+            strings.icontains(.href_url.domain.sld, "zoom")
+            or strings.icontains(.href_url.domain.subdomain, "zoom")
+          )
+          and .href_url.domain.root_domain not in (
+            "zoom.us",
+            "zoom.com",
+            "zoomgov.com",
+            "zoominternet.net",
+            "zoomtown.com",
+            "profitzoom.net",
+            "zoom-x.de"
+          )
+          // confirm the landing page is actually serving zoom-branded content
+          and ml.link_analysis(.).credphish.brand.name == "Zoom"
+  )
+  // body must contain zoom-branded language to confirm impersonation intent
+  and (
+    strings.ilike(body.current_thread.text,
+                  "*zoom meeting*",
+                  "*zoom call*",
+                  "*join zoom*",
+                  "*zoom webinar*",
+                  "*zoom invite*"
+    )
+    or strings.ilike(body.current_thread.text, "*meeting id*", "*passcode*")
+    or strings.icontains(subject.subject, "zoom")
+  )
+  // exclude legitimate Zoom senders passing DMARC
+  and not (
+    sender.email.domain.root_domain in ("zoom.us", "zoom.com", "zoomgov.com")
+    and headers.auth_summary.dmarc.pass
+  )
+  and (
+    profile.by_sender().prevalence in ("new", "outlier")
+    or profile.by_sender().any_messages_malicious_or_spam
+  )
+  and not profile.by_sender().any_messages_benign
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Social engineering"
+detection_methods:
+  - "URL analysis"
+  - "Sender analysis"
+
+id: "a33ca980-5fd1-568e-9bb7-e38f1faf0217"
