@@ -6,7 +6,7 @@ type: "rule"
 severity: "high"
 source: |
   type.inbound
-  
+
   // ensure the display name contains a space to avoid single named process accounts eg. 'billing, payment'
   and strings.contains(sender.display_name, " ")
   and sender.display_name in~ $org_display_names
@@ -19,18 +19,15 @@ source: |
   )
   and 1 of (
     regex.icontains(body.current_thread.text,
-                    '(pay\s?(roll|check|date|day)|direct deposit|(acct|account) rephrase|paid.{0,50}problems|\bACH\b|\bdd\b|gehalt|salario|salary)'
+                    '(?:pay\s?(?:roll|check|date|day)|direct deposit|(?:acct|account) rephrase|paid.{0,50}problems|\bACH\b|\bdd\b|gehalt|salario|salary|employee self[-\s]?service|\bESS\b.{0,30}(?:portal|access|log[-\s]?in)|access.{0,30}(?:HR|employee).{0,30}portal)'
     ),
     regex.icontains(subject.subject,
-                    '(pay\s?(roll|check|date|day)|direct deposit|(acct|account) rephrase|paid.{0,50}problems|\bACH\b|\bdd\b|gehalt|salario|salary)'
+                    '(?:pay\s?(?:roll|check|date|day)|direct deposit|(?:acct|account) rephrase|paid.{0,50}problems|\bACH\b|\bdd\b|gehalt|salario|salary|employee self[-\s]?service|\bESS\b.{0,15}portal)'
     )
   )
   and (
     not profile.by_sender_email().solicited
-    or (
-      profile.by_sender().any_messages_malicious_or_spam
-      and not profile.by_sender().any_messages_benign
-    )
+    or profile.by_sender().any_messages_malicious_or_spam
   )
   and not profile.by_sender().any_messages_benign
   
