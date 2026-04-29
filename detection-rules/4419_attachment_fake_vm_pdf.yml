@@ -1,0 +1,67 @@
+name: "PR# 4419 - Attachment: Fake voicemail via PDF"
+description: "Identifies inbound messages containing a single-page PDF attachment related to voicemail or missed call notifications that includes either a URL or QR code."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  // a single PDF attachment
+  and length(attachments) == 1
+  // the subject doesn't contain fax, which is currently a common match for the topic
+  and not strings.icontains(subject.base, 'fax')
+  and (
+    length(body.current_thread.text) == 0
+    or (
+      ml.nlu_classifier(body.current_thread.text).language == "english"
+      and (
+        any(ml.nlu_classifier(body.current_thread.text).topics,
+            .confidence == "high"
+            and .name == "Voicemail Call and Missed Call Notifications"
+        )
+        or any(ml.nlu_classifier(body.current_thread.text).intents,
+               .confidence == "high" and .name == "bec"
+        )
+      )
+    )
+  )
+  // the Topic analysis of the PDF is Voicemail
+  and any(attachments,
+          .file_extension == "pdf"
+          // the NLU detected language is english
+          and ml.nlu_classifier(beta.ocr(.).text).language == "english"
+          and length(beta.ocr(.).text) > 95
+          and any(ml.nlu_classifier(beta.ocr(.).text).topics,
+                  .confidence == "high"
+                  and .name == "Voicemail Call and Missed Call Notifications"
+          )
+          and beta.ocr(.).success
+          // contains a link or QR code
+          and any(file.explode(.),
+                  0 < length(.scan.pdf.urls) <= 2 or .scan.qr.url.url is not null
+          )
+          // there is only a single page
+          and any(file.explode(.), .depth == 0 and .scan.exiftool.page_count == 1)
+  )
+  and not (
+    sender.email.domain.root_domain == "zendesk.com"
+    and coalesce(headers.auth_summary.dmarc.pass, false)
+  )
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "PDF"
+  - "QR code"
+  - "Social engineering"
+detection_methods:
+  - "Computer Vision"
+  - "Content analysis"
+  - "File analysis"
+  - "Optical Character Recognition"
+  - "QR code analysis"
+  - "URL analysis"
+id: "c3f78642-a654-5b08-8a37-c31b033fb68b"
+tags:
+  - created_from_open_prs
+  - rule_status_modified
+  - pr_author_markmsublime
+references:
+  - https://github.com/sublime-security/sublime-rules/pull/4419
