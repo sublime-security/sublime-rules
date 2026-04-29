@@ -148,6 +148,35 @@ source: |
     // body contains recipient SLD
     any(recipients.to,
         strings.icontains(body.current_thread.text, .email.domain.sld)
+    ),
+  
+    // mailto display text shows email from different root domain than href target
+    (
+      any(filter(body.links, .href_url.scheme == 'mailto'),
+          .display_text is not null
+          and regex.icontains(.display_text,
+                              '[a-zA-Z0-9._+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}'
+          )
+          and not strings.icontains(.href_url.url,
+                                    regex.extract(.display_text,
+                                                  '[a-zA-Z0-9._+-]+@(?:[a-zA-Z0-9-]+\.)*(?P<root>[a-zA-Z0-9-]+\.[a-zA-Z]{2,})'
+                                    )[0].named_groups["root"]
+          )
+      )
+      and sender.email.domain.root_domain in $free_email_providers
+      and (
+        length(headers.references) == 0
+        or all(headers.references, strings.icontains(., ".ref@"))
+      )
+    ),
+  
+    // freemail sender using bulk or marketing mailer
+    (
+      sender.email.domain.root_domain in $free_email_providers
+      and headers.mailer is not null
+      and regex.icontains(headers.mailer,
+                          '(marketing|campaign|mass|bulk|mailer|newsletter|sendinblue|mailchimp|sendgrid|mailgun|postmark|constant.contact|hubspot|pardot|marketo|brevo|klaviyo|drip)'
+      )
     )
   )
   
