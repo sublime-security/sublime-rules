@@ -1,0 +1,40 @@
+name: "Impersonation: HR and financial with recipient domain in display name"
+description: "Detects messages where the sender's display name contains the recipient's organization domain, uses financial or HR-themed subjects, includes attachments, and originates from external domains excluding legitimate business platforms."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+
+  // Display name contains recipient's organization SLD
+  and any(recipients.to,
+          length(.email.domain.sld) >= 4
+          and strings.icontains(sender.display_name, .email.domain.sld)
+  )
+  
+  // Sender domain is external
+  and all(recipients.to,
+          sender.email.domain.root_domain != .email.domain.root_domain
+  )
+  
+  // Financial/HR themed subject
+  and regex.icontains(subject.base,
+                      '(appraisal|salary|payroll|audit|financial.?record|performance.?review|bonus|tax.?form|evaluation)'
+  )
+  
+  // Has attachment but excluding pngs as attachments
+  and length(filter(attachments, .file_type != "png")) > 0
+  
+  // Not from org and high trust domains
+  and not (
+    sender.email.domain.root_domain in $org_domains
+    or sender.email.domain.root_domain in $high_trust_sender_root_domains
+  )
+attack_types:
+  - "BEC/Fraud"
+tactics_and_techniques:
+  - "Impersonation: Employee"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Sender analysis"
+id: "9f2de70d-2d77-52f6-95b2-93d49d235c49"
