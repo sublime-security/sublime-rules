@@ -1,0 +1,66 @@
+name: "Link: Invoice-related BEC with newly registered domain < 60 days "
+description: "Detects Business Email Compromise attacks using fake reply/forward threads containing links to newly registered domains (less than 60 days old) with invoice-related language and engaging action words. The message includes financial or payment terminology and prompts the recipient to take action through suspicious links."
+type: "rule"
+severity: "medium"
+source: |
+    type.inbound
+    and (subject.is_reply or subject.is_forward)
+    and (
+      any(body.current_thread.links, network.whois(.href_url.domain).days_old < 60)
+      and regex.icontains(subject.subject,
+                          '\b(proposal|purchase|invoice|payment|wire|agreement|contract|settlement)\b'
+      )
+      and any(body.links,
+              regex.icontains(.display_text,
+                              '(?:VIEW|REVIEW|CLICK|DOWNLOAD|CHECK|VALIDATE)'
+              )
+      )
+      and any([body.current_thread.text],
+              regex.icontains(.,
+                              'wire transfer',
+                              'payment',
+                              'invoice',
+                              'ACH',
+                              'kindly download',
+                              'document',
+                              'urgently',
+                              'confirm'
+              )
+      )
+      and (
+        any(ml.nlu_classifier(body.current_thread.text).intents,
+            .name == "bec" and .confidence != "low"
+        )
+        or any(ml.nlu_classifier(body.current_thread.text).tags,
+               .name in ("invoice", "payment")
+        )
+        or any(ml.nlu_classifier(body.current_thread.text).entities,
+               .name == "request" and .text == "kindly download to view"
+        )
+      )
+    )
+    // prevent benign emails
+    and not any(ml.nlu_classifier(body.current_thread.text).intents,
+                .name == "benign"
+    )
+    // negate highly trusted sender domains unless they fail DMARC authentication
+    and (
+      (
+        sender.email.domain.root_domain in $high_trust_sender_root_domains
+        and not coalesce(headers.auth_summary.dmarc.pass, false)
+      )
+      or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+    )
+    and not profile.by_sender().any_messages_benign
+
+attack_types:
+  - "BEC/Fraud"
+tactics_and_techniques:
+  - "Social engineering"
+  - "Evasion"
+  - "Spoofing"
+detection_methods:
+  - "Header analysis"
+  - "Sender analysis"
+  - "URL analysis"
+id: "fee020b6-4a01-5ed3-a924-b5aa4415d3e9"
