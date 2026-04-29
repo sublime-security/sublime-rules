@@ -4,18 +4,14 @@ type: "rule"
 severity: "low"
 source: |
   type.inbound
-  and any(ml.nlu_classifier(body.current_thread.text).topics,
-          .name in ("Financial Communications")
-  )
   and not any(ml.nlu_classifier(body.current_thread.text).topics,
               .name in (
                 'Newsletters and Digests',
                 'News and Current Events',
-                'Legal and Compliance'
+                'Legal and Compliance',
+                'Health and Wellness',
+                'Entertainment and Sports'
               )
-  )
-  and not any(ml.nlu_classifier(body.current_thread.text).intents,
-              .name == "benign" and .confidence == "high"
   )
   // action word
   and (
@@ -47,18 +43,27 @@ source: |
     or regex.contains(body.current_thread.text, '\s\$[A-Z]{3,4}\s')
   )
   and not (
-    sender.email.domain.root_domain in (
-      "gemini.com",
-      "ledger.com",
-      "binance.com",
-      "trezor.io",
-      "kraken.com",
-      "solana.com",
-      "metamask.com",
-      "ethereum.org",
-      "bloomberg.com"
+    (
+      sender.email.domain.root_domain in (
+        "gemini.com",
+        "ledger.com",
+        "binance.com",
+        "trezor.io",
+        "kraken.com",
+        "solana.com",
+        "metamask.com",
+        "ethereum.org",
+        "bloomberg.com"
+      )
+      or sender.email.domain.root_domain in $org_domains
     )
-    and headers.auth_summary.dmarc.pass
+    and coalesce(headers.auth_summary.dmarc.pass, false)
+  )
+  and not (
+    (
+      sender.email.domain.domain in $high_trust_sender_root_domains
+      and coalesce(headers.auth_summary.dmarc.pass, false)
+    )
   )
 attack_types:
   - "Spam"
