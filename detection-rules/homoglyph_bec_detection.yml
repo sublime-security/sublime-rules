@@ -1,0 +1,72 @@
+name: "BEC: Unicode homoglyph domain spoofing"
+description: >-
+  Detects Business Email Compromise (BEC) attacks using Unicode homoglyph characters
+  in the sender's display name or domain to impersonate trusted organizations.
+
+  Homoglyph attacks replace standard ASCII characters with visually identical Unicode
+  lookalikes (e.g., Cyrillic 'а' U+0430 replacing Latin 'a' U+0061) to register
+  spoofed domains that appear legitimate to the human eye.
+
+  Based on original research: "The Identical Lie — Unicode Homoglyph Attacks & BEC"
+  by Yana Ivanov (2026). $55.5 billion lost over the past decade to BEC.
+references:
+  - https://yana-ivanov.github.io/cybersecurity-portfolio/analysis/homoglyph_bec_analysis.html
+  - MITRE ATT&CK T1566.002 (Spearphishing Link)
+  - FBI IC3 BEC Advisory (2024)
+severity: high
+type: rule
+authors:
+  - name: Yana Ivanov
+source: |
+  type.inbound
+  and (
+    regex.icontains(sender.display_name,
+                    '[\x{430}\x{435}\x{43e}\x{440}\x{441}\x{445}\x{443}\x{456}]'
+    )
+    or regex.icontains(sender.display_name,
+                       '[\x{391}\x{392}\x{395}\x{396}\x{397}\x{399}\x{39a}\x{39c}\x{39d}\x{39f}\x{3a1}\x{3a4}\x{3a5}\x{3a7}\x{3bf}]'
+    )
+    or regex.icontains(sender.email.domain.domain, '[^\x00-\x7F]')
+    or strings.istarts_with(sender.email.domain.domain, 'xn--')
+  )
+  and (
+    strings.ilike(subject.subject, "*wire transfer*")
+    or strings.ilike(subject.subject, "*urgent payment*")
+    or strings.ilike(subject.subject, "*invoice*")
+    or strings.ilike(subject.subject, "*remittance*")
+    or strings.ilike(subject.subject, "*bank account*")
+    or strings.ilike(subject.subject, "*payment confirmation*")
+    or strings.ilike(body.current_thread.text, "*wire transfer*")
+    or strings.ilike(body.current_thread.text, "*routing number*")
+    or strings.ilike(body.current_thread.text, "*account number*")
+    or strings.ilike(body.current_thread.text, "*please transfer*")
+    or strings.ilike(body.current_thread.text, "*send payment*")
+    or regex.icontains(body.current_thread.text, 'update.{0,30}banking')
+    or regex.icontains(subject.subject, '\bach\b')
+  )
+  and (
+    sender.email.domain.root_domain not in $high_trust_sender_root_domains
+    and coalesce(headers.auth_summary.dmarc.pass, false)
+  )
+  and (
+    sender.email.domain.root_domain not in $org_domains
+    and coalesce(headers.auth_summary.dmarc.pass, false)
+  )
+tags:
+  - "BEC"
+  - "Homoglyph"
+  - "Unicode"
+  - "Wire Fraud"
+  - "Impersonation"
+  - "IDN"
+  - "Punycode"
+attack_types:
+  - "BEC/Fraud"
+  - "Impersonation: Brand"
+tactics_and_techniques:
+  - "Social engineering"
+  - "Impersonation: Display name"
+false_positives:
+  - "Rare: Legitimate emails from internationalized domains (IDN) that use punycode
+     but are well-known senders. Tune by adding to $high_trust_sender_root_domains."
+id: "b02bb2dc-ca4d-5410-a1e0-db01df88d1d8"
