@@ -1,5 +1,5 @@
-name: "Link: Invoice-related BEC with newly registered domain < 60 days "
-description: "Detects Business Email Compromise attacks using fake reply/forward threads containing links to newly registered domains (less than 60 days old) with invoice-related language and engaging action words. The message includes financial or payment terminology and prompts the recipient to take action through suspicious links."
+name: "Link: BEC with newly registered domains and financial keywords"
+description: "Detects Business Email Compromise attacks containing links to newly registered domains (less than 60 days old) with invoice-related language and engaging action words. The message includes financial or payment terminology and prompts the recipient to take action through suspicious links. Uses natural language processing to identify credential theft or BEC intent while filtering out benign communications."
 type: "rule"
 severity: "medium"
 source: |
@@ -8,20 +8,20 @@ source: |
     and any(body.current_thread.links,
             network.whois(.href_url.domain).days_old < 60
             and regex.icontains(.display_text,
-                                '(?:VIEW|REVIEW|CLICK|DOWNLOAD|CHECK|VALIDATE)'
+                                '(?:view|click|download|check|validate)'
             )
     )
     and regex.icontains(subject.base,
-                        '\b(proposal|purchase|invoice|payment|wire|agreement|contract|settlement)\b'
+                        '\b(?:proposal|purchase|invoice|payment|wire|agreement|contract|settlement)\b'
     )
     and regex.icontains(body.current_thread.text,
-                        'wire transfer',
+                        '\bwire\b',
                         'payment',
                         'invoice',
-                        'ACH',
-                        'kindly download',
+                        '\bACH\b',
+                        'kindly',
                         'document',
-                        'urgently',
+                        'urgent',
                         'confirm'
     )
     and (
@@ -37,12 +37,9 @@ source: |
                 .name == "benign"
     )
     // negate highly trusted sender domains unless they fail DMARC authentication
-    and (
-      (
-        sender.email.domain.root_domain in $high_trust_sender_root_domains
-        and not coalesce(headers.auth_summary.dmarc.pass, false)
-      )
-      or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+    and not (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and coalesce(headers.auth_summary.dmarc.pass, false)
     )
 
 attack_types:
@@ -58,4 +55,4 @@ detection_methods:
 id: "51c6b50f-7a68-5ee8-9897-510d11bc255c"
 og_id: "fee020b6-4a01-5ed3-a924-b5aa4415d3e9"
 testing_pr: 4368
-testing_sha: 4d582664451ea549b780d159b046e347229b54d0
+testing_sha: 9cbdb549d1589b4f52044b13615ff5ece4f090f7
