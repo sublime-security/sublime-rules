@@ -4,39 +4,32 @@ type: "rule"
 severity: "medium"
 source: |
     type.inbound
-    and (subject.is_reply or subject.is_forward)
+    and 0 < length(body.current_thread.links) < 15
+    and any(body.current_thread.links,
+            network.whois(.href_url.domain).days_old < 60
+            and regex.icontains(.display_text,
+                                '(?:VIEW|REVIEW|CLICK|DOWNLOAD|CHECK|VALIDATE)'
+            )
+    )
+    and regex.icontains(subject.base,
+                        '\b(proposal|purchase|invoice|payment|wire|agreement|contract|settlement)\b'
+    )
+    and regex.icontains(body.current_thread.text,
+                        'wire transfer',
+                        'payment',
+                        'invoice',
+                        'ACH',
+                        'kindly download',
+                        'document',
+                        'urgently',
+                        'confirm'
+    )
     and (
-      any(body.current_thread.links, network.whois(.href_url.domain).days_old < 60)
-      and regex.icontains(subject.subject,
-                          '\b(proposal|purchase|invoice|payment|wire|agreement|contract|settlement)\b'
+      any(ml.nlu_classifier(body.current_thread.text).intents,
+          .name in ("cred_theft", "bec") and .confidence != "low"
       )
-      and any(body.links,
-              regex.icontains(.display_text,
-                              '(?:VIEW|REVIEW|CLICK|DOWNLOAD|CHECK|VALIDATE)'
-              )
-      )
-      and any([body.current_thread.text],
-              regex.icontains(.,
-                              'wire transfer',
-                              'payment',
-                              'invoice',
-                              'ACH',
-                              'kindly download',
-                              'document',
-                              'urgently',
-                              'confirm'
-              )
-      )
-      and (
-        any(ml.nlu_classifier(body.current_thread.text).intents,
-            .name == "bec" and .confidence != "low"
-        )
-        or any(ml.nlu_classifier(body.current_thread.text).tags,
-               .name in ("invoice", "payment")
-        )
-        or any(ml.nlu_classifier(body.current_thread.text).entities,
-               .name == "request" and .text == "kindly download to view"
-        )
+      or any(ml.nlu_classifier(body.current_thread.text).tags,
+             .name in ("invoice", "payment")
       )
     )
     // prevent benign emails
@@ -51,7 +44,6 @@ source: |
       )
       or sender.email.domain.root_domain not in $high_trust_sender_root_domains
     )
-    and not profile.by_sender().any_messages_benign
 
 attack_types:
   - "BEC/Fraud"
