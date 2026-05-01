@@ -1,0 +1,32 @@
+name: "Brand impersonation: Dotloop"
+description: "Impersonation of Dotloop, a real estate transaction management platform."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and (
+    strings.ilike(sender.display_name, '*dotloop*')
+    or strings.ilike(sender.email.domain.domain, '*dotloop*')
+  )
+  and sender.email.domain.root_domain not in~ ('dotloop.com', 'showingtime.com')
+
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and not headers.auth_summary.dmarc.pass
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Social engineering"
+detection_methods:
+  - "Header analysis"
+  - "Sender analysis"
+id: "084c79f0-44f1-5434-be98-cac104e845c7"
+og_id: "f997581a-ca08-5b21-8a52-ee0ca78fcea5"
+testing_pr: 4150
+testing_sha: 024e91928b294d4fef2641540bfd05e3cd2c96b8
