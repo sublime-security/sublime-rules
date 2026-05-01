@@ -1,0 +1,54 @@
+name: "Employee impersonation: Payroll fraud"
+description: |
+  This rule detects messages impersonating employees, from senders attempting to reroute payroll
+  or alter payment details.
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  
+  // ensure the display name contains a space to avoid single named process accounts eg. 'billing, payment'
+  and strings.contains(sender.display_name, " ")
+  and sender.display_name in~ $org_display_names
+  and length(attachments) == 0
+  and length(body.links) < 10
+  and length(body.current_thread.text) < 800
+  and (
+    sender.email.domain.root_domain not in $org_domains
+    or sender.email.domain.root_domain in $free_email_providers
+  )
+  and 1 of (
+    regex.icontains(body.current_thread.text,
+                    '(pay\s?(roll|check|date|day)|direct deposit|(acct|account) rephrase|paid.{0,50}problems|\bACH\b|\bdd\b|gehalt|salario|salary)'
+    ),
+    regex.icontains(subject.subject,
+                    '(pay\s?(roll|check|date|day)|direct deposit|(acct|account) rephrase|paid.{0,50}problems|\bACH\b|\bdd\b|gehalt|salario|salary)'
+    )
+  )
+  
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and (
+        any(distinct(headers.hops, .authentication_results.dmarc is not null),
+            strings.ilike(.authentication_results.dmarc, "*fail")
+        )
+      )
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+
+attack_types:
+  - "BEC/Fraud"
+tactics_and_techniques:
+  - "Impersonation: Employee"
+  - "Free email provider"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Sender analysis"
+id: "4aa29c3e-462f-5019-9cc0-22a03d0ce229"
+og_id: "2beb7d85-dfe3-5ecc-9b2a-d7416a3ef992"
+testing_pr: 4150
+testing_sha: 024e91928b294d4fef2641540bfd05e3cd2c96b8
