@@ -57,14 +57,22 @@ source: |
           sender.email.email in map(recipients.to, .email.email)
           or (length(recipients.to) == 0 or length(recipients.to) is null)
         )
-        // non-benign nlu intent 
+        // non-benign nlu intent
         or any(ml.nlu_classifier(body.current_thread.text).intents,
                .name != "benign"
         )
       )
     )
+    or (
+      any(ml.nlu_classifier(body.current_thread.text).intents,
+          .name == "cred_theft" and .confidence == "high"
+      )
+      and any(ml.nlu_classifier(body.current_thread.text).entities,
+              .name == "financial" and .text =~ "remittance"
+      )
+    )
   )
-  // negate resume related/job inquiry outreach 
+  // negate resume related/job inquiry outreach
   and not (
     any(ml.nlu_classifier(body.current_thread.text).topics,
         .name == "Professional and Career Development" and .confidence == "high"

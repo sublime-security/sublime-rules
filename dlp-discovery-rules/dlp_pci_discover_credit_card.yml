@@ -1,0 +1,71 @@
+name: "DLP - PCI: Discover Credit Card Number"
+description: |
+  Detects outbound emails containing Discover credit card numbers in the message body or
+  text-parseable attachments. Discover PANs are 16 digits and start with one of the
+  following BIN ranges: 6011, 622126–622925 (UnionPay co-branded), 644–649, or 65.
+  Optional space or dash separators between digit groups are matched
+  (e.g. 6011 1111 1111 1117 or 6011-1111-1111-1117).
+
+  Deploy this rule with the "Block Delivery" action to prevent PCI data exfiltration,
+  or in passive mode to monitor and audit outbound mail containing card numbers.
+
+  Regex engine: RE2 (Golang). No PCRE lookbehind — word boundaries (\b) are used instead.
+  Attachment content is extracted via file.explode() / .scan.strings.strings.
+type: rule
+severity: high
+references:
+  - https://www.regular-expressions.info/creditcard.html
+  - https://en.wikipedia.org/wiki/Payment_card_number
+  - https://www.pcisecuritystandards.org/
+  - https://docs.sublime.security/docs/regex-module
+  - https://docs.sublime.security/docs/how-to-detect-text-in-attachments
+authors:
+  - name: Sublime Security
+tags:
+  - dlp
+  - pci
+  - credit-card
+  - discover
+false_positives:
+  - Test or example Discover card numbers (e.g. 6011111111111117)
+  - Masked card numbers where most digits are replaced (e.g. 6011 **** **** 1117)
+  - 622xxx sequences appearing as invoice IDs or other numeric identifiers
+source: |
+  type.outbound
+  and (
+    // Body: Discover 6011 prefix
+    regex.contains(body.current_thread.text,
+      '\b6011[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}\b'
+    )
+
+    // Body: Discover 65xx prefix
+    or regex.contains(body.current_thread.text,
+      '\b65\d{2}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}\b'
+    )
+
+    // Body: Discover 644–649 prefix
+    or regex.contains(body.current_thread.text,
+      '\b64[4-9]\d[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}\b'
+    )
+
+    // Body: Discover/UnionPay co-branded 622126–622925
+    or regex.contains(body.current_thread.text,
+      '\b622(?:1(?:2[6-9]|[3-9]\d)|[2-8]\d{2}|9(?:[01]\d|2[0-5]))\d{2}[\s-]?\d{4}[\s-]?\d{4}\b'
+    )
+
+    // Attachments: scan extracted strings from PDFs, Office docs, CSVs, etc.
+    or any(attachments,
+      .file_extension in~ ('pdf', 'doc', 'docx', 'xls', 'xlsx', 'txt', 'csv', 'eml', 'msg')
+      and any(file.explode(.),
+        any(.scan.strings.strings,
+          regex.contains(., '\b6011[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}\b')
+          or regex.contains(., '\b65\d{2}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}\b')
+          or regex.contains(., '\b64[4-9]\d[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}\b')
+          or regex.contains(.,
+            '\b622(?:1(?:2[6-9]|[3-9]\d)|[2-8]\d{2}|9(?:[01]\d|2[0-5]))\d{2}[\s-]?\d{4}[\s-]?\d{4}\b'
+          )
+        )
+      )
+    )
+  )
+id: "2031491a-7f6c-5c76-b06d-a8415f7fa40d"
