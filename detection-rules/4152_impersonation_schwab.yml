@@ -1,0 +1,74 @@
+name: "PR# 4152 - Brand impersonation: Charles Schwab"
+description: "Impersonation of Charles Schwab & Co"
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and (
+    // display name contains charles schwab
+    (
+      strings.ilike(strings.replace_confusables(sender.display_name),
+                    '*charles schwab*'
+      )
+      // no spaces
+      or strings.ilike(strings.replace_confusables(sender.display_name),
+                       '*charlesschwab*'
+      )
+      // levenshtein distince similar to schwab
+      or strings.ilevenshtein(strings.replace_confusables(sender.display_name),
+                              'charles schwab'
+      ) <= 1
+      // sender domain contains schwab
+      or strings.ilike(strings.replace_confusables(sender.email.domain.domain),
+                       '*schwab*'
+      )
+    )
+  )
+  
+  // and the sender is not in org_domains or from charles shwab domains and passes auth
+  and not (
+    sender.email.domain.root_domain in $org_domains
+    or (
+      (
+        sender.email.domain.root_domain in (
+          "schwab.com",
+          "aboutschwab.com.",
+          "schwabcorrentesettlement.com", // Schawb v. Corrente, et al. Settlement domain
+          "schwabmoneywise.com",
+          "schwabe.com", // law firm with name
+          "proxyvote.com", // sends shareholder voting information with subject of company name
+          "boheme-schwabing.de", // steakhouse
+          "lesschwab.com", // tire sales
+          "schwab-marketing.com", // German Marketing Agency
+          "schwaben.ca" // unrelated but similar domain
+        )
+        or sender.email.domain.domain in ("schwabebooks.ccsend.com")
+      )
+      and headers.auth_summary.dmarc.pass
+    )
+  )
+  // and the sender is not from high trust sender root domains
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and not headers.auth_summary.dmarc.pass
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Lookalike domain"
+  - "Social engineering"
+detection_methods:
+  - "Header analysis"
+  - "Sender analysis"
+id: "14d66612-409c-555c-9c72-31f112780299"
+tags:
+  - created_from_open_prs
+  - rule_status_modified
+  - pr_author_MSAdministrator
+references:
+  - https://github.com/sublime-security/sublime-rules/pull/4152
