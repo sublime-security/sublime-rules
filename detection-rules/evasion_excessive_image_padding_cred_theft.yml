@@ -4,7 +4,6 @@ type: "rule"
 severity: "high"
 source: |
   type.inbound
-  
   // CTA link with action-oriented display text pointing to a different domain than the sender
   and any(body.current_thread.links,
           regex.icontains(.display_text,
@@ -12,28 +11,23 @@ source: |
           )
           and .href_url.domain.root_domain != sender.email.domain.root_domain
   )
-  
   // tall rendered email with low word density
   and beta.parse_exif(file.message_screenshot()).image_height > 1500
   and beta.parse_exif(file.message_screenshot()).image_height * 100 / regex.count(body.html.display_text,
                                                                                   '\S+'
   ) > 500
-  
   // html whitespace stuffing patterns
   and (
     // bare div-br blocks repeated 30+ times
     regex.icontains(body.html.raw, '(?:<div>\s*<br\s*/?\s*>\s*</div>\s*){30,}')
-  
     // style div-br blocks repeated 20+ times
     or regex.icontains(body.html.raw,
                        '(?:<div\s+style="[^"]+"\s*[^>]*>\s*<br\s*/?\s*>\s*</div>\s*){20,}'
     )
-  
     // p-nbsp blocks repeated 25+ times
     or regex.icontains(body.html.raw,
                        '(?:<p>\s*(?:&nbsp;|&#160;)\s*</p>\s*){25,}'
     )
-  
     // css margin-top pushdown >= 1500px
     or (
       regex.icontains(body.html.raw,
