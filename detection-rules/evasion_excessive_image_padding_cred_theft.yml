@@ -1,0 +1,45 @@
+name: "Link: Credential harvesting with image padding evasion"
+description: "Detects inbound messages containing credential-related action links with tall screenshot images and HTML padding techniques used to evade detection. The rule identifies messages with excessive empty div tags, non-breaking spaces, or large margin-top values that artificially increase content height while hiding malicious intent."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and any(body.current_thread.links,
+          regex.icontains(.display_text,
+                          '(?:open|view|click|sign|log.?in|retain|credential|document|review|release|verify|confirm|secure|accept)'
+          )
+  )
+  and beta.parse_exif(file.message_screenshot()).image_height > 1500
+  and beta.parse_exif(file.message_screenshot()).image_height * 100 / regex.count(body.html.display_text,
+                                                                                  '\S+'
+  ) > 500
+  and (
+    regex.icontains(body.html.raw, '(?:<div>\s*<br\s*/?\s*>\s*</div>\s*){30,}')
+    or regex.icontains(body.html.raw,
+                       '(?:<div\s+style="[^"]+"\s*[^>]*>\s*<br\s*/?\s*>\s*</div>\s*){20,}'
+    )
+    or regex.icontains(body.html.raw,
+                       '(?:<p>\s*(?:&nbsp;|&#160;)\s*</p>\s*){25,}'
+    )
+    or (
+      regex.icontains(body.html.raw,
+                      'margin-top\s*:\s*(?:1[5-9]\d{2}|[2-9]\d{3}|\d{5,})px'
+      )
+      and not regex.icontains(body.html.raw,
+                              'position\s*:\s*absolute[^"]*margin-top\s*:\s*(?:1[5-9]\d{2}|[2-9]\d{3}|\d{5,})px'
+      )
+      and not regex.icontains(body.html.raw,
+                              'margin-left\s*:\s*\d{3,}px[^"]*margin-top\s*:\s*(?:1[5-9]\d{2}|[2-9]\d{3}|\d{5,})px'
+      )
+    )
+  )
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Evasion"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "HTML analysis"
+  - "Exif analysis"
+  - "URL screenshot"
