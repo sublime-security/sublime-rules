@@ -9,16 +9,26 @@ source: |
           and beta.parse_exif(.).page_count == 1
           and (
             // MD5 filename, 32 hex chars and .html
-            regex.imatch(beta.parse_exif(.).title, '^[a-f0-9]{32}\.html$')
-            or 
-            // about:blank and Windows HeadlessChrome 
             (
-              beta.parse_exif(.).title == "about:blank"
-              and strings.istarts_with(beta.parse_exif(.).producer, "Skia/PDF")
-              and strings.icontains(beta.parse_exif(.).creator, "Windows")
+              regex.imatch(beta.parse_exif(.).title, '^[a-f0-9]{32}\.html$')
+              or 
+              // about:blank and Windows HeadlessChrome
+              (
+                beta.parse_exif(.).title == "about:blank"
+                and strings.istarts_with(beta.parse_exif(.).producer, "Skia/PDF")
+                and strings.icontains(beta.parse_exif(.).creator, "Windows")
+              )
+              // cred theft intents on the message and Windows Headless Chrome
+              or (
+                any(ml.nlu_classifier(body.current_thread.text).intents,
+                    .name == "cred_theft" and .confidence != "low"
+                )
+                and strings.istarts_with(beta.parse_exif(.).producer, "Skia/PDF")
+                and strings.icontains(beta.parse_exif(.).creator, "Windows")
+              )
             )
+            and not strings.icontains(beta.parse_exif(.).producer, "Google Docs")
           )
-          and not strings.icontains(beta.parse_exif(.).producer, "Google Docs")
   )
   and not (
     sender.email.domain.root_domain in (
@@ -29,6 +39,7 @@ source: |
     )
     and coalesce(headers.auth_summary.dmarc.pass, false)
   )
+
 tags:
 - "Attack surface reduction"
 attack_types:
