@@ -1,0 +1,49 @@
+name: "Cyrillic vowel substitution in subject or display name from unknown sender"
+description: "This rule detects unsolicited messages containing a mix of Cyrillic and Latin characters in the subject or sender's name while excluding emails from Russian domains and specific Google Calendar notification bounce emails."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  
+  // message contains between 1 and 9 links
+  and (
+    0 < length(body.links) < 10
+    or (
+      length(body.links) == 0
+      and length(attachments) > 0
+      and body.current_thread.text == ""
+    )
+  )
+  
+  //  display name or subject contains Cyrillic vowels in addition to standard letters
+  and any([subject.subject, sender.display_name],
+          regex.icontains(., '(а|е|и|о|у)') and regex.icontains(., '[a-z]')
+  )
+  
+  // and the senders tld or return path is not "ru"
+  and not (
+    sender.email.domain.tld == "ru" or headers.return_path.domain.tld == "ru"
+  )
+  // and the return path is not 'calendar-server.bounces.google.com'
+  and not headers.return_path.domain.domain == 'calendar-server.bounces.google.com'
+  and not headers.return_path.domain.domain == 'identity-reachout.bounces.google.com'
+  and not headers.return_path.domain.domain == 'bounce-sg.zoom.us'
+  and not headers.return_path.domain.domain == 'bounce.dataminr.com'
+  and not headers.return_path.domain.domain == 'mail-us.atlassian.net'
+
+tags:
+ - "Attack surface reduction"
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Evasion"
+  - "Social engineering"
+  - "Spoofing"
+detection_methods:
+  - "Content analysis"
+  - "Header analysis"
+  - "Sender analysis"
+id: "2fbd1b6f-9379-5570-b311-e7e78dc99dc0"
+og_id: "74bc0b0c-891d-53c8-ae01-bc12018c5624"
+testing_pr: 4155
+testing_sha: ec9295093bf4577214f560347c61add5ef6388ce
