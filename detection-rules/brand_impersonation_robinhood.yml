@@ -17,6 +17,14 @@ source: |
     )
     or strings.icontains(body.current_thread.text, 'The Robinhood Team')
     or regex.icontains(body.current_thread.text, '©\s*20[0-9]{2}\s*\s*Robinhood')
+    or strings.icontains(body.current_thread.text, "(888) 344-3957")
+    or strings.icontains(body.current_thread.text, "Financial LLC (Member SIPC)")
+    or strings.icontains(body.current_thread.text,
+                         "Securities, LLC (Member SIPC)"
+    )
+    or regex.icontains(body.current_thread.text,
+                       'sign in without (?:password|id|email|username)'
+    )
     or 2 of (
       strings.icontains(body.current_thread.text, "Robinhood"),
       regex.icontains(body.current_thread.text, '42 Willow (?:Road|St)'),
@@ -29,9 +37,16 @@ source: |
           regex.icontains(body.current_thread.text, 'Location:?'),
           regex.icontains(body.current_thread.text, 'Time:'),
           regex.icontains(body.current_thread.text, 'Device:?'),
-          regex.icontains(body.current_thread.text, 'IP Address:?')
+          regex.icontains(body.current_thread.text, 'IP Address:?'),
+          regex.icontains(body.current_thread.text, 'Date:'),
+          regex.icontains(body.current_thread.text, 'Region:?'),
+          regex.icontains(body.current_thread.text, 'App:?'),
+          regex.icontains(body.current_thread.text, 'Email ID:?')
         )
         or strings.icontains(body.current_thread.text, "new passkey added")
+        or strings.icontains(body.current_thread.text,
+                             "Security support phone number:"
+        )
       )
     )
     or (
@@ -67,8 +82,15 @@ source: |
   )
   // negate newsletters and webinars
   and not any(ml.nlu_classifier(body.current_thread.text).topics,
-              .name in ("Newsletters and Digests", "Events and Webinars")
+              .name in (
+                "Newsletters and Digests",
+                "Health and Wellness",
+                "Events and Webinars"
+              )
               and .confidence == "high"
+  )
+  and not any(ml.nlu_classifier(body.current_thread.text).intents,
+              .name == "benign" and .confidence == "high"
   )
   and not (
     sender.email.domain.root_domain in (
@@ -76,7 +98,8 @@ source: |
       "robinhood.org",
       "duck.com", // unrelated domain
       "robinhoodauctions.com", // unrelated domain
-      "bitstamp.net" // robinhood acquisition
+      "bitstamp.net", // robinhood acquisition
+      "sinch.com" // unrelated domain
     )
     and coalesce(headers.auth_summary.dmarc.pass, false)
   )
