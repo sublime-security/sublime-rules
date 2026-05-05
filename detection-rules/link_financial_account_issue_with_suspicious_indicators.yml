@@ -1,0 +1,66 @@
+name: "Link: Financial account issue with suspicious indicators"
+description: "Detects messages to single recipients containing language about account or payment issues combined with suspicious links or high-confidence credential theft indicators related to financial communications."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  // single recipient
+  and length(recipients.to) == 1
+  // problem phrase commonly observed in lures
+  and regex.icontains(body.current_thread.text,
+                      '(?:issue|problem) with your.{0,20}(?:card|account|renewal|payment|billing)'
+  )
+  // link is suspicious for one reason or another
+  and any(body.links,
+          (
+            .href_url.domain.domain in $url_shorteners
+            or .href_url.domain.root_domain in $url_shorteners
+            or .href_url.domain.root_domain in $free_file_hosts
+            or .href_url.domain.domain in $free_file_hosts
+            or .href_url.domain.root_domain in $free_subdomain_hosts
+            or .href_url.domain.domain in $free_subdomain_hosts
+            or .href_url.domain.root_domain in $self_service_creation_platform_domains
+            or .href_url.domain.domain in $self_service_creation_platform_domains
+            or .href_url.domain.tld in $suspicious_tlds
+            or network.whois(.href_url.domain).days_old < 30
+            or .href_url.domain.root_domain == 'sa.com'
+          )
+          and not .href_url.domain.root_domain in (
+            'app.link',
+            'sng.link',
+            'onelink.me'
+          )
+          // no campaigns
+          and not regex.icontains(.href_url.url,
+                                  '&utm_(?:campaign|medium|source)'
+          )
+  )
+  
+  // high confidence cred theft with a topic of either financial or payment comms
+  and any(ml.nlu_classifier(body.current_thread.text).intents,
+          .name == 'cred_theft' and .confidence == 'high'
+  )
+  and any(ml.nlu_classifier(body.current_thread.text).topics,
+          .name in ("Financial Communications", "Payment Information")
+          and .confidence == 'high'
+  )
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and not coalesce(headers.auth_summary.dmarc.pass, false)
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Free file host"
+  - "Free subdomain host"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Natural Language Understanding"
+  - "URL analysis"
+  - "Whois"
+id: "d4d64041-8adb-533b-8918-fac88fb3dfae"
