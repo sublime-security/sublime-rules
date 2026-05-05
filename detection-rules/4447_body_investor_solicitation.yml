@@ -1,0 +1,56 @@
+name: "PR# 4447 - Investor solicitation with organization targeting"
+description: "Detects messages targeting organizations with investment solicitations that specifically reference the recipient's organization by extracting the organization name and matching it to the recipient's email domain."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and (
+    // current thread
+    (
+      (
+        strings.contains(body.current_thread.text, "ultra-high-net-worth")
+        and strings.contains(body.current_thread.text,
+                             "make additional investments"
+        )
+      // extracting out potential org name from recipient email address
+      )
+      or any(regex.extract(body.current_thread.text,
+                           '(?P<org>[a-zA-Z]{4,20})\s(:?recently)?\scame to our attention'
+             ),
+             any(recipients.to,
+                 strings.icontains(.email.domain.domain, ..named_groups["org"])
+             )
+      )
+    )
+    // previous thread
+    or (
+      any(body.previous_threads,
+          (
+            strings.contains(.text, "ultra-high-net-worth")
+            and strings.contains(.text, "make additional investments")
+          )
+          or any(regex.extract(.text,
+                               '(?P<org>[a-zA-Z]{4,20})\s(:?recently)?\scame to our attention'
+                 ),
+                 any(recipients.to,
+                     strings.icontains(.email.domain.domain,
+                                       ..named_groups["org"]
+                     )
+                 )
+          )
+      )
+    )
+  )
+attack_types:
+  - "BEC/Fraud"
+tactics_and_techniques:
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+id: "dda4d783-d97d-57ed-944a-75954fec1d8d"
+tags:
+  - created_from_open_prs
+  - rule_status_added
+  - pr_author_keaton-sublime
+references:
+  - https://github.com/sublime-security/sublime-rules/pull/4447
