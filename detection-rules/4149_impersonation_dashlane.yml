@@ -1,0 +1,36 @@
+name: "PR# 4149 - Brand impersonation: Dashlane"
+description: "Impersonation of the password management software Dashlane."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and (
+    regex.icontains(sender.display_name, '\bDashlane\b')
+    or strings.ilike(sender.email.domain.domain, '*Dashlane*')
+  )
+  and sender.email.domain.root_domain not in~ ('dashlane.com')
+  
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and not headers.auth_summary.dmarc.pass
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Social engineering"
+detection_methods:
+  - "Header analysis"
+  - "Sender analysis"
+id: "2658e31b-55ad-5b99-ac3b-fd41f7717cb4"
+tags:
+  - created_from_open_prs
+  - rule_status_modified
+  - pr_author_MSAdministrator
+references:
+  - https://github.com/sublime-security/sublime-rules/pull/4149
