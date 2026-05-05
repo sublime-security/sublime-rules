@@ -80,7 +80,20 @@ source: |
       )
     )
   )
-  and not any(headers.domains, strings.ends_with(.domain, "mail.monday.com"))
+  // negate messages that traverse monday.com infra
+  and not (
+    any(headers.domains, strings.ends_with(.domain, "mail.monday.com"))
+    or (
+      strings.iends_with(headers.message_id, '@monday-mail.com>')
+      and any(headers.hops,
+              any(.fields,
+                  .name =~ "Content-Type"
+                  and strings.iends_with(.value, 'mondaymailcom_"')
+              )
+      )
+      and any(headers.hops, any(.fields, .name =~ "x-monday-crm"))
+    )
+  )
   and not (
     headers.auth_summary.dmarc.details.from.root_domain == "monday.com"
     and headers.auth_summary.spf.pass
@@ -106,20 +119,14 @@ source: |
         and .confidence != "low"
     )
   )
-  
-  // negate highly trusted sender domains unless they fail DMARC authentication
   and (
-    (
-      (
-        (
-          sender.email.domain.root_domain in $high_trust_sender_root_domains
-          and not headers.auth_summary.dmarc.pass
-        )
-        or sender.email.domain.root_domain not in $high_trust_sender_root_domains
-      )
+    // negate highly trusted sender domains unless they fail DMARC authentication
+    not (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and coalesce(headers.auth_summary.dmarc.pass, false)
     )
-    // salesforce has been abused to send phishing campaigns leveraging monday.com infrastructure abuse 
-    or sender.email.domain.root_domain == "salesforce.com"
+    // salesforce has been abused to send phishing campaigns leveraging monday.com infrastructure abuse
+    or sender.email.domain.root_domain in ("salesforce.com")
   )
 attack_types:
   - "Credential Phishing"
