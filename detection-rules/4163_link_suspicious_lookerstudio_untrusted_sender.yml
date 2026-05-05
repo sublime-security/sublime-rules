@@ -1,0 +1,36 @@
+name: "PR# 4163 - Suspicious link to Looker Studio (lookerstudio.google.com) from untrusted sender"
+description: "This rule detects messages containing links to lookerstudio with a non standard lookerstudio template from a untrusted sender."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and length(body.current_thread.text) < 1000
+  and regex.icontains(body.current_thread.text,
+                      '(shared.{0,30}with you|View Document)'
+  )
+  and any(body.links, .href_url.domain.domain == "lookerstudio.google.com")
+
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and not headers.auth_summary.dmarc.pass
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Evasion"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Sender analysis"
+  - "URL analysis"
+id: "b051f2b2-ee38-55a5-a15a-75800ee8ff4c"
+tags:
+  - created_from_open_prs
+  - rule_status_renamed
+  - pr_author_MSAdministrator
+references:
+  - https://github.com/sublime-security/sublime-rules/pull/4163
