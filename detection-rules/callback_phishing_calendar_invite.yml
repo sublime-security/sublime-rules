@@ -11,8 +11,20 @@ source: |
           any(file.explode(.),
               any(.scan.ics.calendars,
                   any(.components,
-                      any(ml.nlu_classifier(.description).intents,
-                          .name == "callback_scam"
+                      (
+                        any(ml.nlu_classifier(.description).intents,
+                            .name == "callback_scam"
+                        )
+                        or (
+                          any(ml.nlu_classifier(.description).topics,
+                              .name == "Request to View Invoice"
+                              and .confidence == "high"
+                          )
+                          // emoji regex
+                          and regex.contains(.description,
+                                             '[\x{1F600}-\x{1F64F}\x{1F300}-\x{1F5FF}\x{1F680}-\x{1F6FF}\x{1F900}-\x{1F9FF}\x{2600}-\x{26FF}\x{2700}-\x{27BF}\x{FE00}-\x{FE0F}\x{200D}\x{20E3}\x{E0020}-\x{E007F}]'
+                          )
+                        )
                       )
                   )
               )
@@ -27,7 +39,7 @@ source: |
   and (
     (
       sender.email.domain.root_domain in $high_trust_sender_root_domains
-      and not headers.auth_summary.dmarc.pass
+      and not coalesce(headers.auth_summary.dmarc.pass, false)
     )
     or sender.email.domain.root_domain not in $high_trust_sender_root_domains
   )
