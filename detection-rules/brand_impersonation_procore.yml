@@ -4,8 +4,18 @@ type: "rule"
 severity: "medium"
 source: |
   type.inbound
-  and strings.ilike(body.current_thread.text, "*powered by procore*")
-  and not sender.email.domain.root_domain in ("procore.com", "procoretech.com")
+  and (
+    strings.ilike(body.current_thread.text, "*powered by procore*")
+    or 2 of (
+      strings.icontains(body.current_thread.text, 'Procore'),
+      strings.icontains(body.current_thread.text, '6309 Carpinteria Ave'),
+      strings.icontains(body.current_thread.text, 'Carpinteria, CA 93013')
+    )
+  )
+  and not (
+    sender.email.domain.root_domain in ("procore.com", "procoretech.com")
+    and coalesce(headers.auth_summary.dmarc.pass, false)
+  )
   
   // negating legit replies/forwards
   and not (
