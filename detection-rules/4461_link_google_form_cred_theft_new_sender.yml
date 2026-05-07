@@ -1,0 +1,37 @@
+name: "PR# 4461 - Link: Google Forms link with credential theft language"
+description: "Detects messages containing Google Forms links paired with credential theft language from new senders. This technique abuses Google's trusted domain to host malicious forms designed to steal user credentials."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  // cred_theft intent
+  and any(ml.nlu_classifier(body.current_thread.text).intents,
+          .name == "cred_theft" and .confidence != "low"
+  )
+  // google form link
+  and any(body.current_thread.links,
+          (
+            .href_url.domain.domain == "docs.google.com"
+            and strings.istarts_with(.href_url.path, '/form')
+          )
+          or .href_url.domain.root_domain == "forms.gle"
+  )
+  // new sender
+  and profile.by_sender_email().prevalence == "new"
+  
+tags:
+  - "Attack surface reduction"
+  - pr_author_JFarina5
+  - created_from_open_prs
+  - rule_status_modified
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Social engineering"
+detection_methods:
+  - "Natural Language Understanding"
+  - "Sender analysis"
+  - "URL analysis"
+id: "d38acf77-d433-5e94-9c93-c56915b007dd"
+references:
+  - https://github.com/sublime-security/sublime-rules/pull/4461
