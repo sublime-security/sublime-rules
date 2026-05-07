@@ -1,0 +1,29 @@
+name: "Service abuse: Claude console invitation from free email provider"
+description: "Detects inbound messages from anthropic.com that mention Claude and invitations while extracting email addresses from free email providers, potentially indicating unauthorized use of Anthropic's domain to distribute Claude invitations through suspicious channels."
+type: "rule"
+severity: "low"
+source: |
+  type.inbound
+  and sender.email.domain.root_domain == "anthropic.com"
+  and any(regex.iextract(body.current_thread.text,
+                         'hello.{0,30}?[a-z0-9._%+-]+@(?P<domain>[a-z0-9.-]+\.[a-z]{2,})'
+          ),
+          .named_groups["domain"] in $free_email_providers
+  )
+  and (
+    (
+      strings.contains(body.plain.raw, "Claude")
+      and regex.icontains(body.plain.raw, "invit")
+    )
+    or regex.icontains(subject.subject,
+                       "(?:invit.{0,20}Claude|Claude.{0,20}invit)"
+    )
+  )
+attack_types:
+  - "BEC/Fraud"
+tactics_and_techniques:
+  - "Free email provider"
+  - "Social engineering"
+detection_methods:
+  - "Sender analysis"
+  - "Content analysis"
