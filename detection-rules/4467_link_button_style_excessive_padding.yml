@@ -1,0 +1,97 @@
+name: "PR# 4467 - Link: Button-styled external redirect with excessive padding"
+description: "Detects emails containing button-styled links that redirect to external domains, combined with excessive vertical spacing techniques to push content below the preview pane. The rule identifies styled anchor tags or table cells with background colors, borders, and padding that link externally, while also detecting various HTML padding methods including repeated div-br blocks, consecutive break tags, CSS margin manipulation, or non-breaking space repetition that creates emails taller than 1500 pixels."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  // button-styled link pointing to external domain
+  and (
+    // inline button: anchor with background-color with short text
+    any(filter(html.xpath(body.html, '//a[@href]').nodes,
+               regex.icontains(.raw,
+                               '(?:background(?:-color)?)\s*[:\s]\s*(?:#[0-9a-f]{6}|rgb)'
+               )
+               and regex.count(.display_text, '\S+') < 10
+               and (
+                 regex.icontains(.raw, 'border-radius')
+                 or regex.icontains(.raw, 'padding')
+               )
+        ),
+        any(.links,
+            .href_url.domain.root_domain != sender.email.domain.root_domain
+        )
+    )
+    // td with bgcolor with border-radius and box-shadow containing a link
+    or any(filter(html.xpath(body.html, '//td[@bgcolor]').nodes,
+                  regex.icontains(.raw, 'border-radius')
+                  and regex.icontains(.raw, 'box-shadow')
+           ),
+           any(.links,
+               .href_url.domain.root_domain != sender.email.domain.root_domain
+           )
+    )
+  )
+  
+  // tall rendered email
+  and beta.parse_exif(file.message_screenshot()).image_height > 1500
+  and (
+    // bare div-br blocks repeated 30+ times
+    regex.icontains(body.html.raw, '(?:<div>\s*<br\s*/?\s*>\s*</div>\s*){30,}')
+    // styled div-br blocks repeated 20+ times (Outlook Web App pattern)
+    or regex.icontains(body.html.raw,
+                       '(?:<div\s+style="[^"]+"\s*[^>]*>\s*<br\s*/?\s*>\s*</div>\s*){20,}'
+    )
+    // p-nbsp blocks repeated 25+ times
+    or regex.icontains(body.html.raw,
+                       '(?:<p>\s*(?:&nbsp;|&#160;)\s*</p>\s*){25,}'
+    )
+    // consecutive br tags 30+ times
+    or regex.icontains(body.html.raw, '(?:<br\s*/?\s*>\s*){30,}')
+  
+    // css margin-top pushdown >= 1500px
+    or (
+      regex.icontains(body.html.raw,
+                      'margin-top\s*:\s*(?:1[5-9]\d{2}|[2-9]\d{3}|\d{5,})px'
+      )
+      // not absolute-positioned
+      and not regex.icontains(body.html.raw,
+                              'position\s*:\s*absolute[^"]*margin-top\s*:\s*(?:1[5-9]\d{2}|[2-9]\d{3}|\d{5,})px'
+      )
+      // no left-margined elements
+      and not regex.icontains(body.html.raw,
+                              'margin-left\s*:\s*\d{3,}px[^"]*margin-top\s*:\s*(?:1[5-9]\d{2}|[2-9]\d{3}|\d{5,})px'
+      )
+    )
+  )
+  // negate unsubscriptions
+  and not (
+    any(body.links,
+        strings.icontains(.display_text, "unsubscribe")
+        and (
+          strings.icontains(.href_url.path, "unsubscribe")
+          // handle mimecast URL rewrites
+          or (
+            .href_url.domain.root_domain == 'mimecastprotect.com'
+            and strings.icontains(.href_url.query_params,
+                                  sender.email.domain.root_domain
+            )
+          )
+        )
+    )
+  )
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Evasion"
+  - "Social engineering"
+detection_methods:
+  - "HTML analysis"
+  - "URL analysis"
+  - "Exif analysis"
+id: "6e1aaf86-2149-5ff4-bedb-b10783d5dc67"
+tags:
+  - created_from_open_prs
+  - rule_status_added
+  - pr_author_IndiaAce
+references:
+  - https://github.com/sublime-security/sublime-rules/pull/4467
