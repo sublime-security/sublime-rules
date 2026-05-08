@@ -3,8 +3,7 @@ description: "Detects fraudulent messages impersonating someone selling inherite
 type: "rule"
 severity: "high"
 source: |
-  type.inbound
-  and length(body.links) < 30
+  length(body.current_thread.links) < 10
   and length(body.current_thread.text) < 3000
   and (
     regex.icontains(body.current_thread.text,
@@ -24,13 +23,10 @@ source: |
     )
     or (
       length(regex.extract(body.current_thread.text,
-                           '(?i)(?:generator|refrigerator|trailer|tractor|lawnmower|mower|washer|dryer|freezer|treadmill|peloton|vanity|dresser|couch|sectional|kennel|mattress|bed\s*frame|hot\s*tub|golf\s*cart|tv|gazebo|loveseat|dishwasher|microwave|kitchenaid|rolex|watch|honda|toyota|ford|chevy|jeep|kubota|bobcat|polaris|kawasaki|macbook|iphone|playstation|ps5|xbox|canon|sony|dji|piano|keyboard|guitar|violin)\b[^\r\n]{0,30}(?:\(\s*\d{2,5}\s*\)|\$\s*\d{2,5}|\bfor\s+\$?\d{2,5})'
-             )
-      ) >= 5
+                           '(?i)(?:generator|refrigerator|trailer|tractor|lawnmower|mower|washer|dryer|freezer|treadmill|peloton|vanity|dresser|couch|sectional|kennel|mattress|bed\s*frame|hot\s*tub|golf\s*cart|tv|gazebo|loveseat|dishwasher|microwave|kitchenaid|rolex|watch|honda|toyota|ford|chevy|jeep|kubota|bobcat|polaris|kawasaki|macbook|iphone|playstation|ps5|xbox|canon|sony|dji|piano|keyboard|guitar|violin)\b[^\r\n]{0,30}(?:\(\s*\d{2,5}\s*\)|\$\s*\d{2,5}|\bfor\s+\$?\d{2,5})')) >= 5
       and regex.icontains(body.current_thread.text,
                           'late (?:husband|father|dad|wife|mother|mom)',
-                          '(?:husband|father|dad|wife|mother|mom)[^\r\n]{0,50}estate'
-      )
+                          '(?:husband|father|dad|wife|mother|mom)[^\r\n]{0,50}estate')
     )
   )
   and (
@@ -48,8 +44,6 @@ source: |
                      '*relocate with*family*'
     )
     or strings.ilike(body.current_thread.text,
-                     '* give away*',
-                     "*  giving away*",
                      '*sponsored*giveaway*',
                      '*giveaway*sponsored*',
                      '* generously offering *',
@@ -59,6 +53,10 @@ source: |
                      '*find a new home *',
                      '*rehome these instruments *',
                      '* free donation*'
+    )
+    or regex.icontains(body.current_thread.text,
+                       'giv\w+\s+away\s+(?:her|his|their|my|our)\s+(?:late|deceased|dad|father|mother|husband|wife)',
+                       'giv\w+\s+away\s+(?:her|his|their|my|our)[^\r\n]{0,40}(?:tool|welder|welding|equipment|instrument|machine)'
     )
     or strings.ilike(body.current_thread.text,
                      '*generous opportunity*',
