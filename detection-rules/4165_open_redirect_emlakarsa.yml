@@ -1,0 +1,33 @@
+name: "Open redirect: emlakarsa"
+description: |
+  Message contains use of the emlakarsa open redirect. This has been exploited in the wild.
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and any(body.links,
+          .href_url.domain.root_domain == "emlakarsa.net"
+          and strings.icontains(.href_url.query_params, "_setLang")
+          and strings.icontains(.href_url.query_params, "redirect=")
+  )
+  and sender.email.domain.root_domain != 'emlakarsa.net'
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and not headers.auth_summary.dmarc.pass
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+attack_types:
+  - "Credential Phishing"
+  - "Malware/Ransomware"
+tactics_and_techniques:
+  - "Open redirect"
+detection_methods:
+  - "Sender analysis"
+  - "URL analysis"
+id: "8b4c057f-346d-5181-b56a-040a58346e94"
+og_id: "ce5d5b63-ed78-50b6-a996-f7d7f01e7517"
+testing_pr: 4165
+testing_sha: 52e06718f3f1126b5a813fa6d7c4808f872af308
