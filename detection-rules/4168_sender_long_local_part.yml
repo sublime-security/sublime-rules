@@ -1,0 +1,32 @@
+name: "Unusually long local part from untrusted sender address"
+description: "Detects messages with unusually long local address parts (before the @) from senders outside trusted domains and without verified authentication."
+type: "rule"
+severity: "low"
+source: |
+  // max length of the local_part for exchange is 315
+  // https://learn.microsoft.com/en-us/exchange/mail-flow/mail-routing/recipient-resolution?view=exchserver-2019&viewFallbackFrom=exchonline-ww
+  100 < length(sender.email.local_part)
+  // not org_domains
+  and not (
+    sender.email.domain.root_domain in $org_domains
+    and headers.auth_summary.dmarc.pass
+  )
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and not (
+    sender.email.domain.root_domain in $high_trust_sender_root_domains
+    and headers.auth_summary.dmarc.pass
+  )
+tags:
+ - "Attack surface reduction"
+attack_types:
+  - "Credential Phishing"
+  - "Spam"
+tactics_and_techniques:
+  - "Evasion"
+detection_methods:
+  - "Header analysis"
+  - "Sender analysis"
+id: "b73ce44c-aac7-59ea-a5d5-20f45f54c06a"
+og_id: "91a9cd45-41a9-51b9-9207-ded98d398d70"
+testing_pr: 4168
+testing_sha: 0f3752cd8ea40de75476e593ce7f53976b9e004e
