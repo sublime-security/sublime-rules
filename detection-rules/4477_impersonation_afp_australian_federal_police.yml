@@ -1,0 +1,97 @@
+name: "PR# 4477 - Impersonation: Australian Federal Police with criminal case language"
+description: "Detects messages impersonating the Australian Federal Police using law enforcement terminology in the subject and sender display name, combined with official correspondence language including case references, investigation details, and compliance demands."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and 0 < length(body.links) < 5
+  
+  // common strings in subject or base
+  and (
+    2 of (
+      strings.ilike(subject.base, '*afp*'),
+      strings.ilike(subject.base, '*australian federal police*'),
+      strings.ilike(subject.base, '*case*'),
+      strings.ilike(subject.base, '*investigation*'),
+      strings.ilike(subject.base, '*law enforcement*'),
+      strings.ilike(subject.base, '*management*'),
+      strings.ilike(subject.base, '*notice*'),
+      strings.ilike(subject.base, '*reference*')
+    )
+    and (
+      2 of (
+        strings.ilike(sender.display_name, '*afp*'),
+        strings.ilike(sender.display_name, '*australian federal police*'),
+        strings.ilike(sender.display_name, '*case*'),
+        strings.ilike(sender.display_name, '*investigation*'),
+        strings.ilike(sender.display_name, '*law enforcement*'),
+        strings.ilike(sender.display_name, '*management*'),
+        strings.ilike(sender.display_name, '*notice*'),
+        strings.ilike(sender.display_name, '*reference*')
+      )
+    )
+  )
+  
+  // body strings with nlu enrichment
+  and (
+    (
+      regex.icontains(body.current_thread.text, 'investigation|correspondence')
+      and regex.icontains(body.current_thread.text, 'case (?:reference|type)')
+    )
+    and 3 of (
+      // representation
+      regex.icontains(body.current_thread.text,
+                      'assigned.{0,10}officer|australian federal police|operation firestorm'
+      ),
+  
+      // threat
+      regex.icontains(body.current_thread.text,
+                      'failure to meet|(?:official|formal) (?:noti(?:ce|fication)|declaration|correspondence)|(?:noti(?:fy|fies)|informs?) you'
+      ),
+  
+      // demand
+      regex.icontains(body.current_thread.text,
+                      'cooperate|obstruct|mislead|interfere|\breview\b'
+      ),
+      regex.icontains(body.current_thread.text,
+                      'acknowledge.{0,20}this notice|respond'
+      ),
+  
+      // secrecy
+      regex.icontains(body.current_thread.text, 'confidential|disclose'),
+    )
+    and (
+      any(ml.nlu_classifier(body.current_thread.text).topics,
+          .name == "Legal and Compliance"
+      )
+      and not any(ml.nlu_classifier(body.current_thread.text).topics,
+                  .name == "Events and Webinars"
+      )
+    )
+  )
+  
+  // negate legitimate conversations
+  and not (
+    (length(headers.references) > 0 or headers.in_reply_to is not null)
+    and (subject.is_forward or subject.is_reply)
+    and length(body.previous_threads) >= 1
+  )
+
+attack_types:
+  - "BEC/Fraud"
+  - "Extortion"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Header analysis"
+  - "Natural Language Understanding"
+  - "Sender analysis"
+id: "832955fa-ab35-590e-9b7c-eda978f461c5"
+tags:
+  - created_from_open_prs
+  - rule_status_added
+  - pr_author_missingn0pe
+references:
+  - https://github.com/sublime-security/sublime-rules/pull/4477
