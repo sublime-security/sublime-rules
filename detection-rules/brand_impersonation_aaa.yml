@@ -17,8 +17,13 @@ source: |
         )
     )
   )
-  and regex.icontains(body.current_thread.text,
-                      '(?:car|vehicle|motor|driver|emergency|road.?side|break.?down|assist|save|discount|complimentary|free\b).{0,10}kit'
+  and (
+    regex.icontains(body.current_thread.text,
+                    '(?:car|vehicle|motor|driver|emergency|road.?side|break.?down|assist|save|discount|complimentary|free\b).{0,10}kit'
+    )
+    or regex.icontains(body.current_thread.text,
+                       '(?:\bget my reward\b|\byour loyalty\b)'
+    )
   )
   // and the sender is not from high trust sender root domains
   and not (
@@ -30,7 +35,15 @@ source: |
     any(ml.nlu_classifier(body.current_thread.text).topics,
         .name in ("Newsletters and Digests") and .confidence != "low"
     )
+    or any(ml.nlu_classifier(body.current_thread.text).intents,
+           .name == "benign" and .confidence == "high"
+    )
     or strings.icontains(subject.subject, "quarantine")
+  )
+  // Negate for legit aaa.com senders
+  and not (
+    sender.email.domain.root_domain == "aaa.com"
+    and coalesce(headers.auth_summary.dmarc.pass, false)
   )
 
 
