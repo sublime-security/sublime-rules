@@ -1,0 +1,64 @@
+name: "Acts of Violence: Mass casualty threats (previous threads)"
+description: "Catches in previous email threads threats against schools, workplaces, or public spaces with multiple victims."
+type: "rule"
+severity: "critical"
+source: |
+  type.inbound
+  and length(body.previous_threads) > 0
+  and any(body.previous_threads,
+          any(ml.nlu_classifier(.text).topics,
+              .name == "Acts of Violence" and .confidence == "high"
+          )
+          and (
+            // Mass casualty language
+            regex.icontains(.text,
+                            '(?:shoot|kill|attack|bomb)\s+(?:[^\r\n\x20]+\s+){0,5}(?:all of (?:you|them)|the whole|entire|every\s?(?:student|person|one|body))'
+            )
+            // School/institution threats
+            or regex.icontains(.text,
+                               '(?:shoot up|attack|bomb)\s+(?:[^\r\n\x20]+\s+){0,5}(?:the |this )?(?:school|university|college|campus|office|building|(?:work)?place)'
+            )
+            // Mass shooting indicators
+            or regex.icontains(.text,
+                               '(?:bring|get|use|have)\s+(?:a|my|the)\s+(?:gun|rifle|weapon|firearm|ar(?:[\s\-]?15)?|ak(?:[\s\-]?47)?)\s+(?:[^\r\n\x20]+\s+){0,7}\s+(?:school|work|office|campus|class)'
+            )
+            // Public violence threats
+            or regex.icontains(.text,
+                               '(?:open fire|start shooting|unleash|massacre|slaughter)\s+(?:[^\r\n\x20]+\s+){0,7}(?:everyone|the crowd|people|students|workers)'
+            )
+            // Retribution against groups
+            or regex.icontains(.text,
+                               '(?:you|they|everyone)\s+(?:all\s+)?(?:will|gonna|going to)\s+(?:[^\r\n\x20]+\s+){0,5}(?:die|pay|suffer|regret|be sorry)'
+            )
+            // Corpse/casualty language
+            or regex.icontains(.text,
+                               '(?:bodies|corpses|casualties)\s+(?:[^\r\n\x20]+\s+){0,5}(?:everywhere|all over|pile up|litter|cover)'
+            )
+            // Public exposure of violence
+            or regex.icontains(.text,
+                               '(?:on the|make the|be on)\s+(?:[^\r\n\x20]+\s+){0,5}(?:news|headlines|television|tv|cnn|fox|media|broadcast)'
+            )
+            // Explicit mass casualty
+            or regex.icontains(.text,
+                               '(?:kill|murder|take out)\s+(?:[^\r\n\x20]+\s+){0,5}(?:\d+|dozens|hundreds|many|multiple)\s+(?:people|students|victims|of (?:you|them))'
+            )
+          )
+          and length(.text) > 50
+          and length(.text) < 10000
+  
+          // Negate benign contexts
+          and not any(ml.nlu_classifier(.text).topics,
+                      .name in (
+                        "News and Current Events",
+                        "Newsletters and Digests",
+                        "Entertainment and Sports"
+                      )
+                      and .confidence == "high"
+          )
+  )
+  // Negate bulk/marketing emails with unsubscribe links
+  and not any(body.links,
+              strings.icontains(.display_text, "unsubscribe")
+              or strings.icontains(.href_url.url, "unsubscribe")
+  )
+id: "8b643574-6993-5fe8-a3b7-8d642fae2580"
