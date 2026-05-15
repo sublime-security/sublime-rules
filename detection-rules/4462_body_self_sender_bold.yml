@@ -13,8 +13,36 @@ source: |
   and any(html.xpath(body.html, '//b').nodes,
           .display_text == sender.display_name
   )
+  and length(html.xpath(body.html, '//a/b').nodes) == 1
+  and strings.parse_url(html.xpath(body.html, '//a/b').nodes[0].display_text,
+                        strict=false
+  ).url is null
   and any(html.xpath(body.html, '//a/b').nodes,
-          .display_text == "Read the Message"
+          .display_text in~ (
+            "Read the Message",
+            "OPEN",
+            "Open in drive",
+            "Open document here",
+            "open document",
+            "open documents",
+            'view document',
+            'view documents',
+            'access document',
+            'access documents',
+            'review documents',
+            'review document',
+            // 501e5fe43fa30ccdca9469ab545a6639c9a60952b882823fa1663004de7b4df0
+            'view payment details'
+          )
+          or strings.icontains(.display_text, "Download")
+          or strings.icontains(.display_text, "Review Here")
+          or strings.iends_with(.display_text, ".pdf")
+          // 504788258b421818209543b506f4bbe7cf6615f596726c80b0775870c8764b64
+          or strings.iends_with(.display_text, ".html")
+          // displaytext == subject
+          // https://platform.sublime.security/messages/504db0811037ff63d49b62e683f3a8a0e4d8284158163708c3630ceec556aa47?preview_id=019d8d5c-f2c7-7d46-8697-f6f4632fdf24
+          or .display_text == subject.base
+          or any(.links, .href_url.domain.domain in $free_file_hosts)
   )
 attack_types:
   - "Credential Phishing"
