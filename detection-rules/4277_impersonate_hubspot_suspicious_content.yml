@@ -1,10 +1,9 @@
-name: "PR# 4277 - Brand impersonation: HubSpot with QR code or suspicious content"
-description: "Detects messages impersonating HubSpot by using the company name in the sender display name and including HubSpot-related content or addresses, while containing suspicious elements like QR codes, unsubscribe manipulation language, or account reconnection requests. Legitimate HubSpot communications are excluded through domain and authentication verification."
+name: "PR# 4277 - Brand impersonation: HubSpot credential theft"
+description: "Detects fraudulent messages impersonating HubSpot that contain legitimate HubSpot branding elements and address information, combined with security-related topics and credential theft indicators, while excluding authenticated legitimate HubSpot communications."
 type: "rule"
 severity: "medium"
 source: |
   type.inbound
-  // HubSpot impersonation indicators
   and strings.icontains(sender.display_name, 'hubspot')
   and 2 of (
     regex.contains(body.current_thread.text, '(?:HubSpot, Inc.|HubSpot)'),
@@ -12,13 +11,21 @@ source: |
     strings.icontains(body.current_thread.text, '25 first street'),
     strings.icontains(body.current_thread.text, 'MA 02141')
   )
-  // nlu cred theft
-  and any(ml.nlu_classifier(body.current_thread.text).intents,
-          .name == "cred_theft" and .confidence != "low"
-  )
-  // account/profile language
-  and regex.icontains(body.current_thread.text,
-                      '(?:deactiv|delet|disabl|profile|review|proposal|document|efax|restore|[o0]pen|secure|messaging|reset|account|verify|login|notification|alert|urgent|immediate|access|support|\bupdate\b|download|attachment|service|payment|remittance|invoice|rfp|rfi|pdf|doc)'
+  and 2 of (
+    any(ml.nlu_classifier(body.current_thread.text).topics,
+        .name in (
+          "Security and Authentication",
+          "Software and App Updates",
+          "Customer Service and Support"
+        )
+        and .confidence != "low"
+    ),
+    any(ml.nlu_classifier(body.current_thread.text).intents,
+        .name == "cred_theft" and .confidence != "low"
+    ),
+    regex.icontains(body.current_thread.text,
+                    '(?:account|disactiv|deactiv|disabl|delet|profile)'
+    )
   )
   // exclude legitimate HubSpot sends
   and not (
