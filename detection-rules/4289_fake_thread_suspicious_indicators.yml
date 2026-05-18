@@ -74,9 +74,9 @@ source: |
     // urgency request
     any(ml.nlu_classifier(body.current_thread.text).entities, .name == "urgency"),
   
-    // cred_theft or bec detection
+    // cred_theft detection
     any(ml.nlu_classifier(body.current_thread.text).intents,
-        .name in ("cred_theft", 'bec') and .confidence in~ ("medium", "high")
+        .name in ("cred_theft") and .confidence in~ ("medium", "high")
     ),
   
     // commonly abused sender TLD
@@ -148,6 +148,17 @@ source: |
     // body contains recipient SLD
     any(recipients.to,
         strings.icontains(body.current_thread.text, .email.domain.sld)
+    ),
+    (
+      // bec
+      any(ml.nlu_classifier(body.current_thread.text).intents,
+          .name == "bec" and .confidence != "low"
+      )
+      // previous thread contains matching domain but mismatch local part in current thread
+      and any(body.previous_threads,
+              .sender.email.domain.root_domain == recipients.to[0].email.domain.root_domain
+              and .sender.email.email != recipients.to[0].email.email
+      )
     )
   )
   
@@ -160,7 +171,6 @@ source: |
     or sender.email.domain.root_domain not in $high_trust_sender_root_domains
   )
   and not profile.by_sender().any_messages_benign
-
 tags:
   - "Attack surface reduction"
 attack_types:
@@ -178,4 +188,4 @@ detection_methods:
 id: "c836b065-538b-50f3-83d9-784d34a56e22"
 og_id: "c2e18a57-1f52-544f-bb6d-a578e286cf89"
 testing_pr: 4289
-testing_sha: b2724793b5cba21870436ab480448d333a265945
+testing_sha: 57614b0282c427e82f55a1aa9fd268046eb8cfac
