@@ -1,0 +1,29 @@
+name: "Link: Self-sender credential theft with suspicious TLD"
+description: "Detects messages where the sender and recipient are the same, DMARC authentication passes, but the message contains links to suspicious top-level domains and shows machine learning indicators of credential theft intent."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  // self sender
+  and sender.email.email == recipients.to[0].email.email
+  // auth passes
+  and coalesce(headers.auth_summary.dmarc.pass, false)
+  // link is suspicious tlds
+  and any(body.links,
+          .href_url.domain.tld in~ $suspicious_tlds
+  )
+  // ML signals credential phishing
+  and any(ml.nlu_classifier(body.current_thread.text).intents,
+          .name == "cred_theft" and .confidence != "low"
+  )
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Social engineering"
+  - "Spoofing"
+detection_methods:
+  - "Header analysis"
+  - "Sender analysis"
+  - "URL analysis"
+  - "Natural Language Understanding"
+  - "Threat intelligence"
