@@ -4,9 +4,23 @@ type: "rule"
 severity: "medium"
 source: |
   type.inbound
-  // button-styled link pointing to external domain
+  // is a fake thread
   and (
-    // inline button: anchor with background-color with short text
+    regex.icontains(subject.subject, '\b(?:RE|FWD?)\s*:')
+    or any([body.current_thread.text, body.html.display_text, body.plain.raw],
+           3 of (
+             strings.icontains(., "from:"),
+             strings.icontains(., "to:"),
+             strings.icontains(., "sent:"),
+             strings.icontains(., "date:"),
+             strings.icontains(., "cc:"),
+             strings.icontains(., "subject:")
+           )
+    )
+  )
+  and (length(headers.references) == 0 or headers.in_reply_to is null)
+  // button-styled link pointing to external domain, present in current thread
+  and (
     any(filter(html.xpath(body.html, '//a[@href]').nodes,
                regex.icontains(.raw,
                                '(?:background(?:-color)?)\s*[:\s]\s*(?:#[0-9a-f]{6}|rgb)'
@@ -19,15 +33,20 @@ source: |
         ),
         any(.links,
             .href_url.domain.root_domain != sender.email.domain.root_domain
+            and any(body.current_thread.links,
+                    .href_url.domain.root_domain == ..href_url.domain.root_domain
+            )
         )
     )
-    // td with bgcolor with border-radius and box-shadow containing a link
     or any(filter(html.xpath(body.html, '//td[@bgcolor]').nodes,
                   regex.icontains(.raw, 'border-radius')
                   and regex.icontains(.raw, 'box-shadow')
            ),
            any(.links,
                .href_url.domain.root_domain != sender.email.domain.root_domain
+               and any(body.current_thread.links,
+                       .href_url.domain.root_domain == ..href_url.domain.root_domain
+               )
            )
     )
   )
@@ -35,33 +54,33 @@ source: |
   // tall rendered email
   and beta.parse_exif(file.message_screenshot()).image_height > 1500
   and (
-    // bare div-br blocks repeated 30+ times
     regex.icontains(body.html.raw, '(?:<div>\s*<br\s*/?\s*>\s*</div>\s*){30,}')
-    // styled div-br blocks repeated 20+ times (Outlook Web App pattern)
     or regex.icontains(body.html.raw,
                        '(?:<div\s+style="[^"]+"\s*[^>]*>\s*<br\s*/?\s*>\s*</div>\s*){20,}'
     )
-    // p-nbsp blocks repeated 25+ times
     or regex.icontains(body.html.raw,
                        '(?:<p>\s*(?:&nbsp;|&#160;)\s*</p>\s*){25,}'
     )
-    // consecutive br tags 30+ times
     or regex.icontains(body.html.raw, '(?:<br\s*/?\s*>\s*){30,}')
-  
-    // css margin-top pushdown >= 1500px
     or (
       regex.icontains(body.html.raw,
                       'margin-top\s*:\s*(?:1[5-9]\d{2}|[2-9]\d{3}|\d{5,})px'
       )
-      // not absolute-positioned
       and not regex.icontains(body.html.raw,
                               'position\s*:\s*absolute[^"]*margin-top\s*:\s*(?:1[5-9]\d{2}|[2-9]\d{3}|\d{5,})px'
       )
-      // no left-margined elements
       and not regex.icontains(body.html.raw,
                               'margin-left\s*:\s*\d{3,}px[^"]*margin-top\s*:\s*(?:1[5-9]\d{2}|[2-9]\d{3}|\d{5,})px'
       )
     )
+  )
+  // negate high-trust authenticated senders
+  and (
+    coalesce(sender.email.domain.root_domain in $high_trust_sender_root_domains
+             and not headers.auth_summary.dmarc.pass,
+             false
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
   )
   // negate unsubscriptions
   and not (
@@ -69,7 +88,6 @@ source: |
         strings.icontains(.display_text, "unsubscribe")
         and (
           strings.icontains(.href_url.path, "unsubscribe")
-          // handle mimecast URL rewrites
           or (
             .href_url.domain.root_domain == 'mimecastprotect.com'
             and strings.icontains(.href_url.query_params,
