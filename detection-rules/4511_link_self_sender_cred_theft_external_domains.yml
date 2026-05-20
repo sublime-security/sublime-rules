@@ -1,0 +1,46 @@
+name: "Link: Self-sender credential theft with external domains"
+description: "Detects messages where the sender and recipient are the same address, containing external links and classified as credential theft by NLU analysis. The rule identifies self-sent messages from non-free email providers that pass DMARC authentication but contain 1-4 links to external domains, with machine learning classification indicating credential theft intent."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  // self sender
+  and sender.email.email == recipients.to[0].email.email
+  // auth passes
+  and coalesce(headers.auth_summary.dmarc.pass, false)
+  // not free email
+  and sender.email.domain.root_domain not in $free_email_providers
+  // at least one link but less than 5
+  and 0 < length(body.links) < 5
+  and any(body.links,
+          .href_url.domain.root_domain != sender.email.domain.root_domain
+  )
+  // A few fps with this pattern that approve data migration systems
+  and not any(filter(body.links, .href_url.path is not null),
+              strings.icontains(.href_url.path, '/consent/')
+              or strings.icontains(.href_url.path, '/approvals')
+  )
+  and any(ml.nlu_classifier(body.current_thread.text).intents,
+          .name == "cred_theft" and .confidence != "low"
+  )
+  // Not password reset, compromised account emails
+  and not (
+    strings.icontains(body.current_thread.text, "compromised")
+    or strings.icontains(body.current_thread.text, "password")
+  )
+  // under 2000 characters
+  and length(body.current_thread.text) < 2000
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Social engineering"
+detection_methods:
+  - "Natural Language Understanding"
+  - "Sender analysis"
+  - "Header analysis"
+  - "URL analysis"
+  - "Content analysis"
+id: "ec4b1f32-3361-599d-a8bd-afb651d38e88"
+og_id: "ea16ad7e-a93a-51aa-ae13-76721e6cbca8"
+testing_pr: 4511
+testing_sha: 169789db1c9e893c64462d4fbdabb95e26e42692
