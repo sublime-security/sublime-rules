@@ -1,0 +1,62 @@
+name: "PR# 4513 - VIP impersonation with invoicing request"
+description: "This rule detects emails attempting to impersonate a VIP, it leverages NLU to determine if there is invoicing verbiage in the current thread, and requires request language."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and any($org_vips,
+          strings.contains(sender.display_name, .display_name)
+          or strings.contains(sender.display_name,
+                              strings.concat(.first_name, " ", .last_name)
+          )
+          or strings.contains(sender.display_name,
+                              strings.concat(.last_name, ", ", .first_name)
+          )
+  )
+  and (
+    (
+      sender.email.domain.domain in $org_domains
+      // X-headers indicate external sender
+      and headers.x_authenticated_sender.email != sender.email.email
+      and headers.x_authenticated_domain.domain not in $org_domains
+    )
+    or sender.email.domain.domain not in $org_domains
+  )
+  
+  // Invoice Language with a request
+  and (
+    any(ml.nlu_classifier(body.current_thread.text).tags,
+        .name == "invoice"
+        and .confidence in ("medium", "high")
+        and any(ml.nlu_classifier(body.current_thread.text).entities,
+                .name == "request"
+        )
+    )
+  )
+  
+  // and the reply to email address has never been contacted
+  and any(headers.reply_to, .email.email not in $recipient_emails)
+  
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and not headers.auth_summary.dmarc.pass
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+attack_types:
+  - "BEC/Fraud"
+tactics_and_techniques:
+  - "Impersonation: VIP"
+detection_methods:
+  - "Content analysis"
+  - "Header analysis"
+  - "Natural Language Understanding"
+id: "ced9bb2d-3bc2-59d0-ab4c-48cc1bba975c"
+tags:
+  - created_from_open_prs
+  - rule_status_modified
+  - pr_author_IndiaAce
+references:
+  - https://github.com/sublime-security/sublime-rules/pull/4513
