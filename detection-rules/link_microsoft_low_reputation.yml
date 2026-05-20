@@ -55,15 +55,31 @@ source: |
  
          // exclude sources of potential FPs
          and (
-           .href_url.domain.root_domain not in (
-             "svc.ms",
-             "sharepoint.com",
-             "1drv.ms",
-             "microsoft.com",
-             "aka.ms",
-             "msftauthimages.net",
-             "office.com",
-             "microsoftproject.com"
+           (
+             .href_url.domain.root_domain not in (
+               "svc.ms",
+               "sharepoint.com",
+               "1drv.ms",
+               "microsoft.com",
+               "aka.ms",
+               "msftauthimages.net",
+               "office.com",
+               "microsoftproject.com"
+             )
+             // mimecast rewrites can introduce FPs as well
+             and not (
+               .href_url.domain.root_domain == "mimecastprotect.com"
+               and (
+                 any(.href_url.query_params_decoded["domain"],
+                     . == "sharepoint.com"
+                 )
+                 or (
+                   any(.href_url.query_params_decoded["domain"],
+                       strings.parse_domain(.).tld == "ms"
+                   )
+                 )
+               )
+             )
            )
            or any(body.links, .href_url.domain.domain in $free_file_hosts)
          )
