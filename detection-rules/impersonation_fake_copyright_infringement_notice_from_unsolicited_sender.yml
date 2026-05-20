@@ -4,8 +4,10 @@ type: "rule"
 severity: "medium"
 source: |
   type.inbound
-  and length(body.previous_threads) == 0
-  and length(body.current_thread.text) < 5000
+  and (
+    length(body.current_thread.text) < 5000
+    or 0 < sum(map(body.previous_threads, length(.text))) < 5000
+  )
   and 0 < length(body.links) < 10
   
   // common strings in subject or base
@@ -41,74 +43,76 @@ source: |
     )
   )
   
-  // common strings in email current thread
-  and 15 of (
-    strings.ilike(body.current_thread.text, '*copyright*'),
-    strings.ilike(body.current_thread.text, '*trademark*'),
-    strings.ilike(body.current_thread.text, '*inquiry*'),
-    strings.ilike(body.current_thread.text, '*online*'),
-    strings.ilike(body.current_thread.text, '*authorized*'),
-    strings.ilike(body.current_thread.text, '*legal*'),
-    strings.ilike(body.current_thread.text, '*represent*'),
-    strings.ilike(body.current_thread.text, '*lawful*'),
-    strings.ilike(body.current_thread.text, '*owner*'),
-    strings.ilike(body.current_thread.text, '*materials*'),
-    strings.ilike(body.current_thread.text, '*protected*'),
-    strings.ilike(body.current_thread.text, '*infring*'),
-    strings.ilike(body.current_thread.text, '*immediate*'),
-    strings.ilike(body.current_thread.text, '*cessation*'),
-    strings.ilike(body.current_thread.text, '*content*'),
-    strings.ilike(body.current_thread.text, '*referenced*'),
-    strings.ilike(body.current_thread.text, '*17 U.S.C. §*'),
-    strings.ilike(body.current_thread.text, '*constitutes*'),
-    strings.ilike(body.current_thread.text, '*authorization*'),
-    strings.ilike(body.current_thread.text, '*removal*'),
-    strings.ilike(body.current_thread.text, '*comply*'),
-    strings.ilike(body.current_thread.text, '*failure*'),
-    strings.ilike(body.current_thread.text, '*law firm*'),
-    strings.ilike(body.current_thread.text, '*LLP*'),
-    strings.ilike(body.current_thread.text, '*compliance*'),
-    strings.ilike(body.current_thread.text, '*cease*'),
-    strings.ilike(body.current_thread.text, '*protect*'),
-    strings.ilike(body.current_thread.text, '*rights*'),
-    strings.ilike(body.current_thread.text, '*penalty*'),
-    strings.ilike(body.current_thread.text, '*perjury*'),
-    strings.ilike(body.current_thread.text, '*holder*'),
-    strings.ilike(body.current_thread.text, '*declare*'),
-    strings.ilike(body.current_thread.text, '*sworn*'),
-    strings.ilike(body.current_thread.text, '*affidavit*'),
-    strings.ilike(body.current_thread.text, '*investigation*'),
-    strings.ilike(body.current_thread.text, '*identified*'),
-    strings.ilike(body.current_thread.text, '*reproduction*'),
-    strings.ilike(body.current_thread.text, '*license*'),
-    strings.ilike(body.current_thread.text, '*granted*'),
-    strings.ilike(body.current_thread.text, '*permitting*'),
-    strings.ilike(body.current_thread.text, '*evidence*'),
-    strings.ilike(body.current_thread.text, '*proceedings*'),
-    strings.ilike(body.current_thread.text, '*evidentiary*'),
-    strings.ilike(body.current_thread.text, '*remove*'),
-    strings.ilike(body.current_thread.text, '*suspend*'),
-    strings.ilike(body.current_thread.text, '*discontinue*'),
-    strings.ilike(body.current_thread.text, '*72 hours*'),
-    strings.ilike(body.current_thread.text, '*48 hours*'),
-    strings.ilike(body.current_thread.text, '*24 hours*'),
-    strings.ilike(body.current_thread.text, '*proof*'),
-    strings.ilike(body.current_thread.text, '*unresolved*'),
-    strings.ilike(body.current_thread.text, '*accordance*'),
-    strings.ilike(body.current_thread.text, '*procedures*'),
-    strings.ilike(body.current_thread.text, '*interests*'),
-    strings.ilike(body.current_thread.text, '*appeal*'),
-    strings.ilike(body.current_thread.text, '*clarification*'),
-    strings.ilike(body.current_thread.text, '*notice*')
+  // body strings with nlu enrichment
+  and (
+    (
+      regex.icontains(body.html.display_text,
+                      'infring(?:(?:e|ment)|ing)|copyright|intellectual property|protected works?'
+      )
+      and regex.icontains(body.html.display_text,
+                          '\W(?:pdf|docx)|infringing link|proof of rights record|documentation|reference'
+      )
+    )
+    and 3 of (
+      // representation
+      regex.icontains(body.html.display_text,
+                      'we (?:represent|act for)|on behalf of|(?:legal|authorized) (?:proxy|representative|counsel)'
+      ),
+  
+      // threat
+      regex.icontains(body.html.display_text,
+                      '(?:hereby|formal(?:ly)?) (?:noti(?:fy|fies)|informs?) you|legal (?:proceeding|remedie|action)s?|civil litigation|damages|(?:official|formal) (?:noti(?:ce|fication)|declaration)|(?:authorization|justification) for us(?:e|age)|legal claim'
+      ),
+  
+      // demand
+      regex.icontains(body.html.display_text,
+                      'remedial requirements?|action required|required actions?|failure to comply|evaluate|\breview\b'
+      ),
+      regex.icontains(body.html.display_text,
+                      '(?:written|receive).(?:confirmation|reply)|confirm(ing)? completion|confirm.{0,15}in writing'
+      ),
+  
+      // evidence
+      regex.icontains(body.html.display_text,
+                      '(?:supporting|evidentiary).(?:file|record|context|materials)|evidence|rights holder.?[-:]'
+      ),
+    )
+    and (
+      (
+        any(ml.nlu_classifier(body.current_thread.text).topics,
+            .name == "Legal and Compliance"
+        )
+        and not any(ml.nlu_classifier(body.current_thread.text).topics,
+                    .name == "Events and Webinars"
+        )
+      )
+      or (
+        any(body.previous_threads,
+            any(ml.nlu_classifier(.text).topics, .name == "Legal and Compliance")
+        )
+        and not (
+          any(body.previous_threads,
+              any(ml.nlu_classifier(.text).topics, .name == "Events and Webinars")
+          )
+        )
+      )
+    )
+  )
+  
+  // negate legitimate conversations
+  and not (
+    (length(headers.references) > 0 or headers.in_reply_to is not null)
+    and (subject.is_forward or subject.is_reply)
+    and length(body.previous_threads) >= 1
   )
   
   // remove phrase from legitimate complaint
-  and not regex.icontains(body.current_thread.text,
+  and not regex.icontains(body.html.display_text,
                           '(?:we are passing the notice below|content has been removed|removed from our website|notice of intended action|I have not granted|I am the original creator|content you reported has been removed|complaint will be carefully reviewed|provide a list of violations|document confirming your right to act)'
   )
   
   // not copyright reports
-  and not regex.icontains(body.current_thread.text,
+  and not regex.icontains(body.html.display_text,
                           '(?:confirmation|received).{0,100}copyright report'
   )
   
@@ -123,7 +127,10 @@ source: |
                   )
               )
   )
-  and not strings.icontains(sender.email.domain.root_domain, 'edwinjamesip.com')
+  and not (
+    sender.email.domain.root_domain in ("edwinjamesip.com", "githubsupport.com")
+    and coalesce(headers.auth_summary.dmarc.pass, false)
+  )
 attack_types:
   - "BEC/Fraud"
   - "Extortion"
