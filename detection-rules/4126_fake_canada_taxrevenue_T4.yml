@@ -5,28 +5,27 @@ severity: "medium"
 source: |
   type.inbound
   and regex.icontains(sender.display_name, '(?:Canada Revenue Agency|\bCRA\b)')
-  and regex.icontains(body.current_thread.text, '(cra|canada revenue agency)')
-  and (
+  and 3 of (
     any(filter(attachments, .file_type == "pdf"),
         any(file.explode(.),
             any(.scan.url.urls, .domain.root_domain == 'vercel.app')
         )
-    )
-    or network.whois(sender.email.domain).days_old < 90
-    or any(body.links, network.whois(.href_url.domain).days_old <= 365)
-    or any(body.links,
-           regex.icontains(.href_url.path,
-                           '\.(msi|exe|lnk|js|vbs|bat|cmd|ps1|hta|wsf|scr)$'
-           )
-    )
-    or regex.icontains(body.current_thread.text,
-                       '(?:cra|canada revenue agency|\bt4\b)'
-    )
-    or regex.icontains(body.current_thread.text,
-                       "tax? (record|form|document|copy|attachment)"
-    )
-    or regex.icontains(body.current_thread.text,
-                       '\b(review|open(?:ed)|evaluat(?:ed|ion)|assessment|feedback|adjust|change|modification|distribution|details|revis(?:ed|ion)|update(?:d|to))\b'
+    ),
+    network.whois(sender.email.domain).days_old < 90,
+    any(body.links, network.whois(.href_url.domain).days_old <= 365),
+    any(body.links,
+        regex.icontains(.href_url.path,
+                        '\.(msi|exe|lnk|js|vbs|bat|cmd|ps1|hta|wsf|scr)$'
+        )
+    ),
+    regex.icontains(body.current_thread.text,
+                    '(?:cra|canada revenue agency|\bt4\b)'
+    ),
+    regex.icontains(body.current_thread.text,
+                    "(tax?|record|form|document|copy|attachment)"
+    ),
+    regex.icontains(body.current_thread.text,
+                    '\b(review|open(?:ed)|evaluat(?:ed|ion)|assessment|feedback|adjust|change|modification|distribution|details|revis(?:ed|ion)|update(?:d|to))\b'
     )
   )
   and any(ml.nlu_classifier(body.current_thread.text).intents,
@@ -48,6 +47,11 @@ source: |
   // negate legit senders from merck
   and not (
     sender.email.domain.root_domain == 'merck.com'
+    and coalesce(headers.auth_summary.dmarc.pass, false)
+  )
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and not (
+    sender.email.domain.root_domain in $high_trust_sender_root_domains
     and coalesce(headers.auth_summary.dmarc.pass, false)
   )
 attack_types:
