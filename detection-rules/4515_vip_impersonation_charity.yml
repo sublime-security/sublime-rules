@@ -1,0 +1,93 @@
+name: "PR# 4515 - VIP impersonation with charitable donation fraud"
+description: "Fake email thread shows a VIP requesting a donation to a charity, usually addressed to Accounts Payable departments. Can result in monetary loss."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and strings.ilike(body.current_thread.text,
+                    "*charity*",
+                    "*gala*",
+                    "*donation*",
+                    "*donor*"
+  )
+  and any(ml.nlu_classifier(body.current_thread.text).entities,
+          .name == "financial"
+  )
+  and any(ml.nlu_classifier(body.current_thread.text).entities,
+          .name == "request"
+  )
+  and (
+    any($org_vips,
+        strings.icontains(body.html.inner_text, .display_name)
+        or strings.icontains(body.html.inner_text,
+                             strings.concat(.first_name, " ", .last_name)
+        )
+        or strings.icontains(body.html.inner_text,
+                             strings.concat(.last_name, ", ", .first_name)
+        )
+    )
+    or any($org_vips,
+           strings.icontains(body.plain.raw, .display_name)
+           or strings.icontains(body.plain.raw,
+                                strings.concat(.first_name, " ", .last_name)
+           )
+           or strings.icontains(body.plain.raw,
+                                strings.concat(.last_name, ", ", .first_name)
+           )
+    )
+  )
+  and (
+    (
+      (subject.is_forward or subject.is_reply)
+      and (
+        (length(headers.references) == 0 and headers.in_reply_to is null)
+        or not any(headers.hops,
+                   any(.fields, strings.ilike(.name, "In-Reply-To"))
+        )
+      )
+    )
+    // fake thread, but no indication in the subject line
+    // current_thread pulls the recent thread, but the full body contains the fake "original" email
+    or (
+      not ((subject.is_forward or subject.is_reply))
+      and (
+        3 of (
+          strings.icontains(body.html.display_text, "from:"),
+          strings.icontains(body.html.display_text, "to:"),
+          strings.icontains(body.html.display_text, "sent:"),
+          strings.icontains(body.html.display_text, "subject:")
+        )
+        or length(body.previous_threads) > 0
+      )
+      and (
+        length(body.current_thread.text) + 100 < length(body.html.display_text)
+      )
+      // negating bouncebacks
+      and not any(attachments,
+                  .content_type in ("message/delivery-status", "message/rfc822")
+      )
+    )
+  )
+  and (
+    profile.by_sender().prevalence in ("new", "rare")
+    or profile.by_sender().days_known > 30
+  )
+  and not profile.by_sender().any_messages_benign
+attack_types:
+  - "BEC/Fraud"
+tactics_and_techniques:
+  - "Impersonation: Employee"
+  - "Impersonation: VIP"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Header analysis"
+  - "Natural Language Understanding"
+  - "Sender analysis"
+id: "f1011d09-b7dc-5a80-a0eb-ae5f9e5f1ae1"
+tags:
+  - created_from_open_prs
+  - rule_status_modified
+  - pr_author_IndiaAce
+references:
+  - https://github.com/sublime-security/sublime-rules/pull/4515
