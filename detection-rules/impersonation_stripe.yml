@@ -6,77 +6,62 @@ severity: "high"
 source: |
   type.inbound
   and (
-    // Display name after replacing unicode confusables is stripe
     (
-      sender.display_name =~ 'stripe'
-      or (
-        strings.istarts_with(sender.display_name, 'stripe ')
-        and not sender.display_name in~ (
-          'Stripe & Stare',
-          'Stripe and Stare',
-          'Stripe Events'
-        )
-      )
-      or strings.replace_confusables(sender.display_name) =~ 'stripe'
-      // fake stripe invoice in attached picture
-      or (
-        any(attachments,
-            .file_type in $file_types_images
-            and any(file.explode(.),
-                    strings.ilike(.scan.ocr.raw, "*stripe*")
-                    and any(ml.nlu_classifier(.scan.ocr.raw).intents,
-                            .name in ("callback_scam")
-                            and .confidence in ("medium", "high")
-                    )
-            )
-        )
+      strings.replace_confusables(sender.display_name) =~ 'stripe'
+      and not regex.icontains(sender.display_name, '^stripe$')
+    )
+    // fake stripe invoice in attached picture
+    or (
+      any(attachments,
+          .file_type in $file_types_images
+          and any(file.explode(.),
+                  regex.icontains(.scan.ocr.raw, '\bstripe\b')
+                  and not regex.icontains(.scan.ocr.raw,
+                                          '(?:via Stripe|partners with Stripe|invoice\.stripe\.com|Stripe (?:Customer Portal|(?:Pro )?Subscription)|Perplexity|@stripe\.com|pay\.stripe\.com|stripe processing fees|Stripe to provide invoicing)'
+                  )
+                  and any(ml.nlu_classifier(.scan.ocr.raw).intents,
+                          .name in ("callback_scam")
+                          and .confidence in ("medium", "high")
+                  )
+          )
       )
     )
-    or (
-      // the edit distance is 1 or 2
-      strings.ilevenshtein(strings.replace_confusables(sender.display_name),
-                           'stripe'
-      ) <= 2
-      // the length is the same as "stripe"
-      and length(sender.display_name) == 6
-      // and not one of these english words that matches the edit distance
-      and not sender.display_name in~ (
-        "strive",
-        "stride",
-        "strife",
-        "strike",
-        "strobe",
-        "stroke",
-        "streps",
-        "string",
-        "scribe",
-        "straye", // a shoe company?
-        "storie", // storiesbystorie.com
-        "stryke", // a cybersecurity and compliance company
-        "stryve", // a food/snack company stryve.com
-        "shrine", // common word
-        "s.ride", // cab/taxi company
-        "striim", // ai/data company
-        "striim.com", // same as above
-        "skribe" // ai/legal company
-      )
+    or 2 of (
+      strings.icontains(body.current_thread.text, 'The Stripe Team'),
+      strings.icontains(sender.display_name, 'Stripe'),
+      regex.icontains(subject.base, 'payout.{0,5}paused'),
+      regex.icontains(subject.base, 'res(?:ume|tore).{0,5}payout'),
+      regex.icontains(body.current_thread.text, 'payout.{0,5}paused'),
+      regex.icontains(body.current_thread.text, 'res(?:ume|tore).{0,5}payout'),
+      regex.icontains(body.current_thread.text, 'customer.{0,5}chargeback'),
+      regex.icontains(body.current_thread.text, 'exposed.{0,5}api'),
+      regex.icontains(body.current_thread.text, 'secret key has been created'),
+      regex.icontains(body.current_thread.text,
+                      'We don\x27t recognize the device that was just used to sign in'
+      ),
+      regex.icontains(body.current_thread.text, 'suspicious.{0,5}payment')
     )
   )
-  and sender.email.domain.root_domain not in~ ('stripe.com')
+  and (
+    sender.email.domain.root_domain not in~ (
+      'stripe.com',
+      'stripetour.com',
+      'stripe-club.com',
+      'shopify.com'
+    )
+    and coalesce(headers.auth_summary.dmarc.pass, false)
+  )
   and sender.email.email not in $recipient_emails
   
   // Stripe adds a custom header
   // don't match messages with the header
   and not any(headers.hops, any(.fields, .name == "X-Stripe-EID"))
   
-  // negate highly trusted sender domains unless they fail DMARC authentication
-  and (
-    (
-      sender.email.domain.root_domain in $high_trust_sender_root_domains
-      and not headers.auth_summary.dmarc.pass
-    )
-    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  // msg negations
+  and not regex.icontains(body.current_thread.text,
+                          '(?:Stripe (?:Local|Dashboard|University|Commons)|marked as paid by Stripe)'
   )
+
 attack_types:
   - "Credential Phishing"
 tactics_and_techniques:
