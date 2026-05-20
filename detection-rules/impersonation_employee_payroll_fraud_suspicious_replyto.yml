@@ -1,5 +1,5 @@
 name: "Employee impersonation with payroll context and suspicious reply-to domain"
-description: "Detects messages from senders using organizational display names with payroll-related content in the body or subject, where the reply-to address uses a suspicious TLD or free email provider that doesn't match the sender's domain."
+description: "Detects messages from senders using organizational display names with payroll-related content in the body or subject, where the reply-to address uses a suspicious TLD that doesn't match the sender's domain."
 type: "rule"
 severity: "high"
 source: |
@@ -23,10 +23,8 @@ source: |
    and length(headers.reply_to) > 0
    and all(headers.reply_to,
            .email.domain.root_domain != sender.email.domain.root_domain
-           and (
-             .email.domain.tld in $suspicious_tlds
-             or .email.domain.root_domain in $free_email_providers
-           )
+           and not any(recipients.cc, .email.domain.root_domain == ..email.domain.root_domain)
+           and .email.domain.tld in $suspicious_tlds
    )
 attack_types:
   - "BEC/Fraud"
