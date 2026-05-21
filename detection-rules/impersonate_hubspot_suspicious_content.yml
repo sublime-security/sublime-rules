@@ -1,0 +1,66 @@
+name: "Brand impersonation: HubSpot credential theft"
+description: "Detects fraudulent messages impersonating HubSpot that contain legitimate HubSpot branding elements and address information, combined with security-related topics and credential theft indicators, while excluding authenticated legitimate HubSpot communications."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and strings.icontains(sender.display_name, 'hubspot')
+  and 2 of (
+    regex.contains(body.current_thread.text, '(?:HubSpot, Inc.|HubSpot)'),
+    strings.icontains(body.current_thread.text, '2 Canal Park Cambridge'),
+    strings.icontains(body.current_thread.text, '25 first street'),
+    strings.icontains(body.current_thread.text, 'MA 02141')
+  )
+  and 2 of (
+    any(ml.nlu_classifier(body.current_thread.text).topics,
+        .name in (
+          "Security and Authentication",
+          "Software and App Updates",
+          "Customer Service and Support"
+        )
+        and .confidence != "low"
+    ),
+    any(ml.nlu_classifier(body.current_thread.text).intents,
+        .name == "cred_theft" and .confidence != "low"
+    ),
+    regex.icontains(body.current_thread.text,
+                    '(?:account|disactiv|deactiv|disabl|delet|profile)'
+    )
+  )
+  // exclude legitimate HubSpot sends
+  and not (
+    (
+      (
+        strings.iends_with(sender.email.domain.root_domain, 'hubspot.com')
+        or strings.iends_with(sender.email.domain.root_domain, 'hubspotqa.com')
+      )
+      and coalesce(headers.auth_summary.dmarc.pass, false)
+    )
+    or (
+      (
+        strings.iends_with(headers.return_path.domain.root_domain, 'hubspot.com')
+        or strings.icontains(headers.message_id, '@notifybf')
+        or strings.icontains(headers.message_id, '.hubspot.com')
+      )
+      and (
+        any(headers.domains, strings.iends_with(.root_domain, 'hubspot.com'))
+        or strings.icontains(headers.from.email.email, 'hubspot')
+      )
+    )
+  )
+  and not (
+    sender.email.domain.root_domain in $high_trust_sender_root_domains
+    and coalesce(headers.auth_summary.dmarc.pass, false)
+  )
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "QR code"
+  - "Social engineering"
+detection_methods:
+  - "Sender analysis"
+  - "Content analysis"
+  - "QR code analysis"
+  - "Header analysis"
+id: "5df09a5b-8a87-59be-9a73-bd8765dbcc20"
