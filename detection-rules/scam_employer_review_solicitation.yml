@@ -1,0 +1,72 @@
+name: "Scam soliciting employer review/rating"
+description: "Detects scam content that impersonates employer review/rating platforms (e.g., Glassdoor, Indeed, Comparably, Great Place to Work) and solicits the recipient to review or rate their employer, while excluding legitimate review/rating platform senders."
+type: "rule"
+severity: "low"
+source: |
+  type.inbound
+  and (
+    (
+      // scam in current thread
+      any(ml.nlu_classifier(body.current_thread.text).intents,
+          .name in ("scam", "job_scam", "cred_theft") and .confidence != "low"
+      )
+      // and employer review/rating solicitation in current thread
+      and regex.icontains(body.current_thread.text,
+                          'review\s+(?:your\s+)?(?:experience|employer|workplace|company|job)',
+                          'rate\s+(?:your\s+)?(?:employer|workplace|company|experience|job)',
+                          '(?:employer|company|workplace|job)\s+(?:review|rating)',
+                          'share\s+(?:your\s+|a\s+)?(?:review|experience|feedback|rating)',
+                          'leave\s+(?:a\s+|your\s+)?(?:review|rating|feedback)',
+                          'write\s+(?:a\s+|your\s+)?(?:review|rating)',
+                          '(?:glassdoor|indeed|comparably|great\s+place\s+to\s+work|\bbuilt\s?in\b)'
+      )
+    )
+    // scam in previous thread
+    or any(body.previous_threads,
+           any(ml.nlu_classifier(.text).intents,
+               .name in ("scam", "job_scam", "cred_theft")
+               and .confidence != "low"
+           )
+           // and employer review/rating solicitation in previous thread
+           and regex.icontains(.text,
+                               'review\s+(?:your\s+)?(?:experience|employer|workplace|company|job)',
+                               'rate\s+(?:your\s+)?(?:employer|workplace|company|experience|job)',
+                               '(?:employer|company|workplace|job)\s+(?:review|rating)',
+                               'share\s+(?:your\s+|a\s+)?(?:review|experience|feedback|rating)',
+                               'leave\s+(?:a\s+|your\s+)?(?:review|rating|feedback)',
+                               'write\s+(?:a\s+|your\s+)?(?:review|rating)',
+                               '(?:glassdoor|indeed|comparably|great\s+place\s+to\s+work|\bbuilt\s?in\b)'
+           )
+    )
+  )
+  and length(body.current_thread.links) < 10
+  
+  // negating legitimate employer review/rating senders
+  and not (
+    sender.email.domain.root_domain in (
+      'glassdoor.com',
+      'indeed.com',
+      'comparably.com',
+      'greatplacetowork.com',
+      'builtin.com',
+      'linkedin.com',
+      'lensa.com',
+      'ziprecruiter.com',
+      'kununu.com',
+      'jobcase.com',
+      'trustpilot.com'
+    )
+    and headers.auth_summary.dmarc.pass
+  )
+attack_types:
+  - "BEC/Fraud"
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Social engineering"
+  - "Impersonation: Brand"
+detection_methods:
+  - "Content analysis"
+  - "Natural Language Understanding"
+  - "Header analysis"
+  - "Sender analysis"
+id: "ad3c63e8-02a8-5583-bb60-e5ebd76d0331"
