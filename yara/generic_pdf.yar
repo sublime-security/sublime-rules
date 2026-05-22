@@ -49,6 +49,38 @@ rule w9_pdf_IDs {
         and any of ($id*)
 }
 
+rule w9_pdf_images {
+    meta:
+        author      = "kyle eaton"
+        date        = "2026-05-12"
+        description = "pdfs with images associated with FAKE w9s and invoices, often the signatures or fake company logos"
+    strings:
+        $header           = { 25 50 44 46 2D 31 2E }
+        $jpg_signature_01 = { 60 1E 46 70 7A 8A 00 D5 A2 8A 28 00 A2 8A 28 00 A2 8A 28 00 A8 16 EA D5 EE 1E D1 25 46 9A 30 0B 46 }
+        $jpg_signature_02 = { B7 D2 2E 00 3D EB E0 AF FC 15 F3 F6 EB F8 DF F0 8F E1 97 C6 BF 86 9F F0 45 5F DA 83 E2 07 C2 4F }
+    condition:
+        $header at 0
+        and any of ($jpg_*)
+}
+
+rule w9_pdf_fonts {
+    meta:
+        author      = "kyle eaton"
+        date        = "2026-05-12"
+        description = "PDFs with specific fonts (based on type/length), as observed in fake w9 messages"
+    strings:
+        $header     = { 25 50 44 46 2D 31 2E }
+        $font_17_01 = { 2F 4C 65 6E 67 74 68 20 36 36 34 0A 2F 53 75 62 74 79 70 65 20 2F 54 79 70 65 31 43 }
+        $font_17_02 = { 2F 4C 65 6E 67 74 68 20 32 31 32 33 0A 2F 53 75 62 74 79 70 65 20 2F 54 79 70 65 31 43 }
+        $font_17_03 = { 2F 4C 65 6E 67 74 68 20 34 37 39 31 0A 2F 53 75 62 74 79 70 65 20 2F 54 79 70 65 31 43 }
+        $font_16_01 = { 2F 4C 65 6E 67 74 68 20 34 36 39 34 2F 53 75 62 74 79 70 65 2F 54 79 70 65 31 43 }
+        $font_16_02 = { 2F 4C 65 6E 67 74 68 20 36 36 33 2F 53 75 62 74 79 70 65 2F 54 79 70 65 31 43 }
+        $font_16_03 = { 2F 4C 65 6E 67 74 68 20 32 31 31 31 2F 53 75 62 74 79 70 65 2F 54 79 70 65 31 43 }
+    condition:
+        $header at 0
+        and (all of ($font_17_*) or all of ($font_16_*))
+}
+
 rule invoice_pdf_01 {
     meta:
         author = "kyle eaton"
@@ -111,3 +143,153 @@ rule rmm_pdf_lure {
         $header at 0 and
         $link1
 }
+
+rule SAI_Global_ISO9001_Logo_PDF_Fuzzy                                                                                                                                    
+{                                                                                                                                                                       
+   meta:
+       author = "brandon murphy"
+       date = "2026-04-09"
+       description = "fuzzy detection of SAI Global ISO 9001 logo variants in PDFs (re-encoded, resized)"
+
+  strings:
+        // PDF markers
+        $pdf_header   = "%PDF"
+        $is_image     = "/Subtype /Image"
+        $is_jpeg      = "/Filter /DCTDecode"
+
+        // JPEG quantization table — shorter anchor (16 bytes from luma QT)
+        // This specific sequence of QT values is rare and survives minor edits
+        $qt_anchor = {
+            14 14 14 14 15 14 17 19
+            19 17 1F 22 1E 22 1F 2E
+        }
+
+        // SOF progressive marker with 1024x768
+        $sof_1024x768 = { FF C2 00 11 08 03 00 04 00 }
+
+        // Alternate: SOF baseline with 1024x768
+        $sof_baseline = { FF C0 00 11 08 03 00 04 00 }
+
+        // Unique scan-data byte patterns (mid-stream anchors)
+        // From ~25% into the JPEG scan data
+        $scan_mid1 = { 14 20 31 41 51 53 60 71 15 40 52 72 22 33 34 35 }
+        // From ~50% into the JPEG scan data
+        $scan_mid2 = { E6 0F 4A FA F9 6D 97 45 75 C8 69 DD 9D 8B 31 CC }
+
+    condition:
+        $pdf_header at 0 and
+        $is_image and $is_jpeg and
+        (
+            // High confidence: QT match + dimensions
+            ($qt_anchor and ($sof_1024x768 or $sof_baseline))
+            or
+            // Medium confidence: QT match + scan data anchor
+            ($qt_anchor and ($scan_mid1 or $scan_mid2))
+        )
+}
+
+rule pdf_jsfck_ratio {
+    meta:
+        author      = "kyle eaton"
+        date        = "04.13.2026"
+        description = "matching PDFs which contain JS objects which have a high ratio (40%) of characters used in jsf-ck obfuscation "
+    strings:
+        $header   = { 25 50 44 46 2D 31 2E }
+        $js       = "/JS"
+        $a        = "["
+        $b        = "]"
+        $c        = "+"
+        $d        = "{"
+        $e        = "}"
+        $js_regex = /\/JS\s+?\((.*?)\)\s+?.*?>>/s
+    condition:
+        $header at 0
+        and all of them
+        and for any i in (1..#js_regex): (
+            ((#a in (@js_regex[i]..@js_regex[i] + !js_regex) + #b in (@js_regex[i]..@js_regex[i] + !js_regex) + #c in (@js_regex[i]..@js_regex[i] + !js_regex) + #d in (@js_regex[i]..@js_regex[i] + !js_regex) + #e in (@js_regex[i]..@js_regex[i] + !js_regex) * 1.0) \ !js_regex * 100) > 40
+
+        )
+}
+
+rule pdf_jsfck_strings {
+    meta:
+        author      = "kyle eaton"
+        date        = "04.13.2026"
+        description = "matching PDFs which contain JS objects using jsf-ck obfuscation."
+    strings:
+        $header   = { 25 50 44 46 2D 31 2E }
+        $js_regex = /\/JS\s+?\((.*?)\)\s+?.*?>>/s
+        $jsf01    = "({}+[])"
+        $jsf02    = "(!+[]/+[]+[])"
+        $jsf03    = "[][[]]"
+        $jsf04    = "+[![]]"
+        $jsf05    = "+[]"
+        $jsf06    = "+!+[]"
+        $jsf07    = "!+[]+!+[]"
+        $jsf08    = "[[+!+[]]]"
+    condition:
+        $header at 0
+        and $js_regex
+        and for any i in (1..#js_regex): (
+            any of ($jsf*) in (@js_regex[i]..@js_regex[i] + !js_regex)
+        )
+}
+
+rule pdf_acro_js_functions {
+    meta:
+        author      = "kyle eaton"
+        date        = "04.13.2026"
+		description = "matching PDFs which use JS to load content from other objects with in the PDF OR pdfs that use exploited functions that we've observed used maliciously."
+	strings:
+		$header      = { 25 50 44 46 2D 31 2E }
+		$js_regex    = /\/JS\s+?\((.*?)\)\s+?.*?>>/s
+		$acro_1      = "SOAP"
+		$acro_2      = "util"
+		$getField    = "getField"
+		$fancy_b64_1 = "FORmFuY3lBbGVydEltcGwo"
+		$fancy_b64_2 = "QU5GYW5jeUFsZXJ0SW1wbC"
+		$fancy_b64_3 = "BTkZhbmN5QWxlcnRJbXBsK"
+	condition:
+		$header at 0
+		and $js_regex
+		and for any i in (1..#js_regex): (
+			(
+				any of ($acro_*) in (@js_regex[i]..@js_regex[i] + !js_regex)
+				and $getField in (@js_regex[i]..@js_regex[i] + !js_regex))
+			or (
+				any of ($fancy_b64_*) in (@js_regex[i]..@js_regex[i] + !js_regex)
+			)
+		)
+}
+
+rule pdf_b64_js_var_eval {
+	meta:
+		author      = "kyle eaton"
+		date        = "04.13.2026"
+		description = "matching pdfs with base64 encoded javascript that either start with var, or include the eval string."
+	strings:
+		$header        = { 25 50 44 46 2D 31 2E }
+		$b64_var_start = " /V /dmFyI"
+		$eval_b64_1    = "ZXZhbC"
+		$eval_b64_2    = "V2YWwo"
+		$eval_b64_3    = "ldmFsK"
+	condition:
+		$header at 0
+		and $b64_var_start
+		and any of ($eval_b64_*)
+}
+
+rule pdf_cve_2026_34621_observed_lures {
+	meta:
+		author      = "kyle eaton"
+		date        = "04.14.2026"
+		description = "matches the lures in the PDFs observed exploiting CVE-2026-34621."
+	strings:
+		$header = { 25 50 44 46 2D 31 2E }
+		$img_1  = { ff c0 00 11 08 03 18 02 64 03 01 22 00 02 11 01 03 11 01 ff c4 00 1f 00 00 01 05 01 01 01 01 01 01 00 00 00 00 00 00 00 00 01 02 03 04 05 06 07 08 09 0a 0b ff c4 00 b5 10 00 02 01 03 03 02 04 03 05 05 04 04 00 00 01 7d 01 02 03 00 04 11 05 12 21 31 41 06 13 51 61 07 22 71 14 32 81 91 a1 08 23 42 b1 c1 15 52 d1 f0 24 33 62 72 82 09 0a 16 17 18 19 1a 25 26 27 28 29 2a 34 35 36 37 38 39 3a 43 44 45 46 47 48 49 4a 53 54 55 56 57 58 59 5a 63 64 65 66 67 68 69 6a 73 74 75 76 77 78 79 7a 83 84 85 86 87 88 89 8a 92 93 94 95 96 97 98 99 9a a2 a3 a4 a5 a6 a7 a8 a9 aa b2 b3 b4 b5 b6 b7 b8 b9 ba c2 c3 c4 c5 c6 c7 c8 c9 ca d2 d3 d4 d5 d6 d7 d8 d9 da e1 e2 e3 e4 e5 e6 e7 e8 e9 ea f1 f2 f3 f4 f5 f6 f7 f8 f9 fa ff c4 00 1f 01 00 03 01 01 01 01 01 01 01 01 01 00 00 00 00 00 00 01 02 03 04 05 06 07 08 09 0a 0b ff c4 00 b5 11 00 02 01 02 04 04 03 04 07 05 04 04 00 01 02 77 00 01 02 03 11 04 05 21 31 06 12 41 51 07 61 71 13 22 32 81 08 14 42 91 a1 b1 c1 09 23 33 52 f0 15 62 72 d1 0a 16 24 34 e1 25 f1 17 18 19 1a 26 27 28 29 2a 35 36 37 38 39 3a 43 44 45 46 47 48 49 4a 53 54 55 56 57 58 59 5a 63 64 65 66 67 68 69 6a 73 74 75 76 77 78 79 7a 82 83 84 85 86 87 88 89 8a 92 93 94 95 96 97 98 99 9a a2 a3 a4 a5 a6 a7 a8 a9 aa b2 b3 b4 b5 b6 b7 b8 b9 ba c2 c3 c4 c5 c6 c7 c8 c9 ca d2 d3 d4 d5 d6 d7 d8 d9 da e2 e3 e4 e5 e6 e7 e8 e9 ea f2 f3 f4 f5 f6 f7 f8 f9 fa ff da 00 0c 03 01 00 02 11 03 11 00 3f 00 f7 fa [1328] 0f 5a 3e d0 3d 68 02 cd 15 5b ed 03 d6 8f b4 0f 5a 00 b3 45 56 fb 40 f5 a3 ed 03 d6 80 2c d1 55 be d0 3d 68 fb 40 f5 a0 0b 34 55 6f b4 0f 5a 3e d0 3d 68 02 cd 15 5b ed 03 d6 8f b4 0f 5a 00 b3 45 56 fb 40 f5 a3 ed 03 d6 80 2c d1 55 be d0 3d 68 fb 40 f5 }
+		$img_2  = { ff c2 00 0b 08 05 59 0b a9 01 01 11 00 ff c4 00 1c 00 01 00 02 03 01 01 01 00 00 00 00 00 00 00 00 00 00 05 07 03 04 06 02 01 08 ff da 00 08 01 01 00 00 00 01 ec 2f [5400] 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 02 86 be 40 00 00 00 00 00 ae 79 38 cb 4a b5 b1 3b 92 96 9f c3 5e dc d5 6f 19 da d8 fc 0f 35 1f d6 ec c1 6f 5a 55 4e c7 7d c6 f6 fc f7 21 bf 9e 52 cf a5 2e fe 27 97 d4 d4 ec b5 bc ce 57 3e 71 6d }
+		$img_3  = { ff c0 00 11 08 03 18 02 64 03 01 22 00 02 11 01 03 11 01 ff c4 00 1f 00 00 01 05 01 01 01 01 01 01 00 00 00 00 00 00 00 00 01 02 03 04 05 06 07 08 09 0a 0b ff c4 00 b5 10 00 02 01 03 03 02 04 03 05 05 04 04 00 00 01 7d 01 02 03 00 04 11 05 12 21 31 41 06 13 51 61 07 22 71 14 32 81 91 a1 08 23 42 b1 c1 15 52 d1 f0 24 33 62 72 82 09 0a 16 17 18 19 1a 25 26 27 28 29 2a 34 35 36 37 38 39 3a 43 44 45 46 47 48 49 4a 53 54 55 56 57 58 59 5a 63 64 65 66 67 68 69 6a 73 74 75 76 77 78 79 7a 83 84 85 86 87 88 89 8a 92 93 94 95 96 97 98 99 9a a2 a3 a4 a5 a6 a7 a8 a9 aa b2 b3 b4 b5 b6 b7 b8 b9 ba c2 c3 c4 c5 c6 c7 c8 c9 ca d2 d3 d4 d5 d6 d7 d8 d9 da e1 e2 e3 e4 e5 e6 e7 e8 e9 ea f1 f2 f3 f4 f5 f6 f7 f8 f9 fa ff c4 00 1f 01 00 03 01 01 01 01 01 01 01 01 01 00 00 00 00 00 00 01 02 03 04 05 06 07 08 09 0a 0b ff c4 00 b5 11 00 02 01 02 04 04 03 04 07 05 04 04 00 01 02 77 00 01 02 03 11 04 05 21 31 06 12 41 51 07 61 71 13 22 32 81 08 14 42 91 a1 b1 c1 09 23 33 52 f0 15 62 72 d1 0a 16 24 34 e1 25 f1 17 18 19 1a 26 27 28 29 2a 35 36 37 38 39 3a 43 44 45 46 47 48 49 4a 53 54 55 56 57 58 59 5a 63 64 65 66 67 68 69 6a 73 74 75 76 77 78 79 7a 82 83 84 85 86 87 88 89 8a 92 93 94 95 96 97 98 99 9a a2 a3 a4 a5 a6 a7 a8 a9 aa b2 b3 b4 b5 b6 b7 b8 b9 ba c2 c3 c4 c5 c6 c7 c8 c9 ca d2 d3 d4 d5 d6 d7 d8 d9 da e2 e3 e4 e5 e6 e7 e8 e9 ea f2 f3 f4 f5 f6 f7 f8 f9 fa ff da 00 0c 03 01 00 02 11 03 11 00 3f 00 f7 fa [936] 28 a6 97 02 80 1d 45 47 e6 af ad 2f 98 a7 bd 00 3e 8a 6e f1 49 e6 2f ad 00 3e 8a 67 98 be b4 79 82 80 1f 45 33 cc 1e b4 9e 72 fa d0 04 94 54 7e 6a fa d2 f9 8b eb 40 0f a2 99 e6 0f 5a 3c c1 eb 40 0f a2 99 e6 2f ad 1e 62 fa d0 03 e8 a6 79 ab eb 47 98 28 }
+	condition:
+		$header at 0 and any of ($img_*)
+}
+

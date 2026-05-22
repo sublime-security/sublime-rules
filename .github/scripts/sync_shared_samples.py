@@ -87,6 +87,9 @@ COMMENT_TRIGGER = os.getenv('COMMENT_TRIGGER', DEFAULT_COMMENT_TRIGGER)
 SKIP_BULK_PRS = os.getenv('SKIP_BULK_PRS', 'true').lower() == 'true'
 MAX_RULES_PER_PR = int(os.getenv('MAX_RULES_PER_PR', str(DEFAULT_MAX_RULES_PER_PR)))
 
+# Draft PR handling
+SKIP_DRAFT_PRS = os.getenv('SKIP_DRAFT_PRS', 'false').lower() == 'true'
+
 # Action completion checks
 CHECK_ACTION_COMPLETION = os.getenv('CHECK_ACTION_COMPLETION', 'true').lower() == 'true'
 REQUIRED_CHECK_NAME = os.getenv('REQUIRED_CHECK_NAME', DEFAULT_REQUIRED_CHECK_NAME)
@@ -307,8 +310,8 @@ def handle_pr_rules(graphql_session, rest_session):
             print(f"Skipping PR #{pr_number} (has '{DO_NOT_MERGE_LABEL}' label): {pr.title}")
             continue
 
-        # Skip draft PRs
-        if pr.is_draft:
+        # Skip draft PRs if configured
+        if SKIP_DRAFT_PRS and pr.is_draft:
             print(f"Skipping draft PR #{pr_number}: {pr.title}")
             continue
 
@@ -357,6 +360,10 @@ def handle_pr_rules(graphql_session, rest_session):
                             )
 
                         process_pr = False
+                else:
+                    # Comment triggers disabled - exclude all non-org authors
+                    print(f"\tSkipping PR #{pr_number}: Author {pr.author_login} is not an org member")
+                    process_pr = False
 
         if not process_pr:
             continue
