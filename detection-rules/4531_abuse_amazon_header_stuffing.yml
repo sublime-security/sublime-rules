@@ -1,0 +1,32 @@
+name: "PR# 4531 - Service abuse: Amazon invitation with phone number"
+description: "Detects Amazon's no-reply address with a subject about invitation sending, containing phone numbers within HTML header elements. This pattern is commonly used to trick recipients into calling fraudulent customer service numbers."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and sender.email.email == 'no-reply@amazon.com'
+  and subject.subject == 'Your invitation has been sent'
+  and any(html.xpath(body.html, "//h2[contains(@class, 'rio-header')]").nodes,
+          // phone number regex
+          regex.icontains(strings.replace_confusables(.display_text),
+                          '\+?(?:[ilo0-9]{1}.)?\(?[ilo0-9]{3}?\)?.[ilo0-9]{3}.?[ilo0-9]{4}',
+                          '\+?(?:[ilo0-9]{1,2})?\s?\(?\d{3}\)?[\s\.\-⋅]{0,5}[ilo0-9]{3}[\s\.\-⋅]{0,5}[ilo0-9]{4}'
+          )
+  )
+attack_types:
+  - "Callback Phishing"
+tactics_and_techniques:
+  - "Out of band pivot"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Header analysis"
+  - "HTML analysis"
+  - "Sender analysis"
+id: "818d733b-ece9-56bd-ac4a-1dd177f679d6"
+tags:
+  - created_from_open_prs
+  - rule_status_added
+  - pr_author_D-Bolton
+references:
+  - https://github.com/sublime-security/sublime-rules/pull/4531
