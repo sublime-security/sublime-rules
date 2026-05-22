@@ -9,11 +9,17 @@ source: |
   // auth passes
   and coalesce(headers.auth_summary.dmarc.pass, false)
   // link is suspicious tlds
-  and any(body.links, .href_url.domain.tld in~ $suspicious_tlds)
+  and any(body.links,
+          .href_url.domain.tld in~ $suspicious_tlds
+  //  and sender.email.domain.tld == .href_url.domain.tld
+  )
   // ML signals credential phishing
   and any(ml.nlu_classifier(body.current_thread.text).intents,
           .name == "cred_theft" and .confidence != "low"
   )
+  // exclude json attachments from legit services
+  // all will provide samples without attachments as well
+  and all(attachments, .file_extension != "json")
 attack_types:
   - "Credential Phishing"
 tactics_and_techniques:
@@ -28,4 +34,4 @@ detection_methods:
 id: "791baca9-090c-514b-82f0-d66ae7c9e1e9"
 og_id: "2221809b-f2d3-5323-973c-9fe46a969660"
 testing_pr: 4507
-testing_sha: 65e583a1196d4e145ba631f33926efd1188019f4
+testing_sha: 5b6044a9963fa964c8f6d122e706cf91c791f849
