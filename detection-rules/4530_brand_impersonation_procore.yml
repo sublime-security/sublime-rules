@@ -1,0 +1,66 @@
+name: "Brand Impersonation: Procore"
+description: "Detects messages containing Procore branding language that do not originate from legitimate Procore domains. This has been observed in phishing campaigns."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and (
+    strings.ilike(body.current_thread.text, "*powered by procore*")
+    or 2 of (
+      strings.icontains(body.current_thread.text, 'Procore'),
+      strings.icontains(body.current_thread.text, '6309 Carpinteria Ave'),
+      strings.icontains(body.current_thread.text, 'Carpinteria, CA 93013'),
+      strings.icontains(body.current_thread.text, 'Build America, Buy America')
+    )
+    or strings.iends_with(sender.display_name, 'via Procore')
+  )
+  and not (
+    sender.email.domain.root_domain in ("procore.com", "procoretech.com")
+    and coalesce(headers.auth_summary.dmarc.pass, false)
+  )
+  
+  // negating legit replies/forwards
+  and not (
+    (
+      strings.istarts_with(subject.subject, "RE:")
+      or strings.istarts_with(subject.subject, "FW:")
+      or strings.istarts_with(subject.subject, "FWD:")
+      or regex.imatch(subject.subject,
+                      '(\[[^\]]+\]\s?){0,3}(re|fwd?|automat.*)\s?:.*'
+      )
+      or strings.istarts_with(subject.subject, "Réponse automatique")
+    )
+    and (
+      length(headers.references) > 0
+      and any(headers.hops, any(.fields, strings.ilike(.name, "In-Reply-To")))
+    )
+  )
+  // negate bounce backs
+  and not (
+    strings.like(sender.email.local_part,
+                 "*postmaster*",
+                 "*mailer-daemon*",
+                 "*administrator*"
+    )
+    and any(attachments,
+            .content_type in (
+              "message/rfc822",
+              "message/delivery-status",
+              "text/calendar"
+            )
+    )
+  )
+
+attack_types:
+  - "BEC/Fraud"
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Sender analysis"
+id: "67b9dd8e-c81b-528a-8723-fec96bcf9d70"
+og_id: "74baa1e5-f1cd-5d15-b2f2-e863baf4a20f"
+testing_pr: 4530
+testing_sha: c83c95e2089390d3e65d9b3bc65c0e0551fcf0cf
