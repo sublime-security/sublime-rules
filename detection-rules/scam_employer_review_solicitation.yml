@@ -12,13 +12,64 @@ source: |
       )
       // and employer review/rating solicitation in current thread
       and regex.icontains(body.current_thread.text,
+                          // explicit employer-context patterns
                           'review\s+(?:your\s+)?(?:experience|employer|workplace|company|job)',
                           'rate\s+(?:your\s+)?(?:employer|workplace|company|experience|job)',
                           '(?:employer|company|workplace|job)\s+(?:review|rating)',
-                          'share\s+(?:your\s+|a\s+)?(?:review|experience|feedback|rating)',
-                          'leave\s+(?:a\s+|your\s+)?(?:review|rating|feedback)',
-                          'write\s+(?:a\s+|your\s+)?(?:review|rating)',
-                          '(?:glassdoor|indeed|comparably|great\s+place\s+to\s+work|\bbuilt\s?in\b)'
+                          // generic share/leave/write — require employer context within 80 chars to avoid doc/proposal FPs
+                          '(?:share|leave|write|submit|post|drop)\s+(?:a\s+|an\s+|your\s+)?(?:honest\s+|positive\s+|quick\s+|brief\s+|5[- ]?star\s+|great\s+)?(?:review|rating|feedback|testimonial)[^\r\n]{0,80}(?:employer|workplace|company|job|us|our\s+(?:team|company|workplace|business|employer)|the\s+company)',
+                          '(?:employer|workplace|company|job|us|our\s+(?:team|company|workplace|business|employer)|the\s+company)[^\r\n]{0,80}(?:share|leave|write|submit|post|drop)\s+(?:a\s+|an\s+|your\s+)?(?:honest\s+|positive\s+|quick\s+|brief\s+|5[- ]?star\s+|great\s+)?(?:review|rating|feedback|testimonial)',
+                          // explicit brand mention
+                          '(?:glassdoor|indeed|linkedin|comparably|great\s+place\s+to\s+work|\bbuilt\s?in\b|lensa|ziprecruiter|kununu|jobcase|trustpilot)'
+      )
+      // tuned through sandbox sample testing
+      and any(ml.nlu_classifier(body.current_thread.text).topics, 
+              .name in ("Advertising and Promotions", "Professional and Career Development", "Reminders and Notifications", "Financial Communications")
+              and .confidence != "low"
+      )
+      // instructions/steps provided to the user (numbered, stepped, or bulleted list)
+      and (
+        // numbered list — both "1." and "2." present at line start
+        (
+          regex.icontains(body.current_thread.text, '(?:^|\n)\s*1[\.\)]\s+\S')
+          and regex.icontains(body.current_thread.text, '(?:^|\n)\s*2[\.\)]\s+\S')
+        )
+        // explicit "Step 1" + "Step 2" instructions
+        or (
+          regex.icontains(body.current_thread.text, 'step\s*[#:\-]?\s*1\b')
+          and regex.icontains(body.current_thread.text, 'step\s*[#:\-]?\s*2\b')
+        )
+        // explicit "follow these steps" / "how it works" / "instructions below"
+        or regex.icontains(body.current_thread.text,
+                           'follow\s+(?:these|the\s+below|the\s+following)\s+(?:simple\s+|quick\s+|easy\s+)?(?:steps|instructions)',
+                           'how\s+(?:to|it)\s+works\s*:',
+                           '(?:simple\s+|quick\s+|easy\s+|these\s+)?steps\s+(?:to|below)\s+(?:leave|share|write|complete|submit|post)',
+                           'instructions\s+(?:below|to\s+follow)',
+                           'here(?:\s+is\s+how|\'?s\s+how|\s+are\s+the\s+steps)'
+        )
+        // two or more bullet items (•, *) at line start
+        or length(regex.extract(body.current_thread.text, '(?:^|\n)\s*[•\*]\s+\S')) >= 2
+      )
+      // incentive/reward language identifiers
+      and regex.icontains(body.current_thread.text,
+                          'gift\s*card',
+                          '\$\d{1,4}(?:\.\d{2})?\s*(?:amazon|visa|target|walmart|gift|reward|bonus|incentive|voucher)',
+                          '(?:amazon|visa|target|walmart|starbucks)\s*(?:gift\s*card|voucher|e?[- ]?card)',
+                          '(?:as\s+a|small)\s+(?:thank[- ]you|token\s+of\s+(?:our\s+)?(?:appreciation|thanks|gratitude))',
+                          '(?:reward|incentive|compensation|bonus|prize|payment)\s+(?:for|of)\s+(?:your\s+)?(?:time|participation|review|feedback|completion)',
+                          'in\s+(?:exchange|return)\s+for\s+(?:your\s+)?(?:review|feedback|rating|time|participation)',
+                          'we\'?ll?\s+(?:send|give|reward|compensate|gift|mail)\s+you\b',
+                          'you\'?ll?\s+(?:receive|get|earn)\s+(?:a\s+|an\s+|\$)',
+                          'paid\s+(?:review|feedback|opportunity|survey)',
+                          'compensated\s+(?:for|with)\s+(?:your\s+)?(?:time|review|feedback|participation)'
+      )
+      // not document/proposal/file sharing context (outside scope of this rule)
+      and not regex.icontains(body.current_thread.text,
+                              'review\s+(?:the\s+|this\s+|my\s+|our\s+|attached\s+|enclosed\s+)?(?:attached\s+)?(?:document|proposal|file|attachment|deck|presentation|contract|pdf|draft|report|spreadsheet|agreement|nda|sow|quote|estimate|invoice|design|mockup|wireframe)',
+                              '(?:document|proposal|file|attachment|deck|presentation|contract|draft|spreadsheet|report)\s+(?:is\s+ready\s+)?(?:for|awaiting)\s+(?:your\s+)?(?:review|feedback)',
+                              'shared\s+(?:a|the|this)\s+(?:document|file|folder|proposal|deck|presentation|spreadsheet)\s+with\s+you',
+                              'please\s+(?:see|find|review)\s+(?:the\s+)?attached',
+                              'feedback\s+on\s+(?:the|this|my|our|attached)\s+(?:attached\s+)?(?:document|proposal|file|deck|draft|presentation|contract|report|spreadsheet|design|mockup)'
       )
     )
     // scam in previous thread
@@ -31,16 +82,81 @@ source: |
                                'review\s+(?:your\s+)?(?:experience|employer|workplace|company|job)',
                                'rate\s+(?:your\s+)?(?:employer|workplace|company|experience|job)',
                                '(?:employer|company|workplace|job)\s+(?:review|rating)',
-                               'share\s+(?:your\s+|a\s+)?(?:review|experience|feedback|rating)',
-                               'leave\s+(?:a\s+|your\s+)?(?:review|rating|feedback)',
-                               'write\s+(?:a\s+|your\s+)?(?:review|rating)',
-                               '(?:glassdoor|indeed|comparably|great\s+place\s+to\s+work|\bbuilt\s?in\b)'
+                               '(?:share|leave|write|submit|post|drop)\s+(?:a\s+|an\s+|your\s+)?(?:honest\s+|positive\s+|quick\s+|brief\s+|5[- ]?star\s+|great\s+)?(?:review|rating|feedback|testimonial)[^\r\n]{0,80}(?:employer|workplace|company|job|us|our\s+(?:team|company|workplace|business|employer)|the\s+company)',
+                               '(?:employer|workplace|company|job|us|our\s+(?:team|company|workplace|business|employer)|the\s+company)[^\r\n]{0,80}(?:share|leave|write|submit|post|drop)\s+(?:a\s+|an\s+|your\s+)?(?:honest\s+|positive\s+|quick\s+|brief\s+|5[- ]?star\s+|great\s+)?(?:review|rating|feedback|testimonial)',
+                               '(?:glassdoor|indeed|linkedin|comparably|great\s+place\s+to\s+work|\bbuilt\s?in\b|lensa|ziprecruiter|kununu|jobcase|trustpilot)'
+           )
+           // tuned through sandbox sample testing
+           and any(ml.nlu_classifier(.text).topics,
+                   .name in ("Advertising and Promotions", "Professional and Career Development", "Reminders and Notifications", "Financial Communications")
+                   and .confidence != "low"
+           )
+           // instructions/steps provided to the user (numbered, stepped, or bulleted list)
+           and (
+             // numbered list — both "1." and "2." present at line start
+             (
+               regex.icontains(.text, '(?:^|\n)\s*1[\.\)]\s+\S')
+               and regex.icontains(.text, '(?:^|\n)\s*2[\.\)]\s+\S')
+             )
+             // explicit "Step 1" + "Step 2" instructions
+             or (
+               regex.icontains(.text, 'step\s*[#:\-]?\s*1\b')
+               and regex.icontains(.text, 'step\s*[#:\-]?\s*2\b')
+             )
+             // explicit "follow these steps" / "how it works" / "instructions below"
+             or regex.icontains(.text,
+                                'follow\s+(?:these|the\s+below|the\s+following)\s+(?:simple\s+|quick\s+|easy\s+)?(?:steps|instructions)',
+                                'how\s+(?:to|it)\s+works\s*:',
+                                '(?:simple\s+|quick\s+|easy\s+|these\s+)?steps\s+(?:to|below)\s+(?:leave|share|write|complete|submit|post)',
+                                'instructions\s+(?:below|to\s+follow)',
+                                'here(?:\s+is\s+how|\'?s\s+how|\s+are\s+the\s+steps)'
+             )
+             // two or more bullet items (•, *) at line start
+             or length(regex.extract(.text, '(?:^|\n)\s*[•\*]\s+\S')) >= 2
+           )
+           // incentive/reward language identifiers
+           and regex.icontains(.text,
+                               'gift\s*card',
+                               '\$\d{1,4}(?:\.\d{2})?\s*(?:amazon|visa|target|walmart|gift|reward|bonus|incentive|voucher)',
+                               '(?:amazon|visa|target|walmart|starbucks)\s*(?:gift\s*card|voucher|e?[- ]?card)',
+                               '(?:as\s+a|small)\s+(?:thank[- ]you|token\s+of\s+(?:our\s+)?(?:appreciation|thanks|gratitude))',
+                               '(?:reward|incentive|compensation|bonus|prize|payment)\s+(?:for|of)\s+(?:your\s+)?(?:time|participation|review|feedback|completion)',
+                               'in\s+(?:exchange|return)\s+for\s+(?:your\s+)?(?:review|feedback|rating|time|participation)',
+                               'we\'?ll?\s+(?:send|give|reward|compensate|gift|mail)\s+you\b',
+                               'you\'?ll?\s+(?:receive|get|earn)\s+(?:a\s+|an\s+|\$)',
+                               'paid\s+(?:review|feedback|opportunity|survey)',
+                               'compensated\s+(?:for|with)\s+(?:your\s+)?(?:time|review|feedback|participation)'
+           )
+           // not document/proposal/file sharing context (outside scope of this rule)
+           and not regex.icontains(.text,
+                                   'review\s+(?:the\s+|this\s+|my\s+|our\s+|attached\s+|enclosed\s+)?(?:attached\s+)?(?:document|proposal|file|attachment|deck|presentation|contract|pdf|draft|report|spreadsheet|agreement|nda|sow|quote|estimate|invoice|design|mockup|wireframe)',
+                                   '(?:document|proposal|file|attachment|deck|presentation|contract|draft|spreadsheet|report)\s+(?:is\s+ready\s+)?(?:for|awaiting)\s+(?:your\s+)?(?:review|feedback)',
+                                   'shared\s+(?:a|the|this)\s+(?:document|file|folder|proposal|deck|presentation|spreadsheet)\s+with\s+you',
+                                   'please\s+(?:see|find|review)\s+(?:the\s+)?attached',
+                                   'feedback\s+on\s+(?:the|this|my|our|attached)\s+(?:attached\s+)?(?:document|proposal|file|deck|draft|presentation|contract|report|spreadsheet|design|mockup)'
            )
     )
   )
   and length(body.current_thread.links) < 10
-  
-  // negating legitimate employer review/rating senders
+
+  // subject cites employer review / rating / feedback context
+  and regex.icontains(subject.subject,
+                      'review',
+                      'rating',
+                      '\brate\b',
+                      'feedback',
+                      'testimonial',
+                      '(?:employer|workplace|company|employee|job)',
+                      '(?:glassdoor|indeed|linkedin|comparably|great\s+place\s+to\s+work|built\s?in|lensa|ziprecruiter|kununu|jobcase|trustpilot)',
+                      'experience',
+                      'survey',
+                      'opinion'
+  )
+
+  // unsolicited sender
+  and not profile.by_sender().solicited
+
+  // negating legitimate/trusted employer review/rating senders
   and not (
     (
       sender.email.domain.root_domain in (
