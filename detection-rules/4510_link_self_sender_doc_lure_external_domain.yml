@@ -15,16 +15,15 @@ source: |
   and sender.email.domain.root_domain not in $free_email_providers
   // Document/file language
   and regex.icontains(body.current_thread.text,
-                      '\b(document[s]|file|invoice|report|statement|payment)\b'
+                      '\b(document[s]|file|statement|invoice|report|payment)\b'
   )
+  // must have at least 1 link in current thread
+  and length(body.current_thread.links) >= 1
+  // links don't match sender domain
   and any(body.links,
           .href_url.domain.root_domain != sender.email.domain.root_domain
           and .href_url.domain.root_domain not in $free_file_hosts
-  )
-  and not any(headers.reply_to,
-              .email.domain.domain in $org_domains
-              or .email.domain.root_domain in $high_trust_sender_root_domains
-              or .email.domain.root_domain in ("docusign.net", "docusign.com")
+          and .href_url.domain.root_domain not in $high_trust_sender_root_domains
   )
   // ML signals credential phishing
   and any(ml.nlu_classifier(body.current_thread.text).intents,
@@ -34,6 +33,21 @@ source: |
   and not (
     strings.icontains(body.current_thread.text, "compromised")
     or strings.icontains(body.current_thread.text, "password")
+  )
+  // excluding trusted domains
+  and not any(headers.reply_to,
+              .email.domain.domain in $org_domains
+              or .email.domain.root_domain in $high_trust_sender_root_domains
+              or .email.domain.root_domain in ("docusign.net", "docusign.com")
+  )
+  // excluding fps unless dmarc fails
+  and not (
+    sender.email.domain.root_domain in ("svp.vet", "sap.com", "isolvedhcm.com")
+    and coalesce(headers.auth_summary.dmarc.pass, false)
+  )
+  // exclude rpmsg attachments
+  and not any(attachments,
+              .content_type == "application/x-microsoft-rpmsg-message"
   )
 attack_types:
   - "Credential Phishing"
