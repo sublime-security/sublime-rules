@@ -293,3 +293,17 @@ rule pdf_cve_2026_34621_observed_lures {
 		$header at 0 and any of ($img_*)
 }
 
+rule enc_pdf_image_sizes {
+	meta:
+		author      = "kyle eaton"
+		date        = "2026-05-26"
+		description = "matches PDF image sizes that correlate with the images used in an encrypted PDF lure"
+	strings:
+		$header = { 25 50 44 46 2D 31 2E }
+		$img1   = { 2F 49 6D 61 67 65 20 2F 57 69 64 74 68 20 32 30 32 20 2F 48 65 69 67 68 74 20 32 34 36 }
+		$img2   = { 2F 49 6D 61 67 65 20 2F 57 69 64 74 68 20 31 32 33 20 2F 48 65 69 67 68 74 20 33 32 }
+	condition:
+		$header at 0
+		and all of ($img*)
+		and @img1 < @img2
+}
