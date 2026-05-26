@@ -1,0 +1,33 @@
+name: "PR# 4539 - Service abuse: Square marketing with suspicious QR code"
+description: "Detects messages from Square's marketing domain containing QR codes that redirect to self-service creation platforms, file sharing services, or image hosting services."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and sender.email.domain.domain == "squaremktg.com"
+  and beta.scan_qr(file.message_screenshot()).found
+  and any(filter(beta.scan_qr(file.message_screenshot()).items,
+                 // ignore square's own free website hosting service
+                 .url.domain.root_domain != "square.site"
+          ),
+          .url.domain.root_domain in $self_service_creation_platform_domains
+          or .url.domain.root_domain in $free_file_hosts
+  )
+
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "QR code"
+  - "Free file host"
+detection_methods:
+  - "Computer Vision"
+  - "QR code analysis"
+  - "Sender analysis"
+  - "URL analysis"
+id: "1116aa82-62c1-5e55-a2d2-0db3e5f72d89"
+tags:
+  - created_from_open_prs
+  - rule_status_added
+  - pr_author_peterdj45
+references:
+  - https://github.com/sublime-security/sublime-rules/pull/4539
