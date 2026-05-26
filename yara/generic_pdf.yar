@@ -297,7 +297,7 @@ rule enc_pdf_image_sizes {
 	meta:
 		author      = "kyle eaton"
 		date        = "2026-05-26"
-		description = "PDF image sizes that correlate with the images used in an encrypted PDF lure"
+		description = "matches PDF image sizes that correlate with the images used in an encrypted PDF lure"
 	strings:
 		$header = { 25 50 44 46 2D 31 2E }
 		$img1   = { 2F 49 6D 61 67 65 20 2F 57 69 64 74 68 20 32 30 32 20 2F 48 65 69 67 68 74 20 32 34 36 }
