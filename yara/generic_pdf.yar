@@ -49,6 +49,38 @@ rule w9_pdf_IDs {
         and any of ($id*)
 }
 
+rule w9_pdf_images {
+    meta:
+        author      = "kyle eaton"
+        date        = "2026-05-12"
+        description = "pdfs with images associated with FAKE w9s and invoices, often the signatures or fake company logos"
+    strings:
+        $header           = { 25 50 44 46 2D 31 2E }
+        $jpg_signature_01 = { 60 1E 46 70 7A 8A 00 D5 A2 8A 28 00 A2 8A 28 00 A2 8A 28 00 A8 16 EA D5 EE 1E D1 25 46 9A 30 0B 46 }
+        $jpg_signature_02 = { B7 D2 2E 00 3D EB E0 AF FC 15 F3 F6 EB F8 DF F0 8F E1 97 C6 BF 86 9F F0 45 5F DA 83 E2 07 C2 4F }
+    condition:
+        $header at 0
+        and any of ($jpg_*)
+}
+
+rule w9_pdf_fonts {
+    meta:
+        author      = "kyle eaton"
+        date        = "2026-05-12"
+        description = "PDFs with specific fonts (based on type/length), as observed in fake w9 messages"
+    strings:
+        $header     = { 25 50 44 46 2D 31 2E }
+        $font_17_01 = { 2F 4C 65 6E 67 74 68 20 36 36 34 0A 2F 53 75 62 74 79 70 65 20 2F 54 79 70 65 31 43 }
+        $font_17_02 = { 2F 4C 65 6E 67 74 68 20 32 31 32 33 0A 2F 53 75 62 74 79 70 65 20 2F 54 79 70 65 31 43 }
+        $font_17_03 = { 2F 4C 65 6E 67 74 68 20 34 37 39 31 0A 2F 53 75 62 74 79 70 65 20 2F 54 79 70 65 31 43 }
+        $font_16_01 = { 2F 4C 65 6E 67 74 68 20 34 36 39 34 2F 53 75 62 74 79 70 65 2F 54 79 70 65 31 43 }
+        $font_16_02 = { 2F 4C 65 6E 67 74 68 20 36 36 33 2F 53 75 62 74 79 70 65 2F 54 79 70 65 31 43 }
+        $font_16_03 = { 2F 4C 65 6E 67 74 68 20 32 31 31 31 2F 53 75 62 74 79 70 65 2F 54 79 70 65 31 43 }
+    condition:
+        $header at 0
+        and (all of ($font_17_*) or all of ($font_16_*))
+}
+
 rule invoice_pdf_01 {
     meta:
         author = "kyle eaton"
