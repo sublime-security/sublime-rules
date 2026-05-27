@@ -19,7 +19,7 @@ source: |
                     'dependent (coverage|verification)',
                     '(health|dental|vision|insurance|medical) enrol{1,2}ment',
                     'employee\srewards',
-                    'allowance\s(adjustment|modification)'
+                    'allowance\s(?:adjustment|modification)'
     )
     or regex.icontains(body.current_thread.text,
                        'benefit(s)? (plan|choice|selection|deadline|period)',
@@ -51,7 +51,10 @@ source: |
     ),
     any(ml.nlu_classifier(body.current_thread.text).intents, .name != "benign"),
     (
-      (length(body.current_thread.text) < 250 and length(attachments) == 1)
+      (
+        length(body.current_thread.text) < 250
+        and length(filter(attachments, .content_type != "message/rfc822")) == 1
+      )
       or (body.current_thread.text is null and length(attachments) == 1)
     ),
     // lure in attachment
@@ -73,28 +76,6 @@ source: |
                   )
           )
       )
-    ),
-    any(filter(attachments,
-               .file_type in $file_types_images
-               or .file_extension in $file_extensions_macros
-               or .file_type == "pdf"
-        ),
-        any(filter(file.explode(.),
-                   .scan.qr.type == "url"
-                   and any(recipients.to,
-                           .email.domain.valid
-                           and (
-                             strings.icontains(..scan.qr.url.url, .email.email)
-                             or any(beta.scan_base64(..scan.qr.url.url,
-                                                     format="url"
-                                    ),
-                                    strings.icontains(., ..email.email)
-                             )
-                           )
-                   )
-            ),
-            .scan.qr.url.url is not null
-        )
     )
   )
   // negate replies
@@ -172,4 +153,4 @@ detection_methods:
 id: "663a0d22-2512-553e-b713-eb7d7189a780"
 og_id: "5a6eb5a8-2d91-5ed8-a0d2-fb3cc2fef40b"
 testing_pr: 4520
-testing_sha: f48d4c4bbb8cd85a41e08c73546a3be51cacb22d
+testing_sha: 6153cbb4ad60fe57a737272597d20dd8e4d82068
