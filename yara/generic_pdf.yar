@@ -307,3 +307,31 @@ rule enc_pdf_image_sizes {
 		and all of ($img*)
 		and @img1 < @img2
 }
+
+rule w9_pdf_invoice_images {
+	meta:
+		author      = "kyle eaton"
+		date        = "2026-05-15"
+		description = "matching images within invoices in a subset of w9 pdfs"
+	strings:
+		$header                  = { 25 50 44 46 2D 31 2E }
+		$jpg_001_smaller_image   = { 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 40 00 00 00 05 05 02 10 84 21 08 42 10 84 21 08 42 10 84 21 08 42 10 84 21 08 42 10 84 21 08 42 10 84 21 08 42 10 84 21 08 42 10 84 21 08 42 10 84 21 08 42 10 84 21 08 42 10 84 21 08 42 10 }
+		$jpg_outline_overlap_002 = { 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 02 4F 87 C3 E1 F0 F8 7C 3E 1F 0F 87 C3 E1 F0 F8 7C 3E 1F 0F 87 C3 E1 F0 F8 7C 3E 1F 0F 87 C3 E1 F0 F8 7C 3E 1F 0F 87 C3 E1 F0 F8 7C 3E 1F 0F 87 C3 E1 F0 F8 7C 3E 1F 0F 87 C3 E1 F0 F8 7C 3E 1F 0F 87 C3 E1 F0 F8 7C 3E 1F 0F 87 C3 E1 F0 F8 7C 3E 1F 0F 87 C3 E1 F0 F8 7C 3E 1F 0F 87 C3 E1 F0 F8 7C 3E 1F 0F 87 C3 E1 F0 F8 7C 3E 1F 0F 87 C3 E1 }
+	condition:
+		$header at 0
+		and any of ($jpg_*)
+}
+
+rule w9_pdf_service_agreement_img_objects {
+	meta:
+		author      = "kyle eaton"
+		date        = "2026-05-27"
+		description = "matching the observed service agreements used in a subset of w9 pdfs"
+	strings:
+		$header             = { 25 50 44 46 2D 31 2E }
+		$image_object       = { 2F 49 6D 61 67 65 0A 2F 57 69 64 74 68 20 35 37 32 0A 2F 48 65 69 67 68 74 20 31 35 35 0A }
+		$image_stream_bytes = { 8B 1C 37 2A FA CE 08 E2 11 51 EB 0E }
+	condition:
+		$header at 0
+		and all of them
+}
