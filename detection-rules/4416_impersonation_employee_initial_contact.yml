@@ -13,30 +13,28 @@ source: |
   and (
     strings.starts_with(body.current_thread.text,
                         strings.concat("Hey ",
-                                       regex.iextract(subject.base, '\w+')[0].full_match
+                                       regex.extract(subject.base,
+                                                     '^\P{L}*([\p{L}''-]+)'
+                                       )[0].groups[0],
+                                       ",\n"
                         )
     )
     or strings.starts_with(body.current_thread.text,
                            strings.concat("Hi ",
-                                          regex.iextract(subject.base, '\w+')[0].full_match
+                                          regex.extract(subject.base,
+                                                        '^\P{L}*([\p{L}''-]+)'
+                                          )[0].groups[0],
+                                          ",\n"
                            )
     )
   )
   // ends with the senders display name
   and strings.ends_with(body.current_thread.text,
-                        strings.concat(sender.display_name, ".")
+                        strings.concat("\n", sender.display_name, ".")
   )
   // sender display name not in the actual email address local part
   and any(regex.iextract(sender.display_name, '\w+'),
           .full_match not in~ (sender.email.local_part)
-  )
-  and sender.email.domain.root_domain not in ("linkedin.com")
-  
-  // exclude legitimate password resets with recipient email in link
-  and not any(body.links,
-              any(.href_url.query_params_decoded["email"],
-                  . == recipients.to[0].email.email
-              )
   )
 attack_types:
   - "BEC/Fraud"
@@ -49,4 +47,4 @@ detection_methods:
 id: "2b4a7b23-91fc-52d3-9cbc-b2b1bf299007"
 og_id: "562d02fd-c96e-5954-ae4a-a5e185f1d498"
 testing_pr: 4416
-testing_sha: 0e3031e07c83755999278683435eeee5fa2ce165
+testing_sha: c21547c49e35adfb0665ee40b64074852c0ef457
