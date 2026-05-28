@@ -9,24 +9,41 @@ source: |
   type.inbound
   and (
     length(filter(attachments, .file_type == "docx")) >= 1
-    and body.current_thread.text is null
+    and (
+      // short or null message body
+      (
+        length(body.current_thread.text) < 500 or body.current_thread.text is null
+      )
+      // ignore disclaimers in body length calculation
+      or (
+        any(map(filter(ml.nlu_classifier(body.current_thread.text).entities,
+                       .name == "disclaimer"
+                ),
+                .text
+            ),
+            (length(body.current_thread.text) - length(.)) < 500
+        )
+      )
+    )
   )
   and (
-    // attached docx contains a compensation review themed lure with a QR code and suspicious indicators
+    // attached DOCX contains a compensation review themed lure with a QR code and suspicious indicators
     any(filter(attachments, .file_type == "docx"),
+        // add conditions for DOCX attachment
         (
-          // file name contains reward benefit language
-          regex.icontains(.file_name, '(reward|benefit)[s]')
+          regex.icontains(.file_name,
+                          '(?:salary|pay(?:roll)|bonus|comp(?:ensation|liance|\b)|remuneration|disbursement|incentive|merit|vesting|employee.*(?:reward|benefit)s?)'
+          )
           // recipient email SLD in filename
           or any(recipients.to,
                  strings.icontains(..file_name, .email.domain.sld)
                  and .email.domain.valid
           )
           or regex.icontains(beta.parse_exif(.).title,
-                             'salary|pay(?:roll)|bonus|comp(?:ensation|liance|\b)|remuneration|disbursement|incentive|merit|vesting'
+                             '(?:salary|pay(?:roll)|bonus|comp(?:ensation|liance|\b)|remuneration|disbursement|incentive|merit|vesting|employee.*(?:reward|benefit)s?)'
           )
         )
-        // add conditions for text and any QR code within the attachment
+        // add conditions for text and any QR code within the DOCX attachment
         and (
           // conditions for QR code via text
           any(file.explode(.),
