@@ -5,29 +5,31 @@ severity: "medium"
 source: |
   type.inbound
   and strings.icontains(sender.display_name, 'hubspot')
-  and 2 of (
-    regex.contains(body.current_thread.text, '(?:HubSpot, Inc.|HubSpot)'),
-    strings.icontains(body.current_thread.text, '2 Canal Park Cambridge'),
-    strings.icontains(body.current_thread.text, '25 first street'),
-    strings.icontains(body.current_thread.text, 'MA 02141')
-  )
-  and 2 of (
-    any(ml.nlu_classifier(body.current_thread.text).topics,
-        .name in (
-          "Security and Authentication",
-          "Software and App Updates",
-          "Customer Service and Support"
-        )
-        and .confidence != "low"
-    ),
-    any(ml.nlu_classifier(body.current_thread.text).intents,
-        .name == "cred_theft" and .confidence != "low"
-    ),
-    regex.icontains(body.current_thread.text,
-                    '(?:account|disactiv|deactiv|disabl|delet|profile)'
+  and (
+    // branding elements: copying HubSpot's footer
+    2 of (
+      regex.contains(body.current_thread.text, '(?:HubSpot, Inc\.|HubSpot)'),
+      strings.icontains(body.current_thread.text, '2 Canal Park'),
+      strings.icontains(body.current_thread.text, '25 first street'),
+      strings.icontains(body.current_thread.text, 'MA 02141')
+    )
+    // or typosquatting/confusable "hubspot" in sender domain
+    or (
+      not strings.icontains(strings.replace_confusables(sender.email.domain.domain
+                            ),
+                            'hubspot'
+      )
+      and strings.icontains(sender.email.domain.domain, 'hubsp')
     )
   )
-  and not strings.icontains(sender.email.email, 'hubspot')
+  and not (
+    strings.icontains(sender.email.local_part, 'hubspot')
+    or regex.icontains(sender.email.domain.domain, '^hubspot\.')
+  )
+  // negate if links go to HubSpot's click-tracking domain
+  and not any(body.current_thread.links,
+              .href_url.domain.root_domain == "hubspotlinks.com"
+  )
   // exclude legitimate HubSpot sends
   and not (
     (
@@ -53,6 +55,7 @@ source: |
     sender.email.domain.root_domain in $high_trust_sender_root_domains
     and coalesce(headers.auth_summary.dmarc.pass, false)
   )
+
 attack_types:
   - "Credential Phishing"
 tactics_and_techniques:
