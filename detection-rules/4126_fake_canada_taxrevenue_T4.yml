@@ -4,54 +4,30 @@ type: "rule"
 severity: "medium"
 source: |
   type.inbound
-  and regex.icontains(sender.display_name, '(?:Canada Revenue Agency|\bCRA\b)')
-  and 3 of (
-    any(filter(attachments, .file_type == "pdf"),
-        any(file.explode(.),
-            any(.scan.url.urls, .domain.root_domain == 'vercel.app')
-        )
-    ),
-    network.whois(sender.email.domain).days_old < 90,
-    any(body.links, network.whois(.href_url.domain).days_old <= 365),
-    any(body.links,
-        regex.icontains(.href_url.path,
-                        '\.(msi|exe|lnk|js|vbs|bat|cmd|ps1|hta|wsf|scr)$'
-        )
-    ),
-    regex.icontains(body.current_thread.text,
-                    '(?:cra|canada revenue agency|\bt4\b)'
-    ),
-    regex.icontains(body.current_thread.text,
-                    "(tax?|record|form|document|copy|attachment)"
-    ),
-    regex.icontains(body.current_thread.text,
-                    '\b(review|open(?:ed)|evaluat(?:ed|ion)|assessment|feedback|adjust|change|modification|distribution|details|revis(?:ed|ion)|update(?:d|to))\b'
+  // sender claims to be CRA
+  and (
+    strings.icontains(sender.display_name, 'canada revenue agency')
+    or strings.icontains(sender.display_name, 'agence du revenu du canada')
+    or (
+      // cra display name and cra reference in subject
+      regex.icontains(sender.display_name, '\bcra\b')
+      and regex.icontains(subject.base,
+                          '(?:T4|cra|tax|canada revenue|revenu du canada)'
+      )
     )
   )
+  // nlu cred theft
   and any(ml.nlu_classifier(body.current_thread.text).intents,
-          .name == "cred_theft"
+          .name == "cred_theft" and .confidence != 'low'
   )
-  and any(ml.nlu_classifier(body.current_thread.text).topics,
-          .name in (
-            "Reminders and Notifications",
-            "Security and Authentication",
-            "Request to View Invoice"
-          )
-          and .confidence != "low"
-  )
-  // negate legit cra sender domain
   and not (
-    sender.email.domain.root_domain == 'cra-arc.gc.ca'
-    and coalesce(headers.auth_summary.dmarc.pass, false)
-  )
-  // negate legit senders from merck
-  and not (
-    sender.email.domain.root_domain == 'merck.com'
-    and coalesce(headers.auth_summary.dmarc.pass, false)
-  )
-  // negate highly trusted sender domains unless they fail DMARC authentication
-  and not (
-    sender.email.domain.root_domain in $high_trust_sender_root_domains
+    (
+      // negate highly trusted sender domains
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      // negate legit senders from merck
+      or sender.email.domain.root_domain == "cra-arc.gc.ca"
+    )
+    // enforce auth
     and coalesce(headers.auth_summary.dmarc.pass, false)
   )
 attack_types:
