@@ -1,0 +1,44 @@
+name: "PR# 4564 - Service abuse: Suspicious Datadog alert"
+description: "Message from alert@dtdg.co containing links to URL shorteners or self-service creation platforms."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and sender.email.email == "alert@dtdg.co"
+  // links pointing to free file hosts or url shorteners
+  and (
+    any(body.links,
+        (
+          .href_url.domain.root_domain in $url_shorteners
+          or .href_url.domain.root_domain in $self_service_creation_platform_domains
+        )
+        or (
+          .href_url.domain.domain in $url_shorteners
+          or .href_url.domain.domain in $self_service_creation_platform_domains
+        )
+        // account for rewritten links
+        or (
+          any(.href_url.query_params_decoded["domain"],
+              strings.parse_domain(.).domain in $url_shorteners
+              or strings.parse_domain(.).domain in $self_service_creation_platform_domains
+          )
+        )
+    )
+  )
+
+attack_types:
+  - "Credential Phishing"
+  - "Malware/Ransomware"
+tactics_and_techniques:
+  - "Evasion"
+  - "Free subdomain host"
+detection_methods:
+  - "Sender analysis"
+  - "URL analysis"
+id: "48b7fecb-fe4c-5554-9cda-67c0c17c2d20"
+tags:
+  - created_from_open_prs
+  - rule_status_added
+  - pr_author_peterdj45
+references:
+  - https://github.com/sublime-security/sublime-rules/pull/4564
