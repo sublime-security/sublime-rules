@@ -16,8 +16,12 @@ source: |
     // the display name matches a name on the orgs vip list
     any($org_vips,
         .display_name =~ sender.display_name
-        or strings.concat(.first_name, " ", .last_name) == sender.display_name
-        or strings.concat(.last_name, ", ", .first_name) == sender.display_name
+        or strings.concat(.last_name, ", ", .first_name) =~ sender.display_name
+        or any(regex.extract(.display_name,
+                             '\A(?P<name>.+?)\s*[\(（][^)）]*[)）]\s*\z'
+               ),
+               .named_groups["name"] =~ sender.display_name
+        )
     )
     // or the display name starts with the name on the orgs vip list
     or (
@@ -28,16 +32,6 @@ source: |
           )
           or (
             strings.istarts_with(sender.display_name,
-                                 strings.concat(.first_name, " ", .last_name)
-            )
-            and length(sender.display_name) > length(strings.concat(.first_name,
-                                                                    " ",
-                                                                    .last_name
-                                                     )
-            )
-          )
-          or (
-            strings.istarts_with(sender.display_name,
                                  strings.concat(.last_name, ", ", .first_name)
             )
             and length(sender.display_name) > length(strings.concat(.last_name,
@@ -45,6 +39,12 @@ source: |
                                                                     .first_name
                                                      )
             )
+          )
+          or any(regex.extract(.display_name,
+                               '\A(?P<name>.+?)\s*[\(（][^)）]*[)）]\s*\z'
+                 ),
+                 strings.istarts_with(sender.display_name, .named_groups["name"])
+                 and length(sender.display_name) > length(.named_groups["name"])
           )
       )
       // and we have confidence it's BEC
@@ -119,4 +119,4 @@ detection_methods:
 id: "83f40c96-2ae9-501e-88ca-20a711a01b89"
 og_id: "e42c84b7-9d50-5870-9a5d-311670a14bc1"
 testing_pr: 4513
-testing_sha: 90a3176084fd25d367a7582d78b2cd7bb9c4b8b5
+testing_sha: 8edfcb14502fda5aa8241629f8b4a08bbe1eefc7
