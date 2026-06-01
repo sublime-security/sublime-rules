@@ -308,20 +308,6 @@ rule enc_pdf_image_sizes {
 		and @img1 < @img2
 }
 
-rule w9_pdf_invoice_images {
-	meta:
-		author      = "kyle eaton"
-		date        = "2026-05-15"
-		description = "matching images within invoices in a subset of w9 pdfs"
-	strings:
-		$header                  = { 25 50 44 46 2D 31 2E }
-		$jpg_001_smaller_image   = { 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 40 00 00 00 05 05 02 10 84 21 08 42 10 84 21 08 42 10 84 21 08 42 10 84 21 08 42 10 84 21 08 42 10 84 21 08 42 10 84 21 08 42 10 84 21 08 42 10 84 21 08 42 10 84 21 08 42 10 84 21 08 42 10 }
-		$jpg_outline_overlap_002 = { 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 02 4F 87 C3 E1 F0 F8 7C 3E 1F 0F 87 C3 E1 F0 F8 7C 3E 1F 0F 87 C3 E1 F0 F8 7C 3E 1F 0F 87 C3 E1 F0 F8 7C 3E 1F 0F 87 C3 E1 F0 F8 7C 3E 1F 0F 87 C3 E1 F0 F8 7C 3E 1F 0F 87 C3 E1 F0 F8 7C 3E 1F 0F 87 C3 E1 F0 F8 7C 3E 1F 0F 87 C3 E1 F0 F8 7C 3E 1F 0F 87 C3 E1 F0 F8 7C 3E 1F 0F 87 C3 E1 F0 F8 7C 3E 1F 0F 87 C3 E1 F0 F8 7C 3E 1F 0F 87 C3 E1 }
-	condition:
-		$header at 0
-		and any of ($jpg_*)
-}
-
 rule w9_pdf_service_agreement_img_objects {
 	meta:
 		author      = "kyle eaton"
@@ -348,3 +334,4 @@ rule adobe_sign_lure_banner_images {
         uint32(0) == 0x46445025 and  // "%PDF"
         $hdr and $ftr
 }
+
