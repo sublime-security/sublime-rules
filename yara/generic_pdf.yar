@@ -49,20 +49,6 @@ rule w9_pdf_IDs {
         and any of ($id*)
 }
 
-rule w9_pdf_images {
-    meta:
-        author      = "kyle eaton"
-        date        = "2026-05-12"
-        description = "pdfs with images associated with FAKE w9s and invoices, often the signatures or fake company logos"
-    strings:
-        $header           = { 25 50 44 46 2D 31 2E }
-        $jpg_signature_01 = { 60 1E 46 70 7A 8A 00 D5 A2 8A 28 00 A2 8A 28 00 A2 8A 28 00 A8 16 EA D5 EE 1E D1 25 46 9A 30 0B 46 }
-        $jpg_signature_02 = { B7 D2 2E 00 3D EB E0 AF FC 15 F3 F6 EB F8 DF F0 8F E1 97 C6 BF 86 9F F0 45 5F DA 83 E2 07 C2 4F }
-    condition:
-        $header at 0
-        and any of ($jpg_*)
-}
-
 rule w9_pdf_fonts {
     meta:
         author      = "kyle eaton"
