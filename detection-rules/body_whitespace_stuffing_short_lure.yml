@@ -1,0 +1,76 @@
+name: "Body: HTML whitespace stuffing with short initial message"
+description: "Detects messages that uses HTML-based whitespace padding (repeated br tags, p-nbsp blocks, or div-br wrappers) to push content below the visible fold."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  // not a legitimate thread reply or is indicative of self sender
+  and (
+    (length(headers.references) == 0 and headers.in_reply_to is null)
+    or (
+      length(recipients.to) == 1
+      and length(recipients.cc) == 0
+      and sender.email.email == recipients.to[0].email.email
+    )
+  )
+  // whitespace-stuffed credphish targets single recipients
+  and length(recipients.to) == 1
+  and length(recipients.cc) == 0
+  and length(recipients.bcc) == 0
+  // short lure
+  and length(body.current_thread.text) < 2000
+  // HTML whitespace stuffing
+  and (
+    regex.icontains(body.html.raw, '(?:<br\s*/?\s*>\s*){30,}')
+    or regex.icontains(body.html.raw,
+                       '(?:<p>\s*(?:&nbsp;|&#160;)\s*</p>\s*){10,}'
+    )
+    or regex.icontains(body.html.raw,
+                       '(?:<div[^>]*>\s*<br\s*/?\s*>\s*</div>\s*){20,}'
+    )
+  )
+  // low word count excludes legitimate long threads
+  and regex.count(body.html.display_text, '\S+') < 3000
+  
+  // visible link in current thread pointing to external domain
+  and any(body.current_thread.links,
+          .href_url.domain.root_domain != sender.email.domain.root_domain
+          and .href_url.domain.valid
+          and .href_url.scheme in ("https", "http")
+          and .visible == true
+  )
+  
+  // credential phishing has few visible links - newsletters have many
+  and length(filter(body.current_thread.links,
+                    .href_url.domain.valid
+                    and .href_url.scheme in ("https", "http")
+                    and .visible == true
+             )
+  ) < 10
+  
+  // negate high trust senders that pass auth
+  and not (
+    sender.email.domain.root_domain in $high_trust_sender_root_domains
+    and coalesce(headers.auth_summary.dmarc.pass, false)
+  )
+  
+  // negate authenticated senders with unsubscribe mechanism (marketing)
+  and not (
+    coalesce(headers.auth_summary.dmarc.pass, false)
+    and any(body.current_thread.links,
+            strings.icontains(.display_text, "unsubscribe")
+            or strings.icontains(.href_url.path, "unsubscribe")
+    )
+  )
+tags:
+ - "Attack surface reduction"
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Evasion"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "HTML analysis"
+  - "Header analysis"
+id: "f8a3c1d2-7e4b-4a9f-b6c8-2d1e5f3a7b9c"
