@@ -335,3 +335,16 @@ rule w9_pdf_service_agreement_img_objects {
 		$header at 0
 		and all of them
 }
+
+rule adobe_sign_lure_banner_images {
+	meta:
+		author      = "brandon murphy"
+		date        = "2026-06-01"
+		description = "mathces on observed width/height of abused adobe sign header/footer in a PDF"
+    strings:
+        $hdr = /\/Subtype[ ]?\/Image[^>]{0,80}\/Width[ ]?(1119|1120|1121)[ ]?\/Height[ ]?(372|373|374)/
+        $ftr = /\/Subtype[ ]?\/Image[^>]{0,80}\/Width[ ]?(1063|1064|1065)[ ]?\/Height[ ]?(340|341|342)/
+    condition:
+        uint32(0) == 0x46445025 and  // "%PDF"
+        $hdr and $ftr
+}
