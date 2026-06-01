@@ -9,22 +9,47 @@ type: "rule"
 severity: "high"
 source: |
   type.inbound
-  and any(body.links,
-          .href_url.domain.domain == 'login.microsoftonline.com'
-          and (
-            strings.ilike(.href_url.query_params,
-                          '*offline_access*',
-                          '*.readwrite*',
-                          '*.read*',
-                          '*ctx=*',
-                          '*prompt=none*'
-            )
-            or (
-              strings.icontains(.href_url.path, '/common/reprocess')
-              and strings.icontains(.href_url.query_params, 'ctx=')
-              and strings.icontains(.href_url.query_params, 'sessionId=')
-            )
+  and (
+    // links in email body
+    any(body.links,
+        .href_url.domain.domain == 'login.microsoftonline.com'
+        and (
+          strings.ilike(.href_url.query_params,
+                        '*offline_access*',
+                        '*.readwrite*',
+                        '*.read*',
+                        '*ctx=*',
+                        '*prompt=none*'
           )
+          or (
+            strings.icontains(.href_url.path, '/common/reprocess')
+            and strings.icontains(.href_url.query_params, 'ctx=')
+            and strings.icontains(.href_url.query_params, 'sessionId=')
+          )
+        )
+    )
+    // links in pdf attachments
+    or any(filter(attachments, .file_type == "pdf"),
+           any(file.explode(.),
+               any(.scan.url.urls,
+                   .domain.domain == 'login.microsoftonline.com'
+                   and (
+                     strings.ilike(.query_params,
+                                   '*offline_access*',
+                                   '*.readwrite*',
+                                   '*.read*',
+                                   '*ctx=*',
+                                   '*prompt=none*'
+                     )
+                     or (
+                       strings.icontains(.path, '/common/reprocess')
+                       and strings.icontains(.query_params, 'ctx=')
+                       and strings.icontains(.query_params, 'sessionId=')
+                     )
+                   )
+               )
+           )
+    )
   )
 attack_types:
   - "Credential Phishing"
