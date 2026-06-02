@@ -1,5 +1,5 @@
 name: "PR# 4514 - Brand impersonation: Morgan Stanley"
-description: "Detects messages impersonating Morgan Stanley that contain multiple indicators of credential theft or callback scams, including references to secure email systems, client service centers, financial advisors, and registration processes. The rule identifies spoofed communications by checking for Morgan Stanley branding elements while excluding legitimate domains."
+description: "Detects messages impersonating Morgan Stanley that contain indicators of credential theft or callback scams, including references to secure email systems, client service centers, financial advisors, and registration processes. The rule identifies spoofed communications by checking for Morgan Stanley branding elements while excluding legitimate domains."
 type: "rule"
 severity: "medium"
 source: |
@@ -36,9 +36,8 @@ source: |
     regex.icontains(body.current_thread.text,
                     'Morgan Stanley\s+(?:Smith Barney|Wealth Management|\w+\s+Team)'
     ),
-    strings.icontains(body.current_thread.text, "Member SIPC"),
-    regex.icontains(body.current_thread.text, '©\s*20[0-9]{2}\s*Morgan Stanley'),
     strings.icontains(body.current_thread.text, "one-time registration"),
+    strings.icontains(body.current_thread.text, "see payment activity"),
     regex.icontains(body.current_thread.text,
                     'link will expire on \d{4}-\d{2}-\d{2}'
     ),
@@ -47,33 +46,17 @@ source: |
     )
   )
   and not (
-    sender.email.domain.root_domain in (
-      "adobesign.com",
-      "docusign.net",
-      "compass.com",
-      "etrade.com",
-      "etradefinancial.com",
-      "etradefrommorganstanley.com",
-      "etrademail.com",
-      "fidelity.com",
-      "icapitalnetwork.com",
-      "morganstanley.com",
-      "morganstanley.net",
-      "morganstanleyatwork.com",
-      "morganstanleymufg.com",
-      "morganstanleypwm.com",
-      "ms.com",
-      "msfundservices.com",
-      "msgraystone.com",
-      "myworkday.com",
-      "proxyvote.com",
-      "smithbarney.com",
-      "ultimusleverpoint.com",
-      "webcasts.com",
-      "zendesk.com",
-      "zoom.us"
-    )
+    sender.email.domain.root_domain in ("docusign.net", "morganstanley.com", )
     and coalesce(headers.auth_summary.dmarc.pass, false)
+  )
+  and not (
+    any(headers.hops,
+        any(.fields,
+            .name == "X-ProofpointSecure"
+            and strings.icontains(.value, "Encrypted")
+        )
+    )
+    and any(headers.domains, .root_domain == "pphosted.com")
   )
 attack_types:
   - "Credential Phishing"
