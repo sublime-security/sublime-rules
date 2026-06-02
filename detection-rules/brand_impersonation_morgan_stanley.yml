@@ -36,8 +36,6 @@ source: |
     regex.icontains(body.current_thread.text,
                     'Morgan Stanley\s+(?:Smith Barney|Wealth Management|\w+\s+Team)'
     ),
-    strings.icontains(body.current_thread.text, "Member SIPC"),
-    regex.icontains(body.current_thread.text, '©\s*20[0-9]{2}\s*Morgan Stanley'),
     strings.icontains(body.current_thread.text, "one-time registration"),
     regex.icontains(body.current_thread.text,
                     'link will expire on \d{4}-\d{2}-\d{2}'
@@ -74,6 +72,15 @@ source: |
       "zoom.us"
     )
     and coalesce(headers.auth_summary.dmarc.pass, false)
+  )
+  and not (
+    any(headers.hops,
+        any(.fields,
+            .name == "X-ProofpointSecure"
+            and strings.icontains(.value, "Encrypted")
+        )
+    )
+    and any(headers.domains, .root_domain == "pphosted.com")
   )
 attack_types:
   - "Credential Phishing"
