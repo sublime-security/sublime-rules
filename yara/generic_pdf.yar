@@ -335,3 +335,15 @@ rule adobe_sign_lure_banner_images {
         $hdr and $ftr
 }
 
+rule pdf_lure_image_blurry {
+	meta:
+		author      = "kyle eaton"
+		date        = "2026-06-02"
+		description = "Matches the image lure within some PDF phishing documents."
+	strings:
+		$header = { 25 50 44 46 2D 31 2E }
+		$img_01 = { A0 02 8A 28 CD 00 14 51 9A 33 40 05 14 66 93 34 00 B4 52 66 8C D0 02 D1 49 9A 33 40 0B 45 19 A3 34 00 51 46 68 A0 02 8A 28 A0 02 8A 28 A0 02 8A }
+	condition:
+		$header at 0
+		and $img_01
+}
