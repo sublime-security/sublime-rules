@@ -1,0 +1,31 @@
+name: "PR# 4612 - Attachment: Document with filename matching subject prefix"
+description: "Detects inbound messages containing Word documents where the filename prefix (before underscore) matches the beginning of the email subject line, potentially indicating automated or templated malicious content distribution."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and any(attachments,
+          .file_type in ("doc", "docx")
+          and (
+            // start of file name up to the underscore is the same as the start of the subject
+            any(regex.iextract(.file_name, '^(?P<name>.+?)_'),
+                strings.istarts_with(subject.base, .named_groups["name"])
+            )
+          )
+  )
+  
+attack_types:
+  - "Malware/Ransomware"
+tactics_and_techniques:
+  - "Evasion"
+  - "Social engineering"
+detection_methods:
+  - "File analysis"
+  - "Content analysis"
+id: "446b07e4-659d-55ee-8b87-7b7342d0e310"
+tags:
+  - created_from_open_prs
+  - rule_status_added
+  - pr_author_markmsublime
+references:
+  - https://github.com/sublime-security/sublime-rules/pull/4612
