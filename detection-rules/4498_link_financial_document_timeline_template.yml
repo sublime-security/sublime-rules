@@ -4,14 +4,11 @@ type: "rule"
 severity: "medium"
 source: |
   type.inbound
-  // standard generic greeting
-  and (
-    strings.istarts_with(body.current_thread.text, "dear sir/madam")
-    // expectation of time
-    and regex.icontains(body.current_thread.text,
-                        'will be released|\b[1-4].[1-4]\b.{1,10}days?'
-    )
+  // expectation of time
+  and regex.icontains(body.current_thread.text,
+                      'will be released|\b[1-4].[1-4]\b.{1,10}days?'
   )
+  
   // link is malicious
   and any(body.links,
           // key phrasing or nlu
@@ -42,16 +39,10 @@ source: |
       and length(recipients.cc) == 0
       and sender.email.email == recipients.to[0].email.email
     )
-    // no recipient
+    // the recipient is undisclosed or there are no recipients
     or (
-      (
-        length(recipients.to) == 0
-        and length(recipients.bcc) == 0
-        and length(recipients.cc) == 0
-      )
-      or any(recipients.to,
-             strings.ilike(.display_name, "undisclosed?recipients")
-      )
+      length(recipients.to) == 0
+      or all(recipients.to, .email.domain.valid == false)
     )
   )
 
