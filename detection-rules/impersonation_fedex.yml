@@ -8,14 +8,23 @@ severity: "low"
 source: |
   type.inbound
   and (
-    sender.display_name in~ ('fedex', 'fedex shipment', 'fedex tracking updates')
+    sender.display_name in~ (
+      'fedex',
+      'fedex shipment',
+      'fedex tracking updates'
+    )
     or strings.ilevenshtein(sender.display_name, 'fedex') <= 1
     or regex.icontains(sender.display_name, '^Fed-?ex')
     or strings.ilike(sender.email.domain.domain, '*fedex*')
     or (
       any(ml.logo_detect(file.message_screenshot()).brands, .name == "FedEx")
-      and any(ml.nlu_classifier(body.current_thread.text).entities,
-              .name == "request" and strings.icontains(.text, "signature")
+      and (
+        any(ml.nlu_classifier(body.current_thread.text).entities,
+            .name == "request" and strings.icontains(.text, "signature")
+        )
+        or any(ml.nlu_classifier(body.current_thread.text).entities,
+               .name == "org" and strings.icontains(.text, "FedEx")
+        )
       )
     )
   )
@@ -34,7 +43,7 @@ source: |
     not profile.by_sender().any_messages_benign
     and not profile.by_sender().solicited
   )
-  
+
   // negate highly trusted sender domains unless they fail DMARC authentication
   and (
     (
