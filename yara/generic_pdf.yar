@@ -352,7 +352,7 @@ rule pdf_eCheckLure_format {
 	meta:
 		author      = "kyle eaton"
 		date        = "2026-06-03"
-		description = "matching patterns used in the eCheckRun lures, including link rects and text content."
+		description = "Matching patterns used in the eCheckRun lures, including link rects and text content."
 	strings:
 		$header = { 25 50 44 46 2D 31 2E }
 		$rect1   = { 2F 54 79 70 65 20 2F 41 6E 6E 6F 74 0A 2F 53 75 62 74 79 70 65 20 2F 4C 69 6E 6B 0A 2F 52 65 63 74 20 5B 20 32 30 36 2E 32 35 20 33 39 34 2E 32 35 20 33 38 38 2E 35 20 34 33 39 2E 32 35 20 5D 0A }
