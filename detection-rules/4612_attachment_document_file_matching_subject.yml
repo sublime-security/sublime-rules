@@ -1,0 +1,28 @@
+name: "Attachment: Document with filename matching subject prefix"
+description: "Detects inbound messages containing Word documents where the filename prefix (before underscore) matches the beginning of the email subject line, potentially indicating automated or templated malicious content distribution."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and any(attachments,
+          .file_type in ("doc", "docx")
+          and (
+            // start of file name up to the underscore is the same as the start of the subject
+            any(regex.iextract(.file_name, '^(?P<name>.+?)_'),
+                strings.istarts_with(subject.base, .named_groups["name"])
+            )
+          )
+  )
+  
+attack_types:
+  - "Malware/Ransomware"
+tactics_and_techniques:
+  - "Evasion"
+  - "Social engineering"
+detection_methods:
+  - "File analysis"
+  - "Content analysis"
+id: "446b07e4-659d-55ee-8b87-7b7342d0e310"
+og_id: "e0133499-45b1-5447-90b3-a22783b808f9"
+testing_pr: 4612
+testing_sha: 4225cd6d5e96e74f546e72f2218ecbd19cfea7a9
