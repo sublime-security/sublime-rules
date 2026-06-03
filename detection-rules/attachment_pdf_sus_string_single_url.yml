@@ -8,7 +8,7 @@ source: |
           .file_type == "pdf"
           // a single page pdf
           and beta.parse_exif(.).page_count == 1
-          and any(filter(file.explode(.), .depth == 1),
+          and any(file.explode(.),
                   // the pdf contains specific suspicious wording
                   // these are exact matches when split on new lines extracted from the text of the PDF from the scanPDF scanner
                   any(.scan.strings.strings,
@@ -33,7 +33,8 @@ source: |
                                       'DOCUMENT PREVIEW',
                                       'PREVIEW DOCUMENT',
                                       'VIEW REMITTANCE COPY HERE',
-                                      'shared a file with you'
+                                      'shared a file with you',
+                                      'check your personal forecast',
                       )
                   )
                   // fake error messages
@@ -49,7 +50,28 @@ source: |
                     and 'Some additional information here' in~ .scan.strings.strings
                   )
           )
-          and any(file.explode(.), .depth == 0 and length(.scan.url.urls) == 1)
+          and any(file.explode(.),
+                  .depth == 0
+                  and length(filter(.scan.url.urls,
+                                    // remove mailto: links
+                                    not strings.istarts_with(.url, 'mailto:')
+                                    and not strings.istarts_with(.url, 'email:')
+                                    // remove links found in exiftool output producer/creator
+                                    and not any([
+                                                  ..scan.exiftool.producer,
+                                                  ..scan.exiftool.creator
+                                                ],
+                                                . is not null
+                                                and strings.icontains(.,
+                                                                      ..domain.domain
+                                                )
+                                    )
+                                    and not .domain.root_domain in (
+                                      'pdf-tools.com'
+                                    )
+                             )
+                  ) == 1
+          )
   )
 attack_types:
   - "Credential Phishing"
