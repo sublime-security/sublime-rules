@@ -5,9 +5,10 @@ severity: "high"
 source: |
   type.inbound
   and sender.email.email == "alert@dtdg.co"
+  and length(body.current_thread.text) < 1000
   // links pointing to free file hosts or url shorteners
   and (
-    any(body.links,
+    any(filter(body.links, .parser == "hyperlink"),
         (
           .href_url.domain.root_domain in $url_shorteners
           or .href_url.domain.root_domain in $self_service_creation_platform_domains
@@ -24,6 +25,60 @@ source: |
           )
         )
     )
+    // quarantine message lure
+    or (
+      3 of (
+        strings.ilike(body.current_thread.text, "*review*"),
+        strings.ilike(body.current_thread.text, "*incoming*"),
+        strings.ilike(body.current_thread.text, "*release*"),
+        strings.ilike(body.current_thread.text, "*quarantine*"),
+        strings.ilike(body.current_thread.text, "*messages*"),
+        strings.ilike(body.current_thread.text, "*server error*"),
+        strings.ilike(body.current_thread.text, "*blocked*"),
+        strings.ilike(body.current_thread.text, "*prevented*"),
+        strings.ilike(body.current_thread.text, "*validation*"),
+        strings.ilike(body.current_thread.text, "*notification*"),
+        strings.ilike(body.current_thread.text, "*kindly*"),
+        strings.ilike(body.current_thread.text, "*on hold*"),
+        strings.ilike(body.current_thread.text, "*held*"),
+        strings.ilike(body.current_thread.text, "*pending*"),
+        strings.ilike(body.current_thread.text, "*stuck*"),
+        strings.like(body.current_thread.text, "* MX *")
+      )
+      and (
+        any(body.links,
+            regex.icontains(.display_text,
+                            "quarantine",
+                            "security",
+                            "release",
+                            "message",
+                            "delete",
+                            "recover",
+                            "SSO",
+                            "sign in"
+            )
+        )
+        or (
+          length(body.links) < 3
+          and any(body.links,
+                  any(recipients.to,
+                      .email.domain.root_domain == ..display_url.domain.root_domain
+                      and ..mismatched
+                  )
+          )
+        )
+      )
+    )
+    // fake voicemail notification
+    or (
+      ml.nlu_classifier(body.current_thread.text).language == "english"
+      and (
+        any(ml.nlu_classifier(body.current_thread.text).topics,
+            .confidence == "high"
+            and .name == "Voicemail Call and Missed Call Notifications"
+        )
+      )
+    )
   )
 
 attack_types:
@@ -38,4 +93,4 @@ detection_methods:
 id: "48b7fecb-fe4c-5554-9cda-67c0c17c2d20"
 og_id: "0808411b-5765-5bef-ad52-5d55bd0f36dd"
 testing_pr: 4564
-testing_sha: 6695dba0d2a0ead7dedb85313e2c44df9f9f3579
+testing_sha: a7ad36b5045fab3848ae99fb60f1bc7ae1f97346
