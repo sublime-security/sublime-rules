@@ -50,7 +50,28 @@ source: |
                     and 'Some additional information here' in~ .scan.strings.strings
                   )
           )
-          and any(file.explode(.), .depth == 0 and length(.scan.url.urls) == 1)
+          and any(file.explode(.),
+                  .depth == 0
+                  and length(filter(.scan.url.urls,
+                                    // remove mailto: links
+                                    not strings.istarts_with(.url, 'mailto:')
+                                    and not strings.istarts_with(.url, 'email:')
+                                    // remove links found in exiftool output producer/creator
+                                    and not any([
+                                                  ..scan.exiftool.producer,
+                                                  ..scan.exiftool.creator
+                                                ],
+                                                . is not null
+                                                and strings.icontains(.,
+                                                                      ..domain.domain
+                                                )
+                                    )
+                                    and not .domain.root_domain in (
+                                      'pdf-tools.com'
+                                    )
+                             )
+                  ) == 1
+          )
   )
 attack_types:
   - "Credential Phishing"
