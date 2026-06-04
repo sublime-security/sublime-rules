@@ -347,3 +347,19 @@ rule pdf_lure_image_blurry {
 		$header at 0
 		and $img_01
 }
+
+rule pdf_eCheckLure_format {
+	meta:
+		author      = "kyle eaton"
+		date        = "2026-06-03"
+		description = "Matching patterns used in the eCheckRun lures, including link rects and text content."
+	strings:
+		$header = { 25 50 44 46 2D 31 2E }
+		$rect1   = { 2F 54 79 70 65 20 2F 41 6E 6E 6F 74 0A 2F 53 75 62 74 79 70 65 20 2F 4C 69 6E 6B 0A 2F 52 65 63 74 20 5B 20 32 30 36 2E 32 35 20 33 39 34 2E 32 35 20 33 38 38 2E 35 20 34 33 39 2E 32 35 20 5D 0A }
+		$rect2   = { 2F 52 65 63 74 20 5B 20 34 34 2E 32 35 20 35 36 30 2E 37 35 20 32 36 34 2E 37 35 20 35 39 32 2E 32 35 20 5D }
+		$t1  = { 5B 3C 30 30 35 32 3E 20 3C 30 30 36 35 3E 20 3C 30 30 37 36 3E 20 3C 30 30 36 39 3E 20 3C 30 30 37 37 3E 20 3C 30 30 32 30 3E 20 3C 30 30 34 44 3E 20 3C 30 30 37 33 3E 20 3C 30 30 36 31 3E 20 3C 30 30 36 37 3E 20 5D }
+		$t2  = { 5B 3C 30 30 34 46 3E 20 3C 30 30 37 30 3E 20 3C 30 30 36 35 3E 20 3C 30 30 36 45 3E 20 3C 30 30 32 30 3E 20 3C 30 30 35 33 3E 20 3C 30 30 36 33 3E 20 3C 30 30 37 35 3E 20 3C 30 30 37 32 3E 20 3C 30 30 35 30 3E 20 3C 30 30 36 31 3E 20 3C 30 30 37 39 3E 20 3C 30 30 36 44 3E 20 3C 30 30 37 34 3E 20 3C 30 30 34 45 3E 20 3C 30 30 36 46 3E 20 3C 30 30 36 39 3E 20 5D }
+	condition:
+		$header at 0
+		and ($rect1 or $rect2 or $t1 or $t2)
+}
