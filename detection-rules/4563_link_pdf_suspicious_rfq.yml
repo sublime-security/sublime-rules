@@ -4,53 +4,50 @@ type: "rule"
 severity: "high"
 source: |
   type.inbound
-  and (subject.is_reply or subject.is_forward)
-  and length(body.previous_threads) <= 1
-  and length(body.links) > 0
+  and 0 < length(body.current_thread.links) <= 3
   // no PDF attachments
   and length(filter(attachments, .file_type == "pdf")) == 0
-  // the display_text ends in .pdf and goes to a free file host
+  // link display_text ends in .pdf
   and any(body.current_thread.links,
           strings.iends_with(.display_text, '.pdf')
-          and (
-            (
-              .href_url.domain.domain in $free_file_hosts
-              or .href_url.domain.root_domain in $free_file_hosts
-              or .href_url.domain.domain in $self_service_creation_platform_domains
-              or .href_url.domain.root_domain in $self_service_creation_platform_domains
-              or .href_url.domain.root_domain == "html.cafe"
-            )
-            // suspicious sender behaviour
-            or (
-              sender.email.email in map(recipients.to, .email.email)
-              or (
-                length(recipients.to) == 0
-                or (
-                  all(recipients.to, .email.domain.valid == false)
-                  and all(recipients.cc, .email.domain.valid == false)
-                )
-              )
-            )
-          )
           // the display text references a Request for Quotation (RFQ) or Request for Purchase (RFP)
           and (
             regex.icontains(.display_text,
                             '(?:\bR\.?F\.?P\b|\bR\.?F\.?Q\b)|(?:Request.for.(?:Quot(e|ation)|Purchas(e|ing)))'
             )
           )
-          // negate links which make use of google icons inside of a bounding box
-          // filter down to the link with the same display text
-          and not any(filter(html.xpath(body.html,
-                                        '//a[img[@src] or .//img[@src]][.//div[contains(@style, "border:1px solid")] or ancestor::div[contains(@style, "border:1px solid")]]'
-                             ).nodes,
-                             // the display text is the link we're inspecting
-                             ..display_text == .display_text
-                      ),
-                      // inside this is a reference to the google icon
-                      strings.icontains(.raw, 'gstatic.com/docs/doclist/images/')
+          and (
+            // suspicious link destination
+            (
+              .href_url.domain.domain in $free_file_hosts
+              or .href_url.domain.root_domain in $free_file_hosts
+              or .href_url.domain.domain in $self_service_creation_platform_domains
+              or .href_url.domain.root_domain in $self_service_creation_platform_domains
+            )
+            // suspicious sender behaviour
+            or (
+              sender.email.domain.root_domain in $free_email_providers
+              or sender.email.email in map(recipients.to, .email.email)
+              or length(recipients.to) == 0
+              or (
+                all(recipients.to, .email.domain.valid == false)
+                and all(recipients.cc, .email.domain.valid == false)
+              )
+            )
           )
   )
-  
+  // additional suspicious indicator
+  and (
+    any(ml.nlu_classifier(body.current_thread.text).intents,
+        .name in ("cred_theft", "bec") and .confidence != "low"
+    )
+    or strings.ilike(body.current_thread.text,
+                     "*kindly*",
+                     "*find attached*",
+                     "attachment",
+                     "*secure*"
+    )
+  )
 
 attack_types:
   - "BEC/Fraud"
