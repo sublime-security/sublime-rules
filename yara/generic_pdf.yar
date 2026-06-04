@@ -307,3 +307,43 @@ rule enc_pdf_image_sizes {
 		and all of ($img*)
 		and @img1 < @img2
 }
+
+rule w9_pdf_service_agreement_img_objects {
+	meta:
+		author      = "kyle eaton"
+		date        = "2026-05-27"
+		description = "matching the observed service agreements used in a subset of w9 pdfs"
+	strings:
+		$header             = { 25 50 44 46 2D 31 2E }
+		$image_object       = { 2F 49 6D 61 67 65 0A 2F 57 69 64 74 68 20 35 37 32 0A 2F 48 65 69 67 68 74 20 31 35 35 0A }
+		$image_stream_bytes = { 8B 1C 37 2A FA CE 08 E2 11 51 EB 0E }
+	condition:
+		$header at 0
+		and all of them
+}
+
+rule adobe_sign_lure_banner_images {
+	meta:
+		author      = "brandon murphy"
+		date        = "2026-06-01"
+		description = "mathces on observed width/height of abused adobe sign header/footer in a PDF"
+    strings:
+        $hdr = /\/Subtype[ ]?\/Image[^>]{0,80}\/Width[ ]?(1119|1120|1121)[ ]?\/Height[ ]?(372|373|374)/
+        $ftr = /\/Subtype[ ]?\/Image[^>]{0,80}\/Width[ ]?(1063|1064|1065)[ ]?\/Height[ ]?(340|341|342)/
+    condition:
+        uint32(0) == 0x46445025 and  // "%PDF"
+        $hdr and $ftr
+}
+
+rule pdf_lure_image_blurry {
+	meta:
+		author      = "kyle eaton"
+		date        = "2026-06-02"
+		description = "Matches the image lure within some PDF phishing documents."
+	strings:
+		$header = { 25 50 44 46 2D 31 2E }
+		$img_01 = { A0 02 8A 28 CD 00 14 51 9A 33 40 05 14 66 93 34 00 B4 52 66 8C D0 02 D1 49 9A 33 40 0B 45 19 A3 34 00 51 46 68 A0 02 8A 28 A0 02 8A 28 A0 02 8A }
+	condition:
+		$header at 0
+		and $img_01
+}
