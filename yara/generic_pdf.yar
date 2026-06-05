@@ -363,3 +363,16 @@ rule pdf_eCheckLure_format {
 		$header at 0
 		and ($rect1 or $rect2 or $t1 or $t2)
 }
+
+rule pdf_encrypted_cred_phish_001 {
+	meta:
+		author      = "kyle eaton"
+		date        = "2026-06-04"
+		description = "Matching the image size and other parameters for an encrypted PDF leading to cred phishing."
+	strings:
+		$header   = { 25 50 44 46 2D 31 2E }
+		$img_size = { 2F 49 6D 61 67 65 0A 2F 57 69 64 74 68 20 31 30 31 38 0A 2F 48 65 69 67 68 74 20 31 31 32 32 }
+	condition:
+		$header at 0
+		and $img_size
+}
