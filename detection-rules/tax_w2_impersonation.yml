@@ -4,7 +4,6 @@ type: "rule"
 severity: "medium"
 source: |
   type.inbound
-  and length(body.current_thread.text) < 500
   and sender.email.local_part in~ (
     "contact",
     "no-reply",
@@ -35,10 +34,17 @@ source: |
   )
   // body text containing variations of "W2"
   and (
-    strings.icontains(body.current_thread.text, "w2")
-    or strings.icontains(body.current_thread.text, "W-2")
-    or strings.icontains(body.current_thread.text, "Ẇ-2's")
-    or strings.icontains(body.current_thread.text, "wage")
+    (
+      strings.icontains(body.current_thread.text, "w2")
+      or strings.icontains(body.current_thread.text, "W-2")
+      or strings.icontains(body.current_thread.text, "Ẇ-2")
+      or strings.icontains(body.current_thread.text, "wage statements")
+    )
+    or (
+      length(headers.reply_to) > 0
+      and all(headers.reply_to, network.whois(.email.domain).days_old <= 60)
+      and strings.icontains(body.current_thread.text, "W-2")
+    )
   )
   and any(ml.nlu_classifier(body.current_thread.text).entities,
           .name == "request"
