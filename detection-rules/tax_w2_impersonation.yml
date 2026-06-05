@@ -1,10 +1,10 @@
-name: "BEC Impersonation: Tax document request"
+name: "BEC: Tax document request"
 description: "Detects messages requesting W-2 tax documents or related tax information that exhibit authentication failures such as DMARC or SPF failures, or mismatched reply-to addresses. The rule identifies senders using common administrative local parts and filters for messages containing W-2 language combined with request entities detected through natural language processing."
 type: "rule"
 severity: "medium"
 source: |
   type.inbound
-  // and 150 < length(body.current_thread.text) < 750
+  and length(body.current_thread.text) < 500
   and sender.email.local_part in~ (
     "contact",
     "no-reply",
@@ -19,25 +19,27 @@ source: |
   
   // mismatched From and Reply-to
   and (
-    (
-      length(headers.reply_to) > 0
-      and all(headers.reply_to,
-              .email.domain.root_domain != sender.email.domain.root_domain
-      )
+    length(headers.reply_to) > 0
+    and all(headers.reply_to,
+            .email.domain.root_domain != sender.email.domain.root_domain
     )
-    or not headers.auth_summary.dmarc.pass
-    or not headers.auth_summary.spf.pass
   )
   
   // W-2 Language with a request
   and (
-    strings.contains(strings.replace_confusables(subject.base), 'W-2')
-    or strings.icontains(subject.base, 'w2')
+    strings.contains(subject.base, 'W-2')
     or strings.icontains(subject.base, 'wage')
     or strings.icontains(subject.base, 'tax form')
     or strings.icontains(subject.base, 'irs')
+    or regex.icontains(subject.base, 'w2\b')
   )
-  and strings.contains(body.current_thread.text, 'W-2')
+  // body text containing variations of "W2"
+  and (
+    strings.icontains(body.current_thread.text, "w2")
+    or strings.icontains(body.current_thread.text, "W-2")
+    or strings.icontains(body.current_thread.text, "Ẇ-2's")
+    or strings.icontains(body.current_thread.text, "wage")
+  )
   and any(ml.nlu_classifier(body.current_thread.text).entities,
           .name == "request"
   )
@@ -49,7 +51,6 @@ source: |
                   "*OneNote*",
                   "*Microsoft*"
     )
-    and coalesce(headers.auth_summary.dmarc.pass, false)
   )
   and not any(ml.nlu_classifier(body.current_thread.text).intents,
               .name == "benign" and .confidence == "high"
