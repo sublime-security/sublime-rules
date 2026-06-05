@@ -12,6 +12,8 @@ Usage:
 
 import sys
 import re
+import time
+import random
 import argparse
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -31,6 +33,14 @@ except ImportError:
 API_URL = "https://play.sublime.security/v1/rules/format"
 MAX_WORKERS = 100
 
+# Retry config for transient API failures (e.g. intermittent 403s from the
+# edge/WAF under the high-concurrency fan-out, rate limiting, gateway errors).
+MAX_RETRIES = 4
+RETRY_BASE_DELAY = 1.0  # seconds; exponential backoff with jitter
+# Transient statuses worth retrying. 500 is intentionally excluded: it's a
+# deterministic API bug with empty comment lines, so retrying never helps.
+RETRYABLE_STATUSES = {403, 429, 502, 503, 504}
+
 # Files to exclude from formatting (e.g., special comment formatting)
 EXCLUDE_FILES = {
     "attachment_cve_2023_38831.yml",
@@ -38,22 +48,56 @@ EXCLUDE_FILES = {
 
 
 def format_source(source: str) -> str:
-    """Format MQL source using the Sublime API."""
-    resp = requests.post(API_URL, json={
-        "source": source,
-        "max_line_width": 80,
-        "indent": 2,
-        "prefer_multi_line_root": True,
-    }, timeout=30)
+    """Format MQL source using the Sublime API.
 
-    # Handle 500 errors gracefully - this is a known API bug with empty comment lines
-    if resp.status_code == 500:
-        error = requests.HTTPError("500 Server Error")
-        error.response = resp
-        raise error
+    Retries on transient failures (see RETRYABLE_STATUSES and connection-level
+    errors) with exponential backoff plus jitter. The jitter matters because up
+    to MAX_WORKERS requests fan out concurrently, so a synchronized retry would
+    just re-trigger the same edge throttling. 500s are not retried (known
+    deterministic API bug) and are raised immediately for graceful per-file
+    handling upstream.
+    """
+    last_exc: Exception | None = None
 
-    resp.raise_for_status()
-    return resp.json()["source"]
+    for attempt in range(MAX_RETRIES):
+        try:
+            resp = requests.post(API_URL, json={
+                "source": source,
+                "max_line_width": 80,
+                "indent": 2,
+                "prefer_multi_line_root": True,
+            }, timeout=30)
+
+            # Handle 500 errors gracefully - this is a known API bug with empty
+            # comment lines. Not retryable, so surface it immediately.
+            if resp.status_code == 500:
+                error = requests.HTTPError("500 Server Error")
+                error.response = resp
+                raise error
+
+            if resp.status_code in RETRYABLE_STATUSES:
+                error = requests.HTTPError(f"{resp.status_code} Server Error")
+                error.response = resp
+                raise error
+
+            resp.raise_for_status()
+            return resp.json()["source"]
+        except requests.HTTPError as e:
+            status = getattr(getattr(e, "response", None), "status_code", None)
+            if status not in RETRYABLE_STATUSES:
+                raise
+            last_exc = e
+        except requests.RequestException as e:
+            # Connection errors, timeouts, etc. - transient, worth retrying.
+            last_exc = e
+
+        # Don't sleep after the final attempt.
+        if attempt < MAX_RETRIES - 1:
+            delay = RETRY_BASE_DELAY * (2 ** attempt) + random.uniform(0, 1)
+            time.sleep(delay)
+
+    # Retry budget exhausted - propagate the last error to the caller.
+    raise last_exc
 
 
 def extract_source(content: str) -> str | None:
