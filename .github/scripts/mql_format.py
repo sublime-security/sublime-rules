@@ -75,11 +75,8 @@ def format_source(source: str) -> str:
                 error.response = resp
                 raise error
 
-            if resp.status_code in RETRYABLE_STATUSES:
-                error = requests.HTTPError(f"{resp.status_code} Server Error")
-                error.response = resp
-                raise error
-
+            # Let requests build the HTTPError (accurate reason phrase + URL).
+            # The handler below decides whether the status is retryable.
             resp.raise_for_status()
             return resp.json()["source"]
         except requests.HTTPError as e:
@@ -96,8 +93,14 @@ def format_source(source: str) -> str:
             delay = RETRY_BASE_DELAY * (2 ** attempt) + random.uniform(0, 1)
             time.sleep(delay)
 
-    # Retry budget exhausted - propagate the last error to the caller.
-    raise last_exc
+    # Retry budget exhausted - propagate the last error to the caller. The
+    # guard keeps typing/control flow unambiguous; last_exc is only None if the
+    # loop never ran (e.g. a misconfigured MAX_RETRIES <= 0).
+    if last_exc is not None:
+        raise last_exc
+    raise RuntimeError(
+        f"format_source made no attempts (MAX_RETRIES={MAX_RETRIES})"
+    )
 
 
 def extract_source(content: str) -> str | None:
