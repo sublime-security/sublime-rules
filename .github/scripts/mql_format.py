@@ -47,7 +47,7 @@ EXCLUDE_FILES = {
 }
 
 
-def format_source(source: str) -> str:
+def format_source(source: str, label: str = "") -> str:
     """Format MQL source using the Sublime API.
 
     Retries on transient failures (see RETRYABLE_STATUSES and connection-level
@@ -56,10 +56,18 @@ def format_source(source: str) -> str:
     just re-trigger the same edge throttling. 500s are not retried (known
     deterministic API bug) and are raised immediately for graceful per-file
     handling upstream.
+
+    Each retry is logged with the attempt number, the failure, the per-attempt
+    latency, and a slice of the response body. That detail is deliberate: it's
+    what tells us *why* the endpoint is failing - fast 403s with a WAF/access
+    body point at throttling or an IP block, while attempts that crawl toward
+    the 30s timeout point at endpoint overload (where fewer workers might help).
     """
     last_exc: Exception | None = None
+    prefix = f"{label}: " if label else ""
 
     for attempt in range(MAX_RETRIES):
+        start = time.monotonic()
         try:
             resp = requests.post(API_URL, json={
                 "source": source,
@@ -80,18 +88,29 @@ def format_source(source: str) -> str:
             resp.raise_for_status()
             return resp.json()["source"]
         except requests.HTTPError as e:
+            elapsed = time.monotonic() - start
             status = getattr(getattr(e, "response", None), "status_code", None)
             if status not in RETRYABLE_STATUSES:
                 raise
             last_exc = e
+            resp_obj = getattr(e, "response", None)
+            body = " ".join(resp_obj.text[:200].split()) if resp_obj is not None else ""
+            reason = f"HTTP {status} in {elapsed:.1f}s" + (f" - body: {body}" if body else "")
         except requests.RequestException as e:
             # Connection errors, timeouts, etc. - transient, worth retrying.
+            elapsed = time.monotonic() - start
             last_exc = e
+            reason = f"{type(e).__name__} in {elapsed:.1f}s: {e}"
 
         # Don't sleep after the final attempt.
         if attempt < MAX_RETRIES - 1:
             delay = RETRY_BASE_DELAY * (2 ** attempt) + random.uniform(0, 1)
+            print(f"[retry] {prefix}attempt {attempt + 1}/{MAX_RETRIES} failed - "
+                  f"{reason}; retrying in {delay:.1f}s", flush=True)
             time.sleep(delay)
+        else:
+            print(f"[retry] {prefix}attempt {attempt + 1}/{MAX_RETRIES} failed - "
+                  f"{reason}; retries exhausted", flush=True)
 
     # Retry budget exhausted - propagate the last error to the caller. The
     # guard keeps typing/control flow unambiguous; last_exc is only None if the
@@ -165,7 +184,7 @@ def process_file(file_data: dict) -> dict:
     source = file_data["source"]
 
     try:
-        formatted_source = format_source(source)
+        formatted_source = format_source(source, label=path.name)
         changed = normalize(formatted_source) != normalize(source)
         return {
             "path": path,
