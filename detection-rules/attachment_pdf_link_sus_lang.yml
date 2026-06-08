@@ -11,7 +11,7 @@ source: |
           and any(file.explode(.),
                   .depth == 0
                   // reduce fps by limiting the length to a single link
-                  and length(.scan.url.urls) == 1
+                  and length(distinct(.scan.url.urls, .domain.domain)) == 1
                   and any(filter(.scan.url.urls,
                                  // remove mailto: links
                                  not strings.istarts_with(.url, 'mailto:')
@@ -54,6 +54,17 @@ source: |
                             // a common fp in the .au for a payment system
                             and not strings.icontains(ml.link_analysis(.).final_dom.display_text,
                                                       'View Podium Message'
+                            )
+                          )
+                          // use OCR of the screenshot 
+                          or (
+                            200 <= ml.link_analysis(.).status_code < 300
+                            and length(beta.ocr(ml.link_analysis(.).screenshot).text
+                            ) < 300
+                            and regex.icontains(beta.ocr(ml.link_analysis(.).screenshot
+                                                ).text,
+                                                '\b(?:(?:re)?view|see|read|click\s+(?:here\s+)?to)[\t\x20]*(?:\S+[\t\x20]*){0,3}[\t\x20]*(?:document|message|now|proceed)',
+                                                '\b(?:request|review)\b.{1,5}\b(?:bid|proposal|agreement|portfolio|contract|settlement|invoice)\b'
                             )
                           )
                           // the title contains high confidence indicators
