@@ -9,7 +9,10 @@ source: |
   // auth passes
   and coalesce(headers.auth_summary.dmarc.pass, false)
   // link is suspicious tlds
-  and any(body.links, .href_url.domain.tld in~ $suspicious_tlds)
+  and any(body.links,
+          .href_url.domain.tld in~ $suspicious_tlds
+  //  and sender.email.domain.tld == .href_url.domain.tld
+  )
   // ML signals credential phishing
   and any(ml.nlu_classifier(body.current_thread.text).intents,
           .name == "cred_theft" and .confidence != "low"
@@ -17,6 +20,8 @@ source: |
   // exclude json attachments from legit services
   // all will provide samples without attachments as well
   and all(attachments, .file_extension != "json")
+  // exclude atlassian.jira messages
+  and not (strings.iends_with(headers.references[0], "atlassian.jira"))
 attack_types:
   - "Credential Phishing"
 tactics_and_techniques:
