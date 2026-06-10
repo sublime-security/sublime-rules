@@ -6,81 +6,29 @@ source: |
   type.inbound
   and sender.email.email == "alert@dtdg.co"
   and length(body.current_thread.text) < 1000
-  // links pointing to free file hosts or url shorteners
   and (
-    any(filter(body.links, .parser == "hyperlink"),
-        (
-          .href_url.domain.root_domain in $url_shorteners
-          or .href_url.domain.root_domain in $self_service_creation_platform_domains
-        )
-        or (
-          .href_url.domain.domain in $url_shorteners
-          or .href_url.domain.domain in $self_service_creation_platform_domains
-        )
-        // account for rewritten links
-        or (
-          any(.href_url.query_params_decoded["domain"],
-              strings.parse_domain(.).domain in $url_shorteners
-              or strings.parse_domain(.).domain in $self_service_creation_platform_domains
-          )
-        )
-    )
-    // quarantine message lure
-    or (
-      3 of (
-        strings.ilike(body.current_thread.text, "*review*"),
-        strings.ilike(body.current_thread.text, "*incoming*"),
-        strings.ilike(body.current_thread.text, "*release*"),
-        strings.ilike(body.current_thread.text, "*quarantine*"),
-        strings.ilike(body.current_thread.text, "*messages*"),
-        strings.ilike(body.current_thread.text, "*server error*"),
-        strings.ilike(body.current_thread.text, "*blocked*"),
-        strings.ilike(body.current_thread.text, "*prevented*"),
-        strings.ilike(body.current_thread.text, "*validation*"),
-        strings.ilike(body.current_thread.text, "*notification*"),
-        strings.ilike(body.current_thread.text, "*kindly*"),
-        strings.ilike(body.current_thread.text, "*on hold*"),
-        strings.ilike(body.current_thread.text, "*held*"),
-        strings.ilike(body.current_thread.text, "*pending*"),
-        strings.ilike(body.current_thread.text, "*stuck*"),
-        strings.like(body.current_thread.text, "* MX *")
+    (
+      any(filter(body.links,
+                 .parser == "hyperlink"
+                 and not any(.href_url.query_params_decoded["domain"],
+                             strings.parse_domain(.).root_domain == "datadoghq.com"
+                 )
+          ),
+          .href_url.domain.root_domain != "datadoghq.com"
+          and .href_url.domain.root_domain != "aka.ms"
       )
-      and (
-        any(body.links,
-            regex.icontains(.display_text,
-                            "quarantine",
-                            "security",
-                            "release",
-                            "message",
-                            "delete",
-                            "recover",
-                            "SSO",
-                            "sign in"
-            )
-        )
-        or (
-          length(body.links) < 3
-          and any(body.links,
-                  any(recipients.to,
-                      .email.domain.root_domain == ..display_url.domain.root_domain
-                      and ..mismatched
-                  )
-          )
-        )
+      and regex.icontains(body.current_thread.text,
+                          'quarantine|held for.{0,10}review|secure message|voice\s?mail'
       )
     )
-    // fake voicemail notification
     or (
       ml.nlu_classifier(body.current_thread.text).language == "english"
-      and (
-        any(ml.nlu_classifier(body.current_thread.text).topics,
-            .confidence == "high"
-            and .name == "Voicemail Call and Missed Call Notifications"
-        )
+      and any(ml.nlu_classifier(body.current_thread.text).topics,
+              .confidence == "high"
+              and .name == "Voicemail Call and Missed Call Notifications"
       )
     )
   )
-
 attack_types:
   - "Credential Phishing"
   - "Malware/Ransomware"
