@@ -1,0 +1,24 @@
+name: "Attachment: MS OOXML file created by Administrator with zero edit time"
+description: "Detects inbound PowerPoint (.pptx) and other MS OOXML attachments where the file creator is listed as 'Administrator' and the total edit time is zero minutes, while missing the 'TitlesOfParts' metadata field. This pattern may indicate programmatically generated or suspicious presentation files."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and any(filter(attachments, .file_type in ("pptx", "docx")),
+          beta.parse_exif(.).creator == "Administrator"
+          and any(beta.parse_exif(.).fields,
+                  .key == "TotalEditTime" and .value == "0"
+          )
+          and not 'TitlesOfParts' in map(beta.parse_exif(.).fields, .key)
+  )
+attack_types:
+  - "Malware/Ransomware"
+tactics_and_techniques:
+  - "Evasion"
+detection_methods:
+  - "Exif analysis"
+  - "File analysis"
+id: "65960c17-c2be-5f83-8ea9-5a479a6db2b1"
+og_id: "e6175f24-12b5-52a7-8c76-74ee289a6c82"
+testing_pr: 4659
+testing_sha: 7e3ddf1322fbc6d5a46f3ef81a8aabdeba319cb3
