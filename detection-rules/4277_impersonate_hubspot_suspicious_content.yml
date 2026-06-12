@@ -5,31 +5,24 @@ severity: "medium"
 source: |
   type.inbound
   and strings.icontains(sender.display_name, 'hubspot')
+  
+  // domain typosquats "hubspot" via character substitution/confusables
   and (
-    // branding elements: copying HubSpot's footer
-    2 of (
-      regex.contains(body.current_thread.text, '(?:HubSpot, Inc\.|HubSpot)'),
-      strings.icontains(body.current_thread.text, '2 Canal Park'),
-      strings.icontains(body.current_thread.text, '25 first street'),
-      strings.icontains(body.current_thread.text, 'MA 02141')
+    not strings.icontains(strings.replace_confusables(sender.email.domain.domain),
+                          'hubspot'
     )
-    // or typosquatting/confusable "hubspot" in sender domain
-    or (
-      not strings.icontains(strings.replace_confusables(sender.email.domain.domain
-                            ),
-                            'hubspot'
-      )
-      and strings.icontains(sender.email.domain.domain, 'hubsp')
-    )
+    and strings.icontains(sender.email.domain.domain, 'hubsp')
   )
   and not (
     strings.icontains(sender.email.local_part, 'hubspot')
     or regex.icontains(sender.email.domain.domain, '^hubspot\.')
   )
+  
   // negate if links go to HubSpot's click-tracking domain
   and not any(body.current_thread.links,
               .href_url.domain.root_domain == "hubspotlinks.com"
   )
+  
   // exclude legitimate HubSpot sends
   and not (
     (
@@ -55,7 +48,6 @@ source: |
     sender.email.domain.root_domain in $high_trust_sender_root_domains
     and coalesce(headers.auth_summary.dmarc.pass, false)
   )
-
 attack_types:
   - "Credential Phishing"
 tactics_and_techniques:
@@ -70,4 +62,4 @@ detection_methods:
 id: "115bbcb6-186a-5982-a7b7-4f624ef04f51"
 og_id: "5df09a5b-8a87-59be-9a73-bd8765dbcc20"
 testing_pr: 4277
-testing_sha: 8356063f5fc5f982a907c87280e86b86a7860a60
+testing_sha: 1f98db76b0cf80bb364bb5cf3cc1145fee79f0c6
