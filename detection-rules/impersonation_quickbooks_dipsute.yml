@@ -1,0 +1,34 @@
+name: "Brand impersonation: QuickBooks dispute notification"
+description: "Detects messages impersonating QuickBooks or Intuit that reference dispute notifications or resolutions, but originate from unauthorized domains that fail DMARC authentication."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and any([subject.base, sender.display_name],
+          strings.icontains(., 'Quickbooks', 'Intuit')
+  )
+  and any([subject.base, sender.display_name, body.current_thread.text],
+          regex.icontains(., 'Dispute\s+(?:Notification|Resolution)')
+  )
+  and not (
+    sender.email.domain.root_domain in~ (
+      'intuit.com',
+      'turbotax.com',
+      'intuit.ca',
+      'meliopayments.com',
+      'qemailserver.com',
+      'intuit.co.uk',
+      'quickbooksonline.com',
+      'tsheets.com'
+    )
+    and coalesce(headers.auth_summary.dmarc.pass, false)
+  )
+attack_types:
+  - "BEC/Fraud"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+detection_methods:
+  - "Content analysis"
+  - "Sender analysis"
+  - "Header analysis"
+id: "9416b5b7-3850-505c-a283-45a2bc483f81"
