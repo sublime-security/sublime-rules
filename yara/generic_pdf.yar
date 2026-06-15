@@ -390,3 +390,29 @@ rule pdf_fake_invoice_image_font_sizes {
 		$header at 0
 		and $font_width_array and $image_size
 }
+
+rule fake_invoice_pdf_images_01 {
+	meta:
+		author      = "kyle eaton"
+		date        = "2026-06-15"
+		description = "matches PDFs with a specific email icon as part of the lure."
+	strings:
+		$header    = { 25 50 44 46 2D 31 2E }
+		$email_jpg = { 00 00 00 00 00 02 39 DA 7E D0 F5 8E 8A FE DD 05 86 2B 9D 8D 70 8B 5A D9 9E D7 44 E5 E5 33 11 8E }
+	condition:
+		$header at 0 and
+		$email_jpg
+}
+
+rule fake_invoice_pdf_structure_01 {
+	meta:
+		author      = "kyle eaton"
+		date        = "2026-06-15"
+		description = "matches PDFs with a specific link sizes and structure overlaps."
+	strings:
+		$header = { 25 50 44 46 2D 31 2E }
+		$rect1  = { 2F 52 65 63 74 20 5B 33 34 37 2E 32 32 30 35 20 31 39 39 2E 35 36 38 37 20 35 31 34 2E 34 31 33 30 20 32 33 34 2E 31 37 39 37 5D }
+	condition:
+		$header at 0 and
+		$rect1
+}
