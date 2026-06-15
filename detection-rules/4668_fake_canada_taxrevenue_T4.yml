@@ -1,0 +1,53 @@
+name: "Brand impersonation: Canada Revenue Agency (CRA)"
+description: "Detects messages impersonating the Canada Revenue Agency (CRA) in English or French that contain credential theft indicators. The rule identifies senders claiming to be CRA through display names or subject line references, uses natural language understanding to detect credential theft intent, and excludes legitimate senders with proper authentication."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  // sender claims to be CRA
+  and (
+    strings.icontains(sender.display_name, 'canada revenue agency')
+    or strings.icontains(sender.display_name, 'agence du revenu du canada')
+    or (
+      // cra display name and cra reference in subject
+      regex.icontains(sender.display_name, '\bcra\b')
+      and regex.icontains(subject.base,
+                          '(?:T4|cra|tax|canada revenue|revenu du canada)'
+      )
+    )
+  )
+  // nlu classification for the email's text
+  and (
+    any(ml.nlu_classifier(body.current_thread.text).intents,
+        .name == "cred_theft" and .confidence != 'low'
+    )
+    or any(ml.nlu_classifier(body.current_thread.text).entities,
+           .name in ("sender", "org")
+           and .text in ('Canada Revenue Agency', 'Canada Revenue Agency (CRA)')
+    )
+    or ml.nlu_classifier(body.current_thread.text).language == "french"
+  )
+  and not (
+    (
+      // negate highly trusted sender domains
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      // negate legit senders from merck
+      or sender.email.domain.root_domain == "cra-arc.gc.ca"
+    )
+    // enforce auth
+    and coalesce(headers.auth_summary.dmarc.pass, false)
+  )
+attack_types:
+  - "BEC/Fraud"
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Header analysis"
+  - "Sender analysis"
+id: "93f01b45-c449-56d1-8600-631d5ccd0197"
+og_id: "72607c4c-52dc-5df6-b547-54ee321b7a7a"
+testing_pr: 4668
+testing_sha: 7647d1ebabf4d20de70e5db9c13bb19e180e299a
