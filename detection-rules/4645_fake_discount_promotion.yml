@@ -1,12 +1,31 @@
 name: "PR# 4645 - Impersonation: Fake product discount promotion"
-description: "Detects messages containing fake product discount offers with Claim X% Off buttons that link to googleapis.com."
+description: "Detects messages containing fake product discount offers that leads to a googleapis.com domain."
 type: "rule"
 severity: "medium"
 source: |
   type.inbound
-  and regex.icontains(body.html.raw, 'claim \d+% off')
+  and strings.icontains(body.current_thread.text,
+                        "hi {email}",
+                        "participation is voluntary",
+                        "limit one discount",
+                        "limited time offer",
+                        "code",
+                        "survey"
+  )
+  and (
+    regex.icontains(body.current_thread.text, 'claim \d+% off')
+    or regex.icontains(body.current_thread.text, '\d+ question')
+  )
   and any(body.current_thread.links,
           .href_url.domain.root_domain == "googleapis.com"
+  )
+  and any(ml.nlu_classifier(body.current_thread.text).topics,
+          .name in ("Advertising and Promotions")
+  )
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and not (
+    sender.email.domain.root_domain in $high_trust_sender_root_domains
+    and coalesce(headers.auth_summary.dmarc.pass, false)
   )
 
 attack_types:
