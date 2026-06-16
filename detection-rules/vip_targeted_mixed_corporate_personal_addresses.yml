@@ -1,0 +1,77 @@
+name: "VIP targeted with mixed corporate and personal email addresses"
+description: |
+  Detects emails that target executives by sending to both their corporate email address 
+  and personal email domains (Gmail, Yahoo, etc.) in the same message. This pattern can 
+  indicate social engineering attacks attempting to reach executives through multiple 
+  channels to increase success rates or appear more legitimate.
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  
+  // Check if any VIP is among the recipients
+  and any($org_vips,
+          any(recipients.to + recipients.cc + recipients.bcc, 
+              .email.email == ..email
+          )
+  )
+  
+  // Must have recipients from both corporate domains AND personal email providers
+  and any(recipients.to + recipients.cc + recipients.bcc,
+          .email.domain.root_domain in $org_domains
+  )
+  and any(recipients.to + recipients.cc + recipients.bcc,
+          .email.domain.domain in $free_email_providers
+  )
+  
+  // Relatively small recipient list (not mass spam)
+  and length(recipients.to) + length(recipients.cc) + length(recipients.bcc) <= 10
+  
+  // From external sender
+  and sender.email.domain.root_domain not in $org_domains
+  
+  // Unsolicited or suspicious sender
+  and (
+    (
+      profile.by_sender().prevalence in ("new", "outlier")
+      or not profile.by_sender().solicited
+    )
+    or (
+      profile.by_sender().any_messages_malicious_or_spam
+      and not profile.by_sender().any_messages_benign
+    )
+  )
+  
+  // Negate legitimate notifications that might include multiple addresses
+  and not (
+    sender.email.email in (
+      'no-reply@sharepointonline.com',
+      'noreply@github.com',
+      'no-reply@dropbox.com'
+    )
+    and any(ml.nlu_classifier(body.current_thread.text).tags,
+            .name in ("notification", "file_share")
+    )
+  )
+  
+  // Negate highly trusted domains unless DMARC fails
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and not headers.auth_summary.dmarc.pass
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+
+attack_types:
+  - "BEC/Fraud"
+  - "Social engineering"
+tactics_and_techniques:
+  - "Social engineering"
+  - "Impersonation: VIP"
+  - "Multi-channel targeting"
+detection_methods:
+  - "Recipient analysis"
+  - "Sender analysis"
+  - "Content analysis"
+id: "vip-mixed-corporate-personal-targeting" 
