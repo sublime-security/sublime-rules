@@ -14,13 +14,17 @@ source: |
     or strings.ilike(sender.email.domain.domain, '*fedex*')
     or (
       any(ml.logo_detect(file.message_screenshot()).brands, .name == "FedEx")
-      and any(ml.nlu_classifier(body.current_thread.text).entities,
-              .name == "request" and strings.icontains(.text, "signature")
+      and (
+        any(ml.nlu_classifier(body.current_thread.text).entities,
+            .name == "request" and strings.icontains(.text, "signature")
+        )
+        or strings.istarts_with(body.current_thread.text, 'FedEx')
       )
     )
   )
   and sender.email.domain.root_domain not in~ (
     'fedex.com',
+    'fedexfreight.com', // added 2026-05-08
     'cj.com', // CJ is a global affiliate marketing network
     'sedex.com', // sedex.com is not affiliated with FedEx, but is an apparent FP
     'myworkday.com',
@@ -42,6 +46,7 @@ source: |
     )
     or sender.email.domain.root_domain not in $high_trust_sender_root_domains
   )
+
 attack_types:
   - "Credential Phishing"
 tactics_and_techniques:

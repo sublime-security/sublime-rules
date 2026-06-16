@@ -17,6 +17,13 @@ source: |
     )
     or strings.icontains(body.current_thread.text, 'The Robinhood Team')
     or regex.icontains(body.current_thread.text, '©\s*20[0-9]{2}\s*\s*Robinhood')
+    or regex.icontains(body.current_thread.text,
+                       '(?:\+?\d{0,2}[\s\-\.]*)?(?:\(?888\)?)[\s\-\.]*344[\s\-\.]*3957'
+    )
+    or regex.icontains(body.current_thread.text,
+                       'brokerage clearing (?:service|company|business)'
+    )
+    or regex.icontains(body.html.raw, 'new passkey was recently added')
     or 2 of (
       strings.icontains(body.current_thread.text, "Robinhood"),
       regex.icontains(body.current_thread.text, '42 Willow (?:Road|St)'),
@@ -29,9 +36,16 @@ source: |
           regex.icontains(body.current_thread.text, 'Location:?'),
           regex.icontains(body.current_thread.text, 'Time:'),
           regex.icontains(body.current_thread.text, 'Device:?'),
-          regex.icontains(body.current_thread.text, 'IP Address:?')
+          regex.icontains(body.current_thread.text, 'IP Address:?'),
+          regex.icontains(body.current_thread.text, 'Date:'),
+          regex.icontains(body.current_thread.text, 'Region:?'),
+          regex.icontains(body.current_thread.text, 'App:?'),
+          regex.icontains(body.current_thread.text, 'Email ID:?')
         )
         or strings.icontains(body.current_thread.text, "new passkey added")
+        or strings.icontains(body.current_thread.text,
+                             "Security support phone number"
+        )
       )
     )
     or (
@@ -55,20 +69,22 @@ source: |
   // negate legitimate replies and forwards
   and (
     (
-      (
-        length(headers.references) > 0
-        or not any(headers.hops,
-                   any(.fields, strings.ilike(.name, "In-Reply-To"))
-        )
-      )
+      (length(headers.references) > 0 or headers.in_reply_to is null)
       and not (subject.is_reply or subject.is_forward)
     )
     or length(headers.references) == 0
   )
   // negate newsletters and webinars
   and not any(ml.nlu_classifier(body.current_thread.text).topics,
-              .name in ("Newsletters and Digests", "Events and Webinars")
+              .name in (
+                "Newsletters and Digests",
+                "Health and Wellness",
+                "Events and Webinars"
+              )
               and .confidence == "high"
+  )
+  and not any(ml.nlu_classifier(body.current_thread.text).intents,
+              .name == "benign" and .confidence == "high"
   )
   and not (
     sender.email.domain.root_domain in (
@@ -76,11 +92,11 @@ source: |
       "robinhood.org",
       "duck.com", // unrelated domain
       "robinhoodauctions.com", // unrelated domain
-      "bitstamp.net" // robinhood acquisition
+      "bitstamp.net", // robinhood acquisition
+      "sinch.com" // unrelated domain
     )
     and coalesce(headers.auth_summary.dmarc.pass, false)
   )
-
 attack_types:
   - "Credential Phishing"
 tactics_and_techniques:

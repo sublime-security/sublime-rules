@@ -1,10 +1,9 @@
-name: "Impersonation: Social Security Administration (SSA)"
-description: "Detects messages impersonating the Social Security Administration (SSA) that contain links, a suspicious indicator, and are sent from non-government domains by unsolicited or suspicious senders."
+name: "Brand impersonation: Social Security Administration"
+description: "Detects messages impersonating the Social Security Administration (SSA) through various indicators including display names, subjects, body content, attachments, and HTML titles. The rule identifies SSA references, confusable characters, statement notifications, and credential theft language while excluding legitimate government communications."
 type: "rule"
 severity: "medium"
 source: |
   type.inbound
-  and length(attachments) < 2
   // Identifies as SSA without catching strings such as "Alyssa"
   and (
     regex.contains(sender.display_name, '^SSA\b')
@@ -18,7 +17,7 @@ source: |
     )
     or any([sender.display_name, subject.subject],
            regex.icontains(strings.replace_confusables(.),
-                           'Social (?:benefits|security)',
+                           'Social (?:benefits|security|s.a\b)',
            )
     )
     or (
@@ -60,6 +59,21 @@ source: |
            or .inner_text =~ "Social Security Administration"
            or .inner_text =~ "Social Security"
     )
+    or (
+      any(body.links, strings.contains(.href_url.url, 'ssa.gov'))
+      and strings.icontains(body.current_thread.text,
+                            'download monthly statement'
+      )
+      and strings.icontains(body.current_thread.text, 'stay connected')
+    )
+    or (
+      any(ml.nlu_classifier(body.current_thread.text).entities,
+          .name == "sender" and .text == "Social Security Administration"
+      )
+      and any(ml.nlu_classifier(body.current_thread.text).intents,
+              .name == "cred_theft" and .confidence != "low"
+      )
+    )
   )
   
   // Not from a .gov domain
@@ -68,14 +82,23 @@ source: |
   // Additional suspicious indicator
   and (
     any(ml.nlu_classifier(body.current_thread.text).topics,
-        .name == "Secure Message" and .confidence == "high"
+        .name in ("Security and Authentication", "Secure Message")
+        and .confidence == "high"
     )
+    or any(ml.nlu_classifier(body.current_thread.text).entities,
+           .name == "org" and .text == "SSA"
+    )
+    or length(body.current_thread.text) == 0
+    or body.current_thread.text is null
     or strings.icontains(body.current_thread.text, "SSA Statement Viewer")
     or strings.icontains(strings.replace_confusables(body.current_thread.text),
                          "Social Security Statement"
     )
     or regex.icontains(body.current_thread.text,
                        "(?:view|open) (?:your|the).{0,8} (statement|document)"
+    )
+    or regex.icontains(body.current_thread.text,
+                       "(?:view|open|assess|evaluate|review|conduct|read|scan)"
     )
     // real SSA phone number
     or strings.icontains(body.current_thread.text, "1-800-772-1213")
@@ -103,23 +126,28 @@ source: |
       )
     )
   )
-  and not any(ml.nlu_classifier(body.current_thread.text).topics,
-              .name in (
-                "Newsletters and Digests",
-                "Advertising and Promotions",
-                "Events and Webinars"
-              )
-              and .confidence == "high"
-  )
-  // not a forward or reply
-  and (headers.in_reply_to is null or length(headers.references) == 0)
-  and (
-    not profile.by_sender().solicited
-    or (
-      profile.by_sender().any_messages_malicious_or_spam
-      and not profile.by_sender().any_messages_benign
+  and not (
+    any(ml.nlu_classifier(body.current_thread.text).topics,
+        .name in (
+          "Newsletters and Digests",
+          "Advertising and Promotions",
+          "Events and Webinars",
+          "Charity and Non-Profit",
+          "Political Mail"
+        )
+        and .confidence == "high"
+    )
+    or any(ml.nlu_classifier(body.current_thread.text).intents,
+           .name == "benign" and .confidence == "high"
     )
   )
+  and not (
+    sender.email.email in ("email@email.monarch.com", "contact@govplus.com")
+    and coalesce(headers.auth_summary.dmarc.pass, false)
+  )
+  
+  // not a forward or reply
+  and (headers.in_reply_to is null or length(headers.references) == 0)
   and not (
     sender.email.domain.root_domain in $high_trust_sender_root_domains
     and coalesce(headers.auth_summary.dmarc.pass, false)
