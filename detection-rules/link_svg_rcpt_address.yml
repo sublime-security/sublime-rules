@@ -1,0 +1,32 @@
+name: "Link: SVG with embedded recipient data"
+description: "Detects SVG links that contain the recipient's email address either in plain text or base64 encoded format within the URL, indicating potential tracking or targeting mechanisms."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and any(body.links,
+          strings.iends_with(.href_url.path, '.svg')
+          and any(recipients.to,
+                  .email.domain.valid
+                  // contained in the url
+                  and (
+                    strings.icontains(..href_url.url, .email.email)
+                    // or contains the base64 endcoded email
+                    or any(strings.scan_base64(..href_url.url,
+                                               format="url",
+                                               ignore_padding=true
+                           ),
+                           strings.icontains(., ..email.email)
+                    )
+                  )
+          )
+  )
+  
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Evasion"
+detection_methods:
+  - "URL analysis"
+  - "Content analysis"
+id: "a67ff913-f8cf-58af-a159-7ae20f6c063d"

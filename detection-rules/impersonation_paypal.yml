@@ -15,6 +15,10 @@ source: |
     or strings.ilike(strings.replace_confusables(sender.display_name), '*paypal*')
     or strings.icontains(body.current_thread.text, "paypal billing team")
     or strings.icontains(body.current_thread.text, "paypal account services")
+    or regex.icontains(body.current_thread.text, 'secure[-\._]?pay[-\._]?pal')
+    or regex.icontains(body.current_thread.text,
+                       '(?:paypa[i1]\b|paypa[|!]|p@y\.?p@l)'
+    )
     or any(attachments,
            (.file_type in $file_types_images or .file_type == "pdf")
            and any(ml.logo_detect(.).brands, .name == "PayPal")
@@ -71,7 +75,6 @@ source: |
     'paypal.be',
     'paypal.ca',
     'paypal.ch',
-    'paypal.co.br',
     'paypal.co.il',
     'paypal.co.uk',
     'paypal.com',
@@ -95,13 +98,8 @@ source: |
     'xoom.com',
     'zettle.com'
   )
-  and (
-    not profile.by_sender().solicited
-    or (
-      profile.by_sender().any_messages_malicious_or_spam
-      and not profile.by_sender().any_messages_benign
-    )
-  )
+  // negate paypal.co.br explicitly, this cannot be part of the root_domain set above as it uses the PSL (Public suffix list) for parsing and co.br is not a recognized public suffix.
+  and sender.email.domain.domain not in~ ('paypal.co.br')
   
   // negate highly trusted sender domains unless they fail DMARC authentication
   and (
