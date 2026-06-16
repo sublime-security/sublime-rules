@@ -1,0 +1,75 @@
+name: "Brand impersonation: GitLab"
+description: |
+  Impersonation of GitLab. Custom rule scoped to a specific tenant's
+  legitimate GitLab infrastructure. GitLab offers a self-hosted option with
+  customer-defined domains, so the legitimate root domain varies per
+  organization and a generic GitLab rule is unreliable. This rule treats
+  GitLab SaaS (gitlab.com) and Dashlane's self-hosted instance
+  (gitlab.dashlane.com) as legitimate when they pass DMARC.
+references:
+  - "https://docs.gitlab.com/ee/user/profile/notifications.html"
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and not strings.ilike(sender.display_name,
+                        '*course*',
+                        '*bootcamp*',
+                        '*training*'
+  )
+  and (
+    strings.ilike(sender.display_name, '*gitlab*')
+    or strings.ilike(sender.email.email, '*gitlab*')
+    or strings.ilevenshtein(sender.email.domain.sld, 'gitlab') <= 1
+  )
+  // negating listservs
+  and not (
+    any(headers.hops, any(.fields, .name == "List-Unsubscribe"))
+    and (
+      strings.contains(sender.display_name, "via")
+      or strings.icontains(subject.subject, "monitor")
+    )
+  )
+
+  // Negate legitimate GitLab infrastructure that authenticates via DMARC.
+  // gitlab.com (and subdomains like mg.gitlab.com) is GitLab SaaS;
+  // gitlab.dashlane.com is Dashlane's self-hosted instance.
+  //
+  // SELF-HOSTED CAVEAT: GitLab self-hosted instances use customer-defined
+  // custom domains, so there is no single canonical "legitimate GitLab"
+  // root domain. The hostname list below MUST be tuned per customer/tenant.
+  // For a different tenant, replace 'gitlab.dashlane.com' with that
+  // customer's self-hosted GitLab hostname(s).
+  and not (
+    (
+      sender.email.domain.root_domain in ('gitlab.com')
+      or sender.email.domain.domain in~ ('gitlab.dashlane.com')
+    )
+    and headers.auth_summary.dmarc.pass
+  )
+
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and not headers.auth_summary.dmarc.pass
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+  and (
+    not profile.by_sender().solicited
+    or (
+      profile.by_sender().any_messages_malicious_or_spam
+      and not profile.by_sender().any_messages_benign
+    )
+  )
+  and not profile.by_sender().any_messages_benign
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Lookalike domain"
+  - "Social engineering"
+detection_methods:
+  - "Header analysis"
+  - "Sender analysis"
