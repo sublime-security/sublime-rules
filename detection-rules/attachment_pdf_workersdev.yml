@@ -1,0 +1,23 @@
+name: "Attachment: PDF Attachment with links to workers.dev"
+description: "Detects inbound messages containing PDF attachments with fewer than 5 pages that, when analyzed, contain URLs pointing to workers.dev subdomains. This pattern indicates potential abuse of Cloudflare Workers infrastructure to host malicious content delivered via PDF documents."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and any(filter(attachments, .file_type == "pdf"),
+          beta.parse_exif(.).page_count <= 2
+          and any(file.explode(.),
+                  any(.scan.url.urls, .domain.root_domain == "workers.dev")
+          )
+  )
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "PDF"
+  - "Free subdomain host"
+  - "Evasion"
+detection_methods:
+  - "File analysis"
+  - "Exif analysis"
+  - "URL analysis"
+id: "e8be2515-8b3d-5222-80da-6ecfad58341a"
