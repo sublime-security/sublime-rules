@@ -1,12 +1,13 @@
-name: "PR# 4498 - Link: Generic financial document and suspicious hosting template"
-description: "Detects messages with generic 'dear sir/madam' greetings that reference payment releases & timelines, contain links with suspicious hosting or open redirects, and exhibit unusual recipient patterns such as self-sending or missing recipients."
+name: "PR# 4498 - Link: Generic financial document with proceedural greeting & timeline template"
+description: "Detects messages with generic greetings that reference payment releases & timelines, and exhibit unusual recipient patterns such as self-sending or missing recipients."
 type: "rule"
 severity: "medium"
 source: |
   type.inbound
   // expectation of time
   and regex.icontains(body.current_thread.text,
-                      'will be released.{0,15}(?:(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday),\s+(January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},)|\b[1-4]\W[1-4]\b.{1,10}days'
+                      'will be released.{0,15}(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday),\s+(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},',
+                      '\b[1-4]\W[1-4]\b.{1,10}days'
   )
   
   // link is malicious
@@ -14,19 +15,17 @@ source: |
           // key phrasing or nlu
           (
             regex.icontains(.display_text,
-                            '(?:access|show|view).{0,10}(?:confirmation|message|payment|statement)|advice|deposit|document|eft|release|remit'
+                            '(?:access|show|view).{0,10}(?:confirmation|message|payment|statement)',
+                            'advice',
+                            'deposit',
+                            'document',
+                            'eft',
+                            'release',
+                            'remit'
             )
             or any(ml.nlu_classifier(body.current_thread.text).topics,
                    .name == "Request to View Invoice" and .confidence == "high"
             )
-          )
-          // suspicious hosting
-          and (
-            .href_url.domain.root_domain in $free_file_hosts
-            or .href_url.domain.tld in $suspicious_tlds
-            or .href_url.domain.root_domain not in $tranco_1m
-            // open redirect
-            or strings.icontains(.href_url.query_params, '=https', 'url=')
           )
           // negate org domains
           and .href_url.domain.valid != false
@@ -51,14 +50,11 @@ attack_types:
   - "BEC/Fraud"
   - "Credential Phishing"
 tactics_and_techniques:
-  - "Free file host"
-  - "Open redirect"
   - "Social engineering"
   - "Evasion"
 detection_methods:
   - "Content analysis"
   - "Natural Language Understanding"
-  - "URL analysis"
   - "Header analysis"
   - "Sender analysis"
 id: "1a6e4ced-4391-597f-9184-d4d1c57dedc7"
