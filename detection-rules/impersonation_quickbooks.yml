@@ -44,8 +44,8 @@ source: |
                          'QuickBooks and Intuit are trademarks of Intuit Inc.'
     )
     or strings.icontains(body.current_thread.text, "QuickBooks Cloud Services")
-    or strings.icontains(body.current_thread.text,
-                         "Secured by QuickBooks Payments"
+    or regex.icontains(body.current_thread.text,
+                       '(?:Secured by )?QuickBooks Payments'
     )
     or strings.icontains(body.current_thread.text, "QuickBooks Support Center")
     // phone number and update language
@@ -78,11 +78,23 @@ source: |
       )
     )
     or any(body.links,
-           regex.icontains(.display_url.url, '(?:quickbooks|intuit)')
-           and .mismatched
-           and not .href_url.domain.root_domain in (
-             "mimecast.com",
-             "mimecastprotect.com"
+           (
+             regex.icontains(.display_url.url, '(?:quickbooks|intuit)')
+             and .mismatched
+             and not .href_url.domain.root_domain in (
+               "mimecast.com",
+               "mimecastprotect.com"
+             )
+           )
+           or (
+             regex.icontains(.href_url.path, '(?:quickbooks|intuit)')
+             and not strings.icontains(.href_url.domain.root_domain,
+                                       "quickbooks",
+                                       "intuit"
+             )
+             and not any(ml.nlu_classifier(body.current_thread.text).topics,
+                         .name == "Advertising and Promotions"
+             )
            )
     )
   )
