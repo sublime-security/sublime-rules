@@ -48,13 +48,14 @@ source: |
     )
     // typo-squatted sender domain
     or (
+      // check for RFQ/RFP indicators prior to analyzing $sender_domains
       subject.is_reply
-      and strings.icontains(body.current_thread.text, "RFP", "RFQ")
+      and length(body.current_thread.links) > 0
+      and any(body.current_thread.links,
+              strings.icontains(.display_text, "RFP", "RFQ")
+      )
       and any($sender_domains,
               0 < strings.ilevenshtein(., sender.email.domain.root_domain) < 3
-      )
-      and any(ml.nlu_classifier(body.current_thread.text).intents,
-              .name in ("bec", "cred_theft") and .confidence != "low"
       )
     )
   )
