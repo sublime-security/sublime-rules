@@ -1,0 +1,114 @@
+name: "Newly registered domain spoofing established brand name (Tranco lookalike)"
+description: |
+  Detects messages where either the sender domain or a linked domain was registered within the
+  last 30 days and contains the name of an established brand from the Tranco 10k list within
+  its SLD. This is a common pattern in credential phishing and BEC attacks where threat actors
+  register lookalike domains (e.g., robinhoodinstruction.com, fidelitytimeout.com) to impersonate
+  trusted brands. Benign email categories such as newsletters, political mail, and B2B outreach
+  are excluded via NLU classification.
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and 0 < length(body.links) < 10
+  and (
+    (
+      network.whois(sender.email.domain).days_old <= 30
+      and not sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and any($tranco_10k,
+              any(regex.extract(., '^(?P<sld>[a-z0-9-]{4,})\.'),
+                  strings.icontains(sender.email.domain.sld, .named_groups["sld"])
+                  and length(.named_groups["sld"]) * 5 >= length(sender.email.domain.sld
+                  ) * 2
+                  // common short word negations
+                  and not .named_groups["sld"] in (
+                    "intel",
+                    "homes",
+                    "home",
+                    "real",
+                    "realestate",
+                    "realtor",
+                    "house",
+                    "news",
+                    "link",
+                    "mail",
+                    "work",
+                    "free",
+                    "live",
+                    "next",
+                    "site",
+                    "apps",
+                    "core",
+                    "sync",
+                    "shop",
+                    "nova",
+                    "meta",
+                    "mega"
+                  )
+              )
+      )
+    )
+    or (
+      any(filter(body.links,
+                 network.whois(.href_url.domain).days_old <= 30
+                 and not .href_url.domain.root_domain in $high_trust_sender_root_domains
+          ),
+          any($tranco_10k,
+              any(regex.extract(., '^(?P<sld>[a-z0-9-]{4,})\.'),
+                  strings.icontains(...href_url.domain.sld, .named_groups["sld"])
+                  and length(.named_groups["sld"]) * 5 >= length(...href_url.domain.sld
+                  ) * 2
+                  // common short word negations
+                  and not .named_groups["sld"] in (
+                    "intel",
+                    "homes",
+                    "home",
+                    "real",
+                    "realestate",
+                    "realtor",
+                    "house",
+                    "news",
+                    "link",
+                    "mail",
+                    "work",
+                    "free",
+                    "live",
+                    "next",
+                    "site",
+                    "apps",
+                    "core",
+                    "sync",
+                    "shop",
+                    "nova",
+                    "meta",
+                    "mega"
+                  )
+              )
+          )
+      )
+    )
+  )
+  and not any(ml.nlu_classifier(body.current_thread.text).topics,
+              .name in (
+                "Bounce Back and Delivery Failure Notifications",
+                "Newsletters and Digests",
+                "Political Mail",
+                "Events and Webinars",
+                "B2B Cold Outreach",
+                "Advertising and Promotions",
+                "Software and App Updates"
+              )
+  )
+tags:
+  - "Attack surface reduction"
+attack_types:
+  - "BEC/Fraud"
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Lookalike domain"
+  - "Impersonation: Brand"
+detection_methods:
+  - "Natural Language Understanding"
+  - "URL analysis"
+  - "Whois"
+id: "236703c1-17ba-50e6-9633-4110370775c1"
