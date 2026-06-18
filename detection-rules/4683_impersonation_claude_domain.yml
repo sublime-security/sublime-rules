@@ -6,23 +6,22 @@ source: |
   type.inbound
   and not sender.email.domain.root_domain in ("claude.com", "anthropic.com")
   and sender.display_name in ("Anthropic", "Claude")
-  // a newly created domain
+  // links created less than 90 days
+  and any(body.links, network.whois(.href_url.domain).days_old <= 90)
   and (
-    all(headers.reply_to,
-        .email.domain.root_domain not in $free_email_providers
-        and network.whois(.email.domain).days_old <= 60
-        and .email.email != sender.email.email
-    )
-    // or the return path or sender domain is less than 60d old
-    or network.whois(headers.return_path.domain).days_old <= 60
-    or network.whois(sender.email.domain).days_old <= 60
+    // or the return path or sender domain is less than 90 days old
+    network.whois(sender.email.domain).days_old <= 90
+    or network.whois(headers.return_path.domain).days_old <= 90
   )
   and (
-    (
-      strings.contains(body.current_thread.text, "Claude")
-      and strings.icontains(body.current_thread.text, "claude ads")
+    strings.icontains(body.current_thread.text, "claude")
+    or strings.icontains(body.current_thread.text, "claude ads")
+    or strings.icontains(body.current_thread.text, "anthropic team")
+    or strings.contains(body.current_thread.text,
+                        "Anthropic PBC, 548 Market St, PMB 90375, San Francisco, CA 94104"
     )
-    or strings.icontains(body.current_thread.text, "anthropic, pbc")
+    or strings.icontains(subject.base, "*claude*")
+    or strings.icontains(subject.base, "*anthropic*")
     or regex.icontains(subject.base,
                        "(?:early.{0,20}claude|claude.{0,20}(?:early.access|ads))"
     )
@@ -47,4 +46,4 @@ detection_methods:
 id: "eea62f23-04c6-59ad-af52-8677a33f164a"
 og_id: "02d16c54-a773-5286-b7a8-7b37551ccba5"
 testing_pr: 4683
-testing_sha: 94847e25a8039d6f7bf861cbb4ed6c0a5fd3d130
+testing_sha: 313f4c2b14f91f8d058236add5ed359655433e66
