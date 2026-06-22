@@ -1,0 +1,39 @@
+name: "PR# 4714 - Link: Invalid reply-to with recipient details in subject, body, and encoded link"
+description: "Detects inbound messages with an invalid reply-to address where the recipient's domain SLD appears in the subject, the recipient's local part and domain SLD appear in the body, and the recipient's full email address is base64-encoded within a link fragment."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  // Invalid reply-to address
+  and any(headers.reply_to, not .email.domain.valid)
+  and strings.icontains(subject.base, recipients.to[0].email.domain.sld)
+  and strings.icontains(body.current_thread.text,
+                        recipients.to[0].email.local_part
+  )
+  and strings.icontains(body.current_thread.text,
+                        recipients.to[0].email.domain.sld
+  )
+  and any(body.current_thread.links,
+          any(strings.scan_base64(.href_url.fragment),
+              . == recipients.to[0].email.email
+          )
+  )
+attack_types:
+  - "Credential Phishing"
+  - "BEC/Fraud"
+tactics_and_techniques:
+  - "Social engineering"
+  - "Evasion"
+  - "Spoofing"
+detection_methods:
+  - "Header analysis"
+  - "Content analysis"
+  - "URL analysis"
+  - "Sender analysis"
+id: "1f489d82-af8b-5223-8f92-996635d76b55"
+tags:
+  - created_from_open_prs
+  - rule_status_added
+  - pr_author_D-Bolton
+references:
+  - https://github.com/sublime-security/sublime-rules/pull/4714
