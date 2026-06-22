@@ -29,7 +29,21 @@ source: |
                        'shared a (?:file|document)\s*(?:\w+\s+){0,3}\s*via sharefile'
     )
     or strings.icontains(body.current_thread.text, 'Powered By Citrix ShareFile')
-    or regex.icontains(body.current_thread.text, '© 20\d\d ShareFile')
+  
+    // Impersonation of Progress, ShareFile's parent org
+    // https://www.techzine.eu/news/collaboration/124207/progress-buys-old-citrix-service-sharefile-with-an-eye-on-moveit/
+    or regex.icontains(body.current_thread.text,
+                       '© 20\d\d (ShareFile|\bProgress\b)'
+    )
+    or (
+      strings.ilike(body.current_thread.text, "*Progress*", "*ShareFile*")
+      and 3 of (
+        strings.icontains(body.current_thread.text, "621 Hillsborough St"),
+        strings.icontains(body.current_thread.text, "Floor 7"),
+        strings.icontains(body.current_thread.text, "Raleigh, NC"),
+        strings.icontains(body.current_thread.text, "27603")
+      )
+    )
   
     // any of the attached images contain the same message body wording
     or (
@@ -53,19 +67,33 @@ source: |
                   or strings.icontains(.scan.ocr.raw,
                                        'Powered By Citrix ShareFile'
                   )
-                  or regex.icontains(body.current_thread.text,
-                                     '© 20\d\d ShareFile'
+                  // Impersonation of Progress, ShareFile's parent org
+                  // https://www.techzine.eu/news/collaboration/124207/progress-buys-old-citrix-service-sharefile-with-an-eye-on-moveit/
+                  or regex.icontains(.scan.ocr.raw,
+                                     '© 20\d\d (ShareFile|\bProgress\b)'
+                  )
+                  or (
+                    strings.ilike(.scan.ocr.raw, "*Progress*", "*ShareFile*")
+                    and 3 of (
+                      strings.icontains(.scan.ocr.raw, "621 Hillsborough St"),
+                      strings.icontains(body.current_thread.text, "Floor 7"),
+                      strings.icontains(.scan.ocr.raw, "Raleigh, NC"),
+                      strings.icontains(.scan.ocr.raw, "27603")
+                    )
                   )
               )
       )
     )
   )
   and not (
-    sender.email.domain.root_domain in (
-      'sf-notifications.com',
-      'sharefile.com',
-      'cloud.com', // previous parent org of ShareFile
-      'progress.com' // progress.com is the parent org of ShareFile
+    (
+      sender.email.domain.root_domain in (
+        'sf-notifications.com',
+        'sharefile.com',
+        'cloud.com', // previous parent org of ShareFile
+        'progress.com' // progress.com is the parent org of ShareFile
+      )
+      or network.whois(sender.email.domain).registrant_company == "Progress Software Corporation"
     )
     and headers.auth_summary.dmarc.pass
   )
