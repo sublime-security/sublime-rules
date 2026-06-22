@@ -1,0 +1,66 @@
+name: "PR# 4708 - Attachment: Fraudulent procurement RFQ document in PDF"
+description: "Detects inbound PDF attachments that contain language consistent with fraudulent Request for Quotation (RFQ) or procurement solicitation documents. The rule uses OCR to scan for combinations of procurement-specific terminology such as bid closing dates, pricing conditions, payment terms, preference point systems, and authorization fields commonly found in fabricated government or corporate supply chain solicitations."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and any(filter(attachments, .file_extension == "pdf"),
+          3 of (
+            (
+              strings.icontains(beta.ocr(.).text,
+                                "Contact Person",
+                                "Date of issue",
+                                "Date Issued",
+                                "Closing Time and Date",
+                                "Closing Date",
+                                "QUOTATIONS ARE HEREBY INVITED FOR THE SUPPLY OF",
+                                "COMPULSORY BIDDERS MUST QUOTE",
+                                "Method of RFQ Submission"
+              )
+            ),
+            strings.icontains(beta.ocr(.).text,
+                              "Must be inclusive",
+                              "Tax on Price Quotation",
+                              "100% payment made in the form",
+                              "Conditions for Release of Payment",
+                              "Period of Validity of Quotes",
+                              "Partial Bids",
+                              "PRICING QUOTATION",
+                              "Payment Terms and Conditions",
+                              "freight, insurance until acceptance"
+            ),
+            strings.icontains(beta.ocr(.).text,
+                              "80/20 preference point system",
+                              "80:20",
+                              "Selection of suppliers will be based on",
+                              "plant upgrade and maintenance",
+                              "plant maintenance",
+                              "without an Official Purchase Order",
+                              "If unable to quote"
+            ),
+            strings.icontains(beta.ocr(.).text,
+                              "remain binding upon me/us",
+                              "Authorized Signature",
+                              "Name and Capacity",
+                              "must be completed and accompanied by",
+                              "This is not a Purchase Order"
+            )
+          )
+  )
+  
+attack_types:
+  - "BEC/Fraud"
+tactics_and_techniques:
+  - "PDF"
+  - "Social engineering"
+detection_methods:
+  - "Optical Character Recognition"
+  - "Content analysis"
+  - "File analysis"
+id: "cbee316f-7124-5898-b515-aa192fc0af6a"
+tags:
+  - created_from_open_prs
+  - rule_status_added
+  - pr_author_zoomequipd
+references:
+  - https://github.com/sublime-security/sublime-rules/pull/4708
