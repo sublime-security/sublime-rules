@@ -1,0 +1,26 @@
+name: "Attachment: PDF with localhost IP in EXIF title metadata"
+description: "Detects inbound PDF attachments where the EXIF title metadata starts with '127.0.0.1', sent either to a self-addressed recipient or an invalid recipient domain. This technique may indicate automated or malicious document generation tools embedding localhost references in file metadata."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  // self sender or invaild recipent domain
+    and length(recipients.to) == 1
+    and (
+      sender.email.email == recipients.to[0].email.email
+      or recipients.to[0].email.domain.valid == false
+    )
+  and any(filter(attachments, .file_type == "pdf"),
+          strings.starts_with(beta.parse_exif(.).title, "127.0.0.1")
+  )
+  
+attack_types:
+  - "Credential Phishing"
+  - "Malware/Ransomware"
+tactics_and_techniques:
+  - "PDF"
+  - "Evasion"
+detection_methods:
+  - "Exif analysis"
+  - "File analysis"
+  - "Sender analysis"
