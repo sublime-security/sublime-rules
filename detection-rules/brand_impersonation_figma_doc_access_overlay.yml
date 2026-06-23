@@ -1,0 +1,33 @@
+name: "Brand impersonation: Figma with malicious document access overlay"
+description: |
+  "Detects malicious Figma design shares containing brand impersonation or credential phishing content. The rule identifies legitimate Figma share notifications where the embedded thumbnail preview contains "access document" text when OCR'd. Attackers create phishing designs (impersonating Microsoft, DocuSign, or other brands) within Figma, then share them via Figma's legitimate infrastructure to bypass sender reputation checks. The malicious content is rendered in the Figma-hosted thumbnail image itself."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and sender.email.email == "no-reply@email.figma.com"
+  and strings.icontains(subject.base, "proposal")
+  and length(html.xpath(body.html,
+                        "//img[contains(@src, 'https://api-cdn.figma.com/resize/thumbnails')]"
+             ).nodes
+  ) == 1
+  //
+  // This rule makes use of a beta feature and is subject to change without notice
+  // using the beta feature in custom rules is not suggested until it has been formally released
+  //
+  and strings.icontains(beta.ocr(file.message_screenshot()).text,
+                        'access document'
+  )
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Social engineering"
+  - "Image as content"
+detection_methods:
+  - "Sender analysis"
+  - "HTML analysis"
+  - "URL screenshot"
+  - "Optical Character Recognition"
+  - "URL analysis"
+id: "fcc7be2c-d4ca-5b66-8e45-c2b5d56ee312"

@@ -9,22 +9,81 @@ type: "rule"
 severity: "high"
 source: |
   type.inbound
-  and any(body.links,
-          .href_url.domain.domain == 'login.microsoftonline.com'
-          and (
-            strings.ilike(.href_url.query_params,
-                          '*offline_access*',
-                          '*.readwrite*',
-                          '*.read*',
-                          '*ctx=*',
-                          '*prompt=none*'
+  and (
+    // links in email body
+    any([body.links, body.current_thread.links],
+        any(.,
+            .href_url.domain.domain == 'login.microsoftonline.com'
+            and (
+              strings.ilike(.href_url.query_params,
+                            '*offline_access*',
+                            '*.readwrite*',
+                            '*.read*',
+                            '*ctx=*',
+                            '*prompt=none*'
+              )
+              or (
+                strings.icontains(.href_url.path, '/common/reprocess')
+                and strings.icontains(.href_url.query_params, 'ctx=')
+                and strings.icontains(.href_url.query_params, 'sessionId=')
+              )
             )
-            or (
-              strings.icontains(.href_url.path, '/common/reprocess')
-              and strings.icontains(.href_url.query_params, 'ctx=')
-              and strings.icontains(.href_url.query_params, 'sessionId=')
-            )
-          )
+        )
+    )
+    // links in PDF, HTML, DOCX and PPTX attachments
+    or any(filter(attachments, .file_type in ("pdf", "html", "docx", "pptx")),
+           any(file.explode(.),
+               any(.scan.url.urls,
+                   .domain.domain == 'login.microsoftonline.com'
+                   and (
+                     strings.ilike(.query_params,
+                                   '*offline_access*',
+                                   '*.readwrite*',
+                                   '*.read*',
+                                   '*ctx=*',
+                                   '*prompt=none*'
+                     )
+                     or (
+                       strings.icontains(.path, '/common/reprocess')
+                       and strings.icontains(.query_params, 'ctx=')
+                       and strings.icontains(.query_params, 'sessionId=')
+                     )
+                   )
+               )
+           )
+    )
+    or any(attachments,
+           (
+             .file_type == "ics"
+             or .file_extension == "ics"
+             or .content_type in ("application/ics", "text/calendar")
+           )
+           //
+           // This rule makes use of a beta feature and is subject to change without notice
+           // using the beta feature in custom rules is not suggested until it has been formally released
+           //
+           and any(beta.file.parse_ics(.).events,
+                   any(.links,
+                       .href_url.domain.domain == 'login.microsoftonline.com'
+                       and (
+                         strings.ilike(.href_url.query_params,
+                                       '*offline_access*',
+                                       '*.readwrite*',
+                                       '*.read*',
+                                       '*ctx=*',
+                                       '*prompt=none*'
+                         )
+                         or (
+                           strings.icontains(.href_url.path, '/common/reprocess')
+                           and strings.icontains(.href_url.query_params, 'ctx=')
+                           and strings.icontains(.href_url.query_params,
+                                                 'sessionId='
+                           )
+                         )
+                       )
+                   )
+           )
+    )
   )
 attack_types:
   - "Credential Phishing"

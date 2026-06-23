@@ -11,7 +11,7 @@ source: |
           .name in ("bec", "cred_theft") and .confidence != "low"
   )
   and any(body.links,
-          regex.icontains(.display_text, "document", "download")
+          regex.icontains(.display_text, "document", "download", "message")
           and .href_url.domain.root_domain != sender.email.domain.root_domain
           and .href_url.domain.root_domain not in $tranco_1m
           and .href_url.domain.root_domain not in $org_domains
@@ -47,20 +47,18 @@ source: |
     // No recipients visible
     (
       length(recipients.to) == 0
-      or all(recipients.to,
-             .display_name in ("Undisclosed recipients", "undisclosed-recipients")
+      or (
+        all(recipients.to, .email.domain.valid == false)
+        and all(recipients.cc, .email.domain.valid == false)
       )
     )
     and length(recipients.cc) == 0
   )
   
   // negate highly trusted sender domains unless they fail DMARC authentication
-  and (
-    (
-      sender.email.domain.root_domain in $high_trust_sender_root_domains
-      and not headers.auth_summary.dmarc.pass
-    )
-    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  and not (
+    sender.email.domain.root_domain in $high_trust_sender_root_domains
+    and coalesce(headers.auth_summary.dmarc.pass, false)
   )
 
 attack_types:

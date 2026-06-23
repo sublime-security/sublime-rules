@@ -1,0 +1,33 @@
+name: "Attachment: SVG file with HTML entity encoded href attributes"
+description: "Detects SVG file attachments containing href attributes with three or more consecutive HTML numeric entity references, a technique used to obfuscate malicious URLs and evade security scanning."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and any(attachments,
+          (
+            .file_extension == "svg"
+            or .content_type in ("image/svg+xml")
+            or .file_type == "svg"
+          )
+          // href value starting with 3+ HTML numeric entity references
+          and regex.icontains(file.parse_text(.,
+                                              encodings=[
+                                                "ascii",
+                                                "utf8",
+                                                "utf16-le"
+                                              ]
+                              ).text,
+                              'href\s*=\s*["\x27]\s*(?:&#x?[0-9a-f]+;\s*){3,}'
+          )
+  )
+attack_types:
+  - "Malware/Ransomware"
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Evasion"
+  - "HTML smuggling"
+detection_methods:
+  - "File analysis"
+  - "Content analysis"
+id: "cc527e8e-893c-50b2-957f-2a205712a77f"

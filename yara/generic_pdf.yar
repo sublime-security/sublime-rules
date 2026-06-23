@@ -49,6 +49,38 @@ rule w9_pdf_IDs {
         and any of ($id*)
 }
 
+rule w9_pdf_images {
+    meta:
+        author      = "kyle eaton"
+        date        = "2026-05-12"
+        description = "pdfs with images associated with FAKE w9s and invoices, often the signatures or fake company logos"
+    strings:
+        $header           = { 25 50 44 46 2D 31 2E }
+        $jpg_signature_01 = { 60 1E 46 70 7A 8A 00 D5 A2 8A 28 00 A2 8A 28 00 A2 8A 28 00 A8 16 EA D5 EE 1E D1 25 46 9A 30 0B 46 }
+        $jpg_signature_02 = { B7 D2 2E 00 3D EB E0 AF FC 15 F3 F6 EB F8 DF F0 8F E1 97 C6 BF 86 9F F0 45 5F DA 83 E2 07 C2 4F }
+    condition:
+        $header at 0
+        and any of ($jpg_*)
+}
+
+rule w9_pdf_fonts {
+    meta:
+        author      = "kyle eaton"
+        date        = "2026-05-12"
+        description = "PDFs with specific fonts (based on type/length), as observed in fake w9 messages"
+    strings:
+        $header     = { 25 50 44 46 2D 31 2E }
+        $font_17_01 = { 2F 4C 65 6E 67 74 68 20 36 36 34 0A 2F 53 75 62 74 79 70 65 20 2F 54 79 70 65 31 43 }
+        $font_17_02 = { 2F 4C 65 6E 67 74 68 20 32 31 32 33 0A 2F 53 75 62 74 79 70 65 20 2F 54 79 70 65 31 43 }
+        $font_17_03 = { 2F 4C 65 6E 67 74 68 20 34 37 39 31 0A 2F 53 75 62 74 79 70 65 20 2F 54 79 70 65 31 43 }
+        $font_16_01 = { 2F 4C 65 6E 67 74 68 20 34 36 39 34 2F 53 75 62 74 79 70 65 2F 54 79 70 65 31 43 }
+        $font_16_02 = { 2F 4C 65 6E 67 74 68 20 36 36 33 2F 53 75 62 74 79 70 65 2F 54 79 70 65 31 43 }
+        $font_16_03 = { 2F 4C 65 6E 67 74 68 20 32 31 31 31 2F 53 75 62 74 79 70 65 2F 54 79 70 65 31 43 }
+    condition:
+        $header at 0
+        and (all of ($font_17_*) or all of ($font_16_*))
+}
+
 rule invoice_pdf_01 {
     meta:
         author = "kyle eaton"
@@ -156,139 +188,6 @@ rule SAI_Global_ISO9001_Logo_PDF_Fuzzy
         )
 }
 
-rule Phishing_PDF_Split_QR_Code_Pair_330                                                                                                                                 
-{                                                                                                                                                                          
-  meta:                                                                                                                                                                  
-      author = "brandon murphy"                                                                                                                                          
-      date = "2026-04-09"                                                                                                                                                
-      updated = "2026-04-10"                                                                                                                                             
-      description = "PDF containing two 165x330 JPEG images — a vertically split QR code pair"                                                                           
-                                                                                                                                                                         
-  strings:                                                                                                                                                               
-      $header = {25 50 44 46 2d 31 2e}                                                                                                                                   
-                                                                                                                                                                         
-      // --- PDF object layer ---                                                                                                                                        
-      // Image XObject definitions for the QR halves.                                                                                                                    
-      // Both objects declare the same dimensions + JPEG filter.                                                                                                         
-      $w = "/Width 165"                                                                                                                                                  
-      $h = "/Height 330"                                                                                                                                                 
-      $jpeg_filter = "/Filter /DCTDecode"                                                                                                                                
-      $xobj_image = "/Subtype /Image"                                                                                                                                    
-                                                                                                                                                                         
-      // --- JPEG layer ---                                                                                                                                              
-      // SOF0 (baseline) marker encoding exactly 165x330:                                                                                                                        
-      //   ff c0       = SOF0 marker                                                                                                                                             
-      //   00 11       = segment length (17 bytes)                                                                                                                               
-      //   08          = 8-bit precision                                                                                                                                         
-      //   01 4a       = height 330                                                                                                                                              
-      //   00 a5       = width 165                                                                                                                                               
-      //   03          = 3 components (YCbCr)                                                                                                                                    
-      $sof0 = {ff c0 00 11 08 01 4a 00 a5 03}
-                                                                                                                                                                         
-  condition:                                                                                                                                                             
-      $header at 0 and                                                                                                                                                   
-                                                                                                                                                                         
-      // Both are JPEG XObject images                                                                                                                                    
-      $jpeg_filter and                                                                                                                                                   
-      $xobj_image and                                                                                                                                                    
-                                                                                                                                                                         
-      // Exactly two QR-half image objects in the PDF                                                                                                                    
-      #sof0 == 2 and                                                                                                                                                     
-      #w == 2 and                                                                                                                                                        
-      #h == 2 and                                                                                                                                                        
-                                                                                                                                                                         
-      // The two JPEG SOF0 markers appear within 100KB of each other                                                                                                     
-      @sof0[2] - @sof0[1] < 102400                                                                                                                                       
-}                                                                                                                                                                          
-                                                                                                                                                                             
-rule Phishing_PDF_Split_QR_Code_Pair_290                                                                                                                                   
-{                                                                                                                                                                          
-  meta:                                                                                                                                                                  
-      author = "brandon murphy"                                                                                                                                          
-      date = "2026-04-10"                                                                                                                                                
-      description = "PDF containing two 145x290 JPEG images — a vertically split QR code pair"                                                                           
-                                                                                                                                                                         
-  strings:                                                                                                                                                               
-      $header = {25 50 44 46 2d 31 2e}                                                                                                                                   
-                                                                                                                                                                         
-      // --- PDF object layer ---                                                                                                                                        
-      // Image XObject definitions for the QR halves.                                                                                                                    
-      // Both objects declare the same dimensions + JPEG filter.                                                                                                         
-      $w = "/Width 145"                                                                                                                                                  
-      $h = "/Height 290"                                                                                                                                                 
-      $jpeg_filter = "/Filter /DCTDecode"                                                                                                                                
-      $xobj_image = "/Subtype /Image"                                                                                                                                    
-                                                                                                                                                                         
-      // --- JPEG layer ---                                                                                                                                              
-      // SOF0 (baseline) marker encoding exactly 145x290:                                                                                                                        
-      //   ff c0       = SOF0 marker                                                                                                                                             
-      //   00 11       = segment length (17 bytes)                                                                                                                               
-      //   08          = 8-bit precision                                                                                                                                         
-      //   01 22       = height 290                                                                                                                                              
-      //   00 91       = width 145                                                                                                                                               
-      //   03          = 3 components (YCbCr)                                                                                                                                    
-      $sof0 = {ff c0 00 11 08 01 22 00 91 03}                                                                                                   
-                                                                                                                                                                         
-  condition:                                                                                                                                                             
-      $header at 0 and                                                                                                                                                   
-                                                                                                                                                                         
-      // Both are JPEG XObject images                                                                                                                                    
-      $jpeg_filter and                                                                                                                                                   
-      $xobj_image and                                                                                                                                                    
-                                                                                                                                                                         
-      // Exactly two QR-half image objects in the PDF                                                                                                                    
-      #sof0 == 2 and                                                                                                                                                     
-      #w == 2 and                                                                                                                                                        
-      #h == 2 and                                                                                                                                                        
-                                                                                                                                                                         
-      // The two JPEG SOF0 markers appear within 100KB of each other                                                                                                     
-      @sof0[2] - @sof0[1] < 102400                                                                                                                                       
-}                                                                                               
-
-rule Phishing_PDF_Split_QR_Code_Pair_370
-{
-    meta:
-        author = "brandon murphy"
-        date = "2026-04-10"
-        description = "PDF containing two 185x370 JPEG images — a vertically split QR code pair"
-
-    strings:
-        $header = {25 50 44 46 2d 31 2e}
-
-        // --- PDF object layer ---
-        // Image XObject definitions for the QR halves.
-        // Both objects declare the same dimensions + JPEG filter.
-        $w = "/Width 185"
-        $h = "/Height 370"
-        $jpeg_filter = "/Filter /DCTDecode"
-        $xobj_image = "/Subtype /Image"
-
-        // --- JPEG layer ---
-        // SOF0 (baseline) marker encoding exactly 185x370:
-        //   ff c0       = SOF0 marker
-        //   00 11       = segment length (17 bytes)
-        //   08          = 8-bit precision
-        //   01 72       = height 370
-        //   00 b9       = width 185
-        //   03          = 3 components (YCbCr)
-        $sof0 = {ff c0 00 11 08 01 72 00 b9 03}
-
-    condition:
-        $header at 0 and
-
-        // Both are JPEG XObject images
-        $jpeg_filter and
-        $xobj_image and
-
-        // Exactly two QR-half image objects in the PDF
-        #sof0 == 2 and
-        #w == 2 and
-        #h == 2 and
-
-        // The two JPEG SOF0 markers appear within 100KB of each other
-        @sof0[2] - @sof0[1] < 102400
-}
-
 rule pdf_jsfck_ratio {
     meta:
         author      = "kyle eaton"
@@ -394,3 +293,126 @@ rule pdf_cve_2026_34621_observed_lures {
 		$header at 0 and any of ($img_*)
 }
 
+rule enc_pdf_image_sizes {
+	meta:
+		author      = "kyle eaton"
+		date        = "2026-05-26"
+		description = "matches PDF image sizes that correlate with the images used in an encrypted PDF lure"
+	strings:
+		$header = { 25 50 44 46 2D 31 2E }
+		$img1   = { 2F 49 6D 61 67 65 20 2F 57 69 64 74 68 20 32 30 32 20 2F 48 65 69 67 68 74 20 32 34 36 }
+		$img2   = { 2F 49 6D 61 67 65 20 2F 57 69 64 74 68 20 31 32 33 20 2F 48 65 69 67 68 74 20 33 32 }
+	condition:
+		$header at 0
+		and all of ($img*)
+		and @img1 < @img2
+}
+
+rule w9_pdf_service_agreement_img_objects {
+	meta:
+		author      = "kyle eaton"
+		date        = "2026-05-27"
+		description = "matching the observed service agreements used in a subset of w9 pdfs"
+	strings:
+		$header             = { 25 50 44 46 2D 31 2E }
+		$image_object       = { 2F 49 6D 61 67 65 0A 2F 57 69 64 74 68 20 35 37 32 0A 2F 48 65 69 67 68 74 20 31 35 35 0A }
+		$image_stream_bytes = { 8B 1C 37 2A FA CE 08 E2 11 51 EB 0E }
+	condition:
+		$header at 0
+		and all of them
+}
+
+rule adobe_sign_lure_banner_images {
+	meta:
+		author      = "brandon murphy"
+		date        = "2026-06-01"
+		description = "mathces on observed width/height of abused adobe sign header/footer in a PDF"
+    strings:
+        $hdr = /\/Subtype[ ]?\/Image[^>]{0,80}\/Width[ ]?(1119|1120|1121)[ ]?\/Height[ ]?(372|373|374)/
+        $ftr = /\/Subtype[ ]?\/Image[^>]{0,80}\/Width[ ]?(1063|1064|1065)[ ]?\/Height[ ]?(340|341|342)/
+    condition:
+        uint32(0) == 0x46445025 and  // "%PDF"
+        $hdr and $ftr
+}
+
+rule pdf_lure_image_blurry {
+	meta:
+		author      = "kyle eaton"
+		date        = "2026-06-02"
+		description = "Matches the image lure within some PDF phishing documents."
+	strings:
+		$header = { 25 50 44 46 2D 31 2E }
+		$img_01 = { A0 02 8A 28 CD 00 14 51 9A 33 40 05 14 66 93 34 00 B4 52 66 8C D0 02 D1 49 9A 33 40 0B 45 19 A3 34 00 51 46 68 A0 02 8A 28 A0 02 8A 28 A0 02 8A }
+	condition:
+		$header at 0
+		and $img_01
+}
+
+rule pdf_eCheckLure_format {
+	meta:
+		author      = "kyle eaton"
+		date        = "2026-06-03"
+		description = "Matching patterns used in the eCheckRun lures, including link rects and text content."
+	strings:
+		$header = { 25 50 44 46 2D 31 2E }
+		$rect1   = { 2F 54 79 70 65 20 2F 41 6E 6E 6F 74 0A 2F 53 75 62 74 79 70 65 20 2F 4C 69 6E 6B 0A 2F 52 65 63 74 20 5B 20 32 30 36 2E 32 35 20 33 39 34 2E 32 35 20 33 38 38 2E 35 20 34 33 39 2E 32 35 20 5D 0A }
+		$rect2   = { 2F 52 65 63 74 20 5B 20 34 34 2E 32 35 20 35 36 30 2E 37 35 20 32 36 34 2E 37 35 20 35 39 32 2E 32 35 20 5D }
+		$t1  = { 5B 3C 30 30 35 32 3E 20 3C 30 30 36 35 3E 20 3C 30 30 37 36 3E 20 3C 30 30 36 39 3E 20 3C 30 30 37 37 3E 20 3C 30 30 32 30 3E 20 3C 30 30 34 44 3E 20 3C 30 30 37 33 3E 20 3C 30 30 36 31 3E 20 3C 30 30 36 37 3E 20 5D }
+		$t2  = { 5B 3C 30 30 34 46 3E 20 3C 30 30 37 30 3E 20 3C 30 30 36 35 3E 20 3C 30 30 36 45 3E 20 3C 30 30 32 30 3E 20 3C 30 30 35 33 3E 20 3C 30 30 36 33 3E 20 3C 30 30 37 35 3E 20 3C 30 30 37 32 3E 20 3C 30 30 35 30 3E 20 3C 30 30 36 31 3E 20 3C 30 30 37 39 3E 20 3C 30 30 36 44 3E 20 3C 30 30 37 34 3E 20 3C 30 30 34 45 3E 20 3C 30 30 36 46 3E 20 3C 30 30 36 39 3E 20 5D }
+	condition:
+		$header at 0
+		and ($rect1 or $rect2 or $t1 or $t2)
+}
+
+rule pdf_encrypted_cred_phish_001 {
+	meta:
+		author      = "kyle eaton"
+		date        = "2026-06-04"
+		description = "Matching the image size and other parameters for an encrypted PDF leading to cred phishing."
+	strings:
+		$header   = { 25 50 44 46 2D 31 2E }
+		$img_size = { 2F 49 6D 61 67 65 0A 2F 57 69 64 74 68 20 31 30 31 38 0A 2F 48 65 69 67 68 74 20 31 31 32 32 }
+	condition:
+		$header at 0
+		and $img_size
+}
+
+rule pdf_fake_invoice_image_font_sizes {
+	meta:
+		author      = "kyle eaton"
+		date        = "06.08.2026"
+		description = "matches pdfs with specific image width/height values and font width array"
+	strings:
+		$header           = { 25 50 44 46 2D 31 2E }
+		$font_width_array = { 5B 20 32 37 38 20 30 20 30 20 30 20 30 20 30 20 30 20 30 20 30 20 30 20 30 20 30 20 30 20 33 33 33 20 30 20 30 20 35 35 36 20 35 35 36 20 35 35 36 20 35 35 36 20 35 35 36 20 35 35 36 20 35 35 36 20 30 20 30 20 30 20 30 20 30 20 30 20 30 20 30 20 30 20 30 20 37 32 32 20 37 32 32 20 37 32 32 20 37 32 32 20 36 36 37 20 36 31 31 20 30 20 30 20 32 37 38 20 30 20 37 32 32 20 30 20 38 33 33 20 37 32 32 20 37 37 38 20 36 36 37 20 30 20 37 32 32 20 36 36 37 20 36 31 31 20 37 32 32 20 30 20 30 20 30 20 30 20 30 20 30 20 30 20 30 20 30 20 30 20 30 20 35 35 36 20 30 20 30 20 36 31 31 20 35 35 36 20 30 20 36 31 31 20 36 31 31 20 32 37 38 20 30 20 35 35 36 20 32 37 38 20 30 20 36 31 31 20 36 31 31 20 30 20 30 20 33 38 39 20 35 35 36 20 33 33 33 20 36 31 31 5D }
+		$image_size       = { 2F 54 79 70 65 2F 58 4F 62 6A 65 63 74 2F 53 75 62 74 79 70 65 2F 49 6D 61 67 65 2F 57 69 64 74 68 20 34 38 39 2F 48 65 69 67 68 74 20 31 34 31 }
+	condition:
+		$header at 0
+		and $font_width_array and $image_size
+}
+
+rule fake_invoice_pdf_images_01 {
+	meta:
+		author      = "kyle eaton"
+		date        = "2026-06-15"
+		description = "matches PDFs with a specific email icon as part of the lure."
+	strings:
+		$header    = { 25 50 44 46 2D 31 2E }
+		$email_jpg = { 00 00 00 00 00 02 39 DA 7E D0 F5 8E 8A FE DD 05 86 2B 9D 8D 70 8B 5A D9 9E D7 44 E5 E5 33 11 8E }
+	condition:
+		$header at 0 and
+		$email_jpg
+}
+
+rule fake_invoice_pdf_structure_01 {
+	meta:
+		author      = "kyle eaton"
+		date        = "2026-06-15"
+		description = "matches PDFs with a specific link sizes and structure overlaps."
+	strings:
+		$header = { 25 50 44 46 2D 31 2E }
+		$rect1  = { 2F 52 65 63 74 20 5B 33 34 37 2E 32 32 30 35 20 31 39 39 2E 35 36 38 37 20 35 31 34 2E 34 31 33 30 20 32 33 34 2E 31 37 39 37 5D }
+	condition:
+		$header at 0 and
+		$rect1
+}

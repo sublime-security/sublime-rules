@@ -1,0 +1,30 @@
+name: "Attachment: ICS calendar file with suspicious product identifier"
+description: "Detects inbound messages containing ICS calendar attachments that have product identifiers matching patterns commonly associated with malicious calendar invitations. The rule identifies ICS files through multiple detection methods and analyzes the product_id field for suspicious formatting that may indicate automated generation or spoofing attempts."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and any(attachments,
+          (
+            .file_type == "ics"
+            or .file_extension == "ics"
+            or .content_type in ("application/ics", "text/calendar")
+          )
+          //
+          // This rule makes use of a beta feature and is subject to change without notice
+          // using the beta feature in custom rules is not suggested until it has been formally released
+          //
+          and regex.icontains(beta.file.parse_ics(.).product_id,
+                              '-//[a-z0-9]*[0-9][a-z0-9]*//EN'
+          )
+  )
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Evasion"
+  - "Social engineering"
+  - "ICS Phishing"
+detection_methods:
+  - "File analysis"
+  - "Content analysis"
+id: "b59b702b-85d5-5555-b75f-1b1704fad3d4"

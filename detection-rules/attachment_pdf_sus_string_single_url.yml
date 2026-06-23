@@ -8,13 +8,13 @@ source: |
           .file_type == "pdf"
           // a single page pdf
           and beta.parse_exif(.).page_count == 1
-          and any(filter(file.explode(.), .depth == 1),
+          and any(file.explode(.),
                   // the pdf contains specific suspicious wording
                   // these are exact matches when split on new lines extracted from the text of the PDF from the scanPDF scanner
                   any(.scan.strings.strings,
                       regex.icontains(.,
                                       // action!
-                                      '^\s*(?:view documents?|view pdf|view presentation|preview new docusign|Download Secure PDF|VIEW DOCUMENT HERE|ACCESS DOCUMENT|REVIEW NEW SECURE DOCUMENT|OPEN SECURE VIEWER|DOWNLOAD RFP DOCUMENT|View Dashboard here|ACCESS SECURE DOCUMENTS|VIEW PROPOSAL DOCUMENTS|ACCESS / VIEW PROPOSAL DOCUMENT|Review & Sign Document|Open PDF|Access Document\(s\)|(?:P?RE)?VIEW SHARED DOCUMENT|New Secured Document|ACCESS SECURE RFP PORTAL|Please Review and Sign|Review and Validate|SECURE DOCUMENT|Open Document|View Details|Q!_Compensation/Salary Amendments\.pptx|PREVIEW DOCUMENT HERE|Download Tax Details Below:|Review and Sign Document|Review Document|Open Encrypted|OPEN DOCUMENT HERE|Click to read message)\s*$',
+                                      '^\s*(?:view documents?|view pdf|view presentation|preview new docusign|Download Secure PDF|VIEW DOCUMENT HERE|ACCESS DOCUMENT|REVIEW NEW SECURE DOCUMENT|OPEN SECURE VIEWER|DOWNLOAD RFP DOCUMENT|View Dashboard here|ACCESS SECURE DOCUMENTS|VIEW PROPOSAL DOCUMENTS|ACCESS / VIEW PROPOSAL DOCUMENT|Review & Sign Document|Open PDF|Access Document\(s\)|(?:P?RE)?VIEW SHARED DOCUMENT|New Secured Document|ACCESS SECURE RFP PORTAL|Please Review and Sign|Review and Validate|SECURE DOCUMENT|Open Document|View Details|Q!_Compensation/Salary Amendments\.pptx|PREVIEW DOCUMENT HERE|Download Tax Details Below:|Review and Sign Document|Review Document|Open Encrypted|OPEN DOCUMENT HERE|Click to read message|CLICK HERE TO VIEW DOCUMENTS|VIEW FULL DOCUMENT HERE)\s*$',
                                       // "secure fax"
                                       'View Secure Fax',
                                       // more fake errors
@@ -31,7 +31,11 @@ source: |
                                       // docusign
                                       '\s*DocuSign Contract Under Review\s*',
                                       'DOCUMENT PREVIEW',
-                                      'PREVIEW DOCUMENT'
+                                      'PREVIEW DOCUMENT',
+                                      'VIEW REMITTANCE COPY HERE',
+                                      'shared a file with you',
+                                      '(?:check your personal|view your) forecast',
+                                      'full new state pension'
                       )
                   )
                   // fake error messages
@@ -47,7 +51,94 @@ source: |
                     and 'Some additional information here' in~ .scan.strings.strings
                   )
           )
-          and any(file.explode(.), .depth == 0 and length(.scan.url.urls) == 1)
+          and any(file.explode(.),
+                  .depth == 0
+                  and (
+                    length(filter(.scan.url.urls,
+                                  // remove mailto: links
+                                  not strings.istarts_with(.url, 'mailto:')
+                                  and not strings.istarts_with(.url, 'email:')
+                                  // remove links found in exiftool output producer/creator
+                                  and not any([
+                                                ..scan.exiftool.producer,
+                                                ..scan.exiftool.creator
+                                              ],
+                                              . is not null
+                                              and strings.icontains(.,
+                                                                    ..domain.domain
+                                              )
+                                  )
+                                  and not .domain.root_domain in ('pdf-tools.com')
+                                  and not .url in (
+                                    'https://gamma.app/?utm_source=made-with-gamma'
+                                  )
+                           )
+                    ) == 1
+                    or 
+                    // there is only one unique domain
+                    (
+                      length(distinct(filter(.scan.url.urls,
+                                             // remove mailto: links
+                                             not strings.istarts_with(.url,
+                                                                      'mailto:'
+                                             )
+                                             and not strings.istarts_with(.url,
+                                                                          'email:'
+                                             )
+                                             // remove links found in exiftool output producer/creator
+                                             and not any([
+                                                           ..scan.exiftool.producer,
+                                                           ..scan.exiftool.creator
+                                                         ],
+                                                         . is not null
+                                                         and strings.icontains(.,
+                                                                               ..domain.domain
+                                                         )
+                                             )
+                                             and not .domain.root_domain in (
+                                               'pdf-tools.com'
+                                             )
+                                             and not .url in (
+                                               'https://gamma.app/?utm_source=made-with-gamma'
+                                             )
+                                      ),
+                                      .domain.domain
+                             )
+                      ) == 1
+                      // all of them are in self_service
+                      and all(distinct(filter(.scan.url.urls,
+                                              // remove mailto: links
+                                              not strings.istarts_with(.url,
+                                                                       'mailto:'
+                                              )
+                                              and not strings.istarts_with(.url,
+                                                                           'email:'
+                                              )
+                                              // remove links found in exiftool output producer/creator
+                                              and not any([
+                                                            ..scan.exiftool.producer,
+                                                            ..scan.exiftool.creator
+                                                          ],
+                                                          . is not null
+                                                          and strings.icontains(.,
+                                                                                ..domain.domain
+                                                          )
+                                              )
+                                              and not .domain.root_domain in (
+                                                'pdf-tools.com'
+                                              )
+                                              and not .url in (
+                                                'https://gamma.app/?utm_source=made-with-gamma'
+                                              )
+                                       ),
+                                       .domain.domain
+                              ),
+                              .domain.domain in $self_service_creation_platform_domains
+                              or .domain.root_domain in $self_service_creation_platform_domains
+                      )
+                    )
+                  )
+          )
   )
 attack_types:
   - "Credential Phishing"

@@ -25,7 +25,7 @@ source: |
         )
       )
       // short subject
-      or length(subject.base) < 5
+      or length(subject.base) < 7
     )
     // or a reply or forward in a thread that mentions website or screenshots
     or (
@@ -41,13 +41,25 @@ source: |
   and (
     // Single thread with no links
     (
-      length(body.links) == 0
+      length(filter(body.current_thread.links,
+                    not (.href_url.scheme == "mailto" and .parser == "plain")
+             )
+      ) == 0
       and length(body.previous_threads) == 0
       // short message between 20 and 500 chars
-      and 20 < length(body.current_thread.text) < 500
+      and (
+        20 < length(body.current_thread.text) < 500
+        or any(map(filter(ml.nlu_classifier(body.current_thread.text).entities,
+                          .name == "disclaimer"
+                   ),
+                   .text
+               ),
+               20 < (length(body.current_thread.text) - length(.)) < 500
+        )
+      )
       // service offering keywords
       and regex.icontains(strings.replace_confusables(body.current_thread.text),
-                          "(?:screenshot|error list|plan|quote|rank|professional|price|mistake|visibility|improvement|review|emailed.{0,10}more details)"
+                          "(?:screenshot|errors? (?:list|report)|plan|quote|rank|professional|price|mistake|visibility|improvement|review|emailed.{0,10}more details)"
       )
       // generic greeting
       and regex.icontains(strings.replace_confusables(body.current_thread.text),
@@ -55,11 +67,11 @@ source: |
       )
       // problem or urgency keywords
       and regex.icontains(strings.replace_confusables(body.current_thread.text),
-                          '(?:error|report|issues|website|repair|redesign|upgrade|Google\s+.{0,15}find it|glitch)'
+                          '(?:errors?|report|issues|website|repair|redesign|upgrade|Google\s+.{0,15}find it|glitch|send you|SEO|broken)'
       )
       // website or page mention
       and regex.icontains(strings.replace_confusables(body.current_thread.text),
-                          "(?:site|website|page)"
+                          "(?:site|website|page|package|SEO)"
       )
     )
     // Single thread with unsubscribe link or $org_domains link
@@ -84,11 +96,11 @@ source: |
       )
       // problem or urgency keywords
       and regex.icontains(strings.replace_confusables(body.current_thread.text),
-                          '(?:error|report|issues|website|repair|redesign|upgrade|Google\s+.{0,15}find it)'
+                          '(?:error|report|issues|website|repair|redesign|upgrade|Google\s+.{0,15}find it|send you|SEO)'
       )
       // website or page mention
       and regex.icontains(strings.replace_confusables(body.current_thread.text),
-                          "(?:site|website|page)"
+                          "(?:site|website|page|package|SEO)"
       )
     )
     // Multiple thread messages
@@ -115,7 +127,6 @@ source: |
       )
     )
   )
-
 tags:
   - "Attack surface reduction"
 attack_types:

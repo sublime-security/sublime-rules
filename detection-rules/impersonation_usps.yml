@@ -7,6 +7,7 @@ source: |
   and (
     any(ml.logo_detect(file.message_screenshot()).brands, .name == "USPS")
     or strings.icontains(sender.display_name, "USPS")
+    or strings.icontains(sender.display_name, "United States Postal Service")
     or regex.contains(body.html.display_text, 'USPS\s*\.\s*COM')
     or strings.icontains(body.current_thread.text, 'USPS Delivery Team')
   )
@@ -18,7 +19,10 @@ source: |
                       "*track*",
                       "*package*",
                       '*view your order*',
-                      "*update*"
+                      "*update*",
+                      '*delivery address*',
+                      "*parcel allocation*",
+                      "*claim your parcel*"
         )
     ),
     strings.ilike(body.current_thread.text,
@@ -27,8 +31,10 @@ source: |
                   '*USPS promotions*',
                   '*review your package*',
                   '*receiver address*',
+                  '*package details*',
                   '*sorry tolet*',
-                  '*Due to an incorrect*'
+                  '*Due to an incorrect*',
+                  '*remain undeliverable*'
     ),
     // impersonal greeting
     any(ml.nlu_classifier(body.current_thread.text).entities,
@@ -39,6 +45,9 @@ source: |
     ),
     // free email sender
     sender.email.domain.root_domain in $free_email_providers,
+    network.whois(sender.email.domain).days_old < 30,
+    not network.whois(sender.email.domain).found,
+  
     // contains link to recently registered domain
     any(body.links, network.whois(.href_url.domain).days_old < 15),
     (
@@ -48,7 +57,8 @@ source: |
       and not regex.icontains(body.html.display_text,
                               '\b(?:usps|shipping|delivery)\b'
       )
-    )
+    ),
+    any(body.links, regex.icontains(.href_url.url, 'https?://[0-9]{7,12}/.+')),
   )
   and (
     sender.email.domain.root_domain not in (

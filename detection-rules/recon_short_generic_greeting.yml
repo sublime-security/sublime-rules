@@ -18,8 +18,17 @@ source: |
   )
   // external freemail sender
   and sender.email.domain.root_domain in $free_email_providers
-  and sender.email.domain.root_domain not in (
-    recipients.to[0].email.domain.root_domain
+  and (
+    sender.email.domain.root_domain not in (
+      recipients.to[0].email.domain.root_domain
+    )
+    or (
+      (
+        all(recipients.to, .email.domain.valid == false)
+        and all(recipients.cc, .email.domain.valid == false)
+      )
+      or length(recipients.to) == 0
+    )
   )
   and (
     length(recipients.cc) == 0
@@ -42,28 +51,37 @@ source: |
   // no attachments or links
   and length(attachments) == 0
   and length(body.current_thread.links) == 0
-  // negate sender profiles completely if auth is failing
-  and (
-    (
-      not (
-        coalesce(headers.auth_summary.dmarc.pass, false)
-        or headers.auth_summary.spf.pass == false
-      )
-      and (
-        not profile.by_sender().solicited
-        or (
-          profile.by_sender().any_messages_malicious_or_spam
-          and not profile.by_sender().any_messages_benign
-        )
-      )
-      and not profile.by_sender().any_messages_benign
+  
+  // not where the sender and mailbox display_anames indicate this might be a personal email --> work email
+  // impersonation is covered by other core feed rules
+  and not (
+    sum([length(recipients.to), length(recipients.bcc), length(recipients.cc)]) == 1
+    // use coalesce to deal with either the sender.display_name or the mailbox element being null
+    // if either are null, the function returns false, as it cannot be true if either is null
+    and coalesce(strings.icontains(sender.display_name, mailbox.first_name),
+                 false
     )
+    and coalesce(strings.icontains(sender.display_name, mailbox.last_name), false)
+  )
+  and (
+    // auth failed (or absent) - ignore the profile
+    coalesce(headers.auth_summary.dmarc.pass, false) == false
+    or coalesce(headers.auth_summary.spf.pass, false) == false
+    // auth passed - use the profile
     or (
-      coalesce(headers.auth_summary.dmarc.pass, false)
-      or headers.auth_summary.spf.pass == false
+      // no benign messages
+      not profile.by_sender_email().any_messages_benign
+      and (
+        // not soliticed OR common
+        not (
+          profile.by_sender_email().solicited
+          or profile.by_sender_email().prevalence == "common"
+        )
+        // or HAS been spam_malicious
+        or profile.by_sender_email().any_messages_malicious_or_spam
+      )
     )
   )
-
 tags:
  - "Attack surface reduction"
 attack_types:

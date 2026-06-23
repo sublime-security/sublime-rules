@@ -215,6 +215,26 @@ jobs:
 
           echo "All batches submitted successfully!"
 
+      - name: Validate YARA rules
+        if: github.event_name != 'issue_comment'
+        env:
+          YARA_VERSION: "4.5.0-1build2"
+        run: |
+          sudo apt-get install -y -qq "yara=${YARA_VERSION}" > /dev/null 2>&1
+          failed=0
+          for f in yara/*.yar; do
+            echo "Validating $f..."
+            if ! yarac "$f" /dev/null; then
+              echo "::error file=$f::YARA rule failed to compile: $f"
+              failed=1
+            fi
+          done
+          if [[ $failed -eq 1 ]]; then
+            echo "One or more YARA rules failed to compile"
+            exit 1
+          fi
+          echo "All YARA rules compiled successfully!"
+
       - name: Verify no .yaml files exist
         if: github.event_name != 'issue_comment'
         run: |
@@ -420,6 +440,7 @@ jobs:
             for (const comment of comments) {
               if (comment.author_association !== "MEMBER") {
                 console.log("Ignoring comment from non-member" + comment.user.login)
+                continue
               }
 
               while ((m = exemptRegex.exec(comment.body)) !== null) {

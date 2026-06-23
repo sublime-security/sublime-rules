@@ -6,7 +6,7 @@ source: |
   type.inbound
   and (
     (
-      strings.ilike(sender.display_name, 'quickbook*')
+      strings.ilike(sender.display_name, 'quickboo*')
       or strings.like(sender.display_name, "QB-*")
       or strings.ilike(sender.display_name, 'intuit*')
       or strings.ilevenshtein(sender.display_name, 'quickbooks') <= 1
@@ -27,10 +27,15 @@ source: |
     any(ml.logo_detect(file.message_screenshot()).brands,
         .name == "Quickbooks" and .confidence in ("medium", "high")
     )
-    // contains the address and copyright 
+    // contains the address and copyright
     or (
-      strings.icontains(body.current_thread.text,
-                        '2800 E. Commerce Center Place, Tucson, AZ 85706'
+      (
+        strings.icontains(body.current_thread.text,
+                          '2800 E. Commerce Center Place, Tucson, AZ 85706'
+        )
+        or strings.icontains(body.current_thread.text,
+                             '2700 Coast Ave, Mountain View, CA 94043'
+        )
       )
       and regex.icontains(body.current_thread.text, '©\s*(?:\d+)\s*Intuit')
     )
@@ -39,6 +44,10 @@ source: |
                          'QuickBooks and Intuit are trademarks of Intuit Inc.'
     )
     or strings.icontains(body.current_thread.text, "QuickBooks Cloud Services")
+    or regex.icontains(body.current_thread.text,
+                       '(?:Secured by )?QuickBooks Payments'
+    )
+    or strings.icontains(body.current_thread.text, "QuickBooks Support Center")
     // phone number and update language
     or (
       regex.icontains(body.current_thread.text,
@@ -67,6 +76,26 @@ source: |
           )
         )
       )
+    )
+    or any(body.links,
+           (
+             regex.icontains(.display_url.url, '(?:quickbooks|intuit)')
+             and .mismatched
+             and not .href_url.domain.root_domain in (
+               "mimecast.com",
+               "mimecastprotect.com"
+             )
+           )
+           or (
+             regex.icontains(.href_url.path, '(?:quickbooks|intuit)')
+             and not strings.icontains(.href_url.domain.root_domain,
+                                       "quickbooks",
+                                       "intuit"
+             )
+             and not any(ml.nlu_classifier(body.current_thread.text).topics,
+                         .name == "Advertising and Promotions"
+             )
+           )
     )
   )
   and not (
@@ -132,7 +161,7 @@ source: |
             .href_url.domain.domain == "connect.intuit.com"
             and strings.icontains(.href_url.query_params, 'cta=viewinvoicenow')
           )
-          // Mimecast links 
+          // Mimecast links
           or (
             .href_url.domain.root_domain == "mimecastprotect.com"
             and (
@@ -150,12 +179,9 @@ source: |
   // negate common sender of quickbooks reseller
   and not strings.icontains(body.current_thread.text, 'Purchasing Reviews, Inc')
   // negate highly trusted sender domains unless they fail DMARC authentication
-  and (
-    (
-      sender.email.domain.root_domain in $high_trust_sender_root_domains
-      and not headers.auth_summary.dmarc.pass
-    )
-    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  and not (
+    sender.email.domain.root_domain in $high_trust_sender_root_domains
+    and coalesce(headers.auth_summary.dmarc.pass, false)
   )
 
 attack_types:

@@ -1,0 +1,126 @@
+name: "Attachment: Compensation-themed DOCX with QR code credential theft"
+description: |
+  Detects inbound messages containing DOCX attachments with compensation or benefit-related themes that include QR codes and suspicious indicators.
+  The rule identifies files with reward/benefit language in filenames, compensation-related content in document metadata, and QR codes that may redirect to credential theft pages.
+  It uses natural language processing to detect credential theft intent and suspicious topics like benefit enrollment or financial communications.
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and (
+    length(filter(attachments, .file_type == "docx")) >= 1
+    and (
+      // short or null message body
+      (
+        length(body.current_thread.text) < 500 or body.current_thread.text is null
+      )
+      // ignore disclaimers in body length calculation
+      or (
+        any(map(filter(ml.nlu_classifier(body.current_thread.text).entities,
+                       .name == "disclaimer"
+                ),
+                .text
+            ),
+            (length(body.current_thread.text) - length(.)) < 500
+        )
+      )
+    )
+  )
+  and (
+    // attached DOCX contains a compensation review themed lure with a QR code and suspicious indicators
+    any(filter(attachments, .file_type == "docx"),
+        // add conditions for DOCX attachment
+        (
+          regex.icontains(.file_name,
+                          '(?:salary|pay(?:roll)|bonus|comp(?:ensation|liance|\b)|remuneration|disbursement|incentive|merit|vesting|employee.*(?:reward|benefit)s?)'
+          )
+          // recipient email SLD in filename
+          or any(recipients.to,
+                 strings.icontains(..file_name, .email.domain.sld)
+                 and .email.domain.valid
+          )
+          or regex.icontains(beta.parse_exif(.).title,
+                             '(?:salary|pay(?:roll)|bonus|comp(?:ensation|liance|\b)|remuneration|disbursement|incentive|merit|vesting|employee.*(?:reward|benefit)s?)'
+          )
+        )
+        // add conditions for text and any QR code within the DOCX attachment
+        and (
+          // conditions for QR code via text
+          any(file.explode(.),
+              any([.scan.strings.raw, .scan.ocr.raw],
+                  regex.icontains(., 'scan|camera|review and sign')
+                  and regex.icontains(., '\bQR\b|Q\.R\.|barcode')
+              )
+              or (
+                .scan.qr.type == "url"
+                and .scan.qr.url.url is not null
+                and any(recipients.to,
+                        .email.domain.valid
+                        and (
+                          strings.icontains(..scan.qr.url.url, .email.email)
+                          or any(strings.scan_base64(..scan.qr.url.url,
+                                                     format="url"
+                                 ),
+                                 strings.icontains(., ..email.email)
+                          )
+                        )
+                )
+              )
+          )
+          or any(file.explode(.),
+                 .scan.qr.type == "url" and .scan.qr.url.domain.valid
+          )
+        )
+        // conditions for text
+        and any(file.explode(.),
+                // review/change terms in file content
+                any([.scan.strings.raw, .scan.ocr.raw, .scan.exiftool.title],
+                    (
+                      regex.icontains(.,
+                                      '\b(?:Remuneration Overview|Updated Compensation (?:Summary|Schedule|Details)|Access Your Statements?|Staff Performance Appraisal|Compensation Adjustment|performance appraisal|Appraisal Overview|appraisal and compensation|salary (?:increment|deduction))\b'
+                      )
+                    )
+                )
+                or (
+                  // recipient local_part in attachment body
+                  any(recipients.to,
+                      strings.contains(..scan.ocr.raw, .email.local_part)
+                  )
+                  and (
+                    // NLU cred_theft disposition
+                    any(ml.nlu_classifier(.scan.ocr.raw).intents,
+                        .name == "cred_theft" and .confidence != "low"
+                    )
+                    // suspicious topics
+                    and any(ml.nlu_classifier(.scan.ocr.raw).topics,
+                            .name in (
+                              "Benefit Enrollment",
+                              "Financial Communications"
+                            )
+                            and .confidence != "low"
+                    )
+                  )
+                )
+        )
+    )
+  )
+  
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and not (
+    sender.email.domain.root_domain in $high_trust_sender_root_domains
+    and coalesce(headers.auth_summary.dmarc.pass, false)
+  ) 
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "QR code"
+  - "Social engineering"
+  - "Impersonation: Brand"
+detection_methods:
+  - "File analysis"
+  - "Optical Character Recognition"
+  - "QR code analysis"
+  - "Natural Language Understanding"
+  - "Exif analysis"
+  - "Content analysis"
+id: "a2455111-b689-5004-b7cb-db1407297e0b"

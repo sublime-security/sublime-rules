@@ -12,6 +12,8 @@ Usage:
 
 import sys
 import re
+import time
+import random
 import argparse
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -31,29 +33,93 @@ except ImportError:
 API_URL = "https://play.sublime.security/v1/rules/format"
 MAX_WORKERS = 100
 
+# Retry config for transient API failures (e.g. intermittent 403s from the
+# edge/WAF under the high-concurrency fan-out, rate limiting, gateway errors).
+MAX_RETRIES = 4
+RETRY_BASE_DELAY = 1.0  # seconds; exponential backoff with jitter
+# Transient statuses worth retrying. 500 is intentionally excluded: it's a
+# deterministic API bug with empty comment lines, so retrying never helps.
+RETRYABLE_STATUSES = {403, 429, 502, 503, 504}
+
 # Files to exclude from formatting (e.g., special comment formatting)
 EXCLUDE_FILES = {
     "attachment_cve_2023_38831.yml",
 }
 
 
-def format_source(source: str) -> str:
-    """Format MQL source using the Sublime API."""
-    resp = requests.post(API_URL, json={
-        "source": source,
-        "max_line_width": 80,
-        "indent": 2,
-        "prefer_multi_line_root": True,
-    }, timeout=30)
+def format_source(source: str, label: str = "") -> str:
+    """Format MQL source using the Sublime API.
 
-    # Handle 500 errors gracefully - this is a known API bug with empty comment lines
-    if resp.status_code == 500:
-        error = requests.HTTPError("500 Server Error")
-        error.response = resp
-        raise error
+    Retries on transient failures (see RETRYABLE_STATUSES and connection-level
+    errors) with exponential backoff plus jitter. The jitter matters because up
+    to MAX_WORKERS requests fan out concurrently, so a synchronized retry would
+    just re-trigger the same edge throttling. 500s are not retried (known
+    deterministic API bug) and are raised immediately for graceful per-file
+    handling upstream.
 
-    resp.raise_for_status()
-    return resp.json()["source"]
+    Each retry is logged with the attempt number, the failure, the per-attempt
+    latency, and a slice of the response body. That detail is deliberate: it's
+    what tells us *why* the endpoint is failing - fast 403s with a WAF/access
+    body point at throttling or an IP block, while attempts that crawl toward
+    the 30s timeout point at endpoint overload (where fewer workers might help).
+    """
+    last_exc: Exception | None = None
+    prefix = f"{label}: " if label else ""
+
+    for attempt in range(MAX_RETRIES):
+        start = time.monotonic()
+        try:
+            resp = requests.post(API_URL, json={
+                "source": source,
+                "max_line_width": 80,
+                "indent": 2,
+                "prefer_multi_line_root": True,
+            }, timeout=30)
+
+            # Handle 500 errors gracefully - this is a known API bug with empty
+            # comment lines. Not retryable, so surface it immediately.
+            if resp.status_code == 500:
+                error = requests.HTTPError("500 Server Error")
+                error.response = resp
+                raise error
+
+            # Let requests build the HTTPError (accurate reason phrase + URL).
+            # The handler below decides whether the status is retryable.
+            resp.raise_for_status()
+            return resp.json()["source"]
+        except requests.HTTPError as e:
+            elapsed = time.monotonic() - start
+            status = getattr(getattr(e, "response", None), "status_code", None)
+            if status not in RETRYABLE_STATUSES:
+                raise
+            last_exc = e
+            resp_obj = getattr(e, "response", None)
+            body = " ".join(resp_obj.text[:200].split()) if resp_obj is not None else ""
+            reason = f"HTTP {status} in {elapsed:.1f}s" + (f" - body: {body}" if body else "")
+        except requests.RequestException as e:
+            # Connection errors, timeouts, etc. - transient, worth retrying.
+            elapsed = time.monotonic() - start
+            last_exc = e
+            reason = f"{type(e).__name__} in {elapsed:.1f}s: {e}"
+
+        # Don't sleep after the final attempt.
+        if attempt < MAX_RETRIES - 1:
+            delay = RETRY_BASE_DELAY * (2 ** attempt) + random.uniform(0, 1)
+            print(f"[retry] {prefix}attempt {attempt + 1}/{MAX_RETRIES} failed - "
+                  f"{reason}; retrying in {delay:.1f}s", flush=True)
+            time.sleep(delay)
+        else:
+            print(f"[retry] {prefix}attempt {attempt + 1}/{MAX_RETRIES} failed - "
+                  f"{reason}; retries exhausted", flush=True)
+
+    # Retry budget exhausted - propagate the last error to the caller. The
+    # guard keeps typing/control flow unambiguous; last_exc is only None if the
+    # loop never ran (e.g. a misconfigured MAX_RETRIES <= 0).
+    if last_exc is not None:
+        raise last_exc
+    raise RuntimeError(
+        f"format_source made no attempts (MAX_RETRIES={MAX_RETRIES})"
+    )
 
 
 def extract_source(content: str) -> str | None:
@@ -118,7 +184,7 @@ def process_file(file_data: dict) -> dict:
     source = file_data["source"]
 
     try:
-        formatted_source = format_source(source)
+        formatted_source = format_source(source, label=path.name)
         changed = normalize(formatted_source) != normalize(source)
         return {
             "path": path,
