@@ -10,10 +10,18 @@ source: |
               and strings.icontains(.value, "instantly.ai")
           )
   )
+  and network.whois(sender.email.domain).days_old < 60
   and any(ml.nlu_classifier(body.current_thread.text).topics,
           .name == "B2B Cold Outreach" and .confidence != "low"
   )
-  and not profile.by_sender_email().solicited
+  and (
+    (
+      not profile.by_sender().solicited
+      or profile.by_sender().any_messages_malicious_or_spam
+    )
+    and not profile.by_sender().any_messages_benign
+  )
+  and profile.by_sender().prevalence == "new"
 attack_types:
   - "Spam"
 tactics_and_techniques:
@@ -25,4 +33,4 @@ detection_methods:
 id: "6f517df2-40a1-5539-8beb-5b56bb09a224"
 og_id: "75e48c9a-d493-52b8-9413-4277ca7474f2"
 testing_pr: 4706
-testing_sha: 1b5e871ef85a4fa79fb68297bfbca69efcc2d95f
+testing_sha: 84a48c949b0692bb1706cbef5f9fa56e549eeb6b
