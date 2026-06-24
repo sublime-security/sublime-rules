@@ -1,0 +1,35 @@
+name: "PR# 4727 - BEC/Fraud: Unsolicited business acquisition offer"
+description: "Detects inbound messages with subjects referencing an offer to purchase, combined with body content mentioning private equity, acquiring companies, or discussing an opportunity. These messages are characteristic of fraudulent or unsolicited business acquisition solicitations designed to engage targets in fraudulent financial dealings."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and strings.icontains(subject.base, "Offer to Purchase")
+  and (
+    strings.icontains(body.plain.raw,
+                      "private equity",
+                      "acquiring companies",
+                      "discuss the opportunity"
+    )
+    or (
+      any(ml.nlu_classifier(body.current_thread.text).entities,
+          .name == "financial" and strings.icontains(.text, "purchase")
+      )
+      and any(ml.nlu_classifier(body.current_thread.text).topics,
+              .name == "B2B Cold Outreach" and .confidence == "high"
+      )
+    )
+  )
+attack_types:
+  - "BEC/Fraud"
+tactics_and_techniques:
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+id: "b490993a-3bb2-5e9a-afd3-f73c026b8a71"
+tags:
+  - created_from_open_prs
+  - rule_status_modified
+  - pr_author_markmsublime
+references:
+  - https://github.com/sublime-security/sublime-rules/pull/4727
