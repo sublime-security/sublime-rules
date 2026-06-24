@@ -7,9 +7,10 @@ source: |
   // CTA link with action-oriented display text pointing to a different domain than the sender
   and any(body.current_thread.links,
           regex.icontains(.display_text,
-                          '(?:open|sign.?in|log.?in|retain|credential|secure|confirm|accept|release|document)'
+                          '(?:open|sign.?in|log.?in|retain|credential|secure|confirm|accept|release|review|document)'
           )
           and .href_url.domain.root_domain != sender.email.domain.root_domain
+          and not regex.icontains(.display_text, 'open source')
   )
   // tall rendered email with low word density
   and beta.parse_exif(file.message_screenshot()).image_height > 1500
@@ -24,9 +25,17 @@ source: |
     or regex.icontains(body.html.raw,
                        '(?:<div\s+style="[^"]+"\s*[^>]*>\s*<br\s*/?\s*>\s*</div>\s*){20,}'
     )
-    // class-attributed div-br blocks repeated 20+ times (Outlook elementToProof pattern)
-    or regex.icontains(body.html.raw,
-                       '(?:<div\s+class="[^"]*"[^>]*>\s*<br\s*/?\s*>\s*</div>\s*){20,}'
+    // attributed empty div-nbsp blocks repeated 20+ times (styled/classed empty divs, e.g. Outlook Aptos)
+    // requires an attribute to avoid bare <div>&nbsp;</div> newsletter spacers
+    or (
+      regex.icontains(body.html.raw,
+                      '(?:<div\s+[^>]+>\s*(?:&nbsp;|&#160;)\s*</div>\s*){20,}'
+      )
+      // exclude collapsed/hidden empty divs (display:none, font-size:0, line-height:0)
+      // these render to zero height and are ESP preheader artifacts, not visible stuffing
+      and not regex.icontains(body.html.raw,
+                              '(?:<div\s+[^>]*(?:display\s*:\s*none|font-size\s*:\s*0|line-height\s*:\s*0)[^>]*>\s*(?:&nbsp;|&#160;)\s*</div>\s*){20,}'
+      )
     )
     // p-nbsp blocks repeated 25+ times
     or regex.icontains(body.html.raw,
