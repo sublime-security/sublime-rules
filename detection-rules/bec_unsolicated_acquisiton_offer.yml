@@ -4,11 +4,24 @@ type: "rule"
 severity: "medium"
 source: |
   type.inbound
-  and strings.icontains(subject.base, "Offer to Purchase")
-  and strings.icontains(body.plain.raw,
-                        "private equity",
-                        "acquiring companies",
-                        "discuss the opportunity"
+  and strings.icontains(subject.base,
+                        "Offer to Purchase",
+                        "Transaction Opportunity"
+  )
+  and (
+    strings.icontains(body.plain.raw,
+                      "private equity",
+                      "acquiring companies",
+                      "discuss the opportunity"
+    )
+    or (
+      any(ml.nlu_classifier(body.current_thread.text).entities,
+          .name == "financial" and strings.icontains(.text, "purchase")
+      )
+      and any(ml.nlu_classifier(body.current_thread.text).topics,
+              .name == "B2B Cold Outreach" and .confidence == "high"
+      )
+    )
   )
 attack_types:
   - "BEC/Fraud"
