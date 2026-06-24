@@ -1,0 +1,53 @@
+name: "BEC: Financial fraud from newly registered sender domain"
+description: "Detects inbound messages from domains registered less than 30 days ago that exhibit business email compromise intent with high-confidence financial or payment topics. The message must also contain explicit banking details such as account and routing numbers, invoice references, or payment urgency language, and must either fail DMARC on a trusted domain or originate from an untrusted domain."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and network.whois(sender.email.domain).days_old < 30
+  and any(ml.nlu_classifier(body.current_thread.text).intents, .name == "bec")
+  and (
+    any(ml.nlu_classifier(body.current_thread.text).topics,
+        .name == "Financial Communications" and .confidence == "high"
+    )
+    or any(ml.nlu_classifier(body.current_thread.text).topics,
+           .name == "Payment Information" and .confidence == "high"
+    )
+  )
+  and (
+    (
+      regex.icontains(body.current_thread.text,
+                      'account\s*(?:number|num|no\.?)\s*:?\s*\d{5,}'
+      )
+      and regex.icontains(body.current_thread.text,
+                          '(?:wire\s*)?routing\s*(?:number|num|no\.?)\s*:?\s*\d{5,}'
+      )
+    )
+    or regex.icontains(body.current_thread.text,
+                       'invoice\s*(?:#|number|num|no\.?)\s*:?\s*[A-Z0-9-]{3,}',
+                       'per\s+\w+.{0,5}s\s+request'
+    )
+    or strings.icontains(body.current_thread.text,
+                         'due upon receipt',
+                         'confirm receipt of invoice',
+                         'see attached invoice'
+    )
+  )
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and not headers.auth_summary.dmarc.pass
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+attack_types:
+  - "BEC/Fraud"
+tactics_and_techniques:
+  - "Social engineering"
+  - "Spoofing"
+detection_methods:
+  - "Natural Language Understanding"
+  - "Whois"
+  - "Content analysis"
+  - "Sender analysis"
+  - "Header analysis"
