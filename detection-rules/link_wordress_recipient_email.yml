@@ -4,17 +4,35 @@ type: "rule"
 severity: "high"
 source: |
   type.inbound
+  and recipients.to[0].email.domain.valid
   and any(body.links,
           regex.icontains(.href_url.path,
                           '^\/(?:wp-(?:admin|includes|content|login|json|signup|activate|cron|mail)|xmlrpc\.php)'
           )
-          // base64 encoded
+
           and (
+              // fragments base64 encoded
+
             any(strings.scan_base64(.href_url.fragment),
                 strings.icontains(., recipients.to[0].email.email)
             )
-            // not base64
-            or strings.icontains(.href_url.fragment, recipients.to[0].email.email)
+            // fragments not base64 enbcoded
+            or strings.icontains(.href_url.fragment,
+                                 recipients.to[0].email.email
+            )
+            // query param values are exactly the recipient
+            or (
+              any(flatten(values(.href_url.query_params_decoded)),
+                  . == recipients.to[0].email.email
+                  or any(strings.scan_base64(.),
+                         . == recipients.to[0].email.email
+                  )
+              )
+              // not an unsub URL
+              and not strings.icontains(.href_url.url, 'unsub')
+              // only a single query_param
+              and length(keys(.href_url.query_params_decoded)) <= 2
+            )
           )
   )
 attack_types:
