@@ -7,7 +7,11 @@ source: |
   and (
     (
       strings.icontains(body.current_thread.text, 'Microsoft Teams')
-      and strings.icontains(body.current_thread.text, 'join the meeting')
+      and strings.icontains(body.current_thread.text,
+                            'join the meeting',
+                            'confirm your attendance',
+                            'confirm attendance'
+      )
       and strings.contains(body.current_thread.text, 'Meeting ID:')
       and strings.contains(body.current_thread.text, 'Passcode:')
     )
@@ -39,13 +43,23 @@ source: |
   // no unsubscribe links
   // common in newsletters which link to a webinar style event
   and not any(body.links, strings.icontains(.display_text, "unsub"))
-  
+
   // one of the links contains is a CTA that doesn't link to MS
   and any(body.current_thread.links,
           (
             .display_text =~ "join the meeting"
             or strings.icontains(.display_text, "join the meeting")
             or strings.icontains(.display_text, "play recording")
+            // is a mismatched domain via .display_url
+            or (
+              .display_url.domain.root_domain in (
+                "microsoft.com",
+                "microsoft.us",
+                "microsoft.cn",
+                "live.com"
+              )
+              and .mismatched
+            )
           )
           and .href_url.domain.root_domain not in (
             "microsoft.com",
@@ -55,7 +69,8 @@ source: |
           )
           and not (
             .href_url.domain.root_domain == "mimecastprotect.com"
-            and strings.parse_domain(.href_url.query_params_decoded["domain"][0]).root_domain in (
+            and strings.parse_domain(.href_url.query_params_decoded["domain"][0]
+            ).root_domain in (
               "microsoft.com",
               "microsoft.us",
               "microsoft.cn",
@@ -67,11 +82,13 @@ source: |
   )
   // missing the dial by phone element
   and not strings.icontains(body.current_thread.text, 'Dial in by phone')
-  
+
   // any of these suspicious elements from the body
   and (
     // malicious samples leveraged recipient domain branding here
-    not strings.icontains(body.current_thread.text, 'Microsoft Teams Need help?')
+    not strings.icontains(body.current_thread.text,
+                          'Microsoft Teams Need help?'
+    )
     // malicious samples contained unique html elements not present in legit ones
     or strings.icontains(body.html.raw, '<div class="meeting-title">')
     or strings.icontains(body.html.raw, '<div class="meeting-time">')
@@ -79,7 +96,7 @@ source: |
     or strings.icontains(body.html.raw, '<span class="conflict-badge">')
     or strings.icontains(body.html.raw, 'class="join-button"')
   )
-  
+
   // negate highly trusted sender domains unless they fail DMARC authentication
   and (
     (
