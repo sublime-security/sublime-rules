@@ -1,0 +1,43 @@
+name: "Link: Suspicious domain with copy-paste instructions"
+description: "Detects messages instructing recipients to manually copy and paste a URL containing free subdomain hosting domains (pages.dev or web.app) into their browser, while no actual clickable links to those domains are present in the message body. This tactic is used to evade URL scanning by preventing automated link analysis. Supports detection in non-English messages via translation."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and (
+    (
+      strings.icontains(body.current_thread.text, "copy")
+      and strings.icontains(body.current_thread.text, "paste")
+    )
+    or (
+      ml.nlu_classifier(body.current_thread.text).language != 'english'
+      and strings.icontains(beta.ml_translate(body.current_thread.text).text,
+                            'copy'
+      )
+      and strings.icontains(beta.ml_translate(body.current_thread.text).text,
+                            'paste'
+      )
+    )
+  )
+  and (
+    strings.contains(body.current_thread.text, '.pages.dev')
+    or strings.contains(body.current_thread.text, '.web.app')
+  )
+  and not any(body.links,
+              .href_url.domain.root_domain in~ ("web.app", "pages.dev")
+  )
+
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Evasion"
+  - "Free subdomain host"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Header analysis"
+  - "Sender analysis"
+id: "ddc87b44-d5f1-5b46-a2e9-bbfb46a8fd56"
+og_id: "6dd983b9-7a90-5dbe-b324-a5ed4bfb1f24"
+testing_pr: 4747
+testing_sha: 216d282d0d12b55b34602150cf9181fb1a1d9716
