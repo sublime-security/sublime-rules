@@ -8,7 +8,30 @@ severity: "medium"
 source: |
   type.inbound
   and any($org_vips,
-          0 <= strings.ilevenshtein(sender.display_name, .display_name) < 4
+          (
+            .display_name != ""
+            and 0 <= strings.ilevenshtein(sender.display_name, .display_name) < 4
+          )
+          or (
+            .first_name != ""
+            and .last_name != ""
+            and 0 <= strings.ilevenshtein(sender.display_name,
+                                          strings.concat(.first_name,
+                                                         " ",
+                                                         .last_name
+                                          )
+            ) < 4
+          )
+          or (
+            .first_name != ""
+            and .last_name != ""
+            and 0 <= strings.ilevenshtein(sender.display_name,
+                                          strings.concat(.last_name,
+                                                         ", ",
+                                                         .first_name
+                                          )
+            ) < 4
+          )
   )
   and any(ml.nlu_classifier(body.current_thread.text).intents,
           .name == "bec" and .confidence in ("medium", "high")
