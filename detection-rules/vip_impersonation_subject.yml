@@ -13,7 +13,23 @@ severity: "medium"
 source: |
   type.inbound
   and any($org_vips,
-          strings.contains(subject.subject, .display_name)
+          (
+            strings.contains(subject.subject, .display_name)
+            or (
+              .first_name != ""
+              and .last_name != ""
+              and strings.contains(subject.subject,
+                                   strings.concat(.first_name, " ", .last_name)
+              )
+            )
+            or (
+              .first_name != ""
+              and .last_name != ""
+              and strings.contains(subject.subject,
+                                   strings.concat(.last_name, ", ", .first_name)
+              )
+            )
+          )
           and strings.contains(.display_name, " ")
   )
   // not being sent to said VIP
@@ -23,7 +39,29 @@ source: |
       and all(recipients.to,
               any($org_vips,
                   .email == ..email.email
-                  and strings.contains(subject.subject, .display_name)
+                  and (
+                    strings.contains(subject.subject, .display_name)
+                    or (
+                      .first_name != ""
+                      and .last_name != ""
+                      and strings.contains(subject.subject,
+                                           strings.concat(.first_name,
+                                                          " ",
+                                                          .last_name
+                                           )
+                      )
+                    )
+                    or (
+                      .first_name != ""
+                      and .last_name != ""
+                      and strings.contains(subject.subject,
+                                           strings.concat(.last_name,
+                                                          ", ",
+                                                          .first_name
+                                           )
+                      )
+                    )
+                  )
                   and strings.contains(.display_name, " ")
               )
       )
@@ -77,7 +115,6 @@ source: |
     )
     or sender.email.domain.root_domain not in $high_trust_sender_root_domains
   )
-
 tags:
   - "Attack surface reduction"
 attack_types:
