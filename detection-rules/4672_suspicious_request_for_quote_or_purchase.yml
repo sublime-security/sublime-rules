@@ -48,11 +48,12 @@ source: |
     )
     // typo-squatted sender domain
     or (
-      // check for RFQ/RFP indicators prior to analyzing $sender_domains
-      subject.is_reply
+      // check for suspicious sender domain + RFQ/RFP indicators prior to analyzing $sender_domains
+      sender.email.domain.domain not in $org_domains
+      and network.whois(sender.email.domain).days_old < 365
       and length(body.current_thread.links) > 0
       and any(body.current_thread.links,
-              regex.icontains(.display_text, '\bRFP\b|\bRFQ\b')
+              regex.icontains(.display_text, '(?:\bRFP\b|\bRFQ\b)')
       )
       and any($sender_domains,
               0 < strings.ilevenshtein(., sender.email.domain.root_domain) < 3
@@ -71,7 +72,7 @@ source: |
                            '(sign(ed?)|view).{0,10}(purchase order)|Request for (a Quot(e|ation)|Proposal)'
         )
         or regex.icontains(body.current_thread.text,
-                           '(please|kindly).{0,30}(?:proposal|quot(e|ation))'
+                           '(please|kindly|preferred).{0,30}(?:proposal|quot(e|ation))'
         )
         or regex.icontains(subject.subject,
                            '(request for (purchase|quot(e|ation))|\bRFQ\b|\bRFP\b|bid invit(e|ation))'
@@ -102,7 +103,7 @@ source: |
                           '(sign(ed?)|view).{0,10}(purchase order)|Request for a Quot(e|ation)'
           ),
           regex.icontains(body.current_thread.text,
-                          '(please|kindly).{0,30}(?:proposal|quot(e|ation))'
+                          '(please|kindly|preferred).{0,30}(?:proposal|quot(e|ation))'
           ),
           regex.icontains(body.current_thread.text,
                           '(?:invitation|intent) to bid'
@@ -117,7 +118,7 @@ source: |
               .name == "purchase_order" and .confidence == "high"
           ),
           any(ml.nlu_classifier(body.current_thread.text).entities,
-              .name == "financial" and regex.imatch(.text, "rfp|rfq")
+              .name == "financial" and regex.imatch(.text, "(?:rfp|rfq)")
           ),
   
           // Non-keyword indicators
