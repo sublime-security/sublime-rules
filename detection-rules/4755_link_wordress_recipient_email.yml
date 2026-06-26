@@ -1,0 +1,48 @@
+name: "PR# 4755 - Link: WordPress admin targeting with recipient identifier in URL parts"
+description: "Detects messages containing links to WordPress administrative paths (wp-admin, wp-content, wp-includes, etc.) where the URL fragment or query param values contains base64-encoded data that includes the recipient's email address, indicating potential targeted compromise attempts."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and recipients.to[0].email.domain.valid
+  and any(body.links,
+          regex.icontains(.href_url.path,
+                          '^\/(?:wp-(?:admin|includes|content|login|json|signup|activate|cron|mail)|xmlrpc\.php)'
+          )
+          and (
+            // fragments base64 encoded
+            any(strings.scan_base64(.href_url.fragment),
+                strings.icontains(., recipients.to[0].email.email)
+            )
+            // fragments not base64 enbcoded
+            or strings.icontains(.href_url.fragment, recipients.to[0].email.email)
+            // query param values are exactly the recipient
+            or (
+              any(flatten(values(.href_url.query_params_decoded)),
+                  . == recipients.to[0].email.email
+                  or any(strings.scan_base64(.),
+                         . == recipients.to[0].email.email
+                  )
+              )
+              // not an unsub URL
+              and not strings.icontains(.href_url.url, 'unsub')
+              // only a single query_param
+              and length(keys(.href_url.query_params_decoded)) <= 2
+            )
+          )
+  )
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Evasion"
+  - "Social engineering"
+detection_methods:
+  - "URL analysis"
+  - "Content analysis"
+id: "dcfaa2a1-994c-533f-9b47-1099da3510bd"
+tags:
+  - created_from_open_prs
+  - rule_status_modified
+  - pr_author_zoomequipd
+references:
+  - https://github.com/sublime-security/sublime-rules/pull/4755
