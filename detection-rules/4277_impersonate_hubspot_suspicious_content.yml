@@ -5,44 +5,56 @@ severity: "medium"
 source: |
   type.inbound
   and strings.icontains(sender.display_name, 'hubspot')
-  
-  // domain typosquats "hubspot" via character substitution/confusables
-  and (
-    not strings.icontains(strings.replace_confusables(sender.email.domain.domain),
-                          'hubspot'
-    )
-    and strings.icontains(sender.email.domain.domain, 'hubsp')
+  // body reproduces HubSpot's real corporate footer
+  and 2 of (
+    regex.icontains(body.current_thread.text, 'hubspot,?\s+inc'),
+    strings.icontains(body.current_thread.text, '2 canal park'),
+    strings.icontains(body.current_thread.text, '25 first street'),
+    regex.icontains(body.current_thread.text, 'cambridge,?\s+ma\s+0214[0-9]')
   )
-  and not (
-    strings.icontains(sender.email.local_part, 'hubspot')
-    or regex.icontains(sender.email.domain.domain, '^hubspot\.')
+  // HubSpot orange
+  and strings.icontains(body.html.raw, '#ff7a59')
+  // filter on visible action links off HubSpot's real infrastructure
+  and any(filter(body.links,
+                 .href_url.scheme in ('http', 'https')
+                 and coalesce(.visible, false)
+          ),
+          .href_url.domain.root_domain not in (
+            'hubspot.com',
+            'hubspotlinks.com',
+            'hs-sites.com',
+            'hsforms.com',
+            'hubspotemail.net',
+            'hubspotusercontent.com',
+            'hubapi.com'
+          )
   )
-  
-  // negate if links go to HubSpot's click-tracking domain
-  and not any(body.current_thread.links,
-              .href_url.domain.root_domain == "hubspotlinks.com"
-  )
-  
-  // exclude legitimate HubSpot sends
-  and not (
-    (
-      (
-        strings.iends_with(sender.email.domain.root_domain, 'hubspot.com')
-        or strings.iends_with(sender.email.domain.root_domain, 'hubspotqa.com')
-      )
-      and coalesce(headers.auth_summary.dmarc.pass, false)
-    )
-    or (
-      (
-        strings.iends_with(headers.return_path.domain.root_domain, 'hubspot.com')
-        or strings.icontains(headers.message_id, '@notifybf')
-        or strings.icontains(headers.message_id, '.hubspot.com')
-      )
-      and (
-        any(headers.domains, strings.iends_with(.root_domain, 'hubspot.com'))
-        or strings.icontains(headers.from.email.email, 'hubspot')
-      )
-    )
+  and not coalesce((
+                     sender.email.domain.root_domain in (
+                       'hubspot.com',
+                       'hubspotqa.com'
+                     )
+                     and (
+                       coalesce(headers.auth_summary.dmarc.pass, false)
+                       or coalesce(headers.auth_summary.spf.pass, false)
+                     )
+                   )
+                   or (
+                     (
+                       headers.return_path.domain.root_domain == 'hubspot.com'
+                       or strings.icontains(headers.message_id, '@notifybf')
+                       or strings.iends_with(headers.message_id, '.hubspot.com>')
+                     )
+                     and (
+                       strings.icontains(headers.from.email.email, 'hubspot')
+                       or any(headers.reply_to,
+                              strings.iends_with(.email.domain.root_domain,
+                                                 'hubspot.com'
+                              )
+                       )
+                     )
+                   ),
+                   false
   )
   and not (
     sender.email.domain.root_domain in $high_trust_sender_root_domains
@@ -62,4 +74,4 @@ detection_methods:
 id: "115bbcb6-186a-5982-a7b7-4f624ef04f51"
 og_id: "5df09a5b-8a87-59be-9a73-bd8765dbcc20"
 testing_pr: 4277
-testing_sha: 1f98db76b0cf80bb364bb5cf3cc1145fee79f0c6
+testing_sha: f66754651ba500fa9d3506520dfa802dd250a921
