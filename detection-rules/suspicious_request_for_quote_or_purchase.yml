@@ -48,11 +48,12 @@ source: |
     )
     // typo-squatted sender domain
     or (
-      // check for RFQ/RFP indicators prior to analyzing $sender_domains
-      subject.is_reply
+      // check for suspicious sender domain + RFQ/RFP indicators prior to analyzing $sender_domains
+      sender.email.domain.domain not in $org_domains
+      and network.whois(sender.email.domain).days_old < 365
       and length(body.current_thread.links) > 0
       and any(body.current_thread.links,
-              regex.icontains(.display_text, '\bRFP\b|\bRFQ\b')
+              regex.icontains(.display_text, '(?:\bRFP\b|\bRFQ\b)')
       )
       and any($sender_domains,
               0 < strings.ilevenshtein(., sender.email.domain.root_domain) < 3
