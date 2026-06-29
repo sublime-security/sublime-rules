@@ -1,0 +1,41 @@
+name: "PR# 4766 - HTML: Template placeholders or recipient email in element class attributes"
+description: "Detects inbound messages where HTML element class attributes contain either unfilled template placeholders (e.g., {email}, {RECIPIENT_EMAIL}, {domain}) or the recipient's actual email address — optionally wrapped in curly braces. This pattern indicates a bulk-sending infrastructure that failed to substitute personalization tokens, or one that embeds recipient identifiers directly into HTML class names for tracking or evasion purposes. Observed samples follow a consistent pattern: subjects contain numeric identifiers flanking the recipient's email address, and senders vary across unrelated domains, suggesting a coordinated operation targeting multiple organizations including technology and fitness brands."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and (
+    // observed unpopulated template variables in class names
+    any(html.xpath(body.html, "//*/@class").nodes,
+        regex.icontains(.raw,
+                        '\{\s*(?:domain|email|(?:RECIPIENT|SENDER)[_\s]?EMAIL)\s*\}'
+        )
+    )
+  
+    // check where class names _are_ the email address, or contain the email address are wrapped in { } or start/end with { or }
+    or any(recipients.to,
+           .email.email != ""
+           and any(html.xpath(body.html, "//*/@class").nodes,
+                   .raw =~ ..email.email
+                   or .raw =~ strings.concat("{", ..email.email, "}")
+                   or .raw =~ strings.concat("{", ..email.email)
+                   or .raw =~ strings.concat(..email.email, "}")
+           )
+    )
+  )
+attack_types:
+  - "Credential Phishing"
+  - "BEC/Fraud"
+tactics_and_techniques:
+  - "Evasion"
+  - "Social engineering"
+detection_methods:
+  - "HTML analysis"
+  - "Content analysis"
+id: "dd0d2651-110d-5c3d-8712-ec25cbc0b98f"
+tags:
+  - created_from_open_prs
+  - rule_status_added
+  - pr_author_zoomequipd
+references:
+  - https://github.com/sublime-security/sublime-rules/pull/4766
