@@ -3,13 +3,23 @@ description: "Detects inbound messages containing mailto links where the href UR
 type: "rule"
 severity: "medium"
 source: |
+                                                                                               
   type.inbound
   and any(body.links,
           .href_url.scheme == "mailto"
-          and regex.icontains(.href_url.url,
-                              '{\s*(?:domain|email|(?:RECIPIENT|SENDER)[_\s]EMAIL)\s*}'
+          and (
+              // @{domain} pattern is strong
+              regex.icontains(.href_url.url, '@\s*{\s*domain\s*}')
+              // combine {RECIPIENT_EMAIL} and {SENDER EMAIL} with NLU to remove a bunch of 
+              // benign use cases
+              or (
+                  regex.icontains(.href_url.url, '{\s*(?:RECIPIENT|SENDER)[_\s]?EMAIL\s*}')
+                  and any(ml.nlu_classifier(body.current_thread.text).intents,
+                          .name in ("cred_theft", "bec") and .confidence == "high")
+              )
           )
   )
+  
 attack_types:
   - "Credential Phishing"
 tactics_and_techniques:
