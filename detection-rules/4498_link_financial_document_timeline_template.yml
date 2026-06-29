@@ -4,6 +4,9 @@ type: "rule"
 severity: "medium"
 source: |
   type.inbound
+  // link limiter scopes thread hijacking but limits reports
+  and length(body.links) <= 40
+  
   // expectation of time
   and regex.icontains(body.current_thread.text,
                       'will be released.{0,15}(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday),\s+(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},',
@@ -25,6 +28,25 @@ source: |
             )
             or any(ml.nlu_classifier(body.current_thread.text).topics,
                    .name == "Request to View Invoice" and .confidence == "high"
+            )
+          )
+          // suspicious hosting
+          and (
+            .href_url.domain.domain in $free_file_hosts
+            or .href_url.domain.root_domain in $free_file_hosts
+            or .href_url.domain.tld in $suspicious_tlds
+            or .href_url.domain.domain in $self_service_creation_platform_domains
+            or (
+              .href_url.domain.root_domain not in $tranco_1m
+              and not .href_url.scheme == "mailto"
+            )
+            or .href_url.domain.root_domain in $url_shorteners
+            // open redirect
+            or strings.icontains(.href_url.query_params, '=https', 'url=', 'upn=')
+            // bait and switch CTA observed
+            or (
+              strings.icontains(body.current_thread.text, "[message clipped]")
+              and strings.icontains(.display_text, "view entire message")
             )
           )
           // negate org domains
