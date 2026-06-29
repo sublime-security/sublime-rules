@@ -453,7 +453,7 @@ rule pdf_quote_lure_01 {
 	meta:
 		author      = "kyle eaton"
 		date        = "2026-06-29"
-		description = "Matches the rect value associated with a 'quote' themed PDF lure. All the samples so far have been the same other than a modified date/time in the metadata."
+		description = "Matches the rect value associated with a 'quote' themed PDF lure. All of the samples so far have been the same other than a modified date/time in the metadata."
 	strings:
 		$header = { 25 50 44 46 2D 31 2E }
 		$rect   = { 2F 52 65 63 74 20 5B 32 33 30 2E 33 34 35 32 38 20 34 }
