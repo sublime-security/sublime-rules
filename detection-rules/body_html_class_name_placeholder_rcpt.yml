@@ -4,20 +4,25 @@ type: "rule"
 severity: "high"
 source: |
   type.inbound
-    and (
-        // observed unpopulated template variables in class names
-        any(html.xpath(body.html, "//*/@class").nodes,
-            regex.icontains(.raw, '\{\s*(?:domain|email|(?:RECIPIENT|SENDER)[_\s]?EMAIL)\s*\}'))
-  
-        // check where class names _are_ the email address, or contain the email address are wrapped in { } or start/end with { or }
-        or any(recipients.to,
-               .email.email != ""
-               and any(html.xpath(body.html, "//*/@class").nodes,                                
-                       .raw =~ ..email.email
-                       or .raw =~ strings.concat("{", ..email.email, "}")
-                       or .raw =~ strings.concat("{", ..email.email)
-                       or .raw =~ strings.concat(..email.email, "}")))
+  and (
+    // observed unpopulated template variables in class names
+    any(html.xpath(body.html, "//*/@class").nodes,
+        regex.icontains(.raw,
+                        '\{\s*(?:domain|email|(?:RECIPIENT|SENDER)[_\s]?EMAIL)\s*\}'
+        )
     )
+  
+    // check where class names _are_ the email address, or contain the email address are wrapped in { } or start/end with { or }
+    or any(recipients.to,
+           .email.email != ""
+           and any(html.xpath(body.html, "//*/@class").nodes,
+                   .raw =~ ..email.email
+                   or .raw =~ strings.concat("{", ..email.email, "}")
+                   or .raw =~ strings.concat("{", ..email.email)
+                   or .raw =~ strings.concat(..email.email, "}")
+           )
+    )
+  )
 attack_types:
   - "Credential Phishing"
   - "BEC/Fraud"
@@ -27,3 +32,4 @@ tactics_and_techniques:
 detection_methods:
   - "HTML analysis"
   - "Content analysis"
+id: "e7d0fb39-7a12-5a14-8041-245cc74a9320"
