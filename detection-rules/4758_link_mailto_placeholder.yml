@@ -6,8 +6,19 @@ source: |
   type.inbound
   and any(body.links,
           .href_url.scheme == "mailto"
-          and regex.icontains(.href_url.url,
-                              '{\s*(?:domain|email|(?:RECIPIENT|SENDER)[_\s]EMAIL)\s*}'
+          and (
+            // @{domain} pattern is strong
+            regex.icontains(.href_url.url, '@\s*{\s*domain\s*}')
+            // combine {RECIPIENT_EMAIL} and {SENDER EMAIL} with NLU to remove a bunch of
+            // benign use cases
+            or (
+              regex.icontains(.href_url.url,
+                              '{\s*(?:RECIPIENT|SENDER)[_\s]?EMAIL\s*}'
+              )
+              and any(ml.nlu_classifier(body.current_thread.text).intents,
+                      .name in ("cred_theft", "bec") and .confidence == "high"
+              )
+            )
           )
   )
 attack_types:
@@ -21,4 +32,4 @@ detection_methods:
 id: "1a23141c-40fd-506a-97ba-7a2197abd420"
 og_id: "b27e9e2a-a979-584f-9da7-a2936829ae0c"
 testing_pr: 4758
-testing_sha: bc086f7988513090bc341dc58699480e30185f64
+testing_sha: 250a2d8c749ab0a059696af5a2a7f91b9fc1c4f2
