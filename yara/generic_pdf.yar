@@ -460,3 +460,15 @@ rule pdf_quote_lure_01 {
 	condition:
 		$header at 0 and $rect
 }
+
+rule pdf_w9_signature_c003 {
+	meta:
+		author      = "kyle eaton"
+		date        = "2026-06-29"
+		description = "matching on signature re-use in this set of fake w9 activity"
+	strings:
+		$header = { 25 50 44 46 2D 31 2E }
+		$sig_1  = { 02 80 0A 00 28 00 A0 0A D6 57 B6 9A 8D AC 17 B6 37 30 DD DA 5C A0 92 0B 88 1D 64 8A 54 27 19 56 52 46 43 02 AC BF 79 1D 4A 30 0C 08 50 0B 34 00 50 07 C3 BF B6 67 FC 14 5F F6 46 FD 83 3C 3B 69 AD 7E D1 7F 16 F4 3F 0C EB 5A A1 03 C3 3F 0D B4 }
+	condition:
+		$header at 0 and any of ($sig_*)
+}
