@@ -1,0 +1,23 @@
+name: "Open redirect: JustPaste.it"
+description: "Detects inbound messages containing JustPaste.it redirect links that forward to external destinations outside of JustPaste.it. This technique abuses JustPaste.it's redirect functionality to obscure the true destination URL, bypassing link reputation checks. The rule excludes legitimate senders from JustPaste.it itself."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and any(body.links,
+          .href_url.domain.domain == "justpaste.it"
+          and strings.istarts_with(.href_url.path, '/redirect/')
+          // wrapped destination is not back to justpaste.it
+          and not strings.icontains(.href_url.path, 'justpaste.it')
+  )
+  and not sender.email.domain.root_domain == "justpaste.it"   
+attack_types:
+  - "Credential Phishing"
+  - "Malware/Ransomware"
+tactics_and_techniques:
+  - "Open redirect"
+  - "Free file host"
+  - "Evasion"
+detection_methods:
+  - "URL analysis"
+  - "Sender analysis"
