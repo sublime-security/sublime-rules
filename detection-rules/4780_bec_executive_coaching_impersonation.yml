@@ -1,0 +1,37 @@
+name: "BEC: Executive coaching vendor impersonation"
+description: "Detects fraudulent messages impersonating leadership development coaching services. The rule identifies inbound messages referencing coaching and executive services terminology alongside financial indicators such as invoices and W-9 forms. Natural language understanding is used to confirm high-confidence financial communication intent and BEC signals."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and strings.icontains(body.html.inner_text, "ezra", "betterup")
+  and strings.icontains(body.html.inner_text, "leadership development coach")
+  and 2 of (
+    strings.icontains(body.html.inner_text, "executive coaching"),
+    strings.icontains(body.html.inner_text, "management services"),
+    strings.icontains(body.html.inner_text, "invoice"),
+    regex.icontains(body.html.inner_text, "page (?:2|two)"),
+    regex.icontains(body.html.inner_text, 'W-?9')
+  )
+  and any(ml.nlu_classifier(body.current_thread.text).topics,
+          .name in (
+            "Financial Communications",
+            "Payment Information",
+            "Request to View Invoice"
+          )
+          and .confidence == "high"
+  )
+  and any(ml.nlu_classifier(body.current_thread.text).intents, .name == "bec")
+attack_types:
+  - "BEC/Fraud"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "HTML analysis"
+  - "Natural Language Understanding"
+id: "bef74380-af3b-5993-acc8-fe7a8efc3738"
+og_id: "e9223f0f-6b74-5d26-a7ed-90cfa0a36d99"
+testing_pr: 4780
+testing_sha: 03eee95623de79c49bd00e0c77486273e64bda8b
