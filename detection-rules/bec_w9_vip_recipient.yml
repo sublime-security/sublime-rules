@@ -1,0 +1,38 @@
+name: "BEC: W-9 request targeting a VIP recipient in a financial thread"
+description: "Detects inbound messages that exhibit business email compromise intent with high-confidence financial or payment-related topics. The message is sent directly to a single VIP recipient with no CC recipients, references a W-9 form, and originates from an unsolicited or previously flagged sender. The presence of prior thread context suggests an attempt to build trust through thread hijacking."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and any(ml.nlu_classifier(body.current_thread.text).intents, .name == "bec")
+  and (
+    any(ml.nlu_classifier(body.current_thread.text).topics,
+        .name == "Financial Communications" and .confidence == "high"
+    )
+    or any(ml.nlu_classifier(body.current_thread.text).topics,
+           .name == "Payment Information" and .confidence == "high"
+    )
+  )
+  and length(body.previous_threads) > 0
+  // One recipient that is a VIP
+  and length(recipients.to) == 1
+  and length(recipients.cc) == 0
+  and any($org_vips, .email == recipients.to[0].email.email)
+  // W-9 mention
+  and regex.icontains(body.current_thread.text, 'w[-_]?9')
+  and (
+    not profile.by_sender().solicited
+    or (
+      profile.by_sender().any_messages_malicious_or_spam
+      and not profile.by_sender().any_messages_benign
+    )
+  )
+attack_types:
+  - "BEC/Fraud"
+tactics_and_techniques:
+  - "Impersonation: VIP"
+  - "Social engineering"
+detection_methods:
+  - "Natural Language Understanding"
+  - "Sender analysis"
+  - "Content analysis"
