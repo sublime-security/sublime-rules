@@ -1,0 +1,108 @@
+name: "PR# 4777 - Suspicious Office 365 app authorization (OAuth) link"
+description: |
+  Message contains a suspicious Office 365 app authorization (OAuth) link. The app may be compromised or 
+  was stood up for malicious purposes. Once the app has been authorized, the attacker will have 
+  read or write permissions to the user's Office 365 account.
+references:
+  - "https://info.phishlabs.com/blog/office-365-phishing-uses-malicious-app-persist-password-reset"
+  - https://github.com/sublime-security/sublime-rules/pull/4777
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and (
+    // links in email body
+    any([body.links, body.current_thread.links],
+        any(.,
+            (
+              .href_url.domain.domain == 'login.microsoftonline.com'
+              or strings.icontains(.href_url.query_params,
+                                   "login.microsoftonline.com"
+              )
+            )
+            and (
+              strings.ilike(.href_url.query_params,
+                            '*offline_access*',
+                            '*.readwrite*',
+                            '*.read*',
+                            '*ctx=*',
+                            '*prompt=none*'
+              )
+              or (
+                (
+                  strings.icontains(.href_url.path, '/common/reprocess')
+                  or strings.icontains(.href_url.query_params,
+                                       "/common/reprocess"
+                  )
+                )
+                and strings.icontains(.href_url.query_params, 'ctx=')
+                and strings.icontains(.href_url.query_params, 'sessionId=')
+              )
+            )
+        )
+    )
+    // links in PDF, HTML, DOCX and PPTX attachments
+    or any(filter(attachments, .file_type in ("pdf", "html", "docx", "pptx")),
+           any(file.explode(.),
+               any(.scan.url.urls,
+                   .domain.domain == 'login.microsoftonline.com'
+                   and (
+                     strings.ilike(.query_params,
+                                   '*offline_access*',
+                                   '*.readwrite*',
+                                   '*.read*',
+                                   '*ctx=*',
+                                   '*prompt=none*'
+                     )
+                     or (
+                       strings.icontains(.path, '/common/reprocess')
+                       and strings.icontains(.query_params, 'ctx=')
+                       and strings.icontains(.query_params, 'sessionId=')
+                     )
+                   )
+               )
+           )
+    )
+    or any(attachments,
+           (
+             .file_type == "ics"
+             or .file_extension == "ics"
+             or .content_type in ("application/ics", "text/calendar")
+           )
+           //
+           // This rule makes use of a beta feature and is subject to change without notice
+           // using the beta feature in custom rules is not suggested until it has been formally released
+           //
+           and any(beta.file.parse_ics(.).events,
+                   any(.links,
+                       .href_url.domain.domain == 'login.microsoftonline.com'
+                       and (
+                         strings.ilike(.href_url.query_params,
+                                       '*offline_access*',
+                                       '*.readwrite*',
+                                       '*.read*',
+                                       '*ctx=*',
+                                       '*prompt=none*'
+                         )
+                         or (
+                           strings.icontains(.href_url.path, '/common/reprocess')
+                           and strings.icontains(.href_url.query_params, 'ctx=')
+                           and strings.icontains(.href_url.query_params,
+                                                 'sessionId='
+                           )
+                         )
+                       )
+                   )
+           )
+    )
+  )
+
+attack_types:
+  - "Credential Phishing"
+detection_methods:
+  - "URL analysis"
+id: "71b3fac2-ed0f-5417-9cd0-34bb6016c349"
+tags:
+  - created_from_open_prs
+  - rule_status_modified
+  - pr_author_markmsublime
