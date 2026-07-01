@@ -1,0 +1,150 @@
+name: "Acts of Violence: Multi-layer violence threat detection (previous threads)"
+description: "Catches in previous email threads threats that hit all four key signals: intent, target, violence language, and severity indicators."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and length(body.previous_threads) > 0
+  
+  // Check any previous thread for threats
+  and any(body.previous_threads,
+          any(ml.nlu_classifier(.text).topics,
+              .name == "Acts of Violence" and .confidence == "high"
+          )
+          and not (
+            (
+              any(ml.nlu_classifier(.text).topics,
+                  .name in ("Payment Information")
+              )
+              and (any(ml.nlu_classifier(.text).intents, .name == "extortion"))
+            )
+            or (
+              any(ml.nlu_classifier(.text).intents, .name == "extortion")
+              and (
+                regex.icontains(strings.replace_confusables(.text),
+                                '[bḆḂ]it[cĉƈ][oöة]i[nņɲ]|\bbtc\b|blockchain'
+                )
+              )
+            )
+          )
+          // Intent or action markers — must be directly coupled with violence
+          and (
+            // Future intent + violence verb
+            regex.icontains(.text,
+                            '(?:i|we)\s+(?:will|''ll|gonna|going to|am going to|shall)\s+(?:[^\r\n\x20]+\s+){0,4}(?:kill|murder|shoot|stab|hurt|harm|attack|assault|beat|destroy|eliminate|slaughter|slay|strangle|choke)'
+            )
+            // Present/ongoing action + violence verb
+            or regex.icontains(.text,
+                               '(?:i''m|i am|we''re|we are)\s+(?:coming|going|about to)\s+(?:[^\r\n\x20]+\s+){0,4}(?:kill|murder|shoot|stab|hurt|harm|attack|assault|beat|destroy|eliminate|slaughter|slay|strangle|choke)'
+            )
+            // Promise/swear + violence verb
+            or regex.icontains(.text,
+                               '(?:i|we)\s+(?:promise|swear|vow|guarantee)\s+(?:[^\r\n\x20]+\s+){0,4}(?:kill|murder|shoot|stab|hurt|harm|attack|assault|beat|destroy|eliminate|slaughter|slay|strangle|choke)'
+            )
+            // Command/imperative (directed at someone else)
+            or regex.icontains(.text,
+                               'you\s+(?:should|must|need to|better|have to)\s+(?:[^\r\n\x20]+\s+){0,5}(?:watch|prepare|hide|run)'
+            )
+          )
+  
+          // Must identify a target
+          and (
+            // Direct target
+            regex.icontains(.text, '\b(?:you|your|yours)\b')
+            // Group target
+            or regex.icontains(.text,
+                               '(?:everyone|everybody|all of (?:you|them)|each one|every (?:single )?(?:person|one|student))'
+            )
+            // Specific person/group reference
+            or regex.icontains(.text, '(?:them|those|the\s+\w+)')
+          )
+  
+          // Must contain violence or harm language
+          and (
+            // Violence verbs
+            regex.icontains(.text,
+                            '\b(?:kill|murder|shoot|stab|hurt|harm|attack|assault|beat|destroy|eliminate|slaughter|slay|strangle|choke)\b'
+            )
+            // Harm/suffering nouns
+            or regex.icontains(.text,
+                               '\b(?:pain|suffering|death|dead|dying|blood|corpse|agony|torture|injury|harm|damage)\b'
+            )
+            // Weapons
+            or regex.icontains(.text,
+                               '\b(?:gun|rifle|pistol|firearm|knife|blade|weapon|bomb|explosive|acid)\b'
+            )
+            // Body part targeting (violence implied)
+            or regex.icontains(.text,
+                               '(?:in|on|at)\s+(?:the|your|their)\s+(?:head|face|throat|neck|chest|back|eyes|skull|body)'
+            )
+          )
+  
+          // Must have at least one severity amplifier
+          and (
+            // Shouting in all caps
+            regex.contains(.text,
+                           '(?:DIE|KILL|DEATH|MURDER|SHOOT|HURT)(?:\s*!+)?'
+            )
+            // Victim can't escape
+            or regex.icontains(.text,
+                               '(?:can''t|cannot|won''t)\s+(?:[^\r\n\x20]+\s+){0,5}(?:hide|escape|run|stop me|get away)'
+            )
+            // Knows victim's location
+            or regex.icontains(.text,
+                               '(?:i|we)\s+(?:know|found|have)\s+(?:[^\r\n\x20]+\s+){0,5}(?:where|your address|your location|where you)'
+            )
+            // Wants public attention
+            or regex.icontains(.text,
+                               '(?:news|headlines|media|world|broadcast|television|cnn)'
+            )
+            // Threatens multiple people
+            or regex.icontains(.text,
+                               '(?:all|every|each|everyone)\s+(?:[^\r\n\x20]+\s+){0,5}(?:of you|one|single)'
+            )
+            // Threat is imminent
+            or regex.icontains(.text,
+                               '(?:today|tonight|tomorrow|soon|now|coming|on my way)'
+            )
+            // Repeats violence words
+            or regex.icontains(.text,
+                               '(?:die|kill|dead)\s+(?:[^\r\n\x20]+\s+){0,5}(?:die|kill|dead)'
+            )
+            // Has or will get a weapon
+            or (
+              regex.icontains(.text, '\b(?:gun|rifle|knife|weapon|blade|bomb)\b')
+              and regex.icontains(.text, '(?:bring|have|get|use|take|carry)')
+            )
+            // Motivated by revenge
+            or regex.icontains(.text, '\b(?:pay|regret|sorry|revenge|payback)\b')
+            // Stalking or hunting behavior
+            or regex.icontains(.text,
+                               '\b(?:find|hunt|track|locate|chase)\s+(?:[^\r\n\x20]+\s+){0,5}(?:you|them)\b'
+            )
+            // Targets an institution
+            or regex.icontains(.text,
+                               '(?:school|university|college|office|workplace|building|campus)'
+            )
+            // Uses profanity with violence
+            or regex.icontains(.text,
+                               '\b(?:fucking|goddamn|motherfucking)\s+(?:[^\r\n\x20]+\s+){0,5}(?:kill|hurt|destroy|die|dead)'
+            )
+          )
+          and length(.text) > 50
+          and length(.text) < 5000
+  
+          // Negate benign contexts
+          and not any(ml.nlu_classifier(.text).topics,
+                      .name in (
+                        "News and Current Events",
+                        "Newsletters and Digests",
+                        "Entertainment and Sports"
+                      )
+                      and .confidence == "high"
+          )
+  )
+  // Negate bulk/marketing emails with unsubscribe links
+  and not any(body.links,
+              strings.icontains(.display_text, "unsubscribe")
+              or strings.icontains(.href_url.url, "unsubscribe")
+  )
+id: "495dfdb4-b558-5343-8356-a0fd818a9563"
