@@ -9,8 +9,46 @@ source: |
   // ensure the display name contains a space to avoid single named process accounts eg. 'billing, payment'
   and strings.contains(sender.display_name, " ")
   and (
-    sender.display_name in~ $org_display_names
-    or subject.base in~ $org_display_names
+    any($org_mailboxes,
+        (
+          .display_name != ""
+          and strings.icontains(body.html.inner_text, .display_name)
+        )
+        or (
+          .first_name != ""
+          and .last_name != ""
+          and strings.icontains(body.html.inner_text,
+                                strings.concat(.first_name, " ", .last_name)
+          )
+        )
+        or (
+          .first_name != ""
+          and .last_name != ""
+          and strings.icontains(body.html.inner_text,
+                                strings.concat(.last_name, ", ", .first_name)
+          )
+        )
+    )
+    or any($org_mailboxes,
+           (
+             .display_name != ""
+             and strings.icontains(body.plain.raw, .display_name)
+           )
+           or (
+             .first_name != ""
+             and .last_name != ""
+             and strings.icontains(body.plain.raw,
+                                   strings.concat(.first_name, " ", .last_name)
+             )
+           )
+           or (
+             .first_name != ""
+             and .last_name != ""
+             and strings.icontains(body.plain.raw,
+                                   strings.concat(.last_name, ", ", .first_name)
+             )
+           )
+    )
   )
   and length(attachments) == 0
   and length(body.links) < 10
