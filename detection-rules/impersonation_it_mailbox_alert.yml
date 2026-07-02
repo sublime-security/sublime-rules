@@ -1,0 +1,29 @@
+name: "Impersonation: IT Department Mailbox Storage Alert"
+description: "Detects inbound messages impersonating an internal IT Department by presenting a fake mailbox storage alert."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and strings.contains(body.current_thread.text, 'MAILBOX STORAGE ALERT')
+  and all([
+            'Clean Inbox',
+            'Storage Guide',
+            'Empty Deleted Items',
+            'Clean Mailbox Now',
+            'Contact IT Support'
+          ],
+          . in map(body.links, .display_text)
+  )
+  and any(body.previous_threads,
+          strings.contains(.text, 'IT Department')
+          and strings.contains(.text, 'call ext. 5555')
+  )
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Impersonation: Employee"
+  - "Social engineering"
+  - "Out of band pivot"
+detection_methods:
+  - "Content analysis"
+id: "1a1753f3-4658-59bc-9e28-0c8ed6e87e9a"
