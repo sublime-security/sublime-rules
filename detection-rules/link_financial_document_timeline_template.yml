@@ -1,0 +1,82 @@
+name: "Link: Generic financial document with proceedural timeline template"
+description: "Detects messages with generic greetings that reference payment releases & timelines, and exhibit unusual recipient patterns such as self-sending or missing recipients."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  // link limiter scopes thread hijacking but limits reports
+  and length(body.links) <= 40
+  
+  // expectation of time
+  and regex.icontains(body.current_thread.text,
+                      'will be released.{0,15}(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday),\s+(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},',
+                      '\b[1-4]\W[1-4]\b.{1,10}days'
+  )
+  
+  // link is malicious
+  and any(body.links,
+          // key phrasing or nlu
+          (
+            regex.icontains(.display_text,
+                            '(?:access|show|view).{0,10}(?:confirmation|message|payment|statement)',
+                            'advice',
+                            'deposit',
+                            'document',
+                            'eft',
+                            'release',
+                            'remit'
+            )
+            or any(ml.nlu_classifier(body.current_thread.text).topics,
+                   .name == "Request to View Invoice" and .confidence == "high"
+            )
+          )
+          // suspicious hosting
+          and (
+            .href_url.domain.domain in $free_file_hosts
+            or .href_url.domain.root_domain in $free_file_hosts
+            or .href_url.domain.tld in $suspicious_tlds
+            or .href_url.domain.domain in $self_service_creation_platform_domains
+            or (
+              .href_url.domain.root_domain not in $tranco_1m
+              and not .href_url.scheme == "mailto"
+            )
+            or .href_url.domain.root_domain in $url_shorteners
+            // open redirect
+            or strings.icontains(.href_url.query_params, '=https', 'url=', 'upn=')
+            // bait and switch CTA observed
+            or (
+              strings.icontains(body.current_thread.text, "[message clipped]")
+              and strings.icontains(.display_text, "view entire message")
+            )
+          )
+          // negate org domains
+          and .href_url.domain.valid != false
+          and .href_url.domain.root_domain not in $org_domains
+  )
+  
+  // suspicious sender behavior
+  and (
+    (
+      length(recipients.to) == 1
+      and length(recipients.cc) == 0
+      and sender.email.email == recipients.to[0].email.email
+    )
+    // the recipient is undisclosed or there are no recipients
+    or (
+      length(recipients.to) == 0
+      or all(recipients.to, .email.domain.valid == false)
+    )
+  )
+
+attack_types:
+  - "BEC/Fraud"
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Social engineering"
+  - "Evasion"
+detection_methods:
+  - "Content analysis"
+  - "Natural Language Understanding"
+  - "Header analysis"
+  - "Sender analysis"
+id: "027cb65d-aee3-5f10-9555-20b719bbde42"
