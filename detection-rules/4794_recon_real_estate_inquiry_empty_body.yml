@@ -1,0 +1,36 @@
+name: "Reconnaissance: Fake real estate inquiry with empty body"
+description: "Detects inbound messages with no body content — neither plain text nor HTML — but an unusually long subject line containing real estate inquiry language. The subject lines impersonate prospective home buyers asking about specific property listings or seeking a trusted local real estate agent, often mentioning relocation. These messages are designed to establish contact with real estate professionals as a precursor to fraud."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and (
+    body.plain.raw is null
+    or body.plain.raw == ""
+    or regex.imatch(body.plain.raw, '^\s*$')
+  )
+  and (
+    body.html.raw is null
+    or body.html.raw == ""
+    or regex.imatch(body.html.raw, '^\s*$')
+  )
+  and length(subject.base) > 150
+  and (
+    strings.icontains(subject.base, 'purchase a home')
+    or regex.icontains(subject.base,
+                       'the listing (?:on|at)',
+                       '(?:interested in|regarding) (?:this|the) property',
+                       '(?:will be|are) relocating'
+    )
+  )
+attack_types:
+  - "BEC/Fraud"
+tactics_and_techniques:
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Sender analysis"
+id: "d673c70e-3556-5c02-908a-8cca4666f5c0"
+og_id: "1f477050-7558-5fdc-859c-9c8ca9bddae5"
+testing_pr: 4794
+testing_sha: 15004369a6493df70aaf182ba683ea5ad4fb94e5
