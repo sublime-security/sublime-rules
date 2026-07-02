@@ -4,8 +4,19 @@ type: "dlp"
 severity: "high"
 source: |
   type.outbound
-  and any(ml.extract_sensitive_information(),
-    .type == "credit_card_number"
+  and (
+    any(beta.ml_extract_sensitive_information(body.current_thread.text),
+      .type == "credit_card_number" and .confidence in ("medium", "high")
+    )
+    or any(attachments,
+      any(file.explode(.),
+        any(.scan.strings.strings,
+          any(beta.ml_extract_sensitive_information(.),
+            .type == "credit_card_number" and .confidence in ("medium", "high")
+          )
+        )
+      )
+    )
   )
 detection_methods:
   - "Content analysis"
