@@ -51,8 +51,11 @@ source: |
       // check for suspicious sender domain + RFQ/RFP indicators prior to analyzing $sender_domains
       sender.email.domain.domain not in $org_domains
       and network.whois(sender.email.domain).days_old < 365
-      and length(body.current_thread.links) > 0
       and regex.icontains(body.current_thread.text, '(?:\bRFP\b|\bRFQ\b)')
+      // negate legal/FOIA requests
+      and not any(ml.nlu_classifier(body.current_thread.text).topics,
+                  .name == "Legal and Compliance" and .confidence == "high"
+      )
       and any($sender_domains,
               0 < strings.ilevenshtein(., sender.email.domain.root_domain) < 3
       )
@@ -261,4 +264,4 @@ detection_methods:
 id: "16f57a78-d6ac-5f94-8d85-3b28151567dd"
 og_id: "2ac0d329-c1fb-5c87-98dd-ea3e5b85377a"
 testing_pr: 4672
-testing_sha: e849755bfd0f59958aa69cc694b49f8f44c380f4
+testing_sha: 9f59147bbb0e753bd31f029017de3644fc4b515b
