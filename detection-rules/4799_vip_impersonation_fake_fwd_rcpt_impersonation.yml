@@ -1,0 +1,45 @@
+name: "VIP impersonation: Fake forwarded indicator with VIP recipient impersonation"
+description: "Detects inbound messages that fabricate a forwarded email thread — using patterns like '=== Forwarded Message:' — where a prior thread appears to involve an organizational VIP as a recipient. The messages observed follow an invoice lure pattern referencing admired leadership figures by name, designed to create the appearance of legitimacy by spoofing internal executive communication chains."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  // the body contains one of the multiple fake "forwarded" parts
+  and (
+    // in either the current_thread
+    (
+      strings.icontains(body.current_thread.text, 'forward')
+      and regex.icontains(body.current_thread.text,
+                          '={3,}\s*(?:forwarded message|message that has been forwarded)\s*:'
+      )
+    )
+    // or the previous threads
+    or any(body.previous_threads,
+           strings.icontains(.text, 'forward')
+           and regex.icontains(.text,
+                               '={3,}\s*(?:forwarded message|message that has been forwarded)\s*:'
+           )
+    )
+  )
+  // and one of the previous threads is authored by the VIP
+  and any(body.previous_threads,
+          any(.recipients.to,
+              any($org_vips,
+                  strings.icontains(..display_name, .display_name)
+                  or strings.icontains(..email.email, .email)
+              )
+          )
+  )
+attack_types:
+  - "BEC/Fraud"
+tactics_and_techniques:
+  - "Impersonation: VIP"
+  - "Social engineering"
+  - "Evasion"
+detection_methods:
+  - "Content analysis"
+  - "Sender analysis"
+id: "7f889961-630d-5031-8aa7-3a6a5033203d"
+og_id: "72630010-f8bd-5517-90ba-3b7c7dabc6e0"
+testing_pr: 4799
+testing_sha: c2c338516d0aaf22e7dd3828c687c5cc9eae31af
