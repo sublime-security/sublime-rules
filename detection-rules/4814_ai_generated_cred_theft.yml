@@ -1,0 +1,64 @@
+name: "PR# 4814 - Link: AI-generated credential theft with suspicious HTML indicators"
+description: "Detects inbound messages exhibiting multiple indicators of AI-assisted credential theft. The rule identifies HTML comments containing AI-like construction notes (e.g., 'as requested', 'replace link'), styled button elements with padding and background properties, and additional suspicious signals such as references to temporary or fake content, download arrow links pointing to HTML files, emoji-decorated rounded border spans, or embedded physical addresses. NLU confirms credential theft intent with medium or high confidence."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and (
+    regex.icontains(body.current_thread.text, '(?:template|temporary|fake)')
+    // observed "down" arrow in a link leading to a .html link
+    or any(body.current_thread.links,
+           strings.contains(.display_text, "⬇")
+           and strings.iends_with(.href_url.path, ".html")
+    )
+    // greyed and rounded border contains an emoji character
+    or any(html.xpath(body.html, '//span[contains(@style,"border-radius")]').nodes,
+           regex.icontains(.raw,
+                           '[\x{1F000}-\x{1FAFF}\x{2600}-\x{27BF}\x{2190}-\x{21FF}\x{2B00}-\x{2BFF}]'
+           )
+    )
+    // footer contains address
+    or (
+      regex.icontains(body.current_thread.text,
+                      // US address format: "1234 Evil Doer Way, Paris, TX 12345"
+                      '\d{1,6}\s+[A-Za-z0-9.]+(?:\s+[A-Za-z0-9.]+){0,4},\s*[A-Za-z. ]+,\s*[A-Z]{2}\s+\d{5}(?:-\d{4})?'
+      )
+      or regex.icontains(body.current_thread.text,
+                         // Non-US address format: "..., 1234, Paris, France."
+                         ',\s*\d{4,6},\s*[A-Za-z]+,\s*[A-Za-z]+\.?'
+      )
+    )
+  )
+  and (
+    any(html.xpath(body.html, '//comment()').nodes,
+        // contains ai-esque code comments like "as requested" and "replace x link"
+        regex.icontains(.raw,
+                        'keeping.{0,10}same|as.{0,10}requested|replace.{0,20}(?:url|link|below)|\(unchanged\)|new:|now linked to your'
+        )
+    )
+  )
+  // contains a button
+  and any(html.xpath(body.html, '//a[@style]').nodes,
+          regex.icontains(.raw, 'padding') and regex.icontains(.raw, 'background')
+  )
+  and any(ml.nlu_classifier(body.current_thread.text).intents,
+          .name in ("cred_theft") and .confidence != "low"
+  )
+
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Social engineering"
+  - "Evasion"
+detection_methods:
+  - "HTML analysis"
+  - "Content analysis"
+  - "Natural Language Understanding"
+  - "URL analysis"
+id: "31c8ddd9-74ba-563a-aba1-be5dfcb4c848"
+tags:
+  - created_from_open_prs
+  - rule_status_added
+  - pr_author_IndiaAce
+references:
+  - https://github.com/sublime-security/sublime-rules/pull/4814
