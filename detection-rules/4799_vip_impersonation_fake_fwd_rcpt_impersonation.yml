@@ -4,24 +4,25 @@ type: "rule"
 severity: "high"
 source: |
   type.inbound
-  // the body contains one of the multiple fake "forwarded" parts
+  and length(coalesce(body.plain.raw, body.html.display_text)) < 6000
   and (
-    // in either the current_thread
     (
-      strings.icontains(body.current_thread.text, 'forward')
+      strings.icontains(body.current_thread.text, 'forwarded')
       and regex.icontains(body.current_thread.text,
-                          '={3,}\s*(?:forwarded message|message that has been forwarded)\s*:'
+                          '(?m)^[=\x{2012}\x{2013}\x{2014}\x{2015}\s]*message that has been forwarded',
+                          '={3,}\s*(?:forwarded message|message that has been forwarded)',
+                          '[\x{2012}\x{2013}\x{2014}\x{2015}]{2,}\s*(?:forwarded message|message that has been forwarded)'
       )
     )
-    // or the previous threads
     or any(body.previous_threads,
-           strings.icontains(.text, 'forward')
+           strings.icontains(.text, 'forwarded')
            and regex.icontains(.text,
-                               '={3,}\s*(?:forwarded message|message that has been forwarded)\s*:'
+                               '(?m)^[=\x{2012}\x{2013}\x{2014}\x{2015}\s]*message that has been forwarded',
+                               '={3,}\s*(?:forwarded message|message that has been forwarded)',
+                               '[\x{2012}\x{2013}\x{2014}\x{2015}]{2,}\s*(?:forwarded message|message that has been forwarded)'
            )
     )
   )
-  // and one of the previous threads is authored by the VIP
   and any(body.previous_threads,
           any(.recipients.to,
               any($org_vips,
@@ -42,4 +43,4 @@ detection_methods:
 id: "7f889961-630d-5031-8aa7-3a6a5033203d"
 og_id: "72630010-f8bd-5517-90ba-3b7c7dabc6e0"
 testing_pr: 4799
-testing_sha: c2c338516d0aaf22e7dd3828c687c5cc9eae31af
+testing_sha: 9adae9190b1de46f8eb3b566ebf82fdd2fdd6f81
