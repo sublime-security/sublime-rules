@@ -1,0 +1,22 @@
+name: "DLP: ICD-10 Code"
+description: "Detects messages containing ICD-10 medical diagnosis codes."
+type: "dlp"
+severity: "high"
+source: |
+  type.outbound
+  and (
+    any(beta.ml_extract_sensitive_information(body.current_thread.text),
+      .type == "us_icd10" and .confidence in ("medium", "high")
+    )
+    or any(attachments,
+      any(file.explode(.),
+        any(.scan.strings.strings,
+          any(beta.ml_extract_sensitive_information(.),
+            .type == "us_icd10" and .confidence in ("medium", "high")
+          )
+        )
+      )
+    )
+  )
+detection_methods:
+  - "Content analysis"

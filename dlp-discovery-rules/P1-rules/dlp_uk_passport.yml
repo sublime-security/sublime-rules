@@ -1,0 +1,22 @@
+name: "DLP: UK Passport"
+description: "Detects messages containing UK passport numbers."
+type: "dlp"
+severity: "high"
+source: |
+  type.outbound
+  and (
+    any(beta.ml_extract_sensitive_information(body.current_thread.text),
+      .type == "uk_passport" and .confidence in ("medium", "high")
+    )
+    or any(attachments,
+      any(file.explode(.),
+        any(.scan.strings.strings,
+          any(beta.ml_extract_sensitive_information(.),
+            .type == "uk_passport" and .confidence in ("medium", "high")
+          )
+        )
+      )
+    )
+  )
+detection_methods:
+  - "Content analysis"

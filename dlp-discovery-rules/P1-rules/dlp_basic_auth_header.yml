@@ -1,0 +1,22 @@
+name: "DLP: Basic Auth Header"
+description: "Detects messages containing basic authentication headers."
+type: "dlp"
+severity: "high"
+source: |
+  type.outbound
+  and (
+    any(beta.ml_extract_sensitive_information(body.current_thread.text),
+      .type == "basic_auth_header" and .confidence in ("medium", "high")
+    )
+    or any(attachments,
+      any(file.explode(.),
+        any(.scan.strings.strings,
+          any(beta.ml_extract_sensitive_information(.),
+            .type == "basic_auth_header" and .confidence in ("medium", "high")
+          )
+        )
+      )
+    )
+  )
+detection_methods:
+  - "Content analysis"

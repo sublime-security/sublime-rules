@@ -1,0 +1,22 @@
+name: "DLP: Canadian Social Insurance Number (SIN)"
+description: "Detects messages containing Canadian Social Insurance Numbers."
+type: "dlp"
+severity: "high"
+source: |
+  type.outbound
+  and (
+    any(beta.ml_extract_sensitive_information(body.current_thread.text),
+      .type == "canadian_ssn" and .confidence in ("medium", "high")
+    )
+    or any(attachments,
+      any(file.explode(.),
+        any(.scan.strings.strings,
+          any(beta.ml_extract_sensitive_information(.),
+            .type == "canadian_ssn" and .confidence in ("medium", "high")
+          )
+        )
+      )
+    )
+  )
+detection_methods:
+  - "Content analysis"
