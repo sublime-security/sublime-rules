@@ -17,42 +17,38 @@ source: |
       )
     )
   )
-  and any(filter(html.xpath(body.html, '//a[@href]').nodes,
-                 // blue button background, background-color and observed colors
-                 regex.icontains(.raw,
-                                 '(?:background(?:-color)?)\s*[:\s]\s*#(?:0078d4|3a78d1)'
-                 )
-          ),
-          (
-            // it's styled as a button
-            regex.icontains(.raw, 'padding')
-          )
+  and any(html.xpath(body.html,
+                      // match the anchor's own inline style for blue-button background-color and
+                      // padding; avoids scanning descendant markup, which can be arbitrarily
+                      // large per anchor and dominates cost on content-heavy messages
+                      '//a[@href][contains(translate(@style,"ABCDEFGHIJKLMNOPQRSTUVWXYZ","abcdefghijklmnopqrstuvwxyz"),"background") and (contains(translate(@style,"ABCDEFGHIJKLMNOPQRSTUVWXYZ","abcdefghijklmnopqrstuvwxyz"),"0078d4") or contains(translate(@style,"ABCDEFGHIJKLMNOPQRSTUVWXYZ","abcdefghijklmnopqrstuvwxyz"),"3a78d1")) and contains(translate(@style,"ABCDEFGHIJKLMNOPQRSTUVWXYZ","abcdefghijklmnopqrstuvwxyz"),"padding")]'
+                     ).nodes,
           // ignore links going to microsoft
-          and not any(.links,
-                      (
-                        .href_url.domain.sld in (
-                          "microsoft",
-                          "azure",
-                          "outlook.office365",
-                          "office365"
-                        )
-                      )
-                      or .href_url.domain.domain in $tenant_domains
-                      or (
-                        .href_url.domain.root_domain in (
-                          "mimecast.com",
-                          "mimecastprotect.com"
-                        )
-                        and any(.href_url.query_params_decoded['domain'],
-                                strings.parse_domain(.).domain in (
-                                  "microsoft.com",
-                                  "azure.com",
-                                  "outlook.office365.com",
-                                  "office365.com"
-                                )
-                                or strings.parse_domain(.).domain in $tenant_domains
-                        )
-                      )
+          not any(.links,
+                  (
+                    .href_url.domain.sld in (
+                      "microsoft",
+                      "azure",
+                      "outlook.office365",
+                      "office365"
+                    )
+                  )
+                  or .href_url.domain.domain in $tenant_domains
+                  or (
+                    .href_url.domain.root_domain in (
+                      "mimecast.com",
+                      "mimecastprotect.com"
+                    )
+                    and any(.href_url.query_params_decoded['domain'],
+                            strings.parse_domain(.).domain in (
+                              "microsoft.com",
+                              "azure.com",
+                              "outlook.office365.com",
+                              "office365.com"
+                            )
+                            or strings.parse_domain(.).domain in $tenant_domains
+                    )
+                  )
           )
   )
   and any(ml.nlu_classifier(body.current_thread.text).intents, .name != "benign")
