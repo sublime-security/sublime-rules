@@ -472,3 +472,15 @@ rule pdf_w9_signature_c003 {
 	condition:
 		$header at 0 and any of ($sig_*)
 }
+
+rule pdf_blurred_invoice_lure {
+	meta:
+		author      = "kyle eaton"
+		date        = "2026-07-06"
+		description = "matching a blurred invoice lure used in malicious PDFs"
+	strings:
+		$header = { 25 50 44 46 2D 31 2E }
+		$image  = { 2F 49 6D 61 67 65 0A 2F 4C 65 6E 67 74 68 20 39 36 34 38 38 0A 2F 46 69 6C 74 65 72 20 2F 46 6C 61 74 65 44 65 63 6F 64 65 0A 2F 57 69 64 74 68 20 34 34 38 0A 2F 48 65 69 67 68 74 20 36 30 30 0A }
+	condition:
+		$header at 0 and $image
+}
