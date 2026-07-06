@@ -9,9 +9,11 @@ source: |
   and sender.email.email == "noreply-zoomevents@zoom.us"
   and (headers.auth_summary.spf.pass or headers.auth_summary.dmarc.pass)
   
-  // extract the actor controlled message from the email body and pass it to NLU to see if it's cred theft
+  // pull each actor-editable section (section-content-wrapper) inside the
+  // white body td and NLU-check for cred theft. The Zoom copyright/unsubscribe
+  // footer is not a section-content-wrapper, so it's excluded automatically.
   and any(html.xpath(body.html,
-                     "//div[@class='eb-content css-1l7xmti']//td[@data-dynamic-style-background-color='email.bodyColor.color' and contains(@style, 'background-color: rgb(255, 255, 255)')]"
+                     "//div[@class='eb-content css-1l7xmti']//td[@data-dynamic-style-background-color='email.bodyColor.color' and contains(@style, 'background-color: rgb(255, 255, 255)')]//table[contains(@class, 'section-content-wrapper')]"
           ).nodes,
           any(ml.nlu_classifier(.display_text).intents,
               .name == "cred_theft" and .confidence != "low"
