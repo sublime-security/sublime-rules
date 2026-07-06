@@ -1,0 +1,35 @@
+name: "PR# 4809 - Impersonation: Employee name in subject with suspicious sender"
+description: "Detects inbound messages where the sender is using a free email provider and their display name matches an known organizational display name. The sender's local part contains common organizational role keywords (mail, office, staff, executive), and the subject line matches the recipient's first name or display name, suggesting a targeted impersonation of an internal employee or executive."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  // suspicous local part
+  and strings.contains(sender.email.local_part,
+                       'mail',
+                       'office',
+                       'staff',
+                       'executive'
+  )
+  and (mailbox.first_name == subject.base or mailbox.display_name == subject.base)
+  and strings.contains(sender.display_name, " ")
+  and sender.display_name in~ $org_display_names
+  and sender.email.domain.root_domain in $free_email_providers
+attack_types:
+  - "BEC/Fraud"
+tactics_and_techniques:
+  - "Impersonation: Employee"
+  - "Impersonation: VIP"
+  - "Free email provider"
+  - "Social engineering"
+  - "Spoofing"
+detection_methods:
+  - "Sender analysis"
+  - "Content analysis"
+id: "952a1438-c505-5161-abfa-49d5c5f2ad60"
+tags:
+  - created_from_open_prs
+  - rule_status_added
+  - pr_author_D-Bolton
+references:
+  - https://github.com/sublime-security/sublime-rules/pull/4809
