@@ -1,0 +1,78 @@
+name: "VIP impersonation: VIP payment redirect handoff via thread hijacking"
+description: "Detects inbound messages where an external sender, absent from the original conversation, targets a single internal recipient after a VIP previously instructed that party to handle invoice or payment correspondence. The rule identifies prior threads where a known VIP explicitly redirected billing or payment contact to an internal address — using language such as forwarding instructions, accounts payable references, or billing handoff phrasing — and flags follow-up messages from external senders who are no longer accompanied by the VIP. NLU classifiers confirm financial context in the prior thread. This pattern is consistent with adversaries monitoring or fabricating invoice-related threads to insert themselves at the point of payment handoff."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and any(map(filter(body.previous_threads,
+                     any($org_vips,
+                         strings.icontains(..sender.display_name, .display_name)
+                         and strings.icontains(..sender.email.email, .email)
+                     )
+                     // remove threads that are auto replies (VIP is out of office and instructs the sender to sent another email address)
+                     and not .subject.is_auto_reply
+                     // the recipient of the current message is the one mentioned by the VIP
+                     and any(recipients.to,
+                             .email.email != ..sender.email.email
+                             and .email.domain.root_domain in $org_domains
+                             and strings.icontains(..text, .email.email)
+                     )
+                     // the "handoff" phrases
+                     and regex.icontains(.text,
+                                         'accounts? payable',
+                                         '(?:forward|send|rout|direct|remit|submit|issue) it (?:directly )?to',
+                                         '(?:forward|send|direct|remit|submit|route) (?:the |all |related )?(?:invoice|correspondence|payment|billing)',
+                                         'for payment processing,? please contact',
+                                         '(?:please )?direct (?:it|all|the)[^\n]{0,60}\bto\b',
+                                         '(?:contact|reach out to)[^\n]{0,40}\bat\b[^\n]{0,40}@',
+                                         '(as follows|provided below|find below|details are|contact is)[^\n]{0,10}:',
+                                         'billing (?:contact|correspondence|team|department)'
+                     )
+                     // NLU has mentions of invoices/finance/etc
+                     and (
+                       any(ml.nlu_classifier(.text, subject=.subject.base).topics,
+                           (
+                             .name == "Financial Communications"
+                             or .name == "Request to View Invoice"
+                           )
+                           and .confidence != "low"
+                       )
+                       or any(ml.nlu_classifier(.text, subject=.subject.base).tags,
+                              (.name == "invoice" or .name == "payment")
+                              and .confidence != "low"
+                       )
+                       or any(ml.nlu_classifier(.text, subject=.subject.base).entities,
+                              .name == "financial"
+                       )
+                     )
+              ),
+              .sender.email.email
+          ),
+          . != ""
+          // the VIP is no longer in the message
+          and not strings.icontains(sender.email.email, .)
+          and not any(flatten([recipients.to, recipients.cc, recipients.bcc]),
+                      strings.icontains(.email.email, ..)
+          )
+  )
+  // only a single org_domain recipient
+  and length(filter(flatten([recipients.to, recipients.cc, recipients.bcc]),
+                    .email.domain.root_domain in $org_domains
+             )
+  ) == 1
+  // sender is external
+  and not sender.email.domain.root_domain in $org_domains
+attack_types:
+  - "BEC/Fraud"
+tactics_and_techniques:
+  - "Impersonation: VIP"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Natural Language Understanding"
+  - "Sender analysis"
+  - "Header analysis"
+id: "48ba0616-a8f2-52ab-93f2-b6818d678a73"
+og_id: "215b8849-c7b5-577c-844f-be0e0dfc9116"
+testing_pr: 4815
+testing_sha: 0e745609642e740573d67bcaa1742f6c62f52c72
