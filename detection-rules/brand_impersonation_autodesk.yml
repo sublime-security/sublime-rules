@@ -1,0 +1,44 @@
+name: "Brand impersonation: Autodesk"
+description: "Detects messages impersonating Autodesk by identifying key indicators such as Autodesk branding, corporate address details, trademark language, and copyright notices, while ensuring the sender is not from a legitimate Autodesk domain with valid DMARC authentication."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and (
+    (
+      any(ml.nlu_classifier(body.current_thread.text).entities,
+          .name == "org" and strings.icontains(.text, 'Autodesk')
+      )
+      and any(ml.nlu_classifier(body.current_thread.text).intents,
+              .name == "cred_theft" and .confidence == "high"
+      )
+    )
+    or 2 of (
+      strings.icontains(body.current_thread.text, "Autodesk, Inc."),
+      strings.icontains(body.current_thread.text, "One Market, Ste. 400"),
+      strings.icontains(body.current_thread.text, "San Francisco, CA 94105")
+    )
+    or regex.icontains(body.current_thread.text,
+                       '©\s*(?:20[0-9]{2}\s*)?Autodesk,?\s*Inc\.'
+    )
+    or strings.icontains(body.current_thread.text,
+                         'Autodesk and the Autodesk logo are registered trademarks'
+    )
+  )
+  and not (
+    sender.email.domain.root_domain in (
+      "autodesk.com",
+      "autodeskcommunications.com"
+    )
+    and coalesce(headers.auth_summary.dmarc.pass, false)
+  )
+  
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Social engineering"
+detection_methods:
+  - "Natural Language Understanding"
+  - "Content analysis"
+  - "Sender analysis"
