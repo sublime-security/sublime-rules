@@ -489,7 +489,7 @@ rule w9inv_2page_image {
 	meta:
 		author      = "kyle eaton"
 		date        = "2026-07-07"
-		description = "pdf with specific invoice and w9 images embedded"
+		description = "PDF with specific invoice and w9 images embedded"
 	strings:
 		$header     = { 25 50 44 46 2D 31 2E }
 		$w9_img_01  = { FD F6 C1 1C 52 10 B9 FF 00 3C 7A D2 95 C8 DB D6 8F 42 38 E3 AD 30 13 2A 46 D3 C6 7D E9 72 32 39 E7 B5 04 00 3E 5E 45 20 C0 19 EF D7 F3 A0 62 F1 9C 9E C6 8C 91 D7 8C 51 9C F5 ED 47 CD D0 8C D0 21 71 C7 A8 34 DF 62 7F CF E3 4E ED EB 49 }
