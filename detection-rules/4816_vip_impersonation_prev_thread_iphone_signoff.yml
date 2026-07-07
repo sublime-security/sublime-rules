@@ -1,0 +1,48 @@
+name: "VIP impersonation: Invoice fraud with mobile device sign-off"
+description: "Detects inbound messages where a prior thread contains a reply from a known VIP - identifiable by display name or email address and signed off with a 'Sent from my iPhone' or 'Sent from my iPad' footer. However that VIP has been silently dropped from the current message's recipients. This pattern is consistent with fraudulent invoice and payment request lures where an attacker impersonates an internal executive in a thread, then removes them before requesting payment action from the remaining recipients."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and any(map(filter(body.previous_threads,
+                     // previous thread is authored by a VIP
+                     any($org_vips,
+                         strings.icontains(..sender.display_name, .display_name)
+                         or (
+                           .email != ""
+                           and strings.icontains(..sender.email.email, .email)
+                         )
+                     )
+                     // ends with fake ipad/iphone sign off
+                     and (
+                       strings.iends_with(.text,
+                                          "sent from my iphone.",
+                                          "sent from my ipad."
+                       )
+                     )
+              ),
+              .sender.email.email
+          ),
+          // VIP is dropped from the current thread recipients
+          // the previous thread sender email is empty, consider it a match
+          . == ""
+          // if it's not empty, check that it's not in the current thread
+          or (
+            not strings.icontains(sender.email.email, .)
+            and not any(flatten([recipients.to, recipients.cc, recipients.bcc]),
+                        strings.icontains(.email.email, ..)
+            )
+          )
+  )
+attack_types:
+  - "BEC/Fraud"
+tactics_and_techniques:
+  - "Impersonation: VIP"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Sender analysis"
+id: "143b5b1c-15f6-5123-801f-d66c8bfc8af2"
+og_id: "7b3b9dcb-adcf-5335-813b-51f1a42cb4d6"
+testing_pr: 4816
+testing_sha: 6431ce4f6a686b94fedc3b89a19c9a1ee9d1d795
