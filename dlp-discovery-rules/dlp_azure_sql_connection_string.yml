@@ -1,0 +1,32 @@
+name: "DLP: Azure SQL Server Connection String"
+description: "Detects messages containing Azure SQL Database connection strings with credentials."
+type: "dlp"
+severity: "high"
+source: |
+  type.outbound
+  and (
+    any(beta.ml_extract_sensitive_information(body.current_thread.text),
+          .type == "AZURE_SQL_CONNECTION_STRING"
+          and .confidence in ("medium", "high")
+    )
+    or any(attachments,
+      any(file.explode(.),
+        any(.scan.strings.strings,
+          any(beta.ml_extract_sensitive_information(.),
+              .type == "AZURE_SQL_CONNECTION_STRING"
+              and .confidence in ("medium", "high")
+          )
+        )
+      )
+    )
+  )
+data_categories:
+  - "Credentials"
+data_types:
+  - "Connection String"
+regions:
+  - "Global"
+detection_methods:
+  - "Presidio"
+  - "Content analysis"
+id: "d983c866-aad4-4ea6-8edc-7c3f88ed7d8e"

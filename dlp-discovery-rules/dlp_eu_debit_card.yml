@@ -4,49 +4,32 @@ type: "dlp"
 severity: "high"
 source: |
   type.outbound
-  and any(attachments,
-          (
-            .file_extension in~ $file_extensions_common_archives
-            or .file_extension in~ ('.csv', '.txt', '.xlsx', '.xls')
-          )
-          and any(file.explode(.),
-                  // Debit card: 13-19 digits with optional spaces/hyphens
-                  regex.contains(.scan.ocr.raw, '\b(?:\d{4}[\s\-]?){3}\d{1,7}\b')
-          )
-  )
   and (
-    // EU country TLDs
-    strings.icontains(sender.email.domain.tld, "at")
-    or strings.icontains(sender.email.domain.tld, "be")
-    or strings.icontains(sender.email.domain.tld, "bg")
-    or strings.icontains(sender.email.domain.tld, "hr")
-    or strings.icontains(sender.email.domain.tld, "cy")
-    or strings.icontains(sender.email.domain.tld, "cz")
-    or strings.icontains(sender.email.domain.tld, "dk")
-    or strings.icontains(sender.email.domain.tld, "ee")
-    or strings.icontains(sender.email.domain.tld, "fi")
-    or strings.icontains(sender.email.domain.tld, "fr")
-    or strings.icontains(sender.email.domain.tld, "de")
-    or strings.icontains(sender.email.domain.tld, "gr")
-    or strings.icontains(sender.email.domain.tld, "hu")
-    or strings.icontains(sender.email.domain.tld, "ie")
-    or strings.icontains(sender.email.domain.tld, "it")
-    or strings.icontains(sender.email.domain.tld, "lv")
-    or strings.icontains(sender.email.domain.tld, "lt")
-    or strings.icontains(sender.email.domain.tld, "lu")
-    or strings.icontains(sender.email.domain.tld, "mt")
-    or strings.icontains(sender.email.domain.tld, "nl")
-    or strings.icontains(sender.email.domain.tld, "pl")
-    or strings.icontains(sender.email.domain.tld, "pt")
-    or strings.icontains(sender.email.domain.tld, "ro")
-    or strings.icontains(sender.email.domain.tld, "sk")
-    or strings.icontains(sender.email.domain.tld, "si")
-    or strings.icontains(sender.email.domain.tld, "es")
-    or strings.icontains(sender.email.domain.tld, "se")
-    or strings.icontains(sender.email.domain.tld, "eu")
+    any(beta.ml_extract_sensitive_information(body.current_thread.text),
+          .type == "CREDIT_CARD"
+          and .confidence in ("medium", "high")
+    )
+    or any(attachments,
+      any(file.explode(.),
+        any(.scan.strings.strings,
+          any(beta.ml_extract_sensitive_information(.),
+              .type == "CREDIT_CARD"
+              and .confidence in ("medium", "high")
+          )
+        )
+      )
+    )
   )
-
+data_categories:
+  - "PCI"
+data_types:
+  - "Payment Card"
+regions:
+  - "European Union"
+compliance:
+  - "PCI-DSS"
+  - "GDPR"
 detection_methods:
-  - "File analysis"
-  - "Optical Character Recognition"
+  - "Presidio"
+  - "Content analysis"
 id: "0f31c606-5ea3-530d-a711-a6c6b9c7cd38"

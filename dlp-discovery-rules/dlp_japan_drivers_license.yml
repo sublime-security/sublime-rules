@@ -4,14 +4,29 @@ type: "dlp"
 severity: "medium"
 source: |
   type.outbound
-  and any([body.current_thread.text, subject.subject],
-          // Driver's license: 12 digits
-          regex.contains(., '\b\d{12}\b')
+  and (
+    any(beta.ml_extract_sensitive_information(body.current_thread.text),
+          .type == "JP_DRIVERS_LICENSE"
+          and .confidence in ("medium", "high")
+    )
+    or any(attachments,
+      any(file.explode(.),
+        any(.scan.strings.strings,
+          any(beta.ml_extract_sensitive_information(.),
+              .type == "JP_DRIVERS_LICENSE"
+              and .confidence in ("medium", "high")
+          )
+        )
+      )
+    )
   )
-  and any([body.current_thread.text, subject.subject],
-          regex.icontains(., 'driver.?s?\s+licen[cs]e|運転免許証|免許証')
-  )
-
+data_categories:
+  - "PII"
+data_types:
+  - "Government ID"
+regions:
+  - "Japan"
 detection_methods:
+  - "Presidio"
   - "Content analysis"
 id: "9af8c166-2803-5447-8002-008ad40953cd"

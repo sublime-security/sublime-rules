@@ -1,0 +1,34 @@
+name: "DLP: Czech Republic Driver's License"
+description: "Detects messages containing Czech driver's license numbers."
+type: "dlp"
+severity: "medium"
+source: |
+  type.outbound
+  and (
+    any(beta.ml_extract_sensitive_information(body.current_thread.text),
+          .type == "CZ_DRIVERS_LICENSE"
+          and .confidence in ("medium", "high")
+    )
+    or any(attachments,
+      any(file.explode(.),
+        any(.scan.strings.strings,
+          any(beta.ml_extract_sensitive_information(.),
+              .type == "CZ_DRIVERS_LICENSE"
+              and .confidence in ("medium", "high")
+          )
+        )
+      )
+    )
+  )
+data_categories:
+  - "PII"
+data_types:
+  - "Driver's License"
+regions:
+  - "Czech Republic"
+compliance:
+  - "GDPR"
+detection_methods:
+  - "Presidio"
+  - "Content analysis"
+id: "a1d27a5f-6a40-4b20-960c-2bf72e55babf"

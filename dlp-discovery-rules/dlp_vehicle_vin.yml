@@ -4,14 +4,30 @@ type: "dlp"
 severity: "medium"
 source: |
   type.outbound
-  and any([body.current_thread.text, subject.subject],
-          // VIN: 17 characters (no I, O, Q)
-          regex.contains(., '\b[A-HJ-NPR-Z0-9]{17}\b')
+  and (
+    any(beta.ml_extract_sensitive_information(body.current_thread.text),
+          .type == "VEHICLE_VIN"
+          and .confidence in ("medium", "high")
+    )
+    or any(attachments,
+      any(file.explode(.),
+        any(.scan.strings.strings,
+          any(beta.ml_extract_sensitive_information(.),
+              .type == "VEHICLE_VIN"
+              and .confidence in ("medium", "high")
+          )
+        )
+      )
+    )
   )
-  and any([body.current_thread.text, subject.subject],
-          regex.icontains(., 'VIN|vehicle\s+identification|chassis\s+number')
-  )
-
+data_categories:
+  - "PII"
+data_types:
+  - "Device Identifier"
+regions:
+  - "Global"
+compliance: []
 detection_methods:
+  - "Presidio"
   - "Content analysis"
 id: "18b68205-e1f8-5f09-a78b-1ac3e1ca3ad3"

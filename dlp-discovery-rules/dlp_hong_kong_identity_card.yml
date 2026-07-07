@@ -1,0 +1,32 @@
+name: "DLP: Hong Kong Identity Card"
+description: "Detects messages containing Hong Kong Identity Card (HKID) numbers."
+type: "dlp"
+severity: "high"
+source: |
+  type.outbound
+  and (
+    any(beta.ml_extract_sensitive_information(body.current_thread.text),
+          .type == "HK_IDENTITY_CARD"
+          and .confidence in ("medium", "high")
+    )
+    or any(attachments,
+      any(file.explode(.),
+        any(.scan.strings.strings,
+          any(beta.ml_extract_sensitive_information(.),
+              .type == "HK_IDENTITY_CARD"
+              and .confidence in ("medium", "high")
+          )
+        )
+      )
+    )
+  )
+data_categories:
+  - "PII"
+data_types:
+  - "Government ID"
+regions:
+  - "Hong Kong"
+detection_methods:
+  - "Presidio"
+  - "Content analysis"
+id: "affebf6e-3622-4844-bbec-09f27e5edcb5"

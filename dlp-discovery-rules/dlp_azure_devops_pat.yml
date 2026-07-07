@@ -1,0 +1,32 @@
+name: "DLP: Azure DevOps Personal Access Token"
+description: "Detects messages containing Azure DevOps personal access tokens used for authentication."
+type: "dlp"
+severity: "high"
+source: |
+  type.outbound
+  and (
+    any(beta.ml_extract_sensitive_information(body.current_thread.text),
+          .type == "AZURE_DEVOPS_PAT"
+          and .confidence in ("medium", "high")
+    )
+    or any(attachments,
+      any(file.explode(.),
+        any(.scan.strings.strings,
+          any(beta.ml_extract_sensitive_information(.),
+              .type == "AZURE_DEVOPS_PAT"
+              and .confidence in ("medium", "high")
+          )
+        )
+      )
+    )
+  )
+data_categories:
+  - "Credentials"
+data_types:
+  - "Authentication Token"
+regions:
+  - "Global"
+detection_methods:
+  - "Presidio"
+  - "Content analysis"
+id: "b85fad24-924b-4159-8710-e243f0bfac19"

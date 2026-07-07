@@ -1,0 +1,32 @@
+name: "DLP: Azure DocumentDB Auth Key"
+description: "Detects messages containing Azure DocumentDB authentication keys."
+type: "dlp"
+severity: "high"
+source: |
+  type.outbound
+  and (
+    any(beta.ml_extract_sensitive_information(body.current_thread.text),
+          .type == "AZURE_DOCUMENTDB_AUTH_KEY"
+          and .confidence in ("medium", "high")
+    )
+    or any(attachments,
+      any(file.explode(.),
+        any(.scan.strings.strings,
+          any(beta.ml_extract_sensitive_information(.),
+              .type == "AZURE_DOCUMENTDB_AUTH_KEY"
+              and .confidence in ("medium", "high")
+          )
+        )
+      )
+    )
+  )
+data_categories:
+  - "Credentials"
+data_types:
+  - "API Key"
+regions:
+  - "Global"
+detection_methods:
+  - "Presidio"
+  - "Content analysis"
+id: "5a529fe3-4f15-4385-a310-614106554ee9"

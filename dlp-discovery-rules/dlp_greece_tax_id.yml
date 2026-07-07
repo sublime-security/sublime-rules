@@ -1,17 +1,34 @@
 name: "DLP: Greece Tax Identification Number"
-description: "Detects messages containing Greek Tax Identification Numbers (ΑΦΜ)."
+description: "Detects messages containing Greek Tax Identification Numbers (AFM)."
 type: "dlp"
 severity: "medium"
 source: |
   type.outbound
-  and any([body.current_thread.text, subject.subject],
-          // Greek Tax ID: 9 digits
-          regex.contains(., '\b\d{9}\b')
+  and (
+    any(beta.ml_extract_sensitive_information(body.current_thread.text),
+          .type == "GR_TAX_ID"
+          and .confidence in ("medium", "high")
+    )
+    or any(attachments,
+      any(file.explode(.),
+        any(.scan.strings.strings,
+          any(beta.ml_extract_sensitive_information(.),
+              .type == "GR_TAX_ID"
+              and .confidence in ("medium", "high")
+          )
+        )
+      )
+    )
   )
-  and any([body.current_thread.text, subject.subject],
-          regex.icontains(., 'ΑΦΜ|AFM|tax\s+identification')
-  )
-
+data_categories:
+  - "PII"
+data_types:
+  - "Tax ID"
+regions:
+  - "Greece"
+compliance:
+  - "GDPR"
 detection_methods:
+  - "Presidio"
   - "Content analysis"
 id: "673c6cd1-e5d7-5468-b7c8-e60f26dfa2c4"

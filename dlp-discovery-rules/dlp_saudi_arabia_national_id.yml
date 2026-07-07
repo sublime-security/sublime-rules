@@ -4,14 +4,29 @@ type: "dlp"
 severity: "high"
 source: |
   type.outbound
-  and any([body.current_thread.text, subject.subject],
-          // Saudi National ID: 10 digits
-          regex.contains(., '\b[12]\d{9}\b')
+  and (
+    any(beta.ml_extract_sensitive_information(body.current_thread.text),
+          .type == "SA_NATIONAL_ID"
+          and .confidence in ("medium", "high")
+    )
+    or any(attachments,
+      any(file.explode(.),
+        any(.scan.strings.strings,
+          any(beta.ml_extract_sensitive_information(.),
+              .type == "SA_NATIONAL_ID"
+              and .confidence in ("medium", "high")
+          )
+        )
+      )
+    )
   )
-  and any([body.current_thread.text, subject.subject],
-          regex.icontains(., 'national\s+ID|iqama|رقم\s+الهوية|إقامة')
-  )
-
+data_categories:
+  - "PII"
+data_types:
+  - "Government ID"
+regions:
+  - "Saudi Arabia"
 detection_methods:
+  - "Presidio"
   - "Content analysis"
 id: "72f47fe9-4fe5-5c19-93d8-5938c485e546"

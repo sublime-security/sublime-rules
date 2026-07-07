@@ -4,18 +4,31 @@ type: "dlp"
 severity: "high"
 source: |
   type.outbound
-  and any([body.current_thread.text, subject.subject],
-          // Malta ID: 7-8 digits + 1 letter (e.g., 1234567M)
-          regex.contains(., '\b\d{7,8}[A-Z]\b')
-  )
-  and any([body.current_thread.text, subject.subject],
-          regex.icontains(., 'identity\s+card|ID\s+card|karta\s+tal-identità')
-  )
   and (
-    strings.icontains(sender.email.domain.tld, "mt")
-    or strings.icontains(body.current_thread.text, "malta")
+    any(beta.ml_extract_sensitive_information(body.current_thread.text),
+          .type == "MT_IDENTITY_CARD"
+          and .confidence in ("medium", "high")
+    )
+    or any(attachments,
+      any(file.explode(.),
+        any(.scan.strings.strings,
+          any(beta.ml_extract_sensitive_information(.),
+              .type == "MT_IDENTITY_CARD"
+              and .confidence in ("medium", "high")
+          )
+        )
+      )
+    )
   )
-
+data_categories:
+  - "PII"
+data_types:
+  - "Government ID"
+regions:
+  - "Malta"
+compliance:
+  - "GDPR"
 detection_methods:
+  - "Presidio"
   - "Content analysis"
 id: "83a8908a-8595-52e4-b946-636145107c10"

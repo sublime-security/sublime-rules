@@ -1,0 +1,32 @@
+name: "DLP: New Zealand Bank Account Number"
+description: "Detects messages containing New Zealand bank account numbers."
+type: "dlp"
+severity: "medium"
+source: |
+  type.outbound
+  and (
+    any(beta.ml_extract_sensitive_information(body.current_thread.text),
+          .type == "NZ_BANK_ACCOUNT"
+          and .confidence in ("medium", "high")
+    )
+    or any(attachments,
+      any(file.explode(.),
+        any(.scan.strings.strings,
+          any(beta.ml_extract_sensitive_information(.),
+              .type == "NZ_BANK_ACCOUNT"
+              and .confidence in ("medium", "high")
+          )
+        )
+      )
+    )
+  )
+data_categories:
+  - "Financial"
+data_types:
+  - "Financial Account"
+regions:
+  - "New Zealand"
+detection_methods:
+  - "Presidio"
+  - "Content analysis"
+id: "98a351cd-b47f-475e-a479-b2ff9485d1fa"

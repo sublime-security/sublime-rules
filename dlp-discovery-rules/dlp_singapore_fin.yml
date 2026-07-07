@@ -1,0 +1,32 @@
+name: "DLP: Singapore FIN"
+description: "Detects messages containing Singapore Foreign Identification Numbers (FIN) or NRIC numbers."
+type: "dlp"
+severity: "high"
+source: |
+  type.outbound
+  and (
+    any(beta.ml_extract_sensitive_information(body.current_thread.text),
+          .type == "SG_FIN"
+          and .confidence in ("medium", "high")
+    )
+    or any(attachments,
+      any(file.explode(.),
+        any(.scan.strings.strings,
+          any(beta.ml_extract_sensitive_information(.),
+              .type == "SG_FIN"
+              and .confidence in ("medium", "high")
+          )
+        )
+      )
+    )
+  )
+data_categories:
+  - "PII"
+data_types:
+  - "Government ID"
+regions:
+  - "Singapore"
+detection_methods:
+  - "Presidio"
+  - "Content analysis"
+id: "9ace0b28-9a54-47d3-8328-0d5e1dc320fb"

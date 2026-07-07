@@ -4,14 +4,32 @@ type: "dlp"
 severity: "medium"
 source: |
   type.outbound
-  and any([body.current_thread.text, subject.subject],
-          // US DL varies by state, typically 7-12 alphanumeric
-          regex.contains(., '\b[A-Z0-9]{7,12}\b')
+  and (
+    any(beta.ml_extract_sensitive_information(body.current_thread.text),
+          .type == "US_DRIVER_LICENSE"
+          and .confidence in ("medium", "high")
+    )
+    or any(attachments,
+      any(file.explode(.),
+        any(.scan.strings.strings,
+          any(beta.ml_extract_sensitive_information(.),
+              .type == "US_DRIVER_LICENSE"
+              and .confidence in ("medium", "high")
+          )
+        )
+      )
+    )
   )
-  and any([body.current_thread.text, subject.subject],
-          regex.icontains(., 'driver.?s?\s+licen[cs]e|DL\s+number|DMV')
-  )
-
+data_categories:
+  - "PII"
+data_types:
+  - "Government ID"
+regions:
+  - "United States"
+compliance:
+  - "CCPA"
+  - "GLBA"
 detection_methods:
+  - "Presidio"
   - "Content analysis"
 id: "bffdbcef-5ea5-5c8d-a2aa-64833faa073c"

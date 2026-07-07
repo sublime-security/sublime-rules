@@ -4,14 +4,29 @@ type: "dlp"
 severity: "high"
 source: |
   type.outbound
-  and any([body.current_thread.text, subject.subject],
-          // RRN: 13 digits in YYMMDD-XXXXXXX format
-          regex.contains(., '\b\d{6}-?[1-4]\d{6}\b')
+  and (
+    any(beta.ml_extract_sensitive_information(body.current_thread.text),
+          .type == "KR_RRN"
+          and .confidence in ("medium", "high")
+    )
+    or any(attachments,
+      any(file.explode(.),
+        any(.scan.strings.strings,
+          any(beta.ml_extract_sensitive_information(.),
+              .type == "KR_RRN"
+              and .confidence in ("medium", "high")
+          )
+        )
+      )
+    )
   )
-  and any([body.current_thread.text, subject.subject],
-          regex.icontains(., 'RRN|resident\s+registration|주민등록번호|korean\s+ID')
-  )
-
+data_categories:
+  - "PII"
+data_types:
+  - "Government ID"
+regions:
+  - "South Korea"
 detection_methods:
+  - "Presidio"
   - "Content analysis"
 id: "f8624d7d-b3eb-54f2-a0c7-efb708ab33d9"

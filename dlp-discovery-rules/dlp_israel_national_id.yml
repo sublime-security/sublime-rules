@@ -4,14 +4,29 @@ type: "dlp"
 severity: "high"
 source: |
   type.outbound
-  and any([body.current_thread.text, subject.subject],
-          // Israeli ID: 9 digits
-          regex.contains(., '\b\d{9}\b')
+  and (
+    any(beta.ml_extract_sensitive_information(body.current_thread.text),
+          .type == "IL_NATIONAL_ID"
+          and .confidence in ("medium", "high")
+    )
+    or any(attachments,
+      any(file.explode(.),
+        any(.scan.strings.strings,
+          any(beta.ml_extract_sensitive_information(.),
+              .type == "IL_NATIONAL_ID"
+              and .confidence in ("medium", "high")
+          )
+        )
+      )
+    )
   )
-  and any([body.current_thread.text, subject.subject],
-          regex.icontains(., 'teudat\s+zehut|national\s+ID|ת\.?ז\.?|תעודת\s+זהות')
-  )
-
+data_categories:
+  - "PII"
+data_types:
+  - "Government ID"
+regions:
+  - "Israel"
 detection_methods:
+  - "Presidio"
   - "Content analysis"
 id: "ba2c1570-36d2-5b06-8939-0240c044ae73"

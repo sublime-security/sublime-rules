@@ -1,0 +1,32 @@
+name: "DLP: Azure Function Master/API Key"
+description: "Detects messages containing Azure Function master or API keys used for function authorization."
+type: "dlp"
+severity: "high"
+source: |
+  type.outbound
+  and (
+    any(beta.ml_extract_sensitive_information(body.current_thread.text),
+          .type == "AZURE_FUNCTION_KEY"
+          and .confidence in ("medium", "high")
+    )
+    or any(attachments,
+      any(file.explode(.),
+        any(.scan.strings.strings,
+          any(beta.ml_extract_sensitive_information(.),
+              .type == "AZURE_FUNCTION_KEY"
+              and .confidence in ("medium", "high")
+          )
+        )
+      )
+    )
+  )
+data_categories:
+  - "Credentials"
+data_types:
+  - "API Key"
+regions:
+  - "Global"
+detection_methods:
+  - "Presidio"
+  - "Content analysis"
+id: "9ac9637f-94a8-48cc-b708-b38aec252acb"

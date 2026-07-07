@@ -4,15 +4,32 @@ type: "dlp"
 severity: "medium"
 source: |
   type.outbound
-  and any([body.current_thread.text, subject.subject],
-          // ICD-10-CM diagnosis: letter + 2 digits + optional dot + up to 4 more alphanumeric
-          // ICD-10-PCS procedure: 7 alphanumeric (no I or O)
-          regex.contains(., '\b[A-Z]\d{2}\.?[A-Z0-9]{0,4}\b|\b[A-HJ-NP-Z0-9]{7}\b')
+  and (
+    any(beta.ml_extract_sensitive_information(body.current_thread.text),
+          .type == "US_ICD10"
+          and .confidence in ("medium", "high")
+    )
+    or any(attachments,
+      any(file.explode(.),
+        any(.scan.strings.strings,
+          any(beta.ml_extract_sensitive_information(.),
+              .type == "US_ICD10"
+              and .confidence in ("medium", "high")
+          )
+        )
+      )
+    )
   )
-  and any([body.current_thread.text, subject.subject],
-          regex.icontains(., 'ICD-?10|diagnosis\s+code|procedure\s+code')
-  )
-
+data_categories:
+  - "PII"
+  - "PHI"
+data_types:
+  - "Medical Code"
+regions:
+  - "United States"
+compliance:
+  - "HIPAA"
 detection_methods:
+  - "Presidio"
   - "Content analysis"
 id: "436234d9-0095-5223-b6e4-f9830e186de0"

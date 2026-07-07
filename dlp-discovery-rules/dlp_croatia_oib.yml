@@ -4,14 +4,31 @@ type: "dlp"
 severity: "high"
 source: |
   type.outbound
-  and any([body.current_thread.text, subject.subject],
-          // Croatian OIB: 11 digits
-          regex.contains(., '\b\d{11}\b')
+  and (
+    any(beta.ml_extract_sensitive_information(body.current_thread.text),
+          .type == "HR_OIB"
+          and .confidence in ("medium", "high")
+    )
+    or any(attachments,
+      any(file.explode(.),
+        any(.scan.strings.strings,
+          any(beta.ml_extract_sensitive_information(.),
+              .type == "HR_OIB"
+              and .confidence in ("medium", "high")
+          )
+        )
+      )
+    )
   )
-  and any([body.current_thread.text, subject.subject],
-          regex.icontains(., 'OIB|osobni\s+identifikacijski|personal\s+identification')
-  )
-
+data_categories:
+  - "PII"
+data_types:
+  - "Government ID"
+regions:
+  - "Croatia"
+compliance:
+  - "GDPR"
 detection_methods:
+  - "Presidio"
   - "Content analysis"
 id: "d9b89f12-cec5-52a6-880c-f77a3c9aac76"

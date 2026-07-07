@@ -1,17 +1,34 @@
 name: "DLP: Spain Social Security Number"
-description: "Detects messages containing Spanish Social Security Numbers (Número de la Seguridad Social)."
+description: "Detects messages containing Spanish Social Security Numbers (Numero de la Seguridad Social)."
 type: "dlp"
 severity: "high"
 source: |
   type.outbound
-  and any([body.current_thread.text, subject.subject],
-          // Spanish SSN: 12 digits in XX/XXXXXXXX/XX format
-          regex.contains(., '\b\d{2}[\s/]?\d{8}[\s/]?\d{2}\b')
+  and (
+    any(beta.ml_extract_sensitive_information(body.current_thread.text),
+          .type == "SPAIN_SSN"
+          and .confidence in ("medium", "high")
+    )
+    or any(attachments,
+      any(file.explode(.),
+        any(.scan.strings.strings,
+          any(beta.ml_extract_sensitive_information(.),
+              .type == "SPAIN_SSN"
+              and .confidence in ("medium", "high")
+          )
+        )
+      )
+    )
   )
-  and any([body.current_thread.text, subject.subject],
-          regex.icontains(., 'seguridad\s+social|social\s+security|NSS')
-  )
-
+data_categories:
+  - "PII"
+data_types:
+  - "Government ID"
+regions:
+  - "Spain"
+compliance:
+  - "GDPR"
 detection_methods:
+  - "Presidio"
   - "Content analysis"
 id: "04f9e1a3-2905-5df1-8b2b-318f75b23ea1"

@@ -4,15 +4,31 @@ type: "dlp"
 severity: "high"
 source: |
   type.outbound
-  and any([body.current_thread.text, subject.subject],
-          // DNI: 8 digits + 1 letter (e.g., 12345678A)
-          // NIE: X/Y/Z + 7 digits + 1 letter (e.g., X1234567A)
-          regex.contains(., '\b(?:[XYZ]\d{7}|[\d]{8})[A-Z]\b')
+  and (
+    any(beta.ml_extract_sensitive_information(body.current_thread.text),
+          .type == "ES_NIF"
+          and .confidence in ("medium", "high")
+    )
+    or any(attachments,
+      any(file.explode(.),
+        any(.scan.strings.strings,
+          any(beta.ml_extract_sensitive_information(.),
+              .type == "ES_NIF"
+              and .confidence in ("medium", "high")
+          )
+        )
+      )
+    )
   )
-  and any([body.current_thread.text, subject.subject],
-          regex.icontains(., 'DNI|NIE|documento\s+nacional|identidad')
-  )
-
+data_categories:
+  - "PII"
+data_types:
+  - "Government ID"
+regions:
+  - "Spain"
+compliance:
+  - "GDPR"
 detection_methods:
+  - "Presidio"
   - "Content analysis"
 id: "bfbf18fd-1fdd-5590-9b0f-d6ef0a6b3dcd"

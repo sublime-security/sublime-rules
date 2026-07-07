@@ -4,14 +4,29 @@ type: "dlp"
 severity: "high"
 source: |
   type.outbound
-  and any([body.current_thread.text, subject.subject],
-          // Aadhaar: 12 digits in XXXX XXXX XXXX format
-          regex.contains(., '\b\d{4}[\s\-]?\d{4}[\s\-]?\d{4}\b')
+  and (
+    any(beta.ml_extract_sensitive_information(body.current_thread.text),
+          .type == "IN_AADHAAR"
+          and .confidence in ("medium", "high")
+    )
+    or any(attachments,
+      any(file.explode(.),
+        any(.scan.strings.strings,
+          any(beta.ml_extract_sensitive_information(.),
+              .type == "IN_AADHAAR"
+              and .confidence in ("medium", "high")
+          )
+        )
+      )
+    )
   )
-  and any([body.current_thread.text, subject.subject],
-          regex.icontains(., 'aadhaar|आधार|UIDAI')
-  )
-
+data_categories:
+  - "PII"
+data_types:
+  - "Government ID"
+regions:
+  - "India"
 detection_methods:
+  - "Presidio"
   - "Content analysis"
 id: "00b9be99-2832-5cb3-a8a7-20fe2f8786e8"

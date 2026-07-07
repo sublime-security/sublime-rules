@@ -4,14 +4,29 @@ type: "dlp"
 severity: "high"
 source: |
   type.outbound
-  and any([body.current_thread.text, subject.subject],
-          // Social Insurance Number: 10 digits
-          regex.contains(., '\b\d{4}[\s\-]?\d{6}\b')
+  and (
+    any(beta.ml_extract_sensitive_information(body.current_thread.text),
+          .type == "JP_SIN"
+          and .confidence in ("medium", "high")
+    )
+    or any(attachments,
+      any(file.explode(.),
+        any(.scan.strings.strings,
+          any(beta.ml_extract_sensitive_information(.),
+              .type == "JP_SIN"
+              and .confidence in ("medium", "high")
+          )
+        )
+      )
+    )
   )
-  and any([body.current_thread.text, subject.subject],
-          regex.icontains(., 'social\s+insurance|基礎年金番号|年金手帳')
-  )
-
+data_categories:
+  - "PII"
+data_types:
+  - "Government ID"
+regions:
+  - "Japan"
 detection_methods:
+  - "Presidio"
   - "Content analysis"
 id: "140a4fa1-a088-5f5a-8ce0-76e30af42b8d"

@@ -4,13 +4,29 @@ type: "dlp"
 severity: "medium"
 source: |
   type.outbound
-  and any(ml.logo_detect(beta.message_screenshot()).brands, strings.ilike(.name, "*bank*", "*financial*"))
-  and any([body.current_thread.text, subject.subject],
-          // SWIFT code: 4 letters (bank) + 2 letters (AU) + 2 chars (location) + optional 3 chars (branch)
-          regex.contains(., '\b[A-Z]{4}AU[A-Z0-9]{2}(?:[A-Z0-9]{3})?\b')
+  and (
+    any(beta.ml_extract_sensitive_information(body.current_thread.text),
+          .type == "AU_SWIFT_CODE"
+          and .confidence in ("medium", "high")
+    )
+    or any(attachments,
+      any(file.explode(.),
+        any(.scan.strings.strings,
+          any(beta.ml_extract_sensitive_information(.),
+              .type == "AU_SWIFT_CODE"
+              and .confidence in ("medium", "high")
+          )
+        )
+      )
+    )
   )
-
+data_categories:
+  - "Financial"
+data_types:
+  - "Financial Account"
+regions:
+  - "Australia"
 detection_methods:
+  - "Presidio"
   - "Content analysis"
-  - "Computer Vision"
 id: "4da18a44-7112-58b2-a8a2-e85dc76e4a60"

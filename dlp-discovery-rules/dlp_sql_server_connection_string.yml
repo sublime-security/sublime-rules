@@ -1,0 +1,32 @@
+name: "DLP: SQL Server Connection String"
+description: "Detects messages containing SQL Server connection strings with embedded credentials."
+type: "dlp"
+severity: "high"
+source: |
+  type.outbound
+  and (
+    any(beta.ml_extract_sensitive_information(body.current_thread.text),
+          .type == "SQL_SERVER_CONNECTION_STRING"
+          and .confidence in ("medium", "high")
+    )
+    or any(attachments,
+      any(file.explode(.),
+        any(.scan.strings.strings,
+          any(beta.ml_extract_sensitive_information(.),
+              .type == "SQL_SERVER_CONNECTION_STRING"
+              and .confidence in ("medium", "high")
+          )
+        )
+      )
+    )
+  )
+data_categories:
+  - "Credentials"
+data_types:
+  - "Connection String"
+regions:
+  - "Global"
+detection_methods:
+  - "Presidio"
+  - "Content analysis"
+id: "e577a372-6a01-47a9-917e-268276ff97c6"

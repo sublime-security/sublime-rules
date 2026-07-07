@@ -4,18 +4,31 @@ type: "dlp"
 severity: "high"
 source: |
   type.outbound
-  and any([body.current_thread.text, subject.subject],
-          // French passport: 2 digits + 2 letters + 5 digits (e.g., 12AB12345)
-          regex.contains(., '\b\d{2}[A-Z]{2}\d{5}\b')
-  )
-  and any([body.current_thread.text, subject.subject],
-          regex.icontains(., 'passeport|passport')
-  )
   and (
-    strings.icontains(sender.email.domain.tld, "fr")
-    or strings.icontains(body.current_thread.text, "france")
+    any(beta.ml_extract_sensitive_information(body.current_thread.text),
+          .type == "FRANCE_PASSPORT"
+          and .confidence in ("medium", "high")
+    )
+    or any(attachments,
+      any(file.explode(.),
+        any(.scan.strings.strings,
+          any(beta.ml_extract_sensitive_information(.),
+              .type == "FRANCE_PASSPORT"
+              and .confidence in ("medium", "high")
+          )
+        )
+      )
+    )
   )
-
+data_categories:
+  - "PII"
+data_types:
+  - "Government ID"
+regions:
+  - "France"
+compliance:
+  - "GDPR"
 detection_methods:
+  - "Presidio"
   - "Content analysis"
 id: "09b92ea2-e1d7-57de-b9e7-2addc4886cab"

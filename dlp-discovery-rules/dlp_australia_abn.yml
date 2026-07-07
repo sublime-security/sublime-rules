@@ -1,0 +1,32 @@
+name: "DLP: Australia ABN"
+description: "Detects messages containing Australian Business Numbers (ABN)."
+type: "dlp"
+severity: "medium"
+source: |
+  type.outbound
+  and (
+    any(beta.ml_extract_sensitive_information(body.current_thread.text),
+          .type == "AU_ABN"
+          and .confidence in ("medium", "high")
+    )
+    or any(attachments,
+      any(file.explode(.),
+        any(.scan.strings.strings,
+          any(beta.ml_extract_sensitive_information(.),
+              .type == "AU_ABN"
+              and .confidence in ("medium", "high")
+          )
+        )
+      )
+    )
+  )
+data_categories:
+  - "Financial"
+data_types:
+  - "Tax ID"
+regions:
+  - "Australia"
+detection_methods:
+  - "Presidio"
+  - "Content analysis"
+id: "b412954f-1c03-4e48-a763-f04c6abb97e1"

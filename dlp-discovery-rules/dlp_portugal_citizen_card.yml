@@ -1,17 +1,34 @@
 name: "DLP: Portugal Citizen Card Number"
-description: "Detects messages containing Portuguese Citizen Card Numbers (Cartão de Cidadão)."
+description: "Detects messages containing Portuguese Citizen Card Numbers (Cartao de Cidadao)."
 type: "dlp"
 severity: "high"
 source: |
   type.outbound
-  and any([body.current_thread.text, subject.subject],
-          // Portuguese Citizen Card: 8 digits + 1 check digit (e.g., 12345678-9)
-          regex.contains(., '\b\d{8}[\s\-]?\d\s?[A-Z]{2}\d\b')
+  and (
+    any(beta.ml_extract_sensitive_information(body.current_thread.text),
+          .type == "PORTUGAL_CITIZEN_CARD"
+          and .confidence in ("medium", "high")
+    )
+    or any(attachments,
+      any(file.explode(.),
+        any(.scan.strings.strings,
+          any(beta.ml_extract_sensitive_information(.),
+              .type == "PORTUGAL_CITIZEN_CARD"
+              and .confidence in ("medium", "high")
+          )
+        )
+      )
+    )
   )
-  and any([body.current_thread.text, subject.subject],
-          regex.icontains(., 'cartão\s+de\s+cidadão|citizen\s+card')
-  )
-
+data_categories:
+  - "PII"
+data_types:
+  - "Government ID"
+regions:
+  - "Portugal"
+compliance:
+  - "GDPR"
 detection_methods:
+  - "Presidio"
   - "Content analysis"
 id: "27a4c2c9-04aa-5719-a6ca-318be8e6cc7c"

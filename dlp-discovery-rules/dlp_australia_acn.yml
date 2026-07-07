@@ -1,0 +1,32 @@
+name: "DLP: Australia ACN"
+description: "Detects messages containing Australian Company Numbers (ACN)."
+type: "dlp"
+severity: "medium"
+source: |
+  type.outbound
+  and (
+    any(beta.ml_extract_sensitive_information(body.current_thread.text),
+          .type == "AU_ACN"
+          and .confidence in ("medium", "high")
+    )
+    or any(attachments,
+      any(file.explode(.),
+        any(.scan.strings.strings,
+          any(beta.ml_extract_sensitive_information(.),
+              .type == "AU_ACN"
+              and .confidence in ("medium", "high")
+          )
+        )
+      )
+    )
+  )
+data_categories:
+  - "Financial"
+data_types:
+  - "Tax ID"
+regions:
+  - "Australia"
+detection_methods:
+  - "Presidio"
+  - "Content analysis"
+id: "a676fdc9-ea77-4a21-85c3-9cfe15f0d6f1"

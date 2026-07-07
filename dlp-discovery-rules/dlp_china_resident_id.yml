@@ -4,15 +4,29 @@ type: "dlp"
 severity: "high"
 source: |
   type.outbound
-  and any([body.current_thread.text, subject.subject],
-          // Chinese ID: 18 digits or 15 digits
-          regex.contains(., '\b\d{17}[0-9Xx]\b')
-          or regex.contains(., '\b\d{15}\b')
+  and (
+    any(beta.ml_extract_sensitive_information(body.current_thread.text),
+          .type == "CN_RESIDENT_ID"
+          and .confidence in ("medium", "high")
+    )
+    or any(attachments,
+      any(file.explode(.),
+        any(.scan.strings.strings,
+          any(beta.ml_extract_sensitive_information(.),
+              .type == "CN_RESIDENT_ID"
+              and .confidence in ("medium", "high")
+          )
+        )
+      )
+    )
   )
-  and any([body.current_thread.text, subject.subject],
-          regex.icontains(., 'resident\s+ID|身份证|chinese\s+ID|china')
-  )
-
+data_categories:
+  - "PII"
+data_types:
+  - "Government ID"
+regions:
+  - "China"
 detection_methods:
+  - "Presidio"
   - "Content analysis"
 id: "03c59035-48e2-5925-904a-10a1e089bc8d"

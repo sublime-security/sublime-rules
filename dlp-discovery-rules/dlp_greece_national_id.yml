@@ -4,18 +4,31 @@ type: "dlp"
 severity: "high"
 source: |
   type.outbound
-  and any([body.current_thread.text, subject.subject],
-          // Greek ID: 1-2 letters + 6 digits
-          regex.contains(., '\b[A-Z]{1,2}\d{6}\b')
-  )
-  and any([body.current_thread.text, subject.subject],
-          regex.icontains(., 'ταυτότητα|national\s+ID|identity\s+card')
-  )
   and (
-    strings.icontains(sender.email.domain.tld, "gr")
-    or strings.icontains(body.current_thread.text, "greece")
+    any(beta.ml_extract_sensitive_information(body.current_thread.text),
+          .type == "GR_NATIONAL_ID"
+          and .confidence in ("medium", "high")
+    )
+    or any(attachments,
+      any(file.explode(.),
+        any(.scan.strings.strings,
+          any(beta.ml_extract_sensitive_information(.),
+              .type == "GR_NATIONAL_ID"
+              and .confidence in ("medium", "high")
+          )
+        )
+      )
+    )
   )
-
+data_categories:
+  - "PII"
+data_types:
+  - "Government ID"
+regions:
+  - "Greece"
+compliance:
+  - "GDPR"
 detection_methods:
+  - "Presidio"
   - "Content analysis"
 id: "0d9aa1e8-16cb-50bd-a09f-f5c4a868fbb4"

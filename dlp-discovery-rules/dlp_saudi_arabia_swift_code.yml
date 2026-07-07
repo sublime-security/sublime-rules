@@ -4,13 +4,29 @@ type: "dlp"
 severity: "medium"
 source: |
   type.outbound
-  and any(ml.logo_detect(beta.message_screenshot()).brands, strings.ilike(.name, "*bank*", "*financial*"))
-  and any([body.current_thread.text, subject.subject],
-          // SWIFT code: 4 letters (bank) + 2 letters (SA) + 2 chars (location) + optional 3 chars (branch)
-          regex.contains(., '\b[A-Z]{4}SA[A-Z0-9]{2}(?:[A-Z0-9]{3})?\b')
+  and (
+    any(beta.ml_extract_sensitive_information(body.current_thread.text),
+          .type == "SA_SWIFT_CODE"
+          and .confidence in ("medium", "high")
+    )
+    or any(attachments,
+      any(file.explode(.),
+        any(.scan.strings.strings,
+          any(beta.ml_extract_sensitive_information(.),
+              .type == "SA_SWIFT_CODE"
+              and .confidence in ("medium", "high")
+          )
+        )
+      )
+    )
   )
-
+data_categories:
+  - "Financial"
+data_types:
+  - "Financial Account"
+regions:
+  - "Saudi Arabia"
 detection_methods:
+  - "Presidio"
   - "Content analysis"
-  - "Computer Vision"
 id: "8b5d1443-6d10-5d90-8a66-1fabb3b29d21"

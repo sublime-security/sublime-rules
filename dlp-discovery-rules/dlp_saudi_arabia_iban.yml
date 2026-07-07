@@ -4,14 +4,29 @@ type: "dlp"
 severity: "medium"
 source: |
   type.outbound
-  and any([body.current_thread.text, subject.subject],
-          // Saudi IBAN: SA + 2 check digits + 22 digits
-          regex.contains(., '\bSA\d{2}[\s]?\d{4}[\s]?\d{4}[\s]?\d{4}[\s]?\d{4}[\s]?\d{4}[\s]?\d{2}\b')
+  and (
+    any(beta.ml_extract_sensitive_information(body.current_thread.text),
+          .type == "IBAN"
+          and .confidence in ("medium", "high")
+    )
+    or any(attachments,
+      any(file.explode(.),
+        any(.scan.strings.strings,
+          any(beta.ml_extract_sensitive_information(.),
+              .type == "IBAN"
+              and .confidence in ("medium", "high")
+          )
+        )
+      )
+    )
   )
-  and any([body.current_thread.text, subject.subject],
-          regex.icontains(., 'IBAN|bank\s+account|حساب\s+بنكي')
-  )
-
+data_categories:
+  - "Financial"
+data_types:
+  - "Financial Account"
+regions:
+  - "Saudi Arabia"
 detection_methods:
+  - "Presidio"
   - "Content analysis"
 id: "02049a28-c93a-501b-9ae4-1e23d965e4bf"

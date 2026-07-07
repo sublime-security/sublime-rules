@@ -4,14 +4,32 @@ type: "dlp"
 severity: "medium"
 source: |
   type.outbound
-  and any([body.current_thread.text, subject.subject],
-          // ABA routing: 9 digits, Account: 8-17 digits
-          regex.contains(., '\b\d{9}\b.*\b\d{8,17}\b|\b\d{8,17}\b.*\b\d{9}\b')
+  and (
+    any(beta.ml_extract_sensitive_information(body.current_thread.text),
+          .type == "US_BANK_NUMBER"
+          and .confidence in ("medium", "high")
+    )
+    or any(attachments,
+      any(file.explode(.),
+        any(.scan.strings.strings,
+          any(beta.ml_extract_sensitive_information(.),
+              .type == "US_BANK_NUMBER"
+              and .confidence in ("medium", "high")
+          )
+        )
+      )
+    )
   )
-  and any([body.current_thread.text, subject.subject],
-          regex.icontains(., 'routing|ABA|bank\s+account|account\s+number')
-  )
-
+data_categories:
+  - "Financial"
+data_types:
+  - "Financial Account"
+regions:
+  - "United States"
+compliance:
+  - "GLBA"
+  - "SOX"
 detection_methods:
+  - "Presidio"
   - "Content analysis"
 id: "b81d1c09-2caa-51d1-82ce-72cf504a2c9f"

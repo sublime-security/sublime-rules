@@ -1,0 +1,32 @@
+name: "DLP: Azure Maps Subscription Key"
+description: "Detects messages containing Azure Maps subscription keys."
+type: "dlp"
+severity: "high"
+source: |
+  type.outbound
+  and (
+    any(beta.ml_extract_sensitive_information(body.current_thread.text),
+          .type == "AZURE_MAPS_SUBSCRIPTION_KEY"
+          and .confidence in ("medium", "high")
+    )
+    or any(attachments,
+      any(file.explode(.),
+        any(.scan.strings.strings,
+          any(beta.ml_extract_sensitive_information(.),
+              .type == "AZURE_MAPS_SUBSCRIPTION_KEY"
+              and .confidence in ("medium", "high")
+          )
+        )
+      )
+    )
+  )
+data_categories:
+  - "Credentials"
+data_types:
+  - "API Key"
+regions:
+  - "Global"
+detection_methods:
+  - "Presidio"
+  - "Content analysis"
+id: "0b81ec1a-6727-4eed-9b06-17dfcc1f5048"

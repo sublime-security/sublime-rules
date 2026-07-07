@@ -4,15 +4,29 @@ type: "dlp"
 severity: "medium"
 source: |
   type.outbound
-  and any([body.current_thread.text, subject.subject],
-          // BSB: 6 digits (XXX-XXX format)
-          // Account: 6-10 digits
-          regex.contains(., '\b\d{3}-\d{3}\b')
+  and (
+    any(beta.ml_extract_sensitive_information(body.current_thread.text),
+          .type == "AU_BANK_ACCOUNT"
+          and .confidence in ("medium", "high")
+    )
+    or any(attachments,
+      any(file.explode(.),
+        any(.scan.strings.strings,
+          any(beta.ml_extract_sensitive_information(.),
+              .type == "AU_BANK_ACCOUNT"
+              and .confidence in ("medium", "high")
+          )
+        )
+      )
+    )
   )
-  and any([body.current_thread.text, subject.subject],
-          regex.icontains(., 'BSB|bank\s+account|account\s+number')
-  )
-
+data_categories:
+  - "Financial"
+data_types:
+  - "Financial Account"
+regions:
+  - "Australia"
 detection_methods:
+  - "Presidio"
   - "Content analysis"
 id: "702cb14e-fc14-5171-93db-001310bcfe63"

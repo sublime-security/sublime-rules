@@ -1,0 +1,35 @@
+name: "DLP: US ABA Routing Transit Number"
+description: "Detects messages containing US ABA Routing Transit Numbers used for bank transfers and ACH payments."
+type: "dlp"
+severity: "medium"
+source: |
+  type.outbound
+  and (
+    any(beta.ml_extract_sensitive_information(body.current_thread.text),
+          .type == "US_ABA_ROUTING_NUMBER"
+          and .confidence in ("medium", "high")
+    )
+    or any(attachments,
+      any(file.explode(.),
+        any(.scan.strings.strings,
+          any(beta.ml_extract_sensitive_information(.),
+              .type == "US_ABA_ROUTING_NUMBER"
+              and .confidence in ("medium", "high")
+          )
+        )
+      )
+    )
+  )
+data_categories:
+  - "Financial"
+data_types:
+  - "Financial Account"
+regions:
+  - "United States"
+compliance:
+  - "GLBA"
+  - "SOX"
+detection_methods:
+  - "Presidio"
+  - "Content analysis"
+id: "27822633-8e81-48cb-9038-9a3016ffb82e"

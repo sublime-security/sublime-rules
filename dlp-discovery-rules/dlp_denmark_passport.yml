@@ -1,0 +1,34 @@
+name: "DLP: Denmark Passport"
+description: "Detects messages containing Danish passport numbers."
+type: "dlp"
+severity: "high"
+source: |
+  type.outbound
+  and (
+    any(beta.ml_extract_sensitive_information(body.current_thread.text),
+          .type == "DK_PASSPORT"
+          and .confidence in ("medium", "high")
+    )
+    or any(attachments,
+      any(file.explode(.),
+        any(.scan.strings.strings,
+          any(beta.ml_extract_sensitive_information(.),
+              .type == "DK_PASSPORT"
+              and .confidence in ("medium", "high")
+          )
+        )
+      )
+    )
+  )
+data_categories:
+  - "PII"
+data_types:
+  - "Passport"
+regions:
+  - "Denmark"
+compliance:
+  - "GDPR"
+detection_methods:
+  - "Presidio"
+  - "Content analysis"
+id: "298fbffb-f06d-4ba5-84f6-ae3357244170"

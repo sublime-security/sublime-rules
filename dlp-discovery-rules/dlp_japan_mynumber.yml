@@ -4,14 +4,29 @@ type: "dlp"
 severity: "high"
 source: |
   type.outbound
-  and any([body.current_thread.text, subject.subject],
-          // MyNumber: 12 digits
-          regex.contains(., '\b\d{4}[\s\-]?\d{4}[\s\-]?\d{4}\b')
+  and (
+    any(beta.ml_extract_sensitive_information(body.current_thread.text),
+          .type == "JP_MY_NUMBER"
+          and .confidence in ("medium", "high")
+    )
+    or any(attachments,
+      any(file.explode(.),
+        any(.scan.strings.strings,
+          any(beta.ml_extract_sensitive_information(.),
+              .type == "JP_MY_NUMBER"
+              and .confidence in ("medium", "high")
+          )
+        )
+      )
+    )
   )
-  and any([body.current_thread.text, subject.subject],
-          regex.icontains(., 'MyNumber|マイナンバー|個人番号')
-  )
-
+data_categories:
+  - "PII"
+data_types:
+  - "Government ID"
+regions:
+  - "Japan"
 detection_methods:
+  - "Presidio"
   - "Content analysis"
 id: "500b0110-688d-54c9-8efd-0d4716250b00"

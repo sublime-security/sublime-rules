@@ -4,11 +4,29 @@ type: "dlp"
 severity: "high"
 source: |
   type.outbound
-  and any([body.current_thread.text, subject.subject],
-          // GitHub personal access token: ghp_, gho_, ghu_, ghs_, ghr_ followed by alphanumeric
-          regex.contains(., '\bgh[pousr]_[A-Za-z0-9]{36,}\b')
+  and (
+    any(beta.ml_extract_sensitive_information(body.current_thread.text),
+          .type == "GITHUB_TOKEN"
+          and .confidence in ("medium", "high")
+    )
+    or any(attachments,
+      any(file.explode(.),
+        any(.scan.strings.strings,
+          any(beta.ml_extract_sensitive_information(.),
+              .type == "GITHUB_TOKEN"
+              and .confidence in ("medium", "high")
+          )
+        )
+      )
+    )
   )
-
+data_categories:
+  - "Credentials"
+data_types:
+  - "Authentication Token"
+regions:
+  - "Global"
 detection_methods:
+  - "Presidio"
   - "Content analysis"
 id: "a88d0203-0684-5605-8f5d-bb25a93a8e83"

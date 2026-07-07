@@ -4,14 +4,29 @@ type: "dlp"
 severity: "high"
 source: |
   type.outbound
-  and any([body.current_thread.text, subject.subject],
-          // PAN: 5 letters + 4 digits + 1 letter (e.g., ABCDE1234F)
-          regex.contains(., '\b[A-Z]{5}\d{4}[A-Z]\b')
+  and (
+    any(beta.ml_extract_sensitive_information(body.current_thread.text),
+          .type == "IN_PAN"
+          and .confidence in ("medium", "high")
+    )
+    or any(attachments,
+      any(file.explode(.),
+        any(.scan.strings.strings,
+          any(beta.ml_extract_sensitive_information(.),
+              .type == "IN_PAN"
+              and .confidence in ("medium", "high")
+          )
+        )
+      )
+    )
   )
-  and any([body.current_thread.text, subject.subject],
-          regex.icontains(., 'PAN|permanent\s+account|पैन')
-  )
-
+data_categories:
+  - "Financial"
+data_types:
+  - "Tax ID"
+regions:
+  - "India"
 detection_methods:
+  - "Presidio"
   - "Content analysis"
 id: "b7b62f6b-0e77-5020-ba9c-a2eaf35c749a"

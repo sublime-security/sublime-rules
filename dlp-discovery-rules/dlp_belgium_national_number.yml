@@ -4,14 +4,31 @@ type: "dlp"
 severity: "high"
 source: |
   type.outbound
-  and any([body.current_thread.text, subject.subject],
-          // Belgian National Number: YY.MM.DD-XXX.XX format (11 digits)
-          regex.contains(., '\b\d{2}\.?\d{2}\.?\d{2}[\s\-]?\d{3}\.?\d{2}\b')
+  and (
+    any(beta.ml_extract_sensitive_information(body.current_thread.text),
+          .type == "BELGIUM_NATIONAL_NUMBER"
+          and .confidence in ("medium", "high")
+    )
+    or any(attachments,
+      any(file.explode(.),
+        any(.scan.strings.strings,
+          any(beta.ml_extract_sensitive_information(.),
+              .type == "BELGIUM_NATIONAL_NUMBER"
+              and .confidence in ("medium", "high")
+          )
+        )
+      )
+    )
   )
-  and any([body.current_thread.text, subject.subject],
-          regex.icontains(., 'rijksregister|national\s+number|numéro\s+national')
-  )
-
+data_categories:
+  - "PII"
+data_types:
+  - "Government ID"
+regions:
+  - "Belgium"
+compliance:
+  - "GDPR"
 detection_methods:
+  - "Presidio"
   - "Content analysis"
 id: "962a3dfb-ef20-52bb-9fec-e85866e3c5ca"

@@ -1,0 +1,32 @@
+name: "DLP: Azure Subscription Management Certificate"
+description: "Detects messages containing Azure subscription management certificates used for classic deployment model authentication."
+type: "dlp"
+severity: "high"
+source: |
+  type.outbound
+  and (
+    any(beta.ml_extract_sensitive_information(body.current_thread.text),
+          .type == "AZURE_SUBSCRIPTION_MGMT_CERT"
+          and .confidence in ("medium", "high")
+    )
+    or any(attachments,
+      any(file.explode(.),
+        any(.scan.strings.strings,
+          any(beta.ml_extract_sensitive_information(.),
+              .type == "AZURE_SUBSCRIPTION_MGMT_CERT"
+              and .confidence in ("medium", "high")
+          )
+        )
+      )
+    )
+  )
+data_categories:
+  - "Credentials"
+data_types:
+  - "Cryptographic Material"
+regions:
+  - "Global"
+detection_methods:
+  - "Presidio"
+  - "Content analysis"
+id: "855fdb11-085e-4a37-8e19-e167590e700f"

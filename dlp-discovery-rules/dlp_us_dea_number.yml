@@ -1,0 +1,35 @@
+name: "DLP: US DEA Registration Number"
+description: "Detects messages containing US Drug Enforcement Administration (DEA) registration numbers used for controlled substance prescriptions."
+type: "dlp"
+severity: "high"
+source: |
+  type.outbound
+  and (
+    any(beta.ml_extract_sensitive_information(body.current_thread.text),
+          .type == "US_DEA_NUMBER"
+          and .confidence in ("medium", "high")
+    )
+    or any(attachments,
+      any(file.explode(.),
+        any(.scan.strings.strings,
+          any(beta.ml_extract_sensitive_information(.),
+              .type == "US_DEA_NUMBER"
+              and .confidence in ("medium", "high")
+          )
+        )
+      )
+    )
+  )
+data_categories:
+  - "PII"
+  - "PHI"
+data_types:
+  - "Healthcare ID"
+regions:
+  - "United States"
+compliance:
+  - "HIPAA"
+detection_methods:
+  - "Presidio"
+  - "Content analysis"
+id: "e1481e1b-5894-48e3-917d-07dc65ddb8b2"

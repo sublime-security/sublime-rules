@@ -1,0 +1,32 @@
+name: "DLP: Azure Storage Account Access Key"
+description: "Detects messages containing Azure Storage account access keys."
+type: "dlp"
+severity: "high"
+source: |
+  type.outbound
+  and (
+    any(beta.ml_extract_sensitive_information(body.current_thread.text),
+          .type == "AZURE_STORAGE_ACCOUNT_KEY"
+          and .confidence in ("medium", "high")
+    )
+    or any(attachments,
+      any(file.explode(.),
+        any(.scan.strings.strings,
+          any(beta.ml_extract_sensitive_information(.),
+              .type == "AZURE_STORAGE_ACCOUNT_KEY"
+              and .confidence in ("medium", "high")
+          )
+        )
+      )
+    )
+  )
+data_categories:
+  - "Credentials"
+data_types:
+  - "API Key"
+regions:
+  - "Global"
+detection_methods:
+  - "Presidio"
+  - "Content analysis"
+id: "863bf459-681a-4a8d-9951-7d2c0a7ee3ab"

@@ -4,14 +4,31 @@ type: "dlp"
 severity: "medium"
 source: |
   type.outbound
-  and any([body.current_thread.text, subject.subject],
-          // Hungarian Tax ID: 10 digits
-          regex.contains(., '\b\d{10}\b')
+  and (
+    any(beta.ml_extract_sensitive_information(body.current_thread.text),
+          .type == "HU_TAX_ID"
+          and .confidence in ("medium", "high")
+    )
+    or any(attachments,
+      any(file.explode(.),
+        any(.scan.strings.strings,
+          any(beta.ml_extract_sensitive_information(.),
+              .type == "HU_TAX_ID"
+              and .confidence in ("medium", "high")
+          )
+        )
+      )
+    )
   )
-  and any([body.current_thread.text, subject.subject],
-          regex.icontains(., 'adóazonosító|tax\s+identification|adószám')
-  )
-
+data_categories:
+  - "PII"
+data_types:
+  - "Tax ID"
+regions:
+  - "Hungary"
+compliance:
+  - "GDPR"
 detection_methods:
+  - "Presidio"
   - "Content analysis"
 id: "52765fe0-64ad-57a5-9ac4-7838dbfd0142"

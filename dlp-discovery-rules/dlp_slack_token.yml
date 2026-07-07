@@ -4,13 +4,29 @@ type: "dlp"
 severity: "high"
 source: |
   type.outbound
-  and any([body.current_thread.text, subject.subject],
-          // Slack tokens: xoxb-, xoxp-, xoxa-, xoxr-
-          regex.contains(., '\bxox[bpar]-[0-9]{10,13}-[0-9]{10,13}-[A-Za-z0-9]{24,}\b')
-          // Slack webhook URLs
-          or regex.contains(., 'hooks\.slack\.com/services/T[A-Z0-9]+/B[A-Z0-9]+/[A-Za-z0-9]{24}')
+  and (
+    any(beta.ml_extract_sensitive_information(body.current_thread.text),
+          .type == "SLACK_TOKEN"
+          and .confidence in ("medium", "high")
+    )
+    or any(attachments,
+      any(file.explode(.),
+        any(.scan.strings.strings,
+          any(beta.ml_extract_sensitive_information(.),
+              .type == "SLACK_TOKEN"
+              and .confidence in ("medium", "high")
+          )
+        )
+      )
+    )
   )
-
+data_categories:
+  - "Credentials"
+data_types:
+  - "Authentication Token"
+regions:
+  - "Global"
 detection_methods:
+  - "Presidio"
   - "Content analysis"
 id: "99723c25-994d-59a5-ab4f-030415050c2e"

@@ -1,0 +1,32 @@
+name: "DLP: Microsoft Bing Maps Key"
+description: "Detects messages containing Microsoft Bing Maps API keys."
+type: "dlp"
+severity: "medium"
+source: |
+  type.outbound
+  and (
+    any(beta.ml_extract_sensitive_information(body.current_thread.text),
+          .type == "BING_MAPS_KEY"
+          and .confidence in ("medium", "high")
+    )
+    or any(attachments,
+      any(file.explode(.),
+        any(.scan.strings.strings,
+          any(beta.ml_extract_sensitive_information(.),
+              .type == "BING_MAPS_KEY"
+              and .confidence in ("medium", "high")
+          )
+        )
+      )
+    )
+  )
+data_categories:
+  - "Credentials"
+data_types:
+  - "API Key"
+regions:
+  - "Global"
+detection_methods:
+  - "Presidio"
+  - "Content analysis"
+id: "9cb6a797-c4e1-4310-9f72-4073b7d7949b"

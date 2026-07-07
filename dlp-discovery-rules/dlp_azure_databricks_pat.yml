@@ -1,0 +1,32 @@
+name: "DLP: Azure Databricks Personal Access Token"
+description: "Detects messages containing Azure Databricks personal access tokens used for REST API authentication."
+type: "dlp"
+severity: "high"
+source: |
+  type.outbound
+  and (
+    any(beta.ml_extract_sensitive_information(body.current_thread.text),
+          .type == "AZURE_DATABRICKS_PAT"
+          and .confidence in ("medium", "high")
+    )
+    or any(attachments,
+      any(file.explode(.),
+        any(.scan.strings.strings,
+          any(beta.ml_extract_sensitive_information(.),
+              .type == "AZURE_DATABRICKS_PAT"
+              and .confidence in ("medium", "high")
+          )
+        )
+      )
+    )
+  )
+data_categories:
+  - "Credentials"
+data_types:
+  - "Authentication Token"
+regions:
+  - "Global"
+detection_methods:
+  - "Presidio"
+  - "Content analysis"
+id: "b753ac65-07c4-44b9-bb92-663bb98156c4"

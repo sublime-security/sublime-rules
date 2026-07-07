@@ -4,19 +4,31 @@ type: "dlp"
 severity: "high"
 source: |
   type.outbound
-  and any([body.current_thread.text, subject.subject],
-          // German passport: 9 alphanumeric (e.g., C01X00T47)
-          regex.contains(., '\b[CFGHJK]\d{8}|[CFGHJK][A-Z0-9]{8}\b')
-  )
-  and any([body.current_thread.text, subject.subject],
-          regex.icontains(., 'reisepass|passport')
-  )
   and (
-    strings.icontains(sender.email.domain.tld, "de")
-    or strings.icontains(body.current_thread.text, "germany")
-    or strings.icontains(body.current_thread.text, "deutschland")
+    any(beta.ml_extract_sensitive_information(body.current_thread.text),
+          .type == "DE_PASSPORT"
+          and .confidence in ("medium", "high")
+    )
+    or any(attachments,
+      any(file.explode(.),
+        any(.scan.strings.strings,
+          any(beta.ml_extract_sensitive_information(.),
+              .type == "DE_PASSPORT"
+              and .confidence in ("medium", "high")
+          )
+        )
+      )
+    )
   )
-
+data_categories:
+  - "PII"
+data_types:
+  - "Government ID"
+regions:
+  - "Germany"
+compliance:
+  - "GDPR"
 detection_methods:
+  - "Presidio"
   - "Content analysis"
 id: "d3707f94-57a7-546f-af04-c70caa42cc09"

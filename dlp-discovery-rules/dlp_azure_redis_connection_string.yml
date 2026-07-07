@@ -1,0 +1,32 @@
+name: "DLP: Azure Redis Cache Connection String"
+description: "Detects messages containing Azure Redis Cache connection strings with passwords."
+type: "dlp"
+severity: "high"
+source: |
+  type.outbound
+  and (
+    any(beta.ml_extract_sensitive_information(body.current_thread.text),
+          .type == "AZURE_REDIS_CONNECTION_STRING"
+          and .confidence in ("medium", "high")
+    )
+    or any(attachments,
+      any(file.explode(.),
+        any(.scan.strings.strings,
+          any(beta.ml_extract_sensitive_information(.),
+              .type == "AZURE_REDIS_CONNECTION_STRING"
+              and .confidence in ("medium", "high")
+          )
+        )
+      )
+    )
+  )
+data_categories:
+  - "Credentials"
+data_types:
+  - "Connection String"
+regions:
+  - "Global"
+detection_methods:
+  - "Presidio"
+  - "Content analysis"
+id: "417de6cb-1b27-47e1-afc6-789a9266af6e"

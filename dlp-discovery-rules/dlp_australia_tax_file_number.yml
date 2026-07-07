@@ -4,14 +4,29 @@ type: "dlp"
 severity: "medium"
 source: |
   type.outbound
-  and any([body.current_thread.text, subject.subject],
-          // TFN: 8 or 9 digits, sometimes with spaces or hyphens
-          regex.contains(., '\b\d{3}[\s\-]?\d{3}[\s\-]?\d{3}\b')
+  and (
+    any(beta.ml_extract_sensitive_information(body.current_thread.text),
+          .type == "AU_TFN"
+          and .confidence in ("medium", "high")
+    )
+    or any(attachments,
+      any(file.explode(.),
+        any(.scan.strings.strings,
+          any(beta.ml_extract_sensitive_information(.),
+              .type == "AU_TFN"
+              and .confidence in ("medium", "high")
+          )
+        )
+      )
+    )
   )
-  and any([body.current_thread.text, subject.subject],
-          regex.icontains(., 'tax\s+file\s+number|TFN')
-  )
-
+data_categories:
+  - "Financial"
+data_types:
+  - "Tax ID"
+regions:
+  - "Australia"
 detection_methods:
+  - "Presidio"
   - "Content analysis"
 id: "6f995365-e040-5065-b866-df2b4e11b698"

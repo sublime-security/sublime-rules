@@ -4,14 +4,31 @@ type: "dlp"
 severity: "medium"
 source: |
   type.outbound
-  and any([body.current_thread.text, subject.subject],
-          // French IBAN: FR + 2 check digits + 23 digits
-          regex.contains(., '\bFR\d{2}[\s]?\d{4}[\s]?\d{4}[\s]?\d{4}[\s]?\d{4}[\s]?\d{4}[\s]?\d{3}\b')
+  and (
+    any(beta.ml_extract_sensitive_information(body.current_thread.text),
+          .type == "FRANCE_BANK_ACCOUNT"
+          and .confidence in ("medium", "high")
+    )
+    or any(attachments,
+      any(file.explode(.),
+        any(.scan.strings.strings,
+          any(beta.ml_extract_sensitive_information(.),
+              .type == "FRANCE_BANK_ACCOUNT"
+              and .confidence in ("medium", "high")
+          )
+        )
+      )
+    )
   )
-  and any([body.current_thread.text, subject.subject],
-          regex.icontains(., 'IBAN|compte\s+bancaire|bank\s+account|RIB')
-  )
-
+data_categories:
+  - "PII"
+data_types:
+  - "Financial"
+regions:
+  - "France"
+compliance:
+  - "GDPR"
 detection_methods:
+  - "Presidio"
   - "Content analysis"
 id: "e1083a78-9e9a-5ba5-9748-4c2d797e2e2b"

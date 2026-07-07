@@ -1,0 +1,32 @@
+name: "DLP: General Symmetric Key"
+description: "Detects messages containing general symmetric encryption keys (256-bit or 512-bit)."
+type: "dlp"
+severity: "high"
+source: |
+  type.outbound
+  and (
+    any(beta.ml_extract_sensitive_information(body.current_thread.text),
+          .type == "GENERAL_SYMMETRIC_KEY"
+          and .confidence in ("medium", "high")
+    )
+    or any(attachments,
+      any(file.explode(.),
+        any(.scan.strings.strings,
+          any(beta.ml_extract_sensitive_information(.),
+              .type == "GENERAL_SYMMETRIC_KEY"
+              and .confidence in ("medium", "high")
+          )
+        )
+      )
+    )
+  )
+data_categories:
+  - "Credentials"
+data_types:
+  - "Cryptographic Material"
+regions:
+  - "Global"
+detection_methods:
+  - "Presidio"
+  - "Content analysis"
+id: "ddc9e705-b7cd-4fc2-b0d4-2eee02448c8c"

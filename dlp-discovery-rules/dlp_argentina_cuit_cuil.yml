@@ -1,0 +1,32 @@
+name: "DLP: Argentina CUIT/CUIL"
+description: "Detects messages containing Argentine CUIT (tax ID) or CUIL (labor ID) numbers."
+type: "dlp"
+severity: "medium"
+source: |
+  type.outbound
+  and (
+    any(beta.ml_extract_sensitive_information(body.current_thread.text),
+          .type == "AR_CUIT_CUIL"
+          and .confidence in ("medium", "high")
+    )
+    or any(attachments,
+      any(file.explode(.),
+        any(.scan.strings.strings,
+          any(beta.ml_extract_sensitive_information(.),
+              .type == "AR_CUIT_CUIL"
+              and .confidence in ("medium", "high")
+          )
+        )
+      )
+    )
+  )
+data_categories:
+  - "Financial"
+data_types:
+  - "Tax ID"
+regions:
+  - "Argentina"
+detection_methods:
+  - "Presidio"
+  - "Content analysis"
+id: "786945f1-e20c-4f56-b0bf-502530980e6c"

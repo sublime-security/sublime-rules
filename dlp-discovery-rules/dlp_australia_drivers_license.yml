@@ -4,14 +4,29 @@ type: "dlp"
 severity: "medium"
 source: |
   type.outbound
-  and any([body.current_thread.text, subject.subject],
-          // Driver's license varies by state, generally 6-10 alphanumeric
-          regex.contains(., '\b[A-Z0-9]{6,10}\b')
+  and (
+    any(beta.ml_extract_sensitive_information(body.current_thread.text),
+          .type == "AU_DRIVERS_LICENSE"
+          and .confidence in ("medium", "high")
+    )
+    or any(attachments,
+      any(file.explode(.),
+        any(.scan.strings.strings,
+          any(beta.ml_extract_sensitive_information(.),
+              .type == "AU_DRIVERS_LICENSE"
+              and .confidence in ("medium", "high")
+          )
+        )
+      )
+    )
   )
-  and any([body.current_thread.text, subject.subject],
-          regex.icontains(., 'driver.?s?\s+licen[cs]e|DL\s+number')
-  )
-
+data_categories:
+  - "PII"
+data_types:
+  - "Government ID"
+regions:
+  - "Australia"
 detection_methods:
+  - "Presidio"
   - "Content analysis"
 id: "c46ff6a4-2a51-5067-99a7-f55e8f384a03"

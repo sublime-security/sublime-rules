@@ -1,0 +1,35 @@
+name: "DLP: US Physical Address"
+description: "Detects messages containing US physical or mailing addresses."
+type: "dlp"
+severity: "medium"
+source: |
+  type.outbound
+  and (
+    any(beta.ml_extract_sensitive_information(body.current_thread.text),
+          .type == "US_PHYSICAL_ADDRESS"
+          and .confidence in ("medium", "high")
+    )
+    or any(attachments,
+      any(file.explode(.),
+        any(.scan.strings.strings,
+          any(beta.ml_extract_sensitive_information(.),
+              .type == "US_PHYSICAL_ADDRESS"
+              and .confidence in ("medium", "high")
+          )
+        )
+      )
+    )
+  )
+data_categories:
+  - "PII"
+data_types:
+  - "Physical Address"
+regions:
+  - "United States"
+compliance:
+  - "CCPA"
+  - "GLBA"
+detection_methods:
+  - "Presidio"
+  - "Content analysis"
+id: "df520dab-a731-4b61-9038-2170bb7fc496"

@@ -4,11 +4,29 @@ type: "dlp"
 severity: "medium"
 source: |
   type.outbound
-  and any([body.current_thread.text, subject.subject],
-          // Basic auth format: "Basic " followed by base64
-          regex.contains(., '\bBasic\s+[A-Za-z0-9+/]+=*\b')
+  and (
+    any(beta.ml_extract_sensitive_information(body.current_thread.text),
+          .type == "BASIC_AUTH_HEADER"
+          and .confidence in ("medium", "high")
+    )
+    or any(attachments,
+      any(file.explode(.),
+        any(.scan.strings.strings,
+          any(beta.ml_extract_sensitive_information(.),
+              .type == "BASIC_AUTH_HEADER"
+              and .confidence in ("medium", "high")
+          )
+        )
+      )
+    )
   )
-
+data_categories:
+  - "Credentials"
+data_types:
+  - "Authentication Token"
+regions:
+  - "Global"
 detection_methods:
+  - "Presidio"
   - "Content analysis"
 id: "44fc91c8-53c7-5678-b166-dd2851fabe22"

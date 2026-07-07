@@ -4,14 +4,31 @@ type: "dlp"
 severity: "medium"
 source: |
   type.outbound
-  and any([body.current_thread.text, subject.subject],
-          // Austrian Tax ID: 9 digits
-          regex.contains(., '\b\d{2}[\s\-]?\d{3}[\s\-]?\d{4}\b')
+  and (
+    any(beta.ml_extract_sensitive_information(body.current_thread.text),
+          .type == "AT_TAX_ID"
+          and .confidence in ("medium", "high")
+    )
+    or any(attachments,
+      any(file.explode(.),
+        any(.scan.strings.strings,
+          any(beta.ml_extract_sensitive_information(.),
+              .type == "AT_TAX_ID"
+              and .confidence in ("medium", "high")
+          )
+        )
+      )
+    )
   )
-  and any([body.current_thread.text, subject.subject],
-          regex.icontains(., 'steuernummer|tax\s+ID|FinanzOnline')
-  )
-
+data_categories:
+  - "PII"
+data_types:
+  - "Tax ID"
+regions:
+  - "Austria"
+compliance:
+  - "GDPR"
 detection_methods:
+  - "Presidio"
   - "Content analysis"
 id: "1b03538f-90be-5ee2-8d63-756d6d7b9ea6"

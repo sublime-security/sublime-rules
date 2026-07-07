@@ -4,19 +4,29 @@ type: "dlp"
 severity: "high"
 source: |
   type.outbound
-  and any([body.current_thread.text, subject.subject],
-          // Mexican passport: 9-10 alphanumeric characters
-          regex.contains(., '\b[A-Z0-9]{9,10}\b')
-  )
-  and any([body.current_thread.text, subject.subject],
-          regex.icontains(., 'passport|pasaporte|méxico|mexico')
-  )
   and (
-    strings.icontains(sender.email.domain.tld, "mx")
-    or strings.icontains(body.current_thread.text, "mexico")
-    or strings.icontains(body.current_thread.text, "méxico")
+    any(beta.ml_extract_sensitive_information(body.current_thread.text),
+          .type == "MX_PASSPORT"
+          and .confidence in ("medium", "high")
+    )
+    or any(attachments,
+      any(file.explode(.),
+        any(.scan.strings.strings,
+          any(beta.ml_extract_sensitive_information(.),
+              .type == "MX_PASSPORT"
+              and .confidence in ("medium", "high")
+          )
+        )
+      )
+    )
   )
-
+data_categories:
+  - "PII"
+data_types:
+  - "Government ID"
+regions:
+  - "Mexico"
 detection_methods:
+  - "Presidio"
   - "Content analysis"
 id: "06e8a223-2e85-5674-be9a-774f839da233"

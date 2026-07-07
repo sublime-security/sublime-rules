@@ -4,14 +4,29 @@ type: "dlp"
 severity: "medium"
 source: |
   type.outbound
-  and any([body.current_thread.text, subject.subject],
-          // Institution number: 3 digits, Transit: 5 digits, Account: 7-12 digits
-          regex.contains(., '\b\d{3}[\s\-]?\d{5}[\s\-]?\d{7,12}\b')
+  and (
+    any(beta.ml_extract_sensitive_information(body.current_thread.text),
+          .type == "CA_BANK_ACCOUNT"
+          and .confidence in ("medium", "high")
+    )
+    or any(attachments,
+      any(file.explode(.),
+        any(.scan.strings.strings,
+          any(beta.ml_extract_sensitive_information(.),
+              .type == "CA_BANK_ACCOUNT"
+              and .confidence in ("medium", "high")
+          )
+        )
+      )
+    )
   )
-  and any([body.current_thread.text, subject.subject],
-          regex.icontains(., 'bank\s+account|transit|institution\s+number')
-  )
-
+data_categories:
+  - "Financial"
+data_types:
+  - "Financial Account"
+regions:
+  - "Canada"
 detection_methods:
+  - "Presidio"
   - "Content analysis"
 id: "6ce27d37-a2ae-50dd-a932-23d3dd58f1ac"

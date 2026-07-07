@@ -4,18 +4,31 @@ type: "dlp"
 severity: "high"
 source: |
   type.outbound
-  and any([body.current_thread.text, subject.subject],
-          // Cyprus ID: 8 alphanumeric characters
-          regex.contains(., '\b[A-Z0-9]{8}\b')
-  )
-  and any([body.current_thread.text, subject.subject],
-          regex.icontains(., 'identity\s+card|ταυτότητα|kimlik')
-  )
   and (
-    strings.icontains(sender.email.domain.tld, "cy")
-    or strings.icontains(body.current_thread.text, "cyprus")
+    any(beta.ml_extract_sensitive_information(body.current_thread.text),
+          .type == "CY_IDENTITY_CARD"
+          and .confidence in ("medium", "high")
+    )
+    or any(attachments,
+      any(file.explode(.),
+        any(.scan.strings.strings,
+          any(beta.ml_extract_sensitive_information(.),
+              .type == "CY_IDENTITY_CARD"
+              and .confidence in ("medium", "high")
+          )
+        )
+      )
+    )
   )
-
+data_categories:
+  - "PII"
+data_types:
+  - "Government ID"
+regions:
+  - "Cyprus"
+compliance:
+  - "GDPR"
 detection_methods:
+  - "Presidio"
   - "Content analysis"
 id: "0022129b-de93-539b-bae5-b0e2733844c6"

@@ -4,14 +4,30 @@ type: "dlp"
 severity: "high"
 source: |
   type.outbound
-  and any([body.current_thread.text, subject.subject],
-          // Health card numbers vary by province, generally 10-12 digits
-          regex.contains(., '\b\d{10,12}\b')
+  and (
+    any(beta.ml_extract_sensitive_information(body.current_thread.text),
+          .type == "CA_HEALTH_SERVICE"
+          and .confidence in ("medium", "high")
+    )
+    or any(attachments,
+      any(file.explode(.),
+        any(.scan.strings.strings,
+          any(beta.ml_extract_sensitive_information(.),
+              .type == "CA_HEALTH_SERVICE"
+              and .confidence in ("medium", "high")
+          )
+        )
+      )
+    )
   )
-  and any([body.current_thread.text, subject.subject],
-          regex.icontains(., 'health\s+card|health\s+service|OHIP|RAMQ|MSP|AHCIP')
-  )
-
+data_categories:
+  - "PII"
+  - "PHI"
+data_types:
+  - "Healthcare ID"
+regions:
+  - "Canada"
 detection_methods:
+  - "Presidio"
   - "Content analysis"
 id: "4f45b372-92f2-5196-ac2c-e220ef63b741"

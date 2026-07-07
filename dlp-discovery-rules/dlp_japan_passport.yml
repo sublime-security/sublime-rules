@@ -4,19 +4,29 @@ type: "dlp"
 severity: "high"
 source: |
   type.outbound
-  and any([body.current_thread.text, subject.subject],
-          // Japanese passport: 2 letters + 7 digits
-          regex.contains(., '\b[A-Z]{2}\d{7}\b')
-  )
-  and any([body.current_thread.text, subject.subject],
-          regex.icontains(., 'passport|パスポート|旅券')
-  )
   and (
-    strings.icontains(sender.email.domain.tld, "jp")
-    or strings.icontains(body.current_thread.text, "japan")
-    or strings.icontains(body.current_thread.text, "日本")
+    any(beta.ml_extract_sensitive_information(body.current_thread.text),
+          .type == "JP_PASSPORT"
+          and .confidence in ("medium", "high")
+    )
+    or any(attachments,
+      any(file.explode(.),
+        any(.scan.strings.strings,
+          any(beta.ml_extract_sensitive_information(.),
+              .type == "JP_PASSPORT"
+              and .confidence in ("medium", "high")
+          )
+        )
+      )
+    )
   )
-
+data_categories:
+  - "PII"
+data_types:
+  - "Government ID"
+regions:
+  - "Japan"
 detection_methods:
+  - "Presidio"
   - "Content analysis"
 id: "3d3f3405-784f-5c01-bebb-3a29c98208e0"

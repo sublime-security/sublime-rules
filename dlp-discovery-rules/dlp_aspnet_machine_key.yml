@@ -1,0 +1,32 @@
+name: "DLP: ASP.NET Machine Key"
+description: "Detects messages containing ASP.NET machine keys used for encryption and hashing in forms authentication and view state."
+type: "dlp"
+severity: "high"
+source: |
+  type.outbound
+  and (
+    any(beta.ml_extract_sensitive_information(body.current_thread.text),
+          .type == "ASPNET_MACHINE_KEY"
+          and .confidence in ("medium", "high")
+    )
+    or any(attachments,
+      any(file.explode(.),
+        any(.scan.strings.strings,
+          any(beta.ml_extract_sensitive_information(.),
+              .type == "ASPNET_MACHINE_KEY"
+              and .confidence in ("medium", "high")
+          )
+        )
+      )
+    )
+  )
+data_categories:
+  - "Credentials"
+data_types:
+  - "Cryptographic Material"
+regions:
+  - "Global"
+detection_methods:
+  - "Presidio"
+  - "Content analysis"
+id: "18b74ddd-69e0-4fb1-a6fb-f47037073e46"

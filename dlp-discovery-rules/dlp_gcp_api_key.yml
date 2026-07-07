@@ -4,11 +4,29 @@ type: "dlp"
 severity: "high"
 source: |
   type.outbound
-  and any([body.current_thread.text, subject.subject],
-          // GCP API Key: AIza followed by 35 characters
-          regex.contains(., '\bAIza[0-9A-Za-z_-]{35}\b')
+  and (
+    any(beta.ml_extract_sensitive_information(body.current_thread.text),
+          .type == "GCP_API_KEY"
+          and .confidence in ("medium", "high")
+    )
+    or any(attachments,
+      any(file.explode(.),
+        any(.scan.strings.strings,
+          any(beta.ml_extract_sensitive_information(.),
+              .type == "GCP_API_KEY"
+              and .confidence in ("medium", "high")
+          )
+        )
+      )
+    )
   )
-
+data_categories:
+  - "Credentials"
+data_types:
+  - "API Key"
+regions:
+  - "Global"
 detection_methods:
+  - "Presidio"
   - "Content analysis"
 id: "05fbae4f-15a7-5e38-a49b-67c9f694db6a"

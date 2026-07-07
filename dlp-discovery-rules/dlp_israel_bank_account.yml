@@ -4,18 +4,29 @@ type: "dlp"
 severity: "medium"
 source: |
   type.outbound
-  and any([body.current_thread.text, subject.subject],
-          // Israeli bank account: typically 6-9 digits
-          regex.contains(., '\b\d{6,9}\b')
-  )
-  and any([body.current_thread.text, subject.subject],
-          regex.icontains(., 'bank\s+account|account\s+number|חשבון\s+בנק')
-  )
   and (
-    strings.icontains(sender.email.domain.tld, "il")
-    or strings.icontains(body.current_thread.text, "israel")
+    any(beta.ml_extract_sensitive_information(body.current_thread.text),
+          .type == "IL_BANK_ACCOUNT"
+          and .confidence in ("medium", "high")
+    )
+    or any(attachments,
+      any(file.explode(.),
+        any(.scan.strings.strings,
+          any(beta.ml_extract_sensitive_information(.),
+              .type == "IL_BANK_ACCOUNT"
+              and .confidence in ("medium", "high")
+          )
+        )
+      )
+    )
   )
-
+data_categories:
+  - "Financial"
+data_types:
+  - "Financial Account"
+regions:
+  - "Israel"
 detection_methods:
+  - "Presidio"
   - "Content analysis"
 id: "1ca4fa07-523d-5e34-a59f-e64856cf7631"

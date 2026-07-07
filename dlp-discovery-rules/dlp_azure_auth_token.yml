@@ -4,17 +4,29 @@ type: "dlp"
 severity: "high"
 source: |
   type.outbound
-  and any([body.current_thread.text, subject.subject],
-          regex.icontains(., 'azure|microsoft\s+cloud')
+  and (
+    any(beta.ml_extract_sensitive_information(body.current_thread.text),
+          .type == "AZURE_AUTH_TOKEN"
+          and .confidence in ("medium", "high")
+    )
+    or any(attachments,
+      any(file.explode(.),
+        any(.scan.strings.strings,
+          any(beta.ml_extract_sensitive_information(.),
+              .type == "AZURE_AUTH_TOKEN"
+              and .confidence in ("medium", "high")
+          )
+        )
+      )
+    )
   )
-  and any([body.current_thread.text, subject.subject],
-          regex.icontains(., 'auth|token|credential|secret|key')
-  )
-  and any([body.current_thread.text, subject.subject],
-          // Long alphanumeric tokens
-          regex.contains(., '\b[A-Za-z0-9_-]{40,}\b')
-  )
-
+data_categories:
+  - "Credentials"
+data_types:
+  - "Authentication Token"
+regions:
+  - "Global"
 detection_methods:
+  - "Presidio"
   - "Content analysis"
 id: "39f05b16-8795-5ed5-8f5b-a03d029fa611"

@@ -4,18 +4,29 @@ type: "dlp"
 severity: "high"
 source: |
   type.outbound
-  and any([body.current_thread.text, subject.subject],
-          // Australian passport: 1 letter + 7 digits
-          regex.contains(., '\b[A-Z]\d{7}\b')
-  )
-  and any([body.current_thread.text, subject.subject],
-          regex.icontains(., 'passport|travel\s+document')
-  )
   and (
-    strings.icontains(sender.email.domain.tld, "au")
-    or strings.icontains(body.current_thread.text, "australia")
+    any(beta.ml_extract_sensitive_information(body.current_thread.text),
+          .type == "AU_PASSPORT"
+          and .confidence in ("medium", "high")
+    )
+    or any(attachments,
+      any(file.explode(.),
+        any(.scan.strings.strings,
+          any(beta.ml_extract_sensitive_information(.),
+              .type == "AU_PASSPORT"
+              and .confidence in ("medium", "high")
+          )
+        )
+      )
+    )
   )
-
+data_categories:
+  - "PII"
+data_types:
+  - "Government ID"
+regions:
+  - "Australia"
 detection_methods:
+  - "Presidio"
   - "Content analysis"
 id: "a34b102b-4640-5a77-b17a-18321040b3a2"

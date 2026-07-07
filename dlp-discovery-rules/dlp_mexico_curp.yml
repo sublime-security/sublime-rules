@@ -4,14 +4,29 @@ type: "dlp"
 severity: "high"
 source: |
   type.outbound
-  and any([body.current_thread.text, subject.subject],
-          // CURP: 18 alphanumeric characters
-          regex.contains(., '\b[A-Z]{4}\d{6}[HM][A-Z]{5}[0-9A-Z]\d\b')
+  and (
+    any(beta.ml_extract_sensitive_information(body.current_thread.text),
+          .type == "MX_CURP"
+          and .confidence in ("medium", "high")
+    )
+    or any(attachments,
+      any(file.explode(.),
+        any(.scan.strings.strings,
+          any(beta.ml_extract_sensitive_information(.),
+              .type == "MX_CURP"
+              and .confidence in ("medium", "high")
+          )
+        )
+      )
+    )
   )
-  and any([body.current_thread.text, subject.subject],
-          regex.icontains(., 'CURP|clave\s+única|población')
-  )
-
+data_categories:
+  - "PII"
+data_types:
+  - "Government ID"
+regions:
+  - "Mexico"
 detection_methods:
+  - "Presidio"
   - "Content analysis"
 id: "7ed7b32a-7cb1-5188-a1b5-8c087d018d52"

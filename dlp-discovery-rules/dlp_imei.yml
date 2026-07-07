@@ -4,14 +4,30 @@ type: "dlp"
 severity: "medium"
 source: |
   type.outbound
-  and any([body.current_thread.text, subject.subject],
-          // IMEI: 15 digits
-          regex.contains(., '\b\d{15}\b')
+  and (
+    any(beta.ml_extract_sensitive_information(body.current_thread.text),
+          .type == "IMEI"
+          and .confidence in ("medium", "high")
+    )
+    or any(attachments,
+      any(file.explode(.),
+        any(.scan.strings.strings,
+          any(beta.ml_extract_sensitive_information(.),
+              .type == "IMEI"
+              and .confidence in ("medium", "high")
+          )
+        )
+      )
+    )
   )
-  and any([body.current_thread.text, subject.subject],
-          regex.icontains(., 'IMEI|international\s+mobile\s+equipment|device\s+identifier')
-  )
-
+data_categories:
+  - "Network Identifiers"
+data_types:
+  - "Device Identifier"
+regions:
+  - "Global"
+compliance: []
 detection_methods:
+  - "Presidio"
   - "Content analysis"
 id: "0faa7d25-0ea1-5921-b9fd-125d2d34b8d5"

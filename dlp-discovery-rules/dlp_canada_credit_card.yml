@@ -1,24 +1,34 @@
 name: "DLP: Canada Credit Card Number"
-description: "Detects messages containing credit card numbers."
+description: "Detects messages containing credit card numbers in Canadian context."
 type: "dlp"
 severity: "high"
 source: |
   type.outbound
-  and any(attachments,
-          (
-            .file_extension in~ $file_extensions_common_archives
-            or .file_extension in~ ('.csv', '.txt', '.xlsx', '.xls')
-          )
-          and any(file.explode(.),
-                  regex.contains(.scan.ocr.raw, '\b(?:\d{4}[\s\-]?){3}\d{1,7}\b')
-          )
-  )
   and (
-    strings.icontains(sender.email.domain.tld, "ca")
-    or strings.icontains(body.current_thread.text, "canada")
+    any(beta.ml_extract_sensitive_information(body.current_thread.text),
+          .type == "CREDIT_CARD"
+          and .confidence in ("medium", "high")
+    )
+    or any(attachments,
+      any(file.explode(.),
+        any(.scan.strings.strings,
+          any(beta.ml_extract_sensitive_information(.),
+              .type == "CREDIT_CARD"
+              and .confidence in ("medium", "high")
+          )
+        )
+      )
+    )
   )
-
+data_categories:
+  - "PCI"
+data_types:
+  - "Payment Card"
+regions:
+  - "Canada"
+compliance:
+  - "PCI-DSS"
 detection_methods:
-  - "File analysis"
-  - "Optical Character Recognition"
+  - "Presidio"
+  - "Content analysis"
 id: "e508f0d1-bd70-5365-9e29-0c93e144a7fe"

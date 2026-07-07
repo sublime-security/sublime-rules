@@ -1,0 +1,32 @@
+name: "DLP: Singapore UEN"
+description: "Detects messages containing Singapore Unique Entity Numbers (UEN)."
+type: "dlp"
+severity: "medium"
+source: |
+  type.outbound
+  and (
+    any(beta.ml_extract_sensitive_information(body.current_thread.text),
+          .type == "SG_UEN"
+          and .confidence in ("medium", "high")
+    )
+    or any(attachments,
+      any(file.explode(.),
+        any(.scan.strings.strings,
+          any(beta.ml_extract_sensitive_information(.),
+              .type == "SG_UEN"
+              and .confidence in ("medium", "high")
+          )
+        )
+      )
+    )
+  )
+data_categories:
+  - "Financial"
+data_types:
+  - "Tax ID"
+regions:
+  - "Singapore"
+detection_methods:
+  - "Presidio"
+  - "Content analysis"
+id: "a12844d7-df5a-40f7-9e60-8abb97e64975"

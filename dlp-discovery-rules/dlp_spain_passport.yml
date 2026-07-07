@@ -4,19 +4,31 @@ type: "dlp"
 severity: "high"
 source: |
   type.outbound
-  and any([body.current_thread.text, subject.subject],
-          // Spanish passport: 3 letters + 6 digits (e.g., AAA123456)
-          regex.contains(., '\b[A-Z]{3}\d{6}\b')
-  )
-  and any([body.current_thread.text, subject.subject],
-          regex.icontains(., 'pasaporte|passport')
-  )
   and (
-    strings.icontains(sender.email.domain.tld, "es")
-    or strings.icontains(body.current_thread.text, "spain")
-    or strings.icontains(body.current_thread.text, "españa")
+    any(beta.ml_extract_sensitive_information(body.current_thread.text),
+          .type == "ES_PASSPORT"
+          and .confidence in ("medium", "high")
+    )
+    or any(attachments,
+      any(file.explode(.),
+        any(.scan.strings.strings,
+          any(beta.ml_extract_sensitive_information(.),
+              .type == "ES_PASSPORT"
+              and .confidence in ("medium", "high")
+          )
+        )
+      )
+    )
   )
-
+data_categories:
+  - "PII"
+data_types:
+  - "Government ID"
+regions:
+  - "Spain"
+compliance:
+  - "GDPR"
 detection_methods:
+  - "Presidio"
   - "Content analysis"
 id: "d2f36e97-ee19-5155-a474-b215eda5e706"

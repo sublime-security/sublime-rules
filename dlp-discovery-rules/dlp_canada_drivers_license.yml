@@ -4,14 +4,29 @@ type: "dlp"
 severity: "medium"
 source: |
   type.outbound
-  and any([body.current_thread.text, subject.subject],
-          // Driver's license varies by province, typically 15-16 alphanumeric characters
-          regex.contains(., '\b[A-Z0-9]{15,16}\b')
+  and (
+    any(beta.ml_extract_sensitive_information(body.current_thread.text),
+          .type == "CA_DRIVERS_LICENSE"
+          and .confidence in ("medium", "high")
+    )
+    or any(attachments,
+      any(file.explode(.),
+        any(.scan.strings.strings,
+          any(beta.ml_extract_sensitive_information(.),
+              .type == "CA_DRIVERS_LICENSE"
+              and .confidence in ("medium", "high")
+          )
+        )
+      )
+    )
   )
-  and any([body.current_thread.text, subject.subject],
-          regex.icontains(., 'driver.?s?\s+licen[cs]e|DL\s+number|permis\s+de\s+conduire')
-  )
-
+data_categories:
+  - "PII"
+data_types:
+  - "Government ID"
+regions:
+  - "Canada"
 detection_methods:
+  - "Presidio"
   - "Content analysis"
 id: "ff9b87eb-837e-5594-acf7-4903502fe5fb"

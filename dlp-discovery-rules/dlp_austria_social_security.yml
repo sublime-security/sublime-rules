@@ -4,14 +4,31 @@ type: "dlp"
 severity: "high"
 source: |
   type.outbound
-  and any([body.current_thread.text, subject.subject],
-          // Austrian SSN: 10 digits (XXXX XXXXXX format)
-          regex.contains(., '\b\d{4}[\s]?\d{6}\b')
+  and (
+    any(beta.ml_extract_sensitive_information(body.current_thread.text),
+          .type == "AT_SOCIAL_SECURITY"
+          and .confidence in ("medium", "high")
+    )
+    or any(attachments,
+      any(file.explode(.),
+        any(.scan.strings.strings,
+          any(beta.ml_extract_sensitive_information(.),
+              .type == "AT_SOCIAL_SECURITY"
+              and .confidence in ("medium", "high")
+          )
+        )
+      )
+    )
   )
-  and any([body.current_thread.text, subject.subject],
-          regex.icontains(., 'sozialversicherung|social\s+security|SVNR')
-  )
-
+data_categories:
+  - "PII"
+data_types:
+  - "Social Security Number"
+regions:
+  - "Austria"
+compliance:
+  - "GDPR"
 detection_methods:
+  - "Presidio"
   - "Content analysis"
 id: "a815a321-4e4b-5bfb-9ab6-23b57af3ed92"

@@ -1,0 +1,35 @@
+name: "DLP: US Disability Impairments"
+description: "Detects messages containing US disability impairment categories and terminology."
+type: "dlp"
+severity: "low"
+source: |
+  type.outbound
+  and (
+    any(beta.ml_extract_sensitive_information(body.current_thread.text),
+          .type == "US_DISABILITY_IMPAIRMENT"
+          and .confidence in ("medium", "high")
+    )
+    or any(attachments,
+      any(file.explode(.),
+        any(.scan.strings.strings,
+          any(beta.ml_extract_sensitive_information(.),
+              .type == "US_DISABILITY_IMPAIRMENT"
+              and .confidence in ("medium", "high")
+          )
+        )
+      )
+    )
+  )
+data_categories:
+  - "PII"
+  - "PHI"
+data_types:
+  - "Medical Code"
+regions:
+  - "United States"
+compliance:
+  - "HIPAA"
+detection_methods:
+  - "Presidio"
+  - "Content analysis"
+id: "409d9598-cfc8-48e7-99cc-c16a4b631bf4"

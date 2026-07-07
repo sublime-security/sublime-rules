@@ -1,17 +1,34 @@
 name: "DLP: Finland National ID"
-description: "Detects messages containing Finnish National ID numbers (henkilötunnus)."
+description: "Detects messages containing Finnish National ID numbers (henkilotunnus)."
 type: "dlp"
 severity: "high"
 source: |
   type.outbound
-  and any([body.current_thread.text, subject.subject],
-          // Finnish ID: DDMMYY-XXXX or DDMMYY+XXXX or DDMMYYAXXXX
-          regex.contains(., '\b\d{6}[\-\+A]\d{3}[A-Z0-9]\b')
+  and (
+    any(beta.ml_extract_sensitive_information(body.current_thread.text),
+          .type == "FI_PERSONAL_IDENTITY_CODE"
+          and .confidence in ("medium", "high")
+    )
+    or any(attachments,
+      any(file.explode(.),
+        any(.scan.strings.strings,
+          any(beta.ml_extract_sensitive_information(.),
+              .type == "FI_PERSONAL_IDENTITY_CODE"
+              and .confidence in ("medium", "high")
+          )
+        )
+      )
+    )
   )
-  and any([body.current_thread.text, subject.subject],
-          regex.icontains(., 'henkilötunnus|personal\s+identity|HETU')
-  )
-
+data_categories:
+  - "PII"
+data_types:
+  - "Government ID"
+regions:
+  - "Finland"
+compliance:
+  - "GDPR"
 detection_methods:
+  - "Presidio"
   - "Content analysis"
 id: "73b30e39-52ad-51ad-98a8-269497bba106"

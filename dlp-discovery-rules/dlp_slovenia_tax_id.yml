@@ -4,18 +4,31 @@ type: "dlp"
 severity: "medium"
 source: |
   type.outbound
-  and any([body.current_thread.text, subject.subject],
-          // Slovenian Tax ID: 8 digits
-          regex.contains(., '\b\d{8}\b')
-  )
-  and any([body.current_thread.text, subject.subject],
-          regex.icontains(., 'davčna\s+številka|tax\s+ID|TIN')
-  )
   and (
-    strings.icontains(sender.email.domain.tld, "si")
-    or strings.icontains(body.current_thread.text, "slovenia")
+    any(beta.ml_extract_sensitive_information(body.current_thread.text),
+          .type == "SI_TAX_ID"
+          and .confidence in ("medium", "high")
+    )
+    or any(attachments,
+      any(file.explode(.),
+        any(.scan.strings.strings,
+          any(beta.ml_extract_sensitive_information(.),
+              .type == "SI_TAX_ID"
+              and .confidence in ("medium", "high")
+          )
+        )
+      )
+    )
   )
-
+data_categories:
+  - "PII"
+data_types:
+  - "Tax ID"
+regions:
+  - "Slovenia"
+compliance:
+  - "GDPR"
 detection_methods:
+  - "Presidio"
   - "Content analysis"
 id: "e6ff12e8-d28b-5d24-a475-b69f76aa9038"

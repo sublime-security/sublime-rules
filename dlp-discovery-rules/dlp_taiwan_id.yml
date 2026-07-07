@@ -4,18 +4,29 @@ type: "dlp"
 severity: "high"
 source: |
   type.outbound
-  and any([body.current_thread.text, subject.subject],
-          // Taiwan ID: 1 letter + 9 digits
-          regex.contains(., '\b[A-Z]\d{9}\b')
-  )
-  and any([body.current_thread.text, subject.subject],
-          regex.icontains(., 'taiwan|national\s+ID|身分證')
-  )
   and (
-    strings.icontains(sender.email.domain.tld, "tw")
-    or strings.icontains(body.current_thread.text, "taiwan")
+    any(beta.ml_extract_sensitive_information(body.current_thread.text),
+          .type == "TW_NATIONAL_ID"
+          and .confidence in ("medium", "high")
+    )
+    or any(attachments,
+      any(file.explode(.),
+        any(.scan.strings.strings,
+          any(beta.ml_extract_sensitive_information(.),
+              .type == "TW_NATIONAL_ID"
+              and .confidence in ("medium", "high")
+          )
+        )
+      )
+    )
   )
-
+data_categories:
+  - "PII"
+data_types:
+  - "Government ID"
+regions:
+  - "Taiwan"
 detection_methods:
+  - "Presidio"
   - "Content analysis"
 id: "65f678cb-64d8-5bc8-bb9c-56014c499371"

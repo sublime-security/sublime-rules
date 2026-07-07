@@ -1,0 +1,32 @@
+name: "DLP: Azure EventGrid Access Key"
+description: "Detects messages containing Azure Event Grid access keys used to authenticate event publishing."
+type: "dlp"
+severity: "high"
+source: |
+  type.outbound
+  and (
+    any(beta.ml_extract_sensitive_information(body.current_thread.text),
+          .type == "AZURE_EVENTGRID_ACCESS_KEY"
+          and .confidence in ("medium", "high")
+    )
+    or any(attachments,
+      any(file.explode(.),
+        any(.scan.strings.strings,
+          any(beta.ml_extract_sensitive_information(.),
+              .type == "AZURE_EVENTGRID_ACCESS_KEY"
+              and .confidence in ("medium", "high")
+          )
+        )
+      )
+    )
+  )
+data_categories:
+  - "Credentials"
+data_types:
+  - "API Key"
+regions:
+  - "Global"
+detection_methods:
+  - "Presidio"
+  - "Content analysis"
+id: "cb3c06b6-7d4c-43c1-8e89-6e8d76e25969"

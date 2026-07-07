@@ -4,14 +4,32 @@ type: "dlp"
 severity: "high"
 source: |
   type.outbound
-  and any([body.current_thread.text, subject.subject],
-          // ITIN: 9XX-XX-XXXX format (starts with 9)
-          regex.contains(., '\b9\d{2}[\s\-]?\d{2}[\s\-]?\d{4}\b')
+  and (
+    any(beta.ml_extract_sensitive_information(body.current_thread.text),
+          .type == "US_ITIN"
+          and .confidence in ("medium", "high")
+    )
+    or any(attachments,
+      any(file.explode(.),
+        any(.scan.strings.strings,
+          any(beta.ml_extract_sensitive_information(.),
+              .type == "US_ITIN"
+              and .confidence in ("medium", "high")
+          )
+        )
+      )
+    )
   )
-  and any([body.current_thread.text, subject.subject],
-          regex.icontains(., 'ITIN|individual\s+taxpayer|tax\s+ID')
-  )
-
+data_categories:
+  - "PII"
+data_types:
+  - "Government ID"
+regions:
+  - "United States"
+compliance:
+  - "CCPA"
+  - "GLBA"
 detection_methods:
+  - "Presidio"
   - "Content analysis"
 id: "259d44e5-b0ac-5846-9153-25d08d05ac38"

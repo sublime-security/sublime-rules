@@ -4,14 +4,30 @@ type: "dlp"
 severity: "high"
 source: |
   type.outbound
-  and any([body.current_thread.text, subject.subject],
-          // PHIN varies by province but generally alphanumeric
-          regex.contains(., '\b[A-Z0-9]{9,12}\b')
+  and (
+    any(beta.ml_extract_sensitive_information(body.current_thread.text),
+          .type == "CA_PHIN"
+          and .confidence in ("medium", "high")
+    )
+    or any(attachments,
+      any(file.explode(.),
+        any(.scan.strings.strings,
+          any(beta.ml_extract_sensitive_information(.),
+              .type == "CA_PHIN"
+              and .confidence in ("medium", "high")
+          )
+        )
+      )
+    )
   )
-  and any([body.current_thread.text, subject.subject],
-          regex.icontains(., 'PHIN|personal\s+health\s+identification|health\s+ID')
-  )
-
+data_categories:
+  - "PII"
+  - "PHI"
+data_types:
+  - "Healthcare ID"
+regions:
+  - "Canada"
 detection_methods:
+  - "Presidio"
   - "Content analysis"
 id: "ac349280-46b6-5224-9e81-e996a86dc32c"

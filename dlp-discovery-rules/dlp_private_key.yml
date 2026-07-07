@@ -4,13 +4,29 @@ type: "dlp"
 severity: "high"
 source: |
   type.outbound
-  and any([body.current_thread.text, subject.subject],
-          regex.contains(., '-----BEGIN\s+(?:RSA\s+)?PRIVATE\s+KEY-----')
-          or regex.contains(., '-----BEGIN\s+OPENSSH\s+PRIVATE\s+KEY-----')
-          or regex.contains(., '-----BEGIN\s+PGP\s+PRIVATE\s+KEY\s+BLOCK-----')
-          or regex.contains(., '-----BEGIN\s+EC\s+PRIVATE\s+KEY-----')
+  and (
+    any(beta.ml_extract_sensitive_information(body.current_thread.text),
+          .type == "PRIVATE_KEY"
+          and .confidence in ("medium", "high")
+    )
+    or any(attachments,
+      any(file.explode(.),
+        any(.scan.strings.strings,
+          any(beta.ml_extract_sensitive_information(.),
+              .type == "PRIVATE_KEY"
+              and .confidence in ("medium", "high")
+          )
+        )
+      )
+    )
   )
-
+data_categories:
+  - "Credentials"
+data_types:
+  - "Cryptographic Material"
+regions:
+  - "Global"
 detection_methods:
+  - "Presidio"
   - "Content analysis"
 id: "7d0dff01-be4d-5223-a78c-26b4954481da"

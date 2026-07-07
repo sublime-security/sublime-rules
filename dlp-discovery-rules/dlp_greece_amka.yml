@@ -4,14 +4,31 @@ type: "dlp"
 severity: "high"
 source: |
   type.outbound
-  and any([body.current_thread.text, subject.subject],
-          // AMKA: 11 digits
-          regex.contains(., '\b\d{11}\b')
+  and (
+    any(beta.ml_extract_sensitive_information(body.current_thread.text),
+          .type == "GR_AMKA"
+          and .confidence in ("medium", "high")
+    )
+    or any(attachments,
+      any(file.explode(.),
+        any(.scan.strings.strings,
+          any(beta.ml_extract_sensitive_information(.),
+              .type == "GR_AMKA"
+              and .confidence in ("medium", "high")
+          )
+        )
+      )
+    )
   )
-  and any([body.current_thread.text, subject.subject],
-          regex.icontains(., 'AMKA|ΑΜΚΑ|social\s+security')
-  )
-
+data_categories:
+  - "PII"
+data_types:
+  - "Social Security Number"
+regions:
+  - "Greece"
+compliance:
+  - "GDPR"
 detection_methods:
+  - "Presidio"
   - "Content analysis"
 id: "b2e09497-c178-5cff-b267-7f02d0bea67e"

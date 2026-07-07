@@ -4,19 +4,32 @@ type: "dlp"
 severity: "high"
 source: |
   type.outbound
-  and any([body.current_thread.text, subject.subject],
-          // US passport: 9 digits or 1 letter + 8 digits
-          regex.contains(., '\b(?:\d{9}|[A-Z]\d{8})\b')
-  )
-  and any([body.current_thread.text, subject.subject],
-          regex.icontains(., 'passport|travel\s+document')
-  )
   and (
-    strings.icontains(sender.email.domain.tld, "us")
-    or strings.icontains(body.current_thread.text, "united states")
-    or strings.icontains(body.current_thread.text, "USA")
+    any(beta.ml_extract_sensitive_information(body.current_thread.text),
+          .type == "US_PASSPORT"
+          and .confidence in ("medium", "high")
+    )
+    or any(attachments,
+      any(file.explode(.),
+        any(.scan.strings.strings,
+          any(beta.ml_extract_sensitive_information(.),
+              .type == "US_PASSPORT"
+              and .confidence in ("medium", "high")
+          )
+        )
+      )
+    )
   )
-
+data_categories:
+  - "PII"
+data_types:
+  - "Government ID"
+regions:
+  - "United States"
+compliance:
+  - "CCPA"
+  - "GLBA"
 detection_methods:
+  - "Presidio"
   - "Content analysis"
 id: "df291668-d22b-5402-8705-45d39119d425"

@@ -4,14 +4,32 @@ type: "dlp"
 severity: "medium"
 source: |
   type.outbound
-  and any([body.current_thread.text, subject.subject],
-          // Claim numbers are typically 10-20 alphanumeric characters
-          regex.contains(., '\b[A-Z0-9]{10,20}\b')
+  and (
+    any(beta.ml_extract_sensitive_information(body.current_thread.text),
+          .type == "US_INSURANCE_CLAIM"
+          and .confidence in ("medium", "high")
+    )
+    or any(attachments,
+      any(file.explode(.),
+        any(.scan.strings.strings,
+          any(beta.ml_extract_sensitive_information(.),
+              .type == "US_INSURANCE_CLAIM"
+              and .confidence in ("medium", "high")
+          )
+        )
+      )
+    )
   )
-  and any([body.current_thread.text, subject.subject],
-          regex.icontains(., 'claim\s+number|insurance\s+claim|policy\s+claim')
-  )
-
+data_categories:
+  - "PII"
+  - "PHI"
+data_types:
+  - "Healthcare ID"
+regions:
+  - "United States"
+compliance:
+  - "HIPAA"
 detection_methods:
+  - "Presidio"
   - "Content analysis"
 id: "63f12df8-006f-5ade-9bd5-cdb9259b6a13"

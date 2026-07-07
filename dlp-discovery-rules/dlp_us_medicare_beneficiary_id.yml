@@ -1,0 +1,35 @@
+name: "DLP: US Medicare Beneficiary Identifier (MBI)"
+description: "Detects messages containing US Medicare Beneficiary Identifier numbers used for Medicare enrollment and claims."
+type: "dlp"
+severity: "high"
+source: |
+  type.outbound
+  and (
+    any(beta.ml_extract_sensitive_information(body.current_thread.text),
+          .type == "US_MEDICARE_BENEFICIARY_ID"
+          and .confidence in ("medium", "high")
+    )
+    or any(attachments,
+      any(file.explode(.),
+        any(.scan.strings.strings,
+          any(beta.ml_extract_sensitive_information(.),
+              .type == "US_MEDICARE_BENEFICIARY_ID"
+              and .confidence in ("medium", "high")
+          )
+        )
+      )
+    )
+  )
+data_categories:
+  - "PII"
+  - "PHI"
+data_types:
+  - "Healthcare ID"
+regions:
+  - "United States"
+compliance:
+  - "HIPAA"
+detection_methods:
+  - "Presidio"
+  - "Content analysis"
+id: "66b551db-1b57-4dc0-9603-f32fa595cbeb"

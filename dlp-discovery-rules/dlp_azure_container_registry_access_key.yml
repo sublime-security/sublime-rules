@@ -1,0 +1,32 @@
+name: "DLP: Azure Container Registry Access Key"
+description: "Detects messages containing Azure Container Registry admin access keys."
+type: "dlp"
+severity: "high"
+source: |
+  type.outbound
+  and (
+    any(beta.ml_extract_sensitive_information(body.current_thread.text),
+          .type == "AZURE_CONTAINER_REGISTRY_ACCESS_KEY"
+          and .confidence in ("medium", "high")
+    )
+    or any(attachments,
+      any(file.explode(.),
+        any(.scan.strings.strings,
+          any(beta.ml_extract_sensitive_information(.),
+              .type == "AZURE_CONTAINER_REGISTRY_ACCESS_KEY"
+              and .confidence in ("medium", "high")
+          )
+        )
+      )
+    )
+  )
+data_categories:
+  - "Credentials"
+data_types:
+  - "API Key"
+regions:
+  - "Global"
+detection_methods:
+  - "Presidio"
+  - "Content analysis"
+id: "279ab970-a36b-4184-9ba7-9f4a6700b356"

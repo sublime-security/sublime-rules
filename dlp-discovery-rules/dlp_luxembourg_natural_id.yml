@@ -4,18 +4,31 @@ type: "dlp"
 severity: "high"
 source: |
   type.outbound
-  and any([body.current_thread.text, subject.subject],
-          // Luxembourg Natural Person ID: 13 digits (YYYYMMDDXXXXX)
-          regex.contains(., '\b\d{13}\b')
-  )
-  and any([body.current_thread.text, subject.subject],
-          regex.icontains(., 'matricule|national\s+identification')
-  )
   and (
-    strings.icontains(sender.email.domain.tld, "lu")
-    or strings.icontains(body.current_thread.text, "luxembourg")
+    any(beta.ml_extract_sensitive_information(body.current_thread.text),
+          .type == "LUXEMBOURG_NATURAL_ID"
+          and .confidence in ("medium", "high")
+    )
+    or any(attachments,
+      any(file.explode(.),
+        any(.scan.strings.strings,
+          any(beta.ml_extract_sensitive_information(.),
+              .type == "LUXEMBOURG_NATURAL_ID"
+              and .confidence in ("medium", "high")
+          )
+        )
+      )
+    )
   )
-
+data_categories:
+  - "PII"
+data_types:
+  - "Government ID"
+regions:
+  - "Luxembourg"
+compliance:
+  - "GDPR"
 detection_methods:
+  - "Presidio"
   - "Content analysis"
 id: "8a20ea77-0543-55cf-a7c8-821309d0631a"

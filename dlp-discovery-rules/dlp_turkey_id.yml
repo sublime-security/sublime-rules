@@ -4,19 +4,31 @@ type: "dlp"
 severity: "high"
 source: |
   type.outbound
-  and any([body.current_thread.text, subject.subject],
-          // Turkish ID: 11 digits
-          regex.contains(., '\b[1-9]\d{10}\b')
-  )
-  and any([body.current_thread.text, subject.subject],
-          regex.icontains(., 'TC\s+kimlik|turkish\s+ID|türkiye|turkey')
-  )
   and (
-    strings.icontains(sender.email.domain.tld, "tr")
-    or strings.icontains(body.current_thread.text, "turkey")
-    or strings.icontains(body.current_thread.text, "türkiye")
+    any(beta.ml_extract_sensitive_information(body.current_thread.text),
+          .type == "TR_NATIONAL_ID"
+          and .confidence in ("medium", "high")
+    )
+    or any(attachments,
+      any(file.explode(.),
+        any(.scan.strings.strings,
+          any(beta.ml_extract_sensitive_information(.),
+              .type == "TR_NATIONAL_ID"
+              and .confidence in ("medium", "high")
+          )
+        )
+      )
+    )
   )
-
+data_categories:
+  - "PII"
+data_types:
+  - "Government ID"
+regions:
+  - "Turkey"
+compliance:
+  - "GDPR"
 detection_methods:
+  - "Presidio"
   - "Content analysis"
 id: "21c402c9-8a24-53df-b019-01f312d58c68"

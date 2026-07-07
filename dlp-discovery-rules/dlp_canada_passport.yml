@@ -4,18 +4,29 @@ type: "dlp"
 severity: "high"
 source: |
   type.outbound
-  and any([body.current_thread.text, subject.subject],
-          // Canadian passport: 2 letters + 6 digits
-          regex.contains(., '\b[A-Z]{2}\d{6}\b')
-  )
-  and any([body.current_thread.text, subject.subject],
-          regex.icontains(., 'passport|travel\s+document')
-  )
   and (
-    strings.icontains(sender.email.domain.tld, "ca")
-    or strings.icontains(body.current_thread.text, "canada")
+    any(beta.ml_extract_sensitive_information(body.current_thread.text),
+          .type == "CA_PASSPORT"
+          and .confidence in ("medium", "high")
+    )
+    or any(attachments,
+      any(file.explode(.),
+        any(.scan.strings.strings,
+          any(beta.ml_extract_sensitive_information(.),
+              .type == "CA_PASSPORT"
+              and .confidence in ("medium", "high")
+          )
+        )
+      )
+    )
   )
-
+data_categories:
+  - "PII"
+data_types:
+  - "Government ID"
+regions:
+  - "Canada"
 detection_methods:
+  - "Presidio"
   - "Content analysis"
 id: "ce780bd1-1760-59b6-8b0d-c086745a3180"

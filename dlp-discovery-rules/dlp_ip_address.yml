@@ -4,16 +4,30 @@ type: "dlp"
 severity: "low"
 source: |
   type.outbound
-  and any([body.current_thread.text, subject.subject],
-          // IPv4 address
-          regex.contains(., '\b(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\b')
-          // IPv6 address
-          or regex.contains(., '\b(?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}\b')
+  and (
+    any(beta.ml_extract_sensitive_information(body.current_thread.text),
+          .type == "IP_ADDRESS"
+          and .confidence in ("medium", "high")
+    )
+    or any(attachments,
+      any(file.explode(.),
+        any(.scan.strings.strings,
+          any(beta.ml_extract_sensitive_information(.),
+              .type == "IP_ADDRESS"
+              and .confidence in ("medium", "high")
+          )
+        )
+      )
+    )
   )
-  and any([body.current_thread.text, subject.subject],
-          regex.icontains(., 'ip\s+address|server|network|infrastructure')
-  )
-
+data_categories:
+  - "Network Identifiers"
+data_types:
+  - "Network Address"
+regions:
+  - "Global"
+compliance: []
 detection_methods:
+  - "Presidio"
   - "Content analysis"
 id: "d637bb74-67d5-58fb-87eb-5903a801876f"

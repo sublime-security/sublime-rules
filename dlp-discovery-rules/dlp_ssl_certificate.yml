@@ -4,13 +4,29 @@ type: "dlp"
 severity: "medium"
 source: |
   type.outbound
-  and any([body.current_thread.text, subject.subject],
-          regex.contains(., '-----BEGIN\s+CERTIFICATE-----')
+  and (
+    any(beta.ml_extract_sensitive_information(body.current_thread.text),
+          .type == "SSL_CERTIFICATE"
+          and .confidence in ("medium", "high")
+    )
+    or any(attachments,
+      any(file.explode(.),
+        any(.scan.strings.strings,
+          any(beta.ml_extract_sensitive_information(.),
+              .type == "SSL_CERTIFICATE"
+              and .confidence in ("medium", "high")
+          )
+        )
+      )
+    )
   )
-  and any([body.current_thread.text, subject.subject],
-          regex.contains(., '-----END\s+CERTIFICATE-----')
-  )
-
+data_categories:
+  - "Credentials"
+data_types:
+  - "Cryptographic Material"
+regions:
+  - "Global"
 detection_methods:
+  - "Presidio"
   - "Content analysis"
 id: "9432a3c1-a364-583d-a5bf-2253b9707e91"

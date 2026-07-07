@@ -4,18 +4,29 @@ type: "dlp"
 severity: "high"
 source: |
   type.outbound
-  and any([body.current_thread.text, subject.subject],
-          // DNI: 7-8 digits
-          regex.contains(., '\b\d{7,8}\b')
-  )
-  and any([body.current_thread.text, subject.subject],
-          regex.icontains(., 'DNI|documento\s+nacional|identity\s+card')
-  )
   and (
-    strings.icontains(sender.email.domain.tld, "ar")
-    or strings.icontains(body.current_thread.text, "argentina")
+    any(beta.ml_extract_sensitive_information(body.current_thread.text),
+          .type == "AR_DNI"
+          and .confidence in ("medium", "high")
+    )
+    or any(attachments,
+      any(file.explode(.),
+        any(.scan.strings.strings,
+          any(beta.ml_extract_sensitive_information(.),
+              .type == "AR_DNI"
+              and .confidence in ("medium", "high")
+          )
+        )
+      )
+    )
   )
-
+data_categories:
+  - "PII"
+data_types:
+  - "Government ID"
+regions:
+  - "Argentina"
 detection_methods:
+  - "Presidio"
   - "Content analysis"
 id: "bcd91739-4e68-5af3-8c99-97fed0525753"
