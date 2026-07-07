@@ -1,0 +1,80 @@
+name: "PR# 4821 - Brand impersonation: AARP"
+description: "Detects messages impersonating AARP by analyzing sender display name and body content for AARP references, address information, or survey-related language from unauthorized senders."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and (
+    (
+      strings.icontains(sender.display_name, "AARP")
+      and any(ml.nlu_classifier(body.current_thread.text).entities,
+              .name in ("request", "financial")
+              and regex.icontains(.text, "(?:gift|win|free|renewal)")
+      )
+    )
+    or 2 of (
+      strings.icontains(body.current_thread.text, 'AARP'),
+      strings.icontains(body.current_thread.text, '601 E Street NW'),
+      strings.icontains(body.current_thread.text, 'Washington, DC 20049')
+    )
+    or (
+      strings.icontains(body.current_thread.text, 'AARP')
+      and (
+        regex.icontains(body.current_thread.text, 'quick .{0,10}survey')
+        or strings.icontains(body.current_thread.text, "last attempt")
+      )
+    )
+    //
+    // This rule makes use of a beta feature and is subject to change without notice
+    // using the beta feature in custom rules is not suggested until it has been formally released
+    //
+    or (
+      strings.icontains(beta.ocr(file.message_screenshot()).text, "AARP")
+      and strings.icontains(beta.ocr(file.message_screenshot()).text,
+                            "join or renew now"
+      )
+      and strings.icontains(beta.ocr(file.message_screenshot()).text,
+                            "to opt out"
+      )
+    )
+  )
+  // negate job postings related to AARP and newsletters containing AARP
+  and not any(ml.nlu_classifier(body.current_thread.text).topics,
+              .name in (
+                "Professional and Career Development",
+                "Newsletters and Digests"
+              )
+              and .confidence == "high"
+  )
+  // and the sender is not in org_domains or from AARP domains and passes auth
+  and not (
+    sender.email.domain.root_domain in $org_domains
+    or (
+      sender.email.domain.root_domain in (
+        "aarp.org",
+        "proofpointessentials.com",
+        "expedia.com",
+        "eventbrite.com",
+        "zixcorp.com"
+      )
+      and headers.auth_summary.dmarc.pass
+    )
+  )
+
+attack_types:
+  - "BEC/Fraud"
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Header analysis"
+  - "Sender analysis"
+id: "cb9ab9fe-7f38-5831-a44c-a5cb046e6d17"
+tags:
+  - created_from_open_prs
+  - rule_status_modified
+  - pr_author_JFarina5
+references:
+  - https://github.com/sublime-security/sublime-rules/pull/4821
