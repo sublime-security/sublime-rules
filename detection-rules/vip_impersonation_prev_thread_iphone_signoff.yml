@@ -5,7 +5,6 @@ severity: "high"
 source: |
   type.inbound
   and any(map(filter(body.previous_threads,
-                     // previous thread is authored by a VIP
                      any($org_vips,
                          strings.icontains(..sender.display_name, .display_name)
                          or (
@@ -13,20 +12,27 @@ source: |
                            and strings.icontains(..sender.email.email, .email)
                          )
                      )
-                     // ends with fake ipad/iphone sign off
                      and (
-                       strings.iends_with(.text,
-                                          "sent from my iphone.",
-                                          "sent from my ipad."
+                       strings.iends_with(.text, "sent from my iphone.")
+                       or strings.iends_with(.text, "sent from my ipad.")
+                     )
+                     and (
+                       any(ml.nlu_classifier(.text, subject=.subject.base).topics,
+                           (
+                             .name == "Financial Communications"
+                             or .name == "Request to View Invoice"
+                           )
+                           and .confidence != "low"
+                       )
+                       or any(ml.nlu_classifier(.text, subject=.subject.base).tags,
+                              (.name == "invoice" or .name == "payment")
+                              and .confidence != "low"
                        )
                      )
               ),
               .sender.email.email
           ),
-          // VIP is dropped from the current thread recipients
-          // the previous thread sender email is empty, consider it a match
           . == ""
-          // if it's not empty, check that it's not in the current thread
           or (
             not strings.icontains(sender.email.email, .)
             and not any(flatten([recipients.to, recipients.cc, recipients.bcc]),
