@@ -1,10 +1,12 @@
-name: "PR# 4815 - VIP impersonation: VIP payment redirect handoff via thread hijacking"
+name: "PR# 4815 - VIP impersonation: VIP payment redirect handoff via fake threads"
 description: "Detects inbound messages where an external sender, absent from the original conversation, targets a single internal recipient after a VIP previously instructed that party to handle invoice or payment correspondence. The rule identifies prior threads where a known VIP explicitly redirected billing or payment contact to an internal address — using language such as forwarding instructions, accounts payable references, or billing handoff phrasing — and flags follow-up messages from external senders who are no longer accompanied by the VIP. NLU classifiers confirm financial context in the prior thread. This pattern is consistent with adversaries monitoring or fabricating invoice-related threads to insert themselves at the point of payment handoff."
 type: "rule"
 severity: "high"
 source: |
   type.inbound
   and any(map(filter(body.previous_threads,
+                     // VIP authored the segment: display_name OR real email (OR, not AND -- the actor guesses
+                     // the exec's address, so a fabricated From: is often the wrong format at the right org).
                      any($org_vips,
                          strings.icontains(..sender.display_name, .display_name)
                          or (
@@ -12,16 +14,15 @@ source: |
                            and strings.icontains(..sender.email.email, .email)
                          )
                      )
-                     // remove threads that are auto replies (VIP is out of office and instructs the sender to sent another email address)
-                     // accounting for threads that don't have a subject
+                     // skip auto-replies; coalesce the null on subject-less segments before `not`.
                      and not coalesce(.subject.is_auto_reply, false)
-                     // the recipient of the current message is the one mentioned by the VIP
+                     // the live recipient is the payee the VIP names, at an org domain.
                      and any(recipients.to,
                              .email.email != ..sender.email.email
                              and .email.domain.root_domain in $org_domains
                              and strings.icontains(..text, .email.email)
                      )
-                     // the "handoff" phrases
+                     // payment "handoff" phrasing.
                      and regex.icontains(.text,
                                          'accounts? payable',
                                          '(?:forward|send|rout|direct|remit|submit|issue) it (?:directly )?to',
@@ -32,41 +33,35 @@ source: |
                                          '(?:as follows|provided below|find below|details are|contact is)[^\n]{0,10}:',
                                          'billing (?:contact|correspondence|team|department)'
                      )
-                     // NLU has mentions of invoices/finance/etc
-                     and (
-                       any(ml.nlu_classifier(.text, subject=.subject.base).topics,
-                           (
-                             .name == "Financial Communications"
-                             or .name == "Request to View Invoice"
-                           )
-                           and .confidence != "low"
-                       )
-                       or any(ml.nlu_classifier(.text, subject=.subject.base).tags,
-                              (.name == "invoice" or .name == "payment")
-                              and .confidence != "low"
-                       )
-                       or any(ml.nlu_classifier(.text, subject=.subject.base).entities,
-                              .name == "financial"
-                       )
-                     )
               ),
               .sender.email.email
           ),
           . != ""
-          // the VIP is no longer in the message
+          // the VIP is no longer present in the live message.
           and not strings.icontains(sender.email.email, .)
           and not any(flatten([recipients.to, recipients.cc, recipients.bcc]),
                       strings.icontains(.email.email, ..)
           )
+          // any previous thread authored by the "VIP" has invoice/payment/
+          and any(filter(body.previous_threads, .sender.email.email == ..),
+                  any(ml.nlu_classifier(.text, subject=.subject.base).tags,
+                      .name in ("invoice", "payment") and .confidence != "low"
+                  )
+                  or any(ml.nlu_classifier(.text, subject=.subject.base).topics,
+                         .name in (
+                           "Request to View Invoice",
+                           "Payment Information"
+                         )
+                         and .confidence != "low"
+                  )
+          )
   )
-  // only a single org_domain recipient
+  // exactly one org-domain recipient (the payee); external sender.
   and length(filter(flatten([recipients.to, recipients.cc, recipients.bcc]),
                     .email.domain.root_domain in $org_domains
              )
   ) == 1
-  // sender is external
   and not sender.email.domain.root_domain in $org_domains
-
 attack_types:
   - "BEC/Fraud"
 tactics_and_techniques:
