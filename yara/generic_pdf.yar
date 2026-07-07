@@ -502,7 +502,7 @@ rule pdf_js_function_box_lure {
 	meta:
 		author      = "kyle eaton"
 		date        = "2026-07-07"
-		description = "matching PDF with box shaped lure and embedded javascript - s/o greg"
+		description = "matching javascript for PDFs with box shaped lure and embedded javascript - s/o greg"
 	strings:
 		$header = { 25 50 44 46 2D 31 2E }
 		$js1    = { 2E 72 65 70 6C 61 63 65 28 2F 5C 5C 78 2F 67 2C 20 22 25 22 29 }
