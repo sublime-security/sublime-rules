@@ -17,16 +17,10 @@ source: |
       )
     )
   )
-  and any(filter(html.xpath(body.html, '//a[@href]').nodes,
-                 // blue button background, background-color and observed colors
-                 regex.icontains(.raw,
-                                 '(?:background(?:-color)?)\s*[:\s]\s*#(?:0078d4|3a78d1)'
-                 )
-          ),
-          (
-            // it's styled as a button
-            regex.icontains(.raw, 'padding')
-          )
+  and any(html.xpath(body.html, '//a[@href]').nodes,
+          // hrefs like "#" (JS-driven buttons, etc.), tel:, mailto:, cid:, etc. never produce a
+          // .links entry at all; skip those before doing any regex work
+          length(.links) > 0
           // ignore links going to microsoft
           and not any(.links,
                       (
@@ -54,6 +48,12 @@ source: |
                         )
                       )
           )
+          // blue button background, background-color and observed colors
+          and regex.icontains(.raw,
+                               '(?:background(?:-color)?)\s*[:\s]\s*#(?:0078d4|3a78d1)'
+          )
+          // it's styled as a button
+          and regex.icontains(.raw, 'padding')
   )
   and any(ml.nlu_classifier(body.current_thread.text).intents, .name != "benign")
   // negate attachments that contain the known microsoft content type
