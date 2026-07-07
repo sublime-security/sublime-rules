@@ -484,3 +484,16 @@ rule pdf_blurred_invoice_lure {
 	condition:
 		$header at 0 and $image
 }
+
+rule w9inv_2page_image {
+	meta:
+		author      = "kyle eaton"
+		date        = "2026-07-07"
+		description = "pdf with specific invoice and w9 images embedded"
+	strings:
+		$header     = { 25 50 44 46 2D 31 2E }
+		$w9_img_01  = { FD F6 C1 1C 52 10 B9 FF 00 3C 7A D2 95 C8 DB D6 8F 42 38 E3 AD 30 13 2A 46 D3 C6 7D E9 72 32 39 E7 B5 04 00 3E 5E 45 20 C0 19 EF D7 F3 A0 62 F1 9C 9E C6 8C 91 D7 8C 51 9C F5 ED 47 CD D0 8C D0 21 71 C7 A8 34 DF 62 7F CF E3 4E ED EB 49 }
+		$inv_img_01 = { FF DD 00 04 00 50 FF DA 00 0C 03 01 00 02 11 03 11 00 3F 00 FD F7 20 67 BD 27 71 91 CD 03 23 9F 5A 07 2D 4C 03 AF 3E 87 A5 27 D3 A1 ED 48 33 82 07 18 EF CF 5A 5E B9 E7 8F 4A 40 80 76 C9 E0 E3 07 D6 8C 1E B9 E9 F9 7E 14 10 46 00 E8 29 C7 38 39 1C 0A 06 34 EE C1 2B C5 0C 40 19 3C 7B 50 47 }
+	condition:
+		$header and (any of ($w9_img*) or any of ($inv_img*))
+}
