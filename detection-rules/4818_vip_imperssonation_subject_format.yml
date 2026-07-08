@@ -5,26 +5,32 @@ severity: "high"
 source: |
   type.inbound
   and length(coalesce(body.plain.raw, body.html.display_text)) < 6000
-  and strings.icontains(subject.base, '"', '/-/', '-//', '-/', '-#')
+  and strings.icontains(strings.replace_confusables(subject.base),
+                        '"',
+                        '/-/',
+                        '-//',
+                        '-/',
+                        '-#'
+  )
   and any(body.previous_threads,
           any($org_vips,
               (
-                strings.icontains(subject.base,
+                strings.icontains(strings.replace_confusables(subject.base),
                                   strings.concat('"', .display_name)
                 )
-                or strings.icontains(subject.base,
+                or strings.icontains(strings.replace_confusables(subject.base),
                                      strings.concat(.display_name, '"')
                 )
-                or strings.icontains(subject.base,
+                or strings.icontains(strings.replace_confusables(subject.base),
                                      strings.concat('/-/', .display_name)
                 )
-                or strings.icontains(subject.base,
+                or strings.icontains(strings.replace_confusables(subject.base),
                                      strings.concat('-//', .display_name)
                 )
-                or strings.icontains(subject.base,
+                or strings.icontains(strings.replace_confusables(subject.base),
                                      strings.concat('-/', .display_name)
                 )
-                or strings.icontains(subject.base,
+                or strings.icontains(strings.replace_confusables(subject.base),
                                      strings.concat('-#', .display_name)
                 )
               )
@@ -39,6 +45,14 @@ source: |
                 )
               )
           )
+  )
+  and any(ml.nlu_classifier(body.current_thread.text).topics,
+          .name in (
+            "Financial Communications",
+            "Request to View Invoice",
+            "Payment Information"
+          )
+          and .confidence != "low"
   )
 attack_types:
   - "BEC/Fraud"
