@@ -497,3 +497,28 @@ rule w9inv_2page_image {
 	condition:
 		$header and (any of ($w9_img*) or any of ($inv_img*))
 }
+
+rule pdf_js_function_box_lure {
+	meta:
+		author      = "kyle eaton"
+		date        = "2026-07-07"
+		description = "matching javascript for PDFs with box shaped lure and embedded javascript - s/o greg"
+	strings:
+		$header = { 25 50 44 46 2D 31 2E }
+		$js1    = { 2E 72 65 70 6C 61 63 65 28 2F 5C 5C 78 2F 67 2C 20 22 25 22 29 }
+		$js2    = { 2F 4A 61 76 61 53 63 72 69 70 74 0A 2F 4A 53 20 28 76 61 72 20 }
+	condition:
+		$header at 0 and $js1 and $js2
+}
+
+rule pdf_rect_size_box_lure {
+	meta:
+		author      = "kyle eaton"
+		date        = "2026-07-07"
+		description = "matching rect sizes for PDFs with box shaped lure and embedded javascript - s/o greg"
+	strings:
+		$header    = { 25 50 44 46 2D 31 2E }
+		$rect_size = { 2f 52 65 63 74 20 5b 32 38 30 20 33 34 30 20 34 32 30 20 33 37 32 5d }
+	condition:
+		$header at 0 and $rect_size
+}
