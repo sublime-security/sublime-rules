@@ -1,0 +1,30 @@
+name: "PR# 4831 - Service abuse: Oracle Cloud Workflow callback scam"
+description: "Detects inbound messages sent through Oracle Cloud's workflow mail service (workflow.mail.us2.cloud.oracle.com) that contain callback scam content within styled HTML table cells. Natural language understanding is used to identify callback scam intent with medium or high confidence within the message body, indicating misuse of legitimate Oracle infrastructure to deliver fraudulent content."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and sender.email.domain.domain == "workflow.mail.us2.cloud.oracle.com"
+  and any(html.xpath(body.html,
+                     "//td[contains(@style, 'padding: 20px 40px')]//font[@style='']"
+          ).nodes,
+          any(ml.nlu_classifier(.inner_text).intents,
+              .name == "callback_scam" and .confidence != "low"
+          )
+  )   
+attack_types:
+  - "Callback Phishing"
+tactics_and_techniques:
+  - "Social engineering"
+  - "Impersonation: Brand"
+detection_methods:
+  - "Sender analysis"
+  - "HTML analysis"
+  - "Natural Language Understanding"
+id: "8848c59f-62ac-56cf-838d-e0c0e78124f6"
+tags:
+  - created_from_open_prs
+  - rule_status_added
+  - pr_author_markmsublime
+references:
+  - https://github.com/sublime-security/sublime-rules/pull/4831
