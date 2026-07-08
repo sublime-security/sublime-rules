@@ -9,14 +9,17 @@ source: |
   and sender.email.email == "noreply-zoomevents@zoom.us"
   and (headers.auth_summary.spf.pass or headers.auth_summary.dmarc.pass)
   
-  // extract the actor controlled content from the email body (excluding the
-  // static Zoom copyright/unsubscribe footer) and pass it to NLU
+  // extract the actor controlled message from the email body and pass it to NLU to see if it's cred theft
   and any(html.xpath(body.html,
-                     "//div[@class='eb-content css-1l7xmti']//td[@data-dynamic-style-background-color='email.bodyColor.color' and contains(@style, 'background-color: rgb(255, 255, 255)')]/*[not(.//*[contains(text(), 'Copyright') or contains(text(), 'unsubscribe')])]"
+                     "//div[@class='eb-content css-1l7xmti']//td[@data-dynamic-style-background-color='email.bodyColor.color' and contains(@style, 'background-color: rgb(255, 255, 255)')]"
           ).nodes,
           any(ml.nlu_classifier(.display_text).intents,
               .name == "cred_theft" and .confidence != "low"
           )
+  )
+  // negate legitimate messages where all links lead back to zoom
+  and not all(filter(body.links, .href_url.scheme != "mailto"),
+              .href_url.domain.root_domain in ("zoom.us", "zoom.com")
   )
 attack_types:
   - "Credential Phishing"
