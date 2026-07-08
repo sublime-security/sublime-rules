@@ -1,0 +1,72 @@
+name: "Brand impersonation: Login.gov and ID.me"
+description: "Detects messages impersonating United States government single sign-on (SSO) services, that exhibit PII theft or credential harvesting behavior."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and length(body.links) >= 1
+  and any([sender.display_name, subject.base],
+          strings.ilike(., "*login?gov*") or regex.icontains(., '^\bid.me\b')
+  )
+  // not a forward or reply
+  and not length(headers.references) > 0
+  // negate .gov domains and id.me
+  and not (
+    sender.email.domain.valid
+    and (
+      sender.email.domain.tld == "gov"
+      or sender.email.domain.root_domain in~ (
+        "id.me",
+        "qemailserver.com" // Qualtrics surveys
+      )
+    )
+    and headers.auth_summary.dmarc.pass
+  )
+  and (
+    any(ml.nlu_classifier(body.current_thread.text).intents,
+        .name in ("cred_theft", "steal_pii") and .confidence != "low"
+    )
+    or any(ml.nlu_classifier(body.current_thread.text).topics,
+           .name in (
+             "Government Services",
+             "Security and Authentication",
+             "Secure Message"
+           )
+    )
+    or regex.icontains(body.current_thread.text,
+                       '(?:(Social Security Administration|\bS.?S.?A.?\b)|(General Services Administration|\bG.?S.?A.?\b)|(Internal Revenue Service|\bI.?R.?S.?\b)|(Patent and Trademark Office|\b(U.?S.?)?P.?T.?O.?\b))'
+    )
+  )
+  // negate benign newsletters
+  and not (
+    any(ml.nlu_classifier(body.current_thread.text).topics,
+        .name == "Newsletters and Digests" and .confidence != "low"
+    )
+    and any(ml.nlu_classifier(body.current_thread.text).intents,
+            .name == "benign" and .confidence == "high"
+    )
+  )
+  and (
+    not profile.by_sender_email().solicited
+    or not profile.by_sender_email().any_messages_benign
+    or (
+      profile.by_sender_email().any_messages_malicious_or_spam
+      and not profile.by_sender_email().any_messages_benign
+    )
+    or (
+      sender.email.domain.domain in $org_domains
+      and not coalesce(headers.auth_summary.dmarc.pass, false)
+    )
+  )
+
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Header analysis"
+  - "Natural Language Understanding"
+  - "Sender analysis"
+id: "94fa08f7-cab0-5b99-b39b-d98cb0c701fe"
