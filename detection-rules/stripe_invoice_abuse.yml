@@ -7,25 +7,35 @@ type: "rule"
 severity: "medium"
 source: |
   type.inbound
-  and length(attachments) == 2
   and sender.email.domain.root_domain == "stripe.com"
   and headers.auth_summary.dmarc.pass
-  and any(attachments,
-          .file_extension == "pdf"
-          and any(file.explode(.),
-                  4 of (
-                    strings.ilike(.scan.ocr.raw, "*Btc Purchase*"),
-                    strings.ilike(.scan.ocr.raw, "*suspicious activity*"),
-                    strings.ilike(.scan.ocr.raw,
-                                  "*get in touch with us straight once*"
-                    ),
-                    strings.ilike(.scan.ocr.raw, "*your phone number*"),
-                    strings.ilike(.scan.ocr.raw, "*due deducted*"),
-                    strings.ilike(.scan.ocr.raw,
-                                  "*merchant security service center*"
-                    ),
-                  )
-          )
+  and (
+    (
+      length(attachments) == 2
+      and any(attachments,
+              .file_extension == "pdf"
+              and any(file.explode(.),
+                      4 of (
+                        strings.ilike(.scan.ocr.raw, "*Btc Purchase*"),
+                        strings.ilike(.scan.ocr.raw, "*suspicious activity*"),
+                        strings.ilike(.scan.ocr.raw,
+                                      "*get in touch with us straight once*"
+                        ),
+                        strings.ilike(.scan.ocr.raw, "*your phone number*"),
+                        strings.ilike(.scan.ocr.raw, "*due deducted*"),
+                        strings.ilike(.scan.ocr.raw,
+                                      "*merchant security service center*"
+                        )
+                      )
+              )
+      )
+    )
+    or (
+      length(attachments) == 1
+      and any(ml.nlu_classifier(body.current_thread.text).intents,
+              .name == "callback_scam" and .confidence == "high"
+      )
+    )
   )
 attack_types:
   - "BEC/Fraud"
