@@ -5,10 +5,9 @@ severity: "high"
 source: |
   type.inbound
   and length(coalesce(body.plain.raw, body.html.display_text)) < 6000
-  and strings.icontains(subject.base, '"', '/-/', '-//', '-/')
+  and strings.icontains(subject.base, '"', '/-/', '-//', '-/', '-#')
   and any(body.previous_threads,
           any($org_vips,
-              // VIP name quoted/delimited in subject
               (
                 strings.icontains(subject.base,
                                   strings.concat('"', .display_name)
@@ -25,15 +24,15 @@ source: |
                 or strings.icontains(subject.base,
                                      strings.concat('-/', .display_name)
                 )
+                or strings.icontains(subject.base,
+                                     strings.concat('-#', .display_name)
+                )
               )
               and (
-                // VIP authored previous thread by display name
                 strings.icontains(..sender.display_name, .display_name)
-                // VIP authored previous thread by email
                 or (
                   .email != "" and strings.icontains(..sender.email.email, .email)
                 )
-                // the VIP is the sender display name of the current message but with email mismatch
                 or (
                   strings.icontains(sender.display_name, .display_name)
                   and sender.email.email != .email
