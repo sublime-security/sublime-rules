@@ -44,7 +44,7 @@ RETRYABLE_STATUSES = {403, 429, 502, 503, 504}
 # Files to exclude from formatting (e.g., special comment formatting)
 EXCLUDE_FILES = {
     "attachment_cve_2023_38831.yml",
-    "vip_impersonation_fake_thread_vip_missing_email.yml‎"
+    "vip_impersonation_fake_thread_vip_missing_email.yml",
 }
 
 
