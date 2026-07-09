@@ -1,0 +1,66 @@
+name: "PR# 4851 - VIP impersonation: Fake thread with VIPs missing email metadata"
+description: "Detects inbound messages that weaponize fabricated invoice or payment thread histories to impersonate or involve organizational VIPs. The rule identifies conversations where the two oldest visible threads discuss invoices, payments, or executive engagements, but contain incomplete sender or recipient email addresses — a hallmark of stitched-together or forged thread context. The targeted VIP appears in the fabricated thread history but is conspicuously absent from the current message's recipients, suggesting the VIP's name is being leveraged to establish false legitimacy while routing the live message away from their oversight. Matched messages span executive search retainer invoices, past-due account notices, wire transfer instructions, and advisory billing lures targeting named executives at known organizations."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  // we need at least two threads
+  and length(body.previous_threads) > 1 
+  // oldest thread is invoice/payment related
+  and (
+      any(ml.nlu_classifier(body.previous_threads[length(body.previous_threads)-1].text, subject=body.previous_threads[length(body.previous_threads)-1].subject.base).tags, .name in ("invoice", "payment") and .confidence != "low")
+      or any(ml.nlu_classifier(body.previous_threads[length(body.previous_threads)-1].text, subject=body.previous_threads[length(body.previous_threads)-1].subject.base).topics, .name in ("Request to View Invoice", "Payment Information") and .confidence != "low")
+  )
+  // second to oldest thread is invoice/payment realated
+  and (
+      any(ml.nlu_classifier(body.previous_threads[length(body.previous_threads)-2].text, subject=body.previous_threads[length(body.previous_threads)-2].subject.base).tags, .name in ("invoice", "payment") and .confidence != "low")
+      or any(ml.nlu_classifier(body.previous_threads[length(body.previous_threads)-2].text, subject=body.previous_threads[length(body.previous_threads)-2].subject.base).topics, .name in ("Request to View Invoice", "Payment Information") and .confidence != "low")
+  )
+  // each of the two oldest threads have 1 or less recipients (sometimes the "to" header is missing)
+  and length(body.previous_threads[length(body.previous_threads) - 1].recipients.to) <= 1
+  and length(body.previous_threads[length(body.previous_threads) - 2].recipients.to) <= 1
+  // at least one party in the two oldest threads is missing an email
+  and (
+    body.previous_threads[length(body.previous_threads) - 1].sender.email.email == ""
+    or body.previous_threads[length(body.previous_threads) - 1].recipients.to[0].email.email == ""
+    or body.previous_threads[length(body.previous_threads) - 2].sender.email.email == ""
+    or body.previous_threads[length(body.previous_threads) - 2].recipients.to[0].email.email == ""
+  )
+  // an org vip sent/receieved messages
+  and any($org_vips,
+    ( body.previous_threads[length(body.previous_threads) - 1].recipients.to[0].display_name == .display_name
+      and body.previous_threads[length(body.previous_threads) - 2].sender.display_name == .display_name )
+    or ( body.previous_threads[length(body.previous_threads) - 1].sender.display_name == .display_name
+      and body.previous_threads[length(body.previous_threads) - 2].recipients.to[0].display_name == .display_name )
+  )
+  // the VIP is no longer in the current message
+  and not any(flatten([recipients.to, recipients.cc, recipients.bcc]),
+              any($org_vips,
+                  .email != ""
+                  and strings.icontains(..email.email, .email)
+                  and (
+                    ( body.previous_threads[length(body.previous_threads) - 1].recipients.to[0].display_name == .display_name
+                      and body.previous_threads[length(body.previous_threads) - 2].sender.display_name == .display_name )
+                    or ( body.previous_threads[length(body.previous_threads) - 1].sender.display_name == .display_name
+                      and body.previous_threads[length(body.previous_threads) - 2].recipients.to[0].display_name == .display_name )
+                  )))
+  // not from authorized senders on the org's domain
+  and not (sender.email.domain.domain in $org_domains and coalesce(headers.auth_summary.dmarc.pass, false))
+attack_types:
+  - "BEC/Fraud"
+tactics_and_techniques:
+  - "Impersonation: VIP"
+  - "Social engineering"
+  - "Spoofing"
+detection_methods:
+  - "Natural Language Understanding"
+  - "Header analysis"
+  - "Content analysis"
+  - "Sender analysis"
+id: "22c63aa8-64ab-5dfe-942a-0d95c70776d8"
+tags:
+  - created_from_open_prs
+  - rule_status_added
+  - pr_author_zoomequipd
+references:
+  - https://github.com/sublime-security/sublime-rules/pull/4851
