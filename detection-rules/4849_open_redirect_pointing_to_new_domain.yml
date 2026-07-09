@@ -1,0 +1,29 @@
+name: "PR# 4849 - Open redirect: Recipient address embedded in redirect URL pointing to newly registered domain"
+description: "Detects inbound messages sent to a single recipient where the body contains a link that embeds the recipient's email address in a URL query parameter, and the resolved destination domain was registered less than 100 days ago. This pattern is consistent with personalized redirect links designed to evade detection while directing targets to newly established infrastructure."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and length(recipients.to) == 1
+  and any(body.current_thread.links,
+          strings.contains(.href_url.url, recipients.to[0].email.email)
+          and length(.href_url.query_params_decoded['url']) > 0
+          and any(.href_url.query_params_decoded['url'],
+                  network.whois(strings.parse_url(.).domain).days_old < 100
+          )
+  )
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Open redirect"
+  - "Social engineering"
+detection_methods:
+  - "URL analysis"
+  - "Whois"
+id: "a042b046-ecc3-5b32-9da0-6b842712f73a"
+tags:
+  - created_from_open_prs
+  - rule_status_added
+  - pr_author_D-Bolton
+references:
+  - https://github.com/sublime-security/sublime-rules/pull/4849
