@@ -9,15 +9,15 @@ source: |
   // so sender profile won't be interesting
   // however the subject and sender display names do contain the name of the frame.io account
   // which sent the share
-  
+
   // negate where internal employees might have sent the message
   and not any($org_display_names, strings.istarts_with(subject.subject, .))
-  
+
   // limiting scope to just "shares" in subject
   and strings.icontains(subject.subject, ' shared ')
-  
+
   // the subject contains the name of the file that has been shared
-  // the body does not contain the name shared depending on how it's shared, 
+  // the body does not contain the name shared depending on how it's shared,
   // let us use the suspicious file shares from sharepoint here
   // https://github.com/sublime-security/sublime-rules/blob/main/detection-rules/link_sharepoint_sus_name.yml
   and (
@@ -25,7 +25,7 @@ source: |
       // file sharing service references
       strings.icontains(subject.subject, 'dropbox')
       or strings.icontains(subject.subject, 'docusign')
-  
+
       // file name lures
       // secure theme
       or regex.icontains(subject.subject, 'secured?.*(?:file|document|docs|fax)')
@@ -33,31 +33,31 @@ source: |
       or regex.icontains(subject.subject, 'shared?.*(?:file|document|docs|fax)')
       or regex.icontains(subject.subject, 'protected.*(?:file|document|docs|fax)')
       or regex.icontains(subject.subject, 'encrypted.*(?:file|document|docs|fax)')
-  
+
       // scanner theme
       or strings.icontains(subject.subject, 'scanne[rd]_')
       // image themed
       or strings.icontains(subject.subject, '_IMG_')
       or regex.icontains(subject.subject, '^IMG[_-](?:\d|\W)+$')
-  
+
       // digits
       or regex.icontains(subject.subject, 'doc(?:ument)?\s?\d+$')
       or regex.icontains(subject.subject, '^\d+$')
-  
+
       // onedrive theme
       or strings.icontains(subject.subject, 'one_docx')
       or strings.icontains(subject.subject, 'OneDrive')
       or regex.icontains(subject.subject, 'A document.*One.?Drive')
-  
+
       // action in file name
       or strings.icontains(subject.subject, 'click here')
       or strings.icontains(subject.subject, 'Download PDF')
       or strings.icontains(subject.subject, 'Validate')
-  
+
       // limited file name to "confidential"
       or subject.subject =~ 'Confidentiality'
       or subject.subject =~ 'Confidential'
-  
+
       // invoice themes
       or any(ml.nlu_classifier(subject.subject).entities, .name == "financial")
       or strings.icontains(subject.subject, 'payment')
@@ -75,7 +75,7 @@ source: |
       or strings.icontains(subject.subject, 'Past Due')
       or regex.icontains(subject.subject, 'Remit(tance)?')
       or strings.icontains(subject.subject, 'Purchase Order')
-  
+
       // contract language
       or strings.icontains(subject.subject, 'settlement')
       or strings.icontains(subject.subject, 'contract agreement')
@@ -102,11 +102,11 @@ source: |
                (
                  // any of those links domains are new
                  network.whois(.href_url.domain).days_old < 30
-  
+
                  // go to free file hosts
                  or .href_url.domain.root_domain in $free_file_hosts
                  or .href_url.domain.domain in $free_file_hosts
-  
+
                  // go to free subdomains hosts
                  or (
                    .href_url.domain.root_domain in $free_subdomain_hosts
@@ -127,10 +127,10 @@ source: |
                    and (
                      // and when visiting those links, are phishing
                      ml.link_analysis(., mode="aggressive").credphish.disposition == "phishing"
-  
+
                      // hit a captcha page
                      or ml.link_analysis(., mode="aggressive").credphish.contains_captcha
-  
+
                      // or the page redirects to common website, observed when evasion happens
                      or (
                        length(ml.link_analysis(., mode="aggressive").redirect_history
@@ -141,7 +141,7 @@ source: |
                  )
                )
            )
-  
+
            // or search for QR codes in the screenshot of the frame.io page
            or any(file.explode(ml.link_analysis(.).screenshot),
                   .depth == 0

@@ -5,7 +5,7 @@ severity: "high"
 source: |
   (type.inbound or type.internal)
   and sender.email.domain.root_domain in $org_domains
-  
+
   // subject, sender or reply to contains a VIP
   and (
     any(headers.reply_to,
@@ -21,27 +21,27 @@ source: |
               )
           )
   )
-  
+
   // reply to return path mismatch and not org domain
   and any(headers.reply_to,
           .email.domain.root_domain != headers.return_path.domain.root_domain
           and .email.domain.root_domain not in $org_domains
   )
-  
+
   // googlegroups found in hops
   and any(headers.hops,
           .index == 0 and any(.fields, strings.icontains(.value, "googlegroups"))
   )
-  
+
   // financial nlu entity in current thread
   and 3 of (
     any(ml.nlu_classifier(body.current_thread.text).entities,
         .name == "financial"
     ),
-  
+
     // invoice entity in display_text
     any(ml.nlu_classifier(body.current_thread.text).tags, .name == "invoice"),
-  
+
     // fake thread
     (
       (subject.is_forward or subject.is_reply)
@@ -50,13 +50,13 @@ source: |
         or headers.in_reply_to is null
       )
     ),
-  
-    // reply-to is freemail 
+
+    // reply-to is freemail
     any(headers.reply_to, .email.domain.domain in $free_email_providers),
-  
+
     // reply-to is not in $recipient_emails
     any(headers.reply_to, .email.email not in $recipient_emails),
-  
+
     // dmarc authentication is freemail provider
     headers.auth_summary.dmarc.details.from.root_domain in $free_email_providers
   )

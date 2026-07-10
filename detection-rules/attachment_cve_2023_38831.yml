@@ -13,53 +13,52 @@ references:
 source: |
   type.inbound
   and any(attachments,
-      .file_extension in $file_extensions_common_archives and
-      any(file.explode(.), 
-          (
-              .depth == 0 and 
-              any(.scan.zip.all_paths, 
-                  regex.match(., 
-                  // zip contains a path with spaces and file extensions 
-                  // lure.pdf /lure.pdf .cmd
-                  // 
-                  //  /= Initial file name (including any spaces)
-                  //  |
-                  //  |       /= Space
-                  //  |       |
-                  //  |       | /= Folder
-                  //  |       | |
-                  //  |       | | /= Repeated file name
-                  //  |       | | |
-                  //  |       | | |      /= Space
-                  //  |       | | |      |   
-                  //  |       | | |      |   /= Real script ending
-                  //  |       | | |      |   |
-                      '.+\.\w+\s\/.+\.\w+\s\.\w+'
+          .file_extension in $file_extensions_common_archives
+          and any(file.explode(.),
+                  (
+                    .depth == 0
+                    and any(.scan.zip.all_paths,
+                            regex.match(.,
+                                        // zip contains a path with spaces and file extensions
+                                        // lure.pdf /lure.pdf .cmd
+                                        //
+                                        //  /= Initial file name (including any spaces)
+                                        //  |
+                                        //  |       /= Space
+                                        //  |       |
+                                        //  |       | /= Folder
+                                        //  |       | |
+                                        //  |       | | /= Repeated file name
+                                        //  |       | | |
+                                        //  |       | | |      /= Space
+                                        //  |       | | |      |
+                                        //  |       | | |      |   /= Real script ending
+                                        //  |       | | |      |   |
+                                        '.+\.\w+\s\/.+\.\w+\s\.\w+'
+                            )
+                    )
                   )
-              )
-          ) and 
-          (
-              // One file name is present in another, e.g.
-              //     delivrto.pdf 
-              //     delivrto.pdf /delivrto.pdf .cmd
-              any(.scan.zip.all_paths, 
-                  any(..scan.zip.all_paths,
-                      . != .. and 
-                      strings.starts_with(., ..)
+                  and (
+                    // One file name is present in another, e.g.
+                    //     delivrto.pdf
+                    //     delivrto.pdf /delivrto.pdf .cmd
+                    any(.scan.zip.all_paths,
+                        any(..scan.zip.all_paths,
+                            . != .. and strings.starts_with(., ..)
+                        )
+                    )
                   )
-              )
           )
-      )
   )
   and (
-      (
-          sender.email.domain.root_domain in $free_email_providers
-          and sender.email.email not in $recipient_emails
-      )
-      or (
-          sender.email.domain.root_domain not in $free_email_providers
-          and sender.email.domain.domain not in $recipient_domains
-      )
+    (
+      sender.email.domain.root_domain in $free_email_providers
+      and sender.email.email not in $recipient_emails
+    )
+    or (
+      sender.email.domain.root_domain not in $free_email_providers
+      and sender.email.domain.domain not in $recipient_domains
+    )
   )
 tags:
   - "Suspicious attachment"
