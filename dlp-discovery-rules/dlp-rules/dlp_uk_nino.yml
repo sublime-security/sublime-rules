@@ -1,17 +1,28 @@
-name: "DLP: UK National Insurance Number (NINO)"
-description: "Detects messages containing UK National Insurance Numbers."
+name: "DLP: UK National Insurance Number"
+description: "Detects messages containing UK National Insurance numbers."
 type: "dlp"
 severity: "high"
 source: |
   type.outbound
-  and any([body.current_thread.text, subject.subject],
-          // NINO: 2 letters + 6 digits + 1 letter (e.g., AB123456C)
-          regex.contains(., '\b[A-CEGHJ-PR-TW-Z][A-CEGHJ-NPR-TW-Z]\d{6}[A-D]\b')
+  and (
+    any(beta.ml_extract_sensitive_information(body.current_thread.text).elements,
+      .type == "uk_nino" and .confidence in ("medium", "high")
+    )
+    or any(beta.ml_extract_sensitive_information(subject.subject).elements,
+      .type == "uk_nino" and .confidence in ("medium", "high")
+    )
+    or any(attachments,
+      any(file.explode(.),
+        (
+          any(beta.ml_extract_sensitive_information(.scan.strings.raw).elements,
+            .type == "uk_nino" and .confidence in ("medium", "high")
+          )
+          or any(beta.ml_extract_sensitive_information(.scan.ocr.raw).elements,
+            .type == "uk_nino" and .confidence in ("medium", "high")
+          )
+        )
+      )
+    )
   )
-  and any([body.current_thread.text, subject.subject],
-          regex.icontains(., 'NINO|national\s+insurance|NI\s+number')
-  )
-
 detection_methods:
   - "Content analysis"
-id: "7d5e9b4c-51b2-516f-b0c3-46564c821e60"
