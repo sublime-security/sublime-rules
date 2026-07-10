@@ -1,0 +1,65 @@
+name: "DLP - Outbound to Personal Email Domains"
+description: |
+  Detects outbound emails routed to free or disposable personal email providers
+  when accompanied by at least one amplifying signal: any file attachment, a
+  recipient display name matching an internal org mailbox (misdirection via
+  $org_mailboxes), or a recipient local part resembling the sender's own address
+  (self-exfiltration signal, levenshtein distance <= 2).
+
+  No ml_extract applicable. Signals are domain routing and address similarity,
+  not structured sensitive data patterns. Sensitive language keyword matching
+  omitted to reduce FPs. Pair with the sensitive work product rule for
+  content-specific escalation.
+type: "rule"
+severity: medium
+source: |
+  type.outbound
+  and (
+      any(recipients.to,
+          .email.domain.root_domain in $free_email_providers
+          or .email.domain.root_domain in $disposable_email_providers
+      )
+      or any(recipients.cc,
+          .email.domain.root_domain in $free_email_providers
+          or .email.domain.root_domain in $disposable_email_providers
+      )
+  )
+  and (
+      // Any attachment to a personal domain
+      length(attachments) > 0
+
+      // Misdirection: recipient display name resembles any internal org mailbox
+      or any(recipients.to,
+          any($org_mailboxes, strings.ilevenshtein(.display_name, ..display_name) <= 2)
+          and (
+              .email.domain.root_domain in $free_email_providers
+              or .email.domain.root_domain in $disposable_email_providers
+          )
+      )
+
+      // Self-exfiltration: recipient local part resembles sender's own
+      or any(recipients.to,
+          strings.levenshtein(
+              strings.replace_confusables(.email.local_part),
+              strings.replace_confusables(sender.email.local_part)
+          ) <= 2
+          and (
+              .email.domain.root_domain in $free_email_providers
+              or .email.domain.root_domain in $disposable_email_providers
+          )
+      )
+  )
+tags:
+  - "dlp"
+  - "impersonation:employee"
+  - "misdirected-email"
+  - "personal-email"
+attack_types:
+  - "Data Exfiltration"
+tactics_and_techniques:
+  - "Exfiltration: Outbound email"
+  - "Impersonation: Employee"
+detection_methods:
+  - "Content analysis"
+  - "Recipient analysis"
+id: "5b2c3d4e-f6a7-4901-bc23-f12345678901"
