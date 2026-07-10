@@ -2,7 +2,134 @@ name: "Link: Multistage landing - Microsoft Forms abuse"
 description: "The detection rule matches on message groups which make use of Microsoft Forms as a landing page. The landing page contains links which are newly registered, use free file or subdomain hosts, URL shorteners or when visited are phishing pages, lead to a captcha or redirect to a top website."
 type: "rule"
 severity: "high"
-source: "type.inbound\nand any(filter(body.links, .href_url.domain.domain == \"forms.office.com\"),\n        // avoid doing Link Analysis if the display-text has strong indications of phishing\n        (\n          // replace confusables - observed ITW\n          regex.icontains(strings.replace_confusables(.display_text),\n                          'review|proposal|document|efax|restore|[o0]pen|secure|messaging|reset|account|verify|login|notification|alert|urgent|immediate|access|support|\\bupdate\\b|download|attachment|service|payment|remittance|invoice'\n          )\n          and not regex.icontains(strings.replace_confusables(.display_text),\n                                  'customer service'\n          )\n          // add confidence to these strings by using profile.by_sender()\n          and (\n            not profile.by_sender().solicited\n            and profile.by_sender().prevalence in ('new', 'outlier')\n          )\n        )\n        or \n        // look at the final_dom.raw\n        // if the page has been taken down, match\n        strings.icontains(ml.link_analysis(., mode=\"aggressive\").final_dom.raw,\n                          'This form was blocked due to privacy or safety concerns.'\n        )\n        // this error has been shown before with the text \"Phishing form from content scan. Inner Message: This form has been flagged for potential phishing.\"\n        or any(ml.link_analysis(., mode=\"aggressive\").additional_responses,\n               strings.icontains(.json[\"error\"][\"message\"], \"phishing\")\n        )\n        // or MS thinks there are phishing keywords\n        or any(ml.link_analysis(., mode=\"aggressive\").additional_responses,\n               any(.json[\"form\"][\"questions\"],\n                   .[\"subtitleHasPhishingKeywords\"] == true\n               )\n               or any(.json[\"form\"][\"questions\"],\n                      .[\"titleHasPhishingKeywords\"] == true\n               )\n               or any(.json[\"form\"][\"descriptiveQuestions\"],\n                      .[\"titleHasPhishingKeywords\"] == true\n               )\n               or any(.json[\"form\"][\"descriptiveQuestions\"],\n                      .[\"titleHasPhishingKeywords\"] == true\n               )\n        )\n        // this logic checks for three abnormal cases\n        // 1) no questions\n        // 2) questions, but no inputs\n        // 3) a bunch of new lines (used to push down the submit button of the form)\n        // AND\n        // // there is one or two links that isn't \"standard\" on the form\n        or (\n          (\n            // 1) doesn't contain any sections or questions\n            any(ml.link_analysis(., mode=\"aggressive\").additional_responses,\n                length(.json[\"form\"][\"descriptiveQuestions\"]) == 0\n                and length(.json[\"form\"][\"questions\"]) == 0\n            )\n            or \n            // 2) Contains a form section header, but no actual inputs\n            // possible question types are .Choice, .TextField, .Rating, .DateTime, .Ranking, .MatrixChoiceGroup, .MatrixChoice, and .NPS\n            any(ml.link_analysis(., mode=\"aggressive\").additional_responses,\n                length(.json[\"form\"][\"descriptiveQuestions\"]) > 0\n                and length(.json[\"form\"][\"questions\"]) == 0\n            )\n            or \n            // 3) a bunch of new lines (used to push down the submit button of the form)\n            (\n              strings.icount(ml.link_analysis(., mode=\"aggressive\").final_dom.raw,\n                             '<br><br>'\n              ) > 20\n              or strings.icount(ml.link_analysis(., mode=\"aggressive\").final_dom.raw,\n                                '\\n\\n'\n              ) > 20\n              or strings.icount(ml.link_analysis(., mode=\"aggressive\").final_dom.raw,\n                                '<span><span>'\n              ) > 20\n              or any(ml.link_analysis(., mode=\"aggressive\").additional_responses,\n                     any(.json[\"form\"][\"questions\"],\n                         strings.icount(.[\"formsProRTQuestionTitle\"],\n                                        '<br><br>'\n                         ) > 20\n                         or strings.icount(.[\"formsProRTQuestionTitle\"], '\\n\\n') > 20\n                         or strings.icount(.[\"formsProRTQuestionTitle\"],\n                                           '<span><span>'\n                         ) > 20\n                     )\n              )\n            )\n          )\n          // AND\n          and \n          // there is one or two links to another page\n          0 < length(filter(ml.link_analysis(.).final_dom.links,\n                            not (\n                              (\n                                (\n                                  .display_text =~ \"Privacy and cookies\"\n                                  or .display_text =~ \"terms of use\"\n                                  or .display_text =~ \"report abuse\"\n                                )\n                                and .href_url.domain.root_domain =~ 'microsoft.com'\n                              )\n                              or .href_url.domain.root_domain =~ sender.email.domain.root_domain\n                              or (\n                                .href_url.domain.tld == \"ms\"\n                                // Microsoft does not own the .ms TLD, this checks to ensure it is one of their domains\n                                and (\n                                  network.whois(.href_url.domain).registrant_company == \"Microsoft Corporation\"\n                                  or strings.ilike(network.whois(.href_url.domain\n                                                   ).registrar_name,\n                                                   \"*MarkMonitor*\",\n                                                   \"*CSC Corporate*\",\n                                                   \"*com laude*\"\n                                  )\n                                )\n                              )\n                            )\n                     )\n          ) <= 2\n          and (\n            not strings.contains(ml.link_analysis(., mode=\"aggressive\").final_dom.raw,\n                                 'role=\"progressbar\" aria-label=\"Page 1 of '\n            )\n            or any(ml.link_analysis(., mode=\"aggressive\").additional_responses,\n                   .json[\"form\"][\"progressBarEnabled\"] == false\n            )\n          )\n        )\n)\n"
+source: |
+  type.inbound
+  and any(filter(body.links, .href_url.domain.domain == "forms.office.com"),
+          // avoid doing Link Analysis if the display-text has strong indications of phishing
+          (
+            // replace confusables - observed ITW
+            regex.icontains(strings.replace_confusables(.display_text),
+                            'review|proposal|document|efax|restore|[o0]pen|secure|messaging|reset|account|verify|login|notification|alert|urgent|immediate|access|support|\bupdate\b|download|attachment|service|payment|remittance|invoice'
+            )
+            and not regex.icontains(strings.replace_confusables(.display_text),
+                                    'customer service'
+            )
+            // add confidence to these strings by using profile.by_sender()
+            and (
+              not profile.by_sender().solicited
+              and profile.by_sender().prevalence in ('new', 'outlier')
+            )
+          )
+          or 
+          // look at the final_dom.raw
+          // if the page has been taken down, match
+          strings.icontains(ml.link_analysis(., mode="aggressive").final_dom.raw,
+                            'This form was blocked due to privacy or safety concerns.'
+          )
+          // this error has been shown before with the text "Phishing form from content scan. Inner Message: This form has been flagged for potential phishing."
+          or any(ml.link_analysis(., mode="aggressive").additional_responses,
+                 strings.icontains(.json["error"]["message"], "phishing")
+          )
+          // or MS thinks there are phishing keywords
+          or any(ml.link_analysis(., mode="aggressive").additional_responses,
+                 any(.json["form"]["questions"],
+                     .["subtitleHasPhishingKeywords"] == true
+                 )
+                 or any(.json["form"]["questions"],
+                        .["titleHasPhishingKeywords"] == true
+                 )
+                 or any(.json["form"]["descriptiveQuestions"],
+                        .["titleHasPhishingKeywords"] == true
+                 )
+                 or any(.json["form"]["descriptiveQuestions"],
+                        .["titleHasPhishingKeywords"] == true
+                 )
+          )
+          // this logic checks for three abnormal cases
+          // 1) no questions
+          // 2) questions, but no inputs
+          // 3) a bunch of new lines (used to push down the submit button of the form)
+          // AND
+          // // there is one or two links that isn't "standard" on the form
+          or (
+            (
+              // 1) doesn't contain any sections or questions
+              any(ml.link_analysis(., mode="aggressive").additional_responses,
+                  length(.json["form"]["descriptiveQuestions"]) == 0
+                  and length(.json["form"]["questions"]) == 0
+              )
+              or 
+              // 2) Contains a form section header, but no actual inputs
+              // possible question types are .Choice, .TextField, .Rating, .DateTime, .Ranking, .MatrixChoiceGroup, .MatrixChoice, and .NPS
+              any(ml.link_analysis(., mode="aggressive").additional_responses,
+                  length(.json["form"]["descriptiveQuestions"]) > 0
+                  and length(.json["form"]["questions"]) == 0
+              )
+              or 
+              // 3) a bunch of new lines (used to push down the submit button of the form)
+              (
+                strings.icount(ml.link_analysis(., mode="aggressive").final_dom.raw,
+                               '<br><br>'
+                ) > 20
+                or strings.icount(ml.link_analysis(., mode="aggressive").final_dom.raw,
+                                  '\n\n'
+                ) > 20
+                or strings.icount(ml.link_analysis(., mode="aggressive").final_dom.raw,
+                                  '<span><span>'
+                ) > 20
+                or any(ml.link_analysis(., mode="aggressive").additional_responses,
+                       any(.json["form"]["questions"],
+                           strings.icount(.["formsProRTQuestionTitle"],
+                                          '<br><br>'
+                           ) > 20
+                           or strings.icount(.["formsProRTQuestionTitle"], '\n\n') > 20
+                           or strings.icount(.["formsProRTQuestionTitle"],
+                                             '<span><span>'
+                           ) > 20
+                       )
+                )
+              )
+            )
+            // AND
+            and 
+            // there is one or two links to another page
+            0 < length(filter(ml.link_analysis(.).final_dom.links,
+                              not (
+                                (
+                                  (
+                                    .display_text =~ "Privacy and cookies"
+                                    or .display_text =~ "terms of use"
+                                    or .display_text =~ "report abuse"
+                                  )
+                                  and .href_url.domain.root_domain =~ 'microsoft.com'
+                                )
+                                or .href_url.domain.root_domain =~ sender.email.domain.root_domain
+                                or (
+                                  .href_url.domain.tld == "ms"
+                                  // Microsoft does not own the .ms TLD, this checks to ensure it is one of their domains
+                                  and (
+                                    network.whois(.href_url.domain).registrant_company == "Microsoft Corporation"
+                                    or strings.ilike(network.whois(.href_url.domain
+                                                     ).registrar_name,
+                                                     "*MarkMonitor*",
+                                                     "*CSC Corporate*",
+                                                     "*com laude*"
+                                    )
+                                  )
+                                )
+                              )
+                       )
+            ) <= 2
+            and (
+              not strings.contains(ml.link_analysis(., mode="aggressive").final_dom.raw,
+                                   'role="progressbar" aria-label="Page 1 of '
+              )
+              or any(ml.link_analysis(., mode="aggressive").additional_responses,
+                     .json["form"]["progressBarEnabled"] == false
+              )
+            )
+          )
+  )
 attack_types:
   - "Credential Phishing"
 tactics_and_techniques:

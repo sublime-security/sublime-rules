@@ -2,7 +2,70 @@ name: "Investor solicitation with organization targeting"
 description: "Detects messages targeting organizations with investment solicitations that specifically reference the recipient's organization by extracting the organization name and matching it to the recipient's email domain."
 type: "rule"
 severity: "medium"
-source: "type.inbound\nand (\n  // subject contains recipient's org name\n  any(recipients.to,\n      strings.icontains(subject.subject, .email.domain.sld)\n      and regex.imatch(.email.domain.sld, '.{2,}')\n  )\n  or \n  // body extracts org name matching recipient domain\n  any(regex.extract(body.current_thread.text,\n                    '(?P<org>[a-zA-Z]{2,20})\\s(?:recently\\s)?came to our attention'\n      ),\n      any(recipients.to,\n          strings.icontains(.email.domain.domain, ..named_groups[\"org\"])\n      )\n  )\n)\nand any(headers.reply_to,\n        .email.domain.root_domain != sender.email.domain.root_domain\n)\n// greeting uses recipient's email local_part\nand any(recipients.to,\n        (\n          strings.icontains(body.current_thread.text,\n                            strings.concat(\"Dear \", .email.local_part)\n          )\n          or any(regex.extract(.email.local_part, '^(?P<first>[^._]+)'),\n                 strings.icontains(body.current_thread.text,\n                                   strings.concat(\"Dear \",\n                                                  .named_groups[\"first\"]\n                                   )\n                 )\n          )\n        )\n)\n// financial/investment cold outreach language\nand (\n  2 of (\n    strings.icontains(body.current_thread.text, \"alternative investments\"),\n    strings.icontains(body.current_thread.text, \"raising capital\"),\n    strings.icontains(body.current_thread.text, \"came to our attention\"),\n    strings.icontains(body.current_thread.text, \"private markets\"),\n    strings.icontains(body.current_thread.text, \"fundraising\"),\n    strings.icontains(body.current_thread.text, \"investment opportunities\"),\n    strings.icontains(body.current_thread.text, \"introductory\"),\n    strings.icontains(body.current_thread.text, \"commitment size\"),\n    strings.icontains(body.current_thread.text, \"ultra-high-net-worth\"),\n    strings.icontains(body.current_thread.text, \"deployed capital\"),\n    strings.icontains(body.current_thread.text, \"value creation\"),\n    strings.icontains(body.current_thread.text, \"capital planning\")\n  )\n  or (\n    any(ml.nlu_classifier(body.current_thread.text).topics,\n        .name == \"Financial Communications\"\n    )\n    and any(ml.nlu_classifier(body.current_thread.text).topics,\n            .name == \"Out of Band Pivot\"\n    )\n    and any(ml.nlu_classifier(body.current_thread.text).topics,\n            .name == \"B2B Cold Outreach\"\n    )\n  )\n)\n"
+source: |
+  type.inbound
+  and (
+    // subject contains recipient's org name
+    any(recipients.to,
+        strings.icontains(subject.subject, .email.domain.sld)
+        and regex.imatch(.email.domain.sld, '.{2,}')
+    )
+    or 
+    // body extracts org name matching recipient domain
+    any(regex.extract(body.current_thread.text,
+                      '(?P<org>[a-zA-Z]{2,20})\s(?:recently\s)?came to our attention'
+        ),
+        any(recipients.to,
+            strings.icontains(.email.domain.domain, ..named_groups["org"])
+        )
+    )
+  )
+  and any(headers.reply_to,
+          .email.domain.root_domain != sender.email.domain.root_domain
+  )
+  // greeting uses recipient's email local_part
+  and any(recipients.to,
+          (
+            strings.icontains(body.current_thread.text,
+                              strings.concat("Dear ", .email.local_part)
+            )
+            or any(regex.extract(.email.local_part, '^(?P<first>[^._]+)'),
+                   strings.icontains(body.current_thread.text,
+                                     strings.concat("Dear ",
+                                                    .named_groups["first"]
+                                     )
+                   )
+            )
+          )
+  )
+  // financial/investment cold outreach language
+  and (
+    2 of (
+      strings.icontains(body.current_thread.text, "alternative investments"),
+      strings.icontains(body.current_thread.text, "raising capital"),
+      strings.icontains(body.current_thread.text, "came to our attention"),
+      strings.icontains(body.current_thread.text, "private markets"),
+      strings.icontains(body.current_thread.text, "fundraising"),
+      strings.icontains(body.current_thread.text, "investment opportunities"),
+      strings.icontains(body.current_thread.text, "introductory"),
+      strings.icontains(body.current_thread.text, "commitment size"),
+      strings.icontains(body.current_thread.text, "ultra-high-net-worth"),
+      strings.icontains(body.current_thread.text, "deployed capital"),
+      strings.icontains(body.current_thread.text, "value creation"),
+      strings.icontains(body.current_thread.text, "capital planning")
+    )
+    or (
+      any(ml.nlu_classifier(body.current_thread.text).topics,
+          .name == "Financial Communications"
+      )
+      and any(ml.nlu_classifier(body.current_thread.text).topics,
+              .name == "Out of Band Pivot"
+      )
+      and any(ml.nlu_classifier(body.current_thread.text).topics,
+              .name == "B2B Cold Outreach"
+      )
+    )
+  )
 attack_types:
   - "BEC/Fraud"
 tactics_and_techniques:

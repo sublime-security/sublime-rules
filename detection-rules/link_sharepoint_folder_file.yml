@@ -2,7 +2,63 @@ name: "Link: Suspicious Sharepoint folder share"
 description: "Detection Rule matches on messages which contain a link to a sharepoint shared folder containing a single file which is either a .url file, the filename is all caps, or includes call to action wording.  These messages must not be sent from sharepoint and are either not solicited or from a new or outlier sender."
 type: "rule"
 severity: "high"
-source: "type.inbound\nand any(filter(body.links,\n               // folder share\n               strings.icontains(.href_url.domain.domain, \"-my.sharepoint.com\")\n               and strings.icontains(.href_url.url, \"/:f:/g/personal\")\n\n               // remove links which contains the domain sld in the subdomain (tenenat) name\n               and not any($org_slds,\n                           strings.icontains(..href_url.domain.subdomain, .)\n               )\n        ),\n        ( // a shared URL file\n          regex.icontains(ml.link_analysis(., mode=\"aggressive\").final_dom.raw,\n                          '<div role=\"row\" aria-label=\"[^\\\"]+.url, url File, Shared'\n          )\n          or \n          // the name of the file is all caps allowing for special charaters too\n          regex.contains(ml.link_analysis(., mode=\"aggressive\").final_dom.raw,\n                         '<button data-automationid=\\\"FieldRenderer-name\\\" data-selection-invoke=\\\"true\\\" title=\"[A-Z0-9_\\-\\s]+\\.[^\\\"]{3,4}\\\" role=\\\"link\\\" type=\\\"button\\\"'\n          )\n          or \n          // includes odd wording\n          regex.icontains(ml.link_analysis(., mode=\"aggressive\").final_dom.raw,\n                          '<button data-automationid=\\\"FieldRenderer-name\\\" data-selection-invoke=\\\"true\\\" title=\"[^\\\"]*(?:dropbox|docusign|secured?|important|shared?|protected|encrypted|scanne[rd]|_IMG_|IMG[_-](?:\\d|\\W)|doc(?:ument)?\\s?\\d+|one_drive|OneDrive|Access|Review Document|Click Here|Download|validate|Confidential(?:ity)?|payment|invoice|INV(?:_|\\s)?\\d+|INV(?:_|\\s)|P[O0]\\W+?\\d+|Past Due|Remit(?:tance)?|statement|Purchase Order|settlement|contract agreement|Pr[0o]p[0o]sal|contract doc|EFax|\\.\\.\\.)[^\\\"]*\\.[^\\\"]{3,4}\\\" role=\\\"link\\\" type=\\\"button\\\"'\n          )\n        )\n        // and only a single file shared\n        and strings.icount(ml.link_analysis(., mode=\"aggressive\").final_dom.raw,\n                           '<div role=\"presentation\" data-automationid=\"ListCell\" class=\"ms-List-cell\"'\n        ) == 1\n)\n// message is not from sharepoint actual\nand not (\n  strings.starts_with(headers.message_id, '<Share-')\n  and strings.ends_with(headers.message_id, '@odspnotify>')\n)\nand (\n  // not solicited\n  not profile.by_sender().solicited\n  // new or outlier sender prevalence\n  or profile.by_sender().prevalence in (\"new\", \"outlier\")\n  // marked as spam and no FPs\n  or (\n    profile.by_sender().any_messages_malicious_or_spam\n    and not profile.by_sender().any_messages_benign\n  )\n)\n\n// negate highly trusted sender domains unless they fail DMARC authentication\nand (\n  (\n    sender.email.domain.root_domain in $high_trust_sender_root_domains\n    and not headers.auth_summary.dmarc.pass\n  )\n  or sender.email.domain.root_domain not in $high_trust_sender_root_domains\n)\n"
+source: |
+  type.inbound
+  and any(filter(body.links,
+                 // folder share
+                 strings.icontains(.href_url.domain.domain, "-my.sharepoint.com")
+                 and strings.icontains(.href_url.url, "/:f:/g/personal")
+
+                 // remove links which contains the domain sld in the subdomain (tenenat) name
+                 and not any($org_slds,
+                             strings.icontains(..href_url.domain.subdomain, .)
+                 )
+          ),
+          ( // a shared URL file
+            regex.icontains(ml.link_analysis(., mode="aggressive").final_dom.raw,
+                            '<div role="row" aria-label="[^\"]+.url, url File, Shared'
+            )
+            or 
+            // the name of the file is all caps allowing for special charaters too
+            regex.contains(ml.link_analysis(., mode="aggressive").final_dom.raw,
+                           '<button data-automationid=\"FieldRenderer-name\" data-selection-invoke=\"true\" title="[A-Z0-9_\-\s]+\.[^\"]{3,4}\" role=\"link\" type=\"button\"'
+            )
+            or 
+            // includes odd wording
+            regex.icontains(ml.link_analysis(., mode="aggressive").final_dom.raw,
+                            '<button data-automationid=\"FieldRenderer-name\" data-selection-invoke=\"true\" title="[^\"]*(?:dropbox|docusign|secured?|important|shared?|protected|encrypted|scanne[rd]|_IMG_|IMG[_-](?:\d|\W)|doc(?:ument)?\s?\d+|one_drive|OneDrive|Access|Review Document|Click Here|Download|validate|Confidential(?:ity)?|payment|invoice|INV(?:_|\s)?\d+|INV(?:_|\s)|P[O0]\W+?\d+|Past Due|Remit(?:tance)?|statement|Purchase Order|settlement|contract agreement|Pr[0o]p[0o]sal|contract doc|EFax|\.\.\.)[^\"]*\.[^\"]{3,4}\" role=\"link\" type=\"button\"'
+            )
+          )
+          // and only a single file shared
+          and strings.icount(ml.link_analysis(., mode="aggressive").final_dom.raw,
+                             '<div role="presentation" data-automationid="ListCell" class="ms-List-cell"'
+          ) == 1
+  )
+  // message is not from sharepoint actual
+  and not (
+    strings.starts_with(headers.message_id, '<Share-')
+    and strings.ends_with(headers.message_id, '@odspnotify>')
+  )
+  and (
+    // not solicited
+    not profile.by_sender().solicited
+    // new or outlier sender prevalence
+    or profile.by_sender().prevalence in ("new", "outlier")
+    // marked as spam and no FPs
+    or (
+      profile.by_sender().any_messages_malicious_or_spam
+      and not profile.by_sender().any_messages_benign
+    )
+  )
+
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and not headers.auth_summary.dmarc.pass
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
 attack_types:
   - "Credential Phishing"
 tactics_and_techniques:
