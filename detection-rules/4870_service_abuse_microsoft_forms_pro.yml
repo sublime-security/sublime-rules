@@ -1,0 +1,48 @@
+name: "PR# 4870 - Service abuse: Microsoft Forms Pro with suspicious links or QR codes"
+description: "Detects messages sent from Microsoft Forms Pro (surveys@email.formspro.microsoft.com) that contain suspicious indicators, including links to suspicious TLDs, recipient email addresses embedded in URLs, OAuth authorization links, personal OneDrive paths, template placeholders, or QR codes pointing to recently registered or suspicious domains."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and sender.email.email == 'surveys@email.formspro.microsoft.com'
+  and (
+    any(body.current_thread.links,
+        (
+          .href_url.domain.tld in $suspicious_tlds
+          and not .href_url.domain.root_domain in ('microsoft.us')
+        )
+        or any(recipients.to,
+               strings.icontains(..href_url.url, .email.email)
+               and any(recipients.to, .email.domain.valid)
+        )
+        or .href_url.fragment in ('[[Email]]')
+        or strings.starts_with(.href_url.url,
+                               'https://login.microsoftonline.com/common/oauth2/v2.0/authorize'
+        )
+        // personal onedrive
+        or strings.starts_with(.href_url.path, '/:o:/p/')
+    )
+    or any(file.explode(file.message_screenshot()),
+           .scan.qr.url.domain.tld in $suspicious_tlds
+           or network.whois(.scan.qr.url.domain).days_old < 100
+    )
+  )
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "QR code"
+  - "Social engineering"
+  - "Impersonation: Brand"
+detection_methods:
+  - "URL analysis"
+  - "QR code analysis"
+  - "Sender analysis"
+  - "Whois"
+  - "Content analysis"
+id: "86ad196d-b353-5140-bf20-ef749dc62f6c"
+tags:
+  - created_from_open_prs
+  - rule_status_added
+  - pr_author_D-Bolton
+references:
+  - https://github.com/sublime-security/sublime-rules/pull/4870
