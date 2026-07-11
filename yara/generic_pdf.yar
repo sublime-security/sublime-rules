@@ -472,3 +472,68 @@ rule pdf_w9_signature_c003 {
 	condition:
 		$header at 0 and any of ($sig_*)
 }
+
+rule pdf_blurred_invoice_lure {
+	meta:
+		author      = "kyle eaton"
+		date        = "2026-07-06"
+		description = "matching a blurred invoice lure used in malicious PDFs"
+	strings:
+		$header = { 25 50 44 46 2D 31 2E }
+		$image  = { 2F 49 6D 61 67 65 0A 2F 4C 65 6E 67 74 68 20 39 36 34 38 38 0A 2F 46 69 6C 74 65 72 20 2F 46 6C 61 74 65 44 65 63 6F 64 65 0A 2F 57 69 64 74 68 20 34 34 38 0A 2F 48 65 69 67 68 74 20 36 30 30 0A }
+	condition:
+		$header at 0 and $image
+}
+
+rule w9inv_2page_image {
+	meta:
+		author      = "kyle eaton"
+		date        = "2026-07-07"
+		description = "PDF with specific invoice and w9 images embedded"
+	strings:
+		$header     = { 25 50 44 46 2D 31 2E }
+		$w9_img_01  = { FD F6 C1 1C 52 10 B9 FF 00 3C 7A D2 95 C8 DB D6 8F 42 38 E3 AD 30 13 2A 46 D3 C6 7D E9 72 32 39 E7 B5 04 00 3E 5E 45 20 C0 19 EF D7 F3 A0 62 F1 9C 9E C6 8C 91 D7 8C 51 9C F5 ED 47 CD D0 8C D0 21 71 C7 A8 34 DF 62 7F CF E3 4E ED EB 49 }
+		$inv_img_01 = { FF DD 00 04 00 50 FF DA 00 0C 03 01 00 02 11 03 11 00 3F 00 FD F7 20 67 BD 27 71 91 CD 03 23 9F 5A 07 2D 4C 03 AF 3E 87 A5 27 D3 A1 ED 48 33 82 07 18 EF CF 5A 5E B9 E7 8F 4A 40 80 76 C9 E0 E3 07 D6 8C 1E B9 E9 F9 7E 14 10 46 00 E8 29 C7 38 39 1C 0A 06 34 EE C1 2B C5 0C 40 19 3C 7B 50 47 }
+	condition:
+		$header and (any of ($w9_img*) or any of ($inv_img*))
+}
+
+rule pdf_js_function_box_lure {
+	meta:
+		author      = "kyle eaton"
+		date        = "2026-07-07"
+		description = "matching javascript for PDFs with box shaped lure and embedded javascript - s/o greg"
+	strings:
+		$header = { 25 50 44 46 2D 31 2E }
+		$js1    = { 2E 72 65 70 6C 61 63 65 28 2F 5C 5C 78 2F 67 2C 20 22 25 22 29 }
+		$js2    = { 2F 4A 61 76 61 53 63 72 69 70 74 0A 2F 4A 53 20 28 76 61 72 20 }
+	condition:
+		$header at 0 and $js1 and $js2
+}
+
+rule pdf_rect_size_box_lure {
+	meta:
+		author      = "kyle eaton"
+		date        = "2026-07-07"
+		description = "matching rect sizes for PDFs with box shaped lure and embedded javascript - s/o greg"
+	strings:
+		$header    = { 25 50 44 46 2D 31 2E }
+		$rect_size = { 2f 52 65 63 74 20 5b 32 38 30 20 33 34 30 20 34 32 30 20 33 37 32 5d }
+	condition:
+		$header at 0 and $rect_size
+}
+
+rule pdf_view_doc_here_title_box {
+	meta:
+		aurthor     = "kyle eaton"
+		date        = "2026-07-09"
+		description = "matching PDFs with VIEW DOCUMENT HERE language, matching specific title and positioning parameters"
+	strings:
+		$header     = { 25 50 44 46 2D 31 2E }
+		$title      = { 2F 54 69 74 6C 65 20 28 56 49 45 57 20 44 4F 43 55 4D 45 4E 54 53 20 48 45 52 45 29 0A 2F 44 65 73 74 20 5B 35 20 30 20 52 20 2F 58 59 5A 20 36 39 }
+		$link       = { 2F 52 65 63 74 20 5B 30 20 37 39 32 20 30 20 37 39 32 5D }
+		$image_size = { 20 2F 49 6D 61 67 65 0A 2F 57 69 64 74 68 20 32 37 32 0A 2F 48 65 69 67 68 74 20 33 33 33 0A }
+	condition:
+		$header at 0 and $image_size and ($title or $link)
+}
+
