@@ -70,13 +70,28 @@ source: |
                       "*sign*",
                       "*review*"
         )
-        or any(recipients.to,
-               strings.icontains(subject.subject, .email.domain.sld)
+        or (
+          any(recipients.to,
+              strings.icontains(subject.subject, .email.domain.sld)
+              or (
+                (.email.domain.valid == false)
+                and all(recipients.cc, .email.domain.valid == false)
+              )
+          )
+          or length(recipients.to) == 0
         )
         or strings.ilike(subject.subject, "*Docs*", "*Sheets*", "*Slides*")
         or any(body.links,
                strings.icontains(.display_text, "open document")
                or strings.iends_with(.display_text, ".pdf")
+               or (
+                 .display_text =~ "Open"
+                 and network.whois(.href_url.domain).days_old < 365
+               )
+               or any(recipients.to,
+                      strings.icontains(..display_text, .email.email)
+                      or strings.icontains(..display_text, .email.local_part)
+               )
         )
         or strings.ilike(sender.display_name, "*Google Drive*")
         or subject.subject is null

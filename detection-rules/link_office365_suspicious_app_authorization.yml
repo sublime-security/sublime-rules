@@ -11,21 +11,33 @@ source: |
   type.inbound
   and (
     // links in email body
-    any(body.links,
-        .href_url.domain.domain == 'login.microsoftonline.com'
-        and (
-          strings.ilike(.href_url.query_params,
-                        '*offline_access*',
-                        '*.readwrite*',
-                        '*.read*',
-                        '*ctx=*',
-                        '*prompt=none*'
-          )
-          or (
-            strings.icontains(.href_url.path, '/common/reprocess')
-            and strings.icontains(.href_url.query_params, 'ctx=')
-            and strings.icontains(.href_url.query_params, 'sessionId=')
-          )
+    any([body.links, body.current_thread.links],
+        any(.,
+            (
+              .href_url.domain.domain == 'login.microsoftonline.com'
+              or strings.icontains(.href_url.query_params,
+                                   "login.microsoftonline.com"
+              )
+            )
+            and (
+              strings.ilike(.href_url.query_params,
+                            '*offline_access*',
+                            '*.readwrite*',
+                            '*.read*',
+                            '*ctx=*',
+                            '*prompt=none*'
+              )
+              or (
+                (
+                  strings.icontains(.href_url.path, '/common/reprocess')
+                  or strings.icontains(.href_url.query_params,
+                                       "/common/reprocess"
+                  )
+                )
+                and strings.icontains(.href_url.query_params, 'ctx=')
+                and strings.icontains(.href_url.query_params, 'sessionId=')
+              )
+            )
         )
     )
     // links in PDF, HTML, DOCX and PPTX attachments
@@ -83,6 +95,7 @@ source: |
            )
     )
   )
+
 attack_types:
   - "Credential Phishing"
 detection_methods:
