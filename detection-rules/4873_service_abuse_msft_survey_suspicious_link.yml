@@ -1,0 +1,46 @@
+name: "PR# 4873 - Service abuse: Microsoft Forms Pro survey with free subdomain host link"
+description: "Detects messages delivered via Microsoft Forms Pro (surveys@email.formspro.microsoft.com) that contain links to free subdomain hosting platforms such as Netlify, Vercel, Render, Cloudflare Pages, or similar services. The messages use financial lures — including payment advice, distribution statements, invoice notifications, and salary adjustment notices — to entice recipients into clicking links hosted on these low-cost, easily disposable infrastructure providers. This pattern is consistent with credential harvesting operations that abuse a legitimate survey delivery service to bypass domain reputation checks while directing victims to attacker-controlled pages on free hosting platforms."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and sender.email.domain.domain == "email.formspro.microsoft.com"
+  // survey body carries a link to a free app/serverless hosting subdomain
+  and any(body.current_thread.links,
+          (
+            .href_url.domain.root_domain in (
+              "netlify.app",
+              "railway.app",
+              "onrender.com",
+              "glitch.me",
+              "web.app",
+              "firebaseapp.com",
+              "pages.dev",
+              "workers.dev",
+              "r2.dev",
+              "vercel.app",
+              "replit.app"
+            )
+            or .href_url.domain.root_domain in $free_subdomain_hosts
+          )
+          and .href_url.domain.subdomain is not null
+          and .href_url.domain.subdomain != "www"
+  )
+attack_types:
+  - "Credential Phishing"
+  - "BEC/Fraud"
+tactics_and_techniques:
+  - "Free subdomain host"
+  - "Social engineering"
+  - "Evasion"
+detection_methods:
+  - "Sender analysis"
+  - "URL analysis"
+  - "Content analysis"
+id: "48fb4828-8e6c-506b-8bd9-86fcb787b7b3"
+tags:
+  - created_from_open_prs
+  - rule_status_added
+  - pr_author_IndiaAce
+references:
+  - https://github.com/sublime-security/sublime-rules/pull/4873
