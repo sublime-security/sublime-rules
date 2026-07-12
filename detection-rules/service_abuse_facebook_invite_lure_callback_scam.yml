@@ -1,0 +1,33 @@
+name: "Service abuse: Facebook event invitation lure with fraudulent billing or callback scam"
+description: "Detects messages that abuse Facebook's invitation notification format to deliver fraudulent billing or subscription payment lures. The messages originate from legitimate Facebook mail domains and contain event invitation subjects, but embed payment fraud language and out-of-band callback phone numbers to redirect victims outside the platform."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and strings.icontains(subject.base, 'invited')
+  and sender.email.domain.root_domain in ("facebookmail.com", "facebook.com")
+  // the campaign's signature payment/fraud phrasing, riding the event title/description
+  and regex.icontains(body.current_thread.text,
+                      '(?:bill\s+paid\s+successfully|subscription\s+payment|paid\s+.{0,20}subscription|subscription.{0,30}(?:successfully|completed|paid)|fraudulent(?:ly)?.{0,40}(?:pay-?pal|paypal|account)|un(?:familiar|known)\s+seller\s+ip)'
+  )
+  
+  // out-of-band callback number
+  and (
+    regex.icontains(body.current_thread.text,
+                    '(?:\+?1[\s.-]*)?\(?\d{3}\)?[\s.-]*\d{3}[\s.-]*\d{4}'
+    )
+    or any(ml.nlu_classifier(body.current_thread.text).topics,
+           .name == "Out of Band Pivot"
+    )
+  )
+attack_types:
+  - "Callback Phishing"
+  - "BEC/Fraud"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Out of band pivot"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Sender analysis"
+  - "Natural Language Understanding"
