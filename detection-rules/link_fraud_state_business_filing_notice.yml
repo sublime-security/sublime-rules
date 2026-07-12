@@ -1,0 +1,36 @@
+name: "Link: Fraudulent state business filing notice"
+description: "Detects inbound messages impersonating official state business compliance communications, such as Statements of Information or Certificates of Good Standing, that contain links to free subdomain hosting services. These messages use urgent language around filing deadlines or business suspensions to pressure recipients into clicking credential-harvesting links."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and not subject.is_reply
+  and not subject.is_forward
+  and 2 of (
+    strings.icontains(body.current_thread.text, "Statement of Information"),
+    strings.icontains(body.current_thread.text, "Secretary of State"),
+    regex.icontains(body.current_thread.text, 'filing (is )?overdue'),
+    strings.icontains(body.current_thread.text, "Certificate of Good Standing"),
+    strings.icontains(body.current_thread.text, "business suspension")
+  )
+  and any(body.current_thread.links,
+          .href_url.domain.root_domain in $free_subdomain_hosts
+  )
+  and any(ml.nlu_classifier(body.current_thread.text).intents,
+          .name == "cred_theft" and .confidence == "high"
+  )
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and not (
+    sender.email.domain.root_domain in $high_trust_sender_root_domains
+    and coalesce(headers.auth_summary.dmarc.pass, false)
+  )
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Free subdomain host"
+  - "Social engineering"
+  - "Impersonation: Brand"
+detection_methods:
+  - "Content analysis"
+  - "Natural Language Understanding"
+  - "URL analysis"
