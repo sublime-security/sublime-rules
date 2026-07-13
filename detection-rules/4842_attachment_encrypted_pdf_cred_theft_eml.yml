@@ -31,7 +31,7 @@ source: |
             )
             or regex.icontains(file.parse_eml(.).body.current_thread.text,
                                'PDF\s*(?:Access|Preview|Unlock|Decrypt|passcode)',
-                               '(Access|Preview|Unlock|Decrypt|Pass)\s*(?:word|code)\s*(?:\S+\s+){0,3}PDF\s*is?\s*:',
+                               '(?:Access|Preview|Unlock|Decrypt|Pass)\s*(?:word|code)\s*(?:\S+\s+){0,3}PDF\s*is?\s*:',
                                'This\s+(?:file|document|pdf)\s+is\s+(?:password[-\s]?)\s+protected\.\s*The\s+password\s+is\s*:?',
                                '(?:Access|Preview|Unlock|Decrypt)\s+(?:\S+\s+){0,3}(?:PDF|statement)(?:\S+\s+){0,3}(?:pass(?:word|code)|\s*with\s+\S+)'
             )
@@ -43,7 +43,7 @@ source: |
               and any(file.parse_eml(.).body.previous_threads,
                       regex.icontains(.text,
                                       'PDF\s*(?:Access|Preview|Unlock|Decrypt|passcode)',
-                                      '(Access|Preview|Unlock|Decrypt|Pass)\s*(?:word|code)\s*(?:\S+\s+){0,3}PDF\s*is?\s*:',
+                                      '(?:Access|Preview|Unlock|Decrypt|Pass)\s*(?:word|code)\s*(?:\S+\s+){0,3}PDF\s*is?\s*:',
                                       'This\s+(?:file|document|pdf)\s+is\s+(?:password[-\s]?)\s+protected\.\s*The\s+password\s+is\s*:?',
                                       '(?:Access|Preview|Unlock|Decrypt)\s+(?:\S+\s+){0,3}(?:PDF|statement)(?:\S+\s+){0,3}(?:pass(?:word|code)|\s*with\s+\S+)'
                       )
@@ -68,8 +68,9 @@ source: |
     )
     or (
       length(recipients.to) == 0
-      or all(recipients.to,
-             strings.ilike(.display_name, "undisclosed?recipients")
+      or (
+        all(recipients.to, .email.domain.valid == false)
+        and all(recipients.cc, .email.domain.valid == false)
       )
     )
     or (
@@ -78,14 +79,10 @@ source: |
     )
   )
   // negate highly trusted sender domains unless they fail DMARC authentication
-  and (
-    (
-      sender.email.domain.root_domain in $high_trust_sender_root_domains
-      and not headers.auth_summary.dmarc.pass
-    )
-    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  and not (
+    sender.email.domain.root_domain in $high_trust_sender_root_domains
+    and coalesce(headers.auth_summary.dmarc.pass, false)
   )
-
 attack_types:
   - "Credential Phishing"
 tactics_and_techniques:
@@ -102,4 +99,4 @@ detection_methods:
 id: "7e4cd777-2b80-5e57-8fc2-33bc448335c1"
 og_id: "f4a5fb9e-ecda-57a8-bc3c-851d64b8d06d"
 testing_pr: 4842
-testing_sha: 1f3f28a7186d25143da740eeb7333d5756b27e13
+testing_sha: 05e077994fb0d08ee2eaab62bd5d6e6ef2280ab3
