@@ -3,11 +3,15 @@ description: "Detects inbound messages where an external sender, absent from the
 type: "rule"
 severity: "high"
 source: |
-  type.inbound 
+  type.inbound
   and any(map(filter(body.previous_threads,
                      .sender.email.email == ""
                      and .sender.display_name != ""
-                     and any($org_vips, strings.icontains(..sender.display_name, .display_name))
+                     and any($org_vips,
+                             strings.icontains(..sender.display_name,
+                                               .display_name
+                             )
+                     )
                      and not coalesce(.subject.is_auto_reply, false)
                      and any(recipients.to,
                              .email.domain.root_domain in $org_domains
@@ -23,7 +27,7 @@ source: |
                                          '(?:as follows|provided below|find below|details are|contact is)[^\n]{0,10}:',
                                          'billing (?:contact|correspondence|team|department|statements?)'
                      )
-              ), 
+              ),
               .sender.display_name
           ),
           . != ""
@@ -32,18 +36,29 @@ source: |
                       .name in ("invoice", "payment") and .confidence != "low"
                   )
                   or any(ml.nlu_classifier(.text, subject=.subject.base).topics,
-                         .name in ("Request to View Invoice", "Payment Information")
+                         .name in (
+                           "Request to View Invoice",
+                           "Payment Information"
+                         )
                          and .confidence != "low"
                   )
           )
           and not any(flatten([recipients.to, recipients.cc, recipients.bcc]),
-                      any($org_vips, strings.icontains(..., .display_name) and .email != "" and strings.icontains(..email.email, .email)))
-  ) 
+                      any($org_vips,
+                          strings.icontains(..., .display_name)
+                          and .email != ""
+                          and strings.icontains(..email.email, .email)
+                      )
+          )
+  )
   and length(filter(flatten([recipients.to, recipients.cc, recipients.bcc]),
                     .email.domain.root_domain in $org_domains
-             ) 
+             )
   ) == 1
-  and not (sender.email.domain.root_domain in $org_domains and coalesce(headers.auth_summary.dmarc.pass, false))
+  and not (
+    sender.email.domain.root_domain in $org_domains
+    and coalesce(headers.auth_summary.dmarc.pass, false)
+  )
 attack_types:
   - "BEC/Fraud"
 tactics_and_techniques:
@@ -54,3 +69,4 @@ detection_methods:
   - "Natural Language Understanding"
   - "Sender analysis"
   - "Header analysis"
+id: "43180f2d-8cf7-5af0-9963-2c9634734c8d"
