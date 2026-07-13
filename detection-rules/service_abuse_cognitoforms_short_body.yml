@@ -4,13 +4,20 @@ type: "rule"
 severity: "medium"
 source: |
   type.inbound
-  and length(body.current_thread.text) < 200
+  and (
+    length(body.current_thread.text) < 200
+    or strings.icontains(subject.base, 'document')
+  )
   and sender.email.domain.root_domain != "cognitoforms.com"
   and any(body.current_thread.links,
           .href_url.domain.root_domain == "cognitoforms.com"
           // negating benign hits
-          and .display_text != "Opt-Out"
+          and not .display_text =~ "opt-out"
           and not strings.icontains(.display_text, "cognitoforms.com")
+  )
+  // negating messages which use cognito and other mailing platforms
+  and not any(body.current_thread.links, 
+          .display_text =~ "unsubscribe"
   )
 attack_types:
   - "Credential Phishing"
