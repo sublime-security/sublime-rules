@@ -1,0 +1,36 @@
+name: "beta.DLP: Date of Birth"
+description: "Detects messages containing dates of birth."
+type: "dlp"
+severity: "high"
+source: |
+  type.outbound
+  and (
+    any(beta.ml_extract_sensitive_information(body.current_thread.text).elements,
+      .type == "date_of_birth" and .confidence in ("medium", "high")
+    )
+    or any(beta.ml_extract_sensitive_information(subject.subject).elements,
+      .type == "date_of_birth" and .confidence in ("medium", "high")
+    )
+    or any(attachments,
+    any(file.explode(.),
+      (
+        any(beta.ml_extract_sensitive_information(.scan.strings.raw).elements,
+          .type == "date_of_birth" and .confidence in ("medium", "high")
+        )
+        or any(beta.ml_extract_sensitive_information(.scan.ocr.raw).elements,
+          .type == "date_of_birth" and .confidence in ("medium", "high")
+        )
+      )
+    )
+  )
+  )
+tags:
+  - "PII"
+attack_types:
+  - "DLP: PII"
+detection_methods:
+  - "Content analysis"
+  - "Natural Language Understanding"
+  - "File analysis"
+  - "Optical Character Recognition"
+id: "1c99f7b7-1928-5817-94d5-2d0bbfdf1231"

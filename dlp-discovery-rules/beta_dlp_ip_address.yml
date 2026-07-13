@@ -1,0 +1,36 @@
+name: "beta.DLP: IP Address"
+description: "Detects messages containing IP addresses."
+type: "dlp"
+severity: "low"
+source: |
+  type.outbound
+  and (
+    any(beta.ml_extract_sensitive_information(body.current_thread.text).elements,
+      .type == "ip_address" and .confidence in ("medium", "high")
+    )
+    or any(beta.ml_extract_sensitive_information(subject.subject).elements,
+      .type == "ip_address" and .confidence in ("medium", "high")
+    )
+    or any(attachments,
+    any(file.explode(.),
+      (
+        any(beta.ml_extract_sensitive_information(.scan.strings.raw).elements,
+          .type == "ip_address" and .confidence in ("medium", "high")
+        )
+        or any(beta.ml_extract_sensitive_information(.scan.ocr.raw).elements,
+          .type == "ip_address" and .confidence in ("medium", "high")
+        )
+      )
+    )
+  )
+  )
+tags:
+  - "Infrastructure data"
+attack_types:
+  - "DLP: Infrastructure"
+detection_methods:
+  - "Content analysis"
+  - "Natural Language Understanding"
+  - "File analysis"
+  - "Optical Character Recognition"
+id: "ff41fc24-d319-56cc-9ac3-383e4b31d998"
