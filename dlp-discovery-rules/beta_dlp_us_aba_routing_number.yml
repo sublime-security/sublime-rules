@@ -1,0 +1,28 @@
+name: "beta.DLP: US ABA Routing Number"
+description: "Detects messages containing US ABA routing numbers."
+type: "dlp"
+severity: "high"
+source: |
+  type.outbound
+  and (
+    any(beta.ml_extract_sensitive_information(body.current_thread.text).elements,
+      .type == "us_aba_routing_number" and .confidence in ("medium", "high")
+    )
+    or any(beta.ml_extract_sensitive_information(subject.subject).elements,
+      .type == "us_aba_routing_number" and .confidence in ("medium", "high")
+    )
+    or any(attachments,
+      any(file.explode(.),
+        (
+          any(beta.ml_extract_sensitive_information(.scan.strings.raw).elements,
+            .type == "us_aba_routing_number" and .confidence in ("medium", "high")
+          )
+          or any(beta.ml_extract_sensitive_information(.scan.ocr.raw).elements,
+            .type == "us_aba_routing_number" and .confidence in ("medium", "high")
+          )
+        )
+      )
+    )
+  )
+detection_methods:
+  - "Content analysis"
