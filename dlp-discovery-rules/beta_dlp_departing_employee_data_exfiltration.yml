@@ -11,7 +11,7 @@ description: |
 
   Operational requirement: $employees_on_notice must be updated promptly when
   resignations are received and entries removed after the employee's final day.
-type: "rule"
+type: "dlp"
 severity: high
 source: |
   type.outbound
@@ -32,19 +32,29 @@ source: |
           )
       )
       // Trigger 2: single attachment over 5 MB regardless of destination
-      or any(attachments, .size > 5242880)
+      or (
+          any(attachments, .size > 5242880)
+          and (
+              any(recipients.to,
+                  .email.domain.root_domain in $free_email_providers
+                  or .email.domain.root_domain in $disposable_email_providers
+              )
+              or any(recipients.cc,
+                  .email.domain.root_domain in $free_email_providers
+                  or .email.domain.root_domain in $disposable_email_providers
+              )
+              or any(recipients.bcc,
+                  .email.domain.root_domain in $free_email_providers
+                  or .email.domain.root_domain in $disposable_email_providers
+              )
+          )
+      )
   )
 tags:
-  - "dlp"
-  - "insider-threat"
-  - "departing-employee"
-  - "personal-email"
+  - "Sensitive data"
 attack_types:
-  - "Data Exfiltration"
-tactics_and_techniques:
-  - "Exfiltration: Outbound email"
-  - "Insider threat"
+  - "DLP: Data Exfiltration"
 detection_methods:
   - "Content analysis"
   - "Sender analysis"
-id: "7d4e5f6a-b8c9-4123-de45-234567890123"
+id: "ab1b5a96-8358-471f-a3f3-b729151ed25c"
