@@ -1,0 +1,144 @@
+name: "PR# 4878 - Brand impersonation: OpenAI with payment issues"
+description: "Detects messages impersonating OpenAI or ChatGPT with payment-related content such as subscription cancellation, payment failures, or billing updates from non-OpenAI domains."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and (
+    // sender or subject contains openai or chatgpt
+    regex.icontains(sender.display_name, '\bchat\s*gpt\b')
+    or regex.icontains(sender.display_name, '\bopen\s*a[li]\b')
+    or regex.icontains(subject.subject, '\bchat\s*gpt\b')
+    or regex.icontains(subject.subject, '\bopen\s*a[li]\b')
+    or regex.icontains(strings.replace_confusables(body.current_thread.text),
+                       '(?:regarding\s*your\s*Open\s*A[lI]\s*account|Open\s*A[lI]\s*\.\s*All\s*rights\s*reserved|the\s*open\s*ai\s*team)'
+    )
+  )
+  and 2 of (
+    // payment phrase
+    regex.icontains(strings.replace_confusables(body.current_thread.text),
+                    'update (?:payment method|your (?:billing|payment))'
+    ),
+    regex.icontains(strings.replace_confusables(body.current_thread.text),
+                    'Subscription (?:has expired|(?:will be)?Cancel+ed)'
+    ),
+    regex.icontains(strings.replace_confusables(body.current_thread.text),
+                    'issue with (?:the transaction|(?:your\s)?payment)'
+    ),
+    regex.icontains(strings.replace_confusables(body.current_thread.text),
+                    "you(?:'ll| will) lose access"
+    ),
+    regex.icontains(strings.replace_confusables(body.current_thread.text),
+                    'payment (?:is not successful|error|was declined)'
+    ),
+    regex.icontains(strings.replace_confusables(body.current_thread.text),
+                    'unable to (?:process|automatically charge)'
+    ),
+    strings.icontains(strings.replace_confusables(body.current_thread.text),
+                      'bank or card issuer'
+    ),
+    strings.icontains(strings.replace_confusables(body.current_thread.text),
+                      'issue with the transaction'
+    ),
+    strings.icontains(strings.replace_confusables(body.current_thread.text),
+                      'could not be processed'
+    ),
+    strings.icontains(strings.replace_confusables(body.current_thread.text),
+                      'settle the outstanding'
+    ),
+    strings.icontains(strings.replace_confusables(body.current_thread.text),
+                      'account will be downgraded'
+    ),
+    strings.icontains(strings.replace_confusables(body.current_thread.text),
+                      'Renew Subscription'
+    ),
+    strings.icontains(strings.replace_confusables(body.current_thread.text),
+                      'balance is settled'
+    ),
+    strings.icontains(strings.replace_confusables(body.current_thread.text),
+                      'will renew automatically'
+    ),
+    strings.icontains(strings.replace_confusables(body.current_thread.text),
+                      'process your payment'
+    ),
+    strings.icontains(strings.replace_confusables(body.current_thread.text),
+                      'keep your subscription active'
+    ),
+    strings.icontains(strings.replace_confusables(body.current_thread.text),
+                      'avoid any interruption'
+    ),
+    strings.icontains(strings.replace_confusables(body.current_thread.text),
+                      'charge attempt was unsuccessful'
+    ),
+    strings.icontains(strings.replace_confusables(body.current_thread.text),
+                      'scheduled for cancellation'
+    ),
+    strings.icontains(strings.replace_confusables(body.current_thread.text),
+                      'authorizing your payment'
+    ),
+    strings.icontains(strings.replace_confusables(body.current_thread.text),
+                      'Declining Payment'
+    ),
+    strings.icontains(strings.replace_confusables(body.current_thread.text),
+                      'Insufficient funds'
+    ),
+    strings.icontains(strings.replace_confusables(body.current_thread.text),
+                      'Card has expired'
+    ),
+    strings.icontains(strings.replace_confusables(body.current_thread.text),
+                      'exceeds your credit limit'
+    ),
+    strings.icontains(strings.replace_confusables(body.current_thread.text),
+                      'plan features have been paused'
+    ),
+    strings.icontains(strings.replace_confusables(body.current_thread.text),
+                      'saved payment method'
+    ),
+    strings.icontains(strings.replace_confusables(body.current_thread.text),
+                      'active without interruption'
+    ),
+    strings.icontains(strings.replace_confusables(body.current_thread.text),
+                      'interruption to your access'
+    ),
+    strings.icontains(strings.replace_confusables(body.current_thread.text),
+                      'review your account status'
+    ),
+    strings.icontains(strings.replace_confusables(body.current_thread.text),
+                      'access confirmation'
+    ),
+    strings.icontains(strings.replace_confusables(body.current_thread.text),
+                      'review allowance'
+    ),
+    strings.icontains(strings.replace_confusables(body.current_thread.text),
+                      'access may be suspended'
+    ),
+    strings.icontains(strings.replace_confusables(body.current_thread.text),
+                      'next allowance cycle'
+    )
+  )
+  // not from openai
+  and not (
+    sender.email.domain.root_domain == 'openai.com'
+    and coalesce(headers.auth_summary.dmarc.pass, false)
+  )
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and not (
+    sender.email.domain.root_domain in $high_trust_sender_root_domains
+    and coalesce(headers.auth_summary.dmarc.pass, false)
+  )
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Header analysis"
+  - "Sender analysis"
+id: "987dc38b-64d5-508d-9440-f620db5994f2"
+tags:
+  - created_from_open_prs
+  - rule_status_modified
+  - pr_author_JFarina5
+references:
+  - https://github.com/sublime-security/sublime-rules/pull/4878
