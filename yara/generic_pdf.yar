@@ -537,3 +537,27 @@ rule pdf_view_doc_here_title_box {
 		$header at 0 and $image_size and ($title or $link)
 }
 
+rule pdf_prompt_ack_secure_document_link {
+	meta:
+		author      = "kyle eaton"
+		date        = "2026-07-14"
+		description = "PDF with a 'please acknowledge quickly' lure and an open secure document button, matching the button positioning"
+	strings:
+		$header = { 25 50 44 46 2D 31 2E }
+		$rect   = { 2F 52 65 63 74 20 5B 20 35 33 2E 32 35 20 34 32 35 }
+	condition:
+		$header at 0 and $rect
+}
+
+rule pdf_prompt_ack_secure_document_image_sizes {
+	meta:
+		author      = "kyle eaton"
+		date        = "2026-07-14"
+		description = "PDF with a 'please acknowledge quickly' lure and an open secure document button, matching the clip art sizes"
+	strings:
+		$header = { 25 50 44 46 2D 31 2E }
+		$img1   = { 2F 53 75 62 74 79 70 65 20 2F 49 6D 61 67 65 0A 2F 57 69 64 74 68 20 31 36 34 0A 2F 48 65 69 67 68 74 20 31 36 34 0A 2F 42 69 74 73 50 65 72 43 6F 6D 70 6F 6E 65 6E 74 20 38 0A 2F 43 6F 6C 6F 72 53 70 61 63 65 20 2F 44 65 76 69 63 65 47 72 61 79 0A }
+		$img2   = { 2F 53 75 62 74 79 70 65 20 2F 49 6D 61 67 65 0A 2F 57 69 64 74 68 20 31 36 34 0A 2F 48 65 69 67 68 74 20 31 36 34 0A 2F 42 69 74 73 50 65 72 43 6F 6D 70 6F 6E 65 6E 74 20 38 0A 2F 43 6F 6C 6F 72 53 70 61 63 65 20 2F 44 65 76 69 63 65 52 47 42 }
+	condition:
+		$header at 0 and all of ($img*)
+}
