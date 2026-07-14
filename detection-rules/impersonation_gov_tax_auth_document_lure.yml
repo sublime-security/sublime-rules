@@ -8,26 +8,19 @@ source: |
   and regex.icontains(strings.replace_confusables(sender.display_name),
                       'internal revenue|\bIRS\b|social security|\bSSA\b|medicaid|medicare|department of (health|revenue|treasur|state|labor|justice|homeland)|ministry of finance|income tax (department|dept)|department of the treasury|u\.?s\.? treasury'
   )
-  // a document lure link that is either (a) a download cta to a low-rep host, or
-  // (b) a phishing-kit url that foldered the impersonated org into the path
+  // a document lure link that is either a download cta to a low-rep host
   and any(body.current_thread.links,
-          (
-            regex.icontains(.display_text,
-                            'download|response form|review document|official document|statement'
-            )
-            and (
-              .href_url.domain.root_domain not in $tranco_1m
-              or .href_url.domain.root_domain in $url_shorteners
-              or (
-                .href_url.domain.subdomain is not null
-                and .href_url.domain.subdomain != "www"
-                and .href_url.domain.root_domain in $free_subdomain_hosts
-              )
-            )
+          regex.icontains(.display_text,
+                          'download|response form|review document|official document|statement'
           )
-          or (
-            strings.icontains(.href_url.path, sender.display_name)
-            and strings.iends_with(.href_url.path, "/index.html")
+          and (
+            .href_url.domain.root_domain not in $tranco_1m
+            or .href_url.domain.root_domain in $url_shorteners
+            or (
+              .href_url.domain.subdomain is not null
+              and .href_url.domain.subdomain != "www"
+              and .href_url.domain.root_domain in $free_subdomain_hosts
+            )
           )
   )
   and any(ml.nlu_classifier(body.current_thread.text).intents,
