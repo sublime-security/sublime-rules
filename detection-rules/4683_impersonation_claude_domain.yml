@@ -4,7 +4,6 @@ type: "rule"
 severity: "medium"
 source: |
   type.inbound
-  and not sender.email.domain.root_domain in ("claude.com", "anthropic.com")
   and sender.display_name in ("Anthropic", "Claude")
   // links created less than 90 days
   and any(body.links, network.whois(.href_url.domain).days_old <= 90)
@@ -14,22 +13,21 @@ source: |
     or network.whois(headers.return_path.domain).days_old <= 90
   )
   and (
+    strings.icontains(subject.base, "claude")
+    or strings.icontains(subject.base, "anthropic")
+    or regex.icontains(subject.base, "(?:early.access|ads)")
+  )
+  and (
     strings.icontains(body.current_thread.text, "claude")
-    or strings.icontains(body.current_thread.text, "claude ads")
-    or strings.icontains(body.current_thread.text, "anthropic team")
-    or strings.contains(body.current_thread.text,
-                        "Anthropic PBC, 548 Market St, PMB 90375, San Francisco, CA 94104"
-    )
-    or strings.icontains(subject.base, "*claude*")
-    or strings.icontains(subject.base, "*anthropic*")
-    or regex.icontains(subject.base,
-                       "(?:early.{0,20}claude|claude.{0,20}(?:early.access|ads))"
-    )
+    or strings.icontains(body.current_thread.text, "anthropic")
   )
   // negate highly trusted sender domains unless they fail DMARC authentication
   and not (
-    sender.email.domain.root_domain in $high_trust_sender_root_domains
-    and coalesce(headers.auth_summary.dmarc.pass, false)
+    sender.email.domain.root_domain in ("claude.com", "anthropic.com")
+    and (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and coalesce(headers.auth_summary.dmarc.pass, false)
+    )
   )
 attack_types:
   - "BEC/Fraud"
