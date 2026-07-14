@@ -1,0 +1,25 @@
+name: "Open redirect: Government domain used to redirect to non-government URL"
+description: "Detects inbound messages sent to a single recipient containing links hosted on government TLD domains that embed the recipient's email address in the URL and use a redirect parameter pointing to a non-government destination. This technique exploits the trusted reputation of government domains to obscure a malicious redirect target."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and length(recipients.to) == 1
+  and any(body.current_thread.links,
+          strings.contains(.href_url.domain.tld, 'gov')
+          and strings.contains(.href_url.url, recipients.to[0].email.email)
+          and length(.href_url.query_params_decoded['url']) > 0
+          and not any(.href_url.query_params_decoded['url'],
+                      strings.contains(strings.parse_url(.).domain.tld, 'gov')
+          )
+  )
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Open redirect"
+  - "Social engineering"
+  - "Evasion"
+detection_methods:
+  - "URL analysis"
+  - "Content analysis"
+id: "37add46b-cfbe-5626-83e5-5f4d9ce394a0"
