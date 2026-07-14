@@ -1,18 +1,20 @@
-name: "PR# 4683 - Brand impersonation: Claude with newly registered domains"
+name: "PR# 4683 - Brand impersonation: Anthropic and Claude lure"
 description: "Detects messages impersonating Anthropic or Claude using sender display names of 'Anthropic' or 'Claude' from domains not affiliated with the legitimate brands. The rule flags messages where the sending domain, reply-to domain, or return-path domain is newly registered (under 90 days old)."
 type: "rule"
 severity: "medium"
 source: |
   type.inbound
+  // sender display name Anthropic and Claude
   and sender.display_name in ("Anthropic", "Claude")
+  // sender suspicious domains
   and not sender.email.domain.root_domain in ("claude.com", "anthropic.com")
   // links created less than 90 days
   and any(body.links, network.whois(.href_url.domain).days_old <= 90)
   and (
-    // or the return path or sender domain is less than 90 days old
     network.whois(sender.email.domain).days_old <= 90
     or network.whois(headers.return_path.domain).days_old <= 90
   )
+  // look for common subject lines & body text for claude, anthropic, ads
   and (
     strings.icontains(subject.base, "claude")
     or strings.icontains(subject.base, "anthropic")
