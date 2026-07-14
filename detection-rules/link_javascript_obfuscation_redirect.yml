@@ -1,0 +1,49 @@
+name: "Link: JavaScript redirect with hash-based obfuscation"
+description: "Detects inbound messages sent to self, invalid recipients, or undisclosed recipients containing links that, upon analysis, include a JavaScript setTimeout redirect using location.hash to obscure the final destination. This technique delays redirection and appends URL fragments to evade static link inspection."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and (
+    // self sender or invaild recipent domain or local parts match
+    (
+      length(recipients.to) == 1
+      and (
+        sender.email.email == recipients.to[0].email.email
+        or recipients.to[0].email.domain.valid == false
+        or sender.email.local_part == recipients.to[0].email.local_part
+      )
+    )
+    // no recipients defined
+    or (
+      (
+        length(recipients.to) == 0
+        or all(recipients.to, .display_name == "Undisclosed recipients")
+      )
+      and length(recipients.cc) == 0
+      and length(recipients.bcc) == 0
+    )
+  )
+  and 0 < length(body.links) < 10
+  and any(body.current_thread.links,
+          any(html.xpath(ml.link_analysis(., mode="aggressive").final_dom,
+                         "//script"
+              ).nodes,
+              strings.starts_with(.raw,
+                                  '<script>setTimeout(function(){window.location="'
+              )
+              and strings.ends_with(.raw, '"+location.hash},3000)</script>')
+          )
+  )
+  
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Scripting"
+  - "Evasion"
+  - "Social engineering"
+detection_methods:
+  - "URL analysis"
+  - "Javascript analysis"
+  - "HTML analysis"
+  - "Sender analysis"
