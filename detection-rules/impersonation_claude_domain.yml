@@ -5,6 +5,7 @@ severity: "medium"
 source: |
   type.inbound
   and sender.display_name in ("Anthropic", "Claude")
+  and not sender.email.domain.root_domain in ("claude.com", "anthropic.com")
   // links created less than 90 days
   and any(body.links, network.whois(.href_url.domain).days_old <= 90)
   and (
@@ -23,11 +24,8 @@ source: |
   )
   // negate highly trusted sender domains unless they fail DMARC authentication
   and not (
-    sender.email.domain.root_domain in ("claude.com", "anthropic.com")
-    and (
-      sender.email.domain.root_domain in $high_trust_sender_root_domains
-      and coalesce(headers.auth_summary.dmarc.pass, false)
-    )
+    sender.email.domain.root_domain in $high_trust_sender_root_domains
+    and coalesce(headers.auth_summary.dmarc.pass, false)
   )
 attack_types:
   - "BEC/Fraud"
