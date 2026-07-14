@@ -1,20 +1,34 @@
-name: "Link: WordPress admin targeting with recipient identifier in URL fragment"
-description: "Detects messages containing links to WordPress administrative paths (wp-admin, wp-content, wp-includes, etc.) where the URL fragment contains base64-encoded data that includes the recipient's email address, indicating potential targeted compromise attempts."
+name: "Link: WordPress admin targeting with recipient identifier in URL parts"
+description: "Detects messages containing links to WordPress administrative paths (wp-admin, wp-content, wp-includes, etc.) where the URL fragment or query param values contains base64-encoded data that includes the recipient's email address, indicating potential targeted compromise attempts."
 type: "rule"
 severity: "high"
 source: |
   type.inbound
+  and recipients.to[0].email.domain.valid
   and any(body.links,
           regex.icontains(.href_url.path,
                           '^\/(?:wp-(?:admin|includes|content|login|json|signup|activate|cron|mail)|xmlrpc\.php)'
           )
-          // base64 encoded
           and (
+            // fragments base64 encoded
             any(strings.scan_base64(.href_url.fragment),
                 strings.icontains(., recipients.to[0].email.email)
             )
-            // not base64
+            // fragments not base64 encoded
             or strings.icontains(.href_url.fragment, recipients.to[0].email.email)
+            // query param values are exactly the recipient
+            or (
+              any(flatten(values(.href_url.query_params_decoded)),
+                  . == recipients.to[0].email.email
+                  or any(strings.scan_base64(.),
+                         . == recipients.to[0].email.email
+                  )
+              )
+              // not an unsub URL
+              and not strings.icontains(.href_url.url, 'unsub')
+              // less than two query_params
+              and length(keys(.href_url.query_params_decoded)) <= 2
+            )
           )
   )
 attack_types:
