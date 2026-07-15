@@ -1,0 +1,35 @@
+name: "PR# 4904 - Attachment: Microsoft SharePoint Impersonation via images in macro-enabled attachment"
+description: "Detects macro-enabled Office documents (docx and similar extensions) that contain images with text mimicking Microsoft SharePoint file-sharing notifications. The embedded images reference SharePoint collaboration language such as invitations to edit or references to Microsoft 365 access controls, designed to deceive recipients into trusting the attachment."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  // office docx
+  and any(filter(attachments, .file_extension in $file_extensions_macros),
+          any(file.explode(.),
+              // that contain sharepoint file share email wording in images
+              strings.icontains(.scan.ocr.raw,
+                                ' invited you to edit',
+                                'This invite will only work for you and people with existing access',
+                                ' use of Microsoft 365 and may contain content that is controlled by'
+              )
+          )
+  )
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Macros"
+  - "Image as content"
+  - "Social engineering"
+detection_methods:
+  - "File analysis"
+  - "Macro analysis"
+  - "Optical Character Recognition"
+id: "041dfab1-03dd-5725-84c2-81d3c42c40fa"
+tags:
+  - created_from_open_prs
+  - rule_status_added
+  - pr_author_zoomequipd
+references:
+  - https://github.com/sublime-security/sublime-rules/pull/4904
