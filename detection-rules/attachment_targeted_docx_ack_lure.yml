@@ -1,0 +1,40 @@
+name: "Attachment: Targeted DOCX with personalized recipient acknowledgement lure"
+description: "Detects inbound messages with a DOCX attachment containing a quarterly date reference, specific STATUS and ACKNOWLEDGEMENT formatting patterns, and a personalized salutation where the recipient's name or local email part is dynamically embedded in the document XML."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and any(filter(attachments, .file_type == "docx"),
+          any(filter(file.explode(.), .file_name == "word/document.xml"),
+              // doc xml has a QX 2026 type date
+              regex.contains(.scan.strings.raw, '<w:t>Q[1-4]\S202[5-9]<\/w:t>')
+              // and a couple of the terms we've seen in the document with specific spacing reqs
+              and strings.contains(.scan.strings.raw,
+                                   '<w:t xml:space="preserve">STATUS </w:t>'
+              )
+              and strings.contains(.scan.strings.raw,
+                                   '<w:t xml:space="preserve">ACKNOWLEDGEMENT </w:t>'
+              )
+              // and doc xml has some reference to the user's name in there too?
+              and any(regex.extract(.scan.strings.raw,
+                                    '<w:t xml:space="preserve">Dear </w:t></w:r><w:r><w:rPr><w:b /><w:bCs /><w:color w:val="[a-f0-9]{6}" /><w:sz w:val="[0-9]{1,3}" /><w:szCs w:val="[0-9]{1,3}" /></w:rPr><w:t>(?P<name>.*?)</w:t></w:r>'
+                      ),
+                      any(recipients.to,
+                          (
+                            ..named_groups["name"] =~ .email.local_part
+                            or ..named_groups["name"] =~ .display_name
+                          )
+                      )
+              )
+          )
+  )
+
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Social engineering"
+detection_methods:
+  - "Archive analysis"
+  - "Content analysis"
+  - "File analysis"
+  - "XML analysis"
