@@ -522,3 +522,42 @@ rule pdf_rect_size_box_lure {
 	condition:
 		$header at 0 and $rect_size
 }
+
+rule pdf_view_doc_here_title_box {
+	meta:
+		aurthor     = "kyle eaton"
+		date        = "2026-07-09"
+		description = "matching PDFs with VIEW DOCUMENT HERE language, matching specific title and positioning parameters"
+	strings:
+		$header     = { 25 50 44 46 2D 31 2E }
+		$title      = { 2F 54 69 74 6C 65 20 28 56 49 45 57 20 44 4F 43 55 4D 45 4E 54 53 20 48 45 52 45 29 0A 2F 44 65 73 74 20 5B 35 20 30 20 52 20 2F 58 59 5A 20 36 39 }
+		$link       = { 2F 52 65 63 74 20 5B 30 20 37 39 32 20 30 20 37 39 32 5D }
+		$image_size = { 20 2F 49 6D 61 67 65 0A 2F 57 69 64 74 68 20 32 37 32 0A 2F 48 65 69 67 68 74 20 33 33 33 0A }
+	condition:
+		$header at 0 and $image_size and ($title or $link)
+}
+
+rule pdf_prompt_ack_secure_document_link {
+	meta:
+		author      = "kyle eaton"
+		date        = "2026-07-14"
+		description = "PDF with a 'please acknowledge quickly' lure and an open secure document button, matching the button positioning"
+	strings:
+		$header = { 25 50 44 46 2D 31 2E }
+		$rect   = { 2F 52 65 63 74 20 5B 20 35 33 2E 32 35 20 34 32 35 }
+	condition:
+		$header at 0 and $rect
+}
+
+rule pdf_prompt_ack_secure_document_image_sizes {
+	meta:
+		author      = "kyle eaton"
+		date        = "2026-07-14"
+		description = "PDF with a 'please acknowledge quickly' lure and an open secure document button, matching the clip art sizes"
+	strings:
+		$header = { 25 50 44 46 2D 31 2E }
+		$img1   = { 2F 53 75 62 74 79 70 65 20 2F 49 6D 61 67 65 0A 2F 57 69 64 74 68 20 31 36 34 0A 2F 48 65 69 67 68 74 20 31 36 34 0A 2F 42 69 74 73 50 65 72 43 6F 6D 70 6F 6E 65 6E 74 20 38 0A 2F 43 6F 6C 6F 72 53 70 61 63 65 20 2F 44 65 76 69 63 65 47 72 61 79 0A }
+		$img2   = { 2F 53 75 62 74 79 70 65 20 2F 49 6D 61 67 65 0A 2F 57 69 64 74 68 20 31 36 34 0A 2F 48 65 69 67 68 74 20 31 36 34 0A 2F 42 69 74 73 50 65 72 43 6F 6D 70 6F 6E 65 6E 74 20 38 0A 2F 43 6F 6C 6F 72 53 70 61 63 65 20 2F 44 65 76 69 63 65 52 47 42 }
+	condition:
+		$header at 0 and all of ($img*)
+}
