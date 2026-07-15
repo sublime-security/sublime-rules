@@ -1,0 +1,45 @@
+name: "Body: Thread hijacking with font mismatch"
+description: "Detects Business Email Compromise attacks where a sender creates a legitimate email thread by replying to or forwarding their own message containing a fake thread." 
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and (subject.is_reply or subject.is_forward)
+  and length(headers.references) == 1
+  and length(body.previous_threads) > 1
+  // sender has never been emailed by anyone in the org
+  and sender.email.email not in $recipient_emails
+  // sender replying to or forwarding their own message thread
+  and body.previous_threads[0].sender.email.email == sender.email.email
+  // at least one thread purporting to be from an $org_domain sender
+  and any(body.previous_threads,
+          .index != 0
+          and (
+            .sender.email.domain.domain in $org_domains
+          //   or .sender.email.domain.domain == mailbox.email.domain.domain // shared EML test
+          )
+  )
+  // suspicious font mismatch in thread preamble
+  and (
+    any(regex.iextract(body.html.raw,
+                       '<span style.*?font-family:(?P<primary_fonts>[^;"]+)[;"]+.*?>.{0,20}?((?:From|To|Subject|Date|CC)\:).*?<span style.*?font-family:(?P<secondary_fonts>[^;"]+)[;"]>'
+        ),
+        // allow for a levenshtein difference of 1 to account for parsing misses
+        strings.ilevenshtein(.named_groups["primary_fonts"],
+                             .named_groups["secondary_fonts"]
+        ) > 1
+    )
+  )
+
+attack_types:
+  - "BEC/Fraud"
+tactics_and_techniques:
+  - "Social engineering"
+  - "Evasion"
+detection_methods:
+  - "Content analysis"
+  - "Header analysis"
+  - "Natural Language Understanding"
+  - "Sender analysis"
+  - "Whois"
+id: "ba574fb3-9f89-586a-8a8f-c7cf0cba081f"
