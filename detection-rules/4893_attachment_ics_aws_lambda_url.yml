@@ -1,0 +1,40 @@
+name: "Attachment: ICS file with AWS Lambda URL"
+description: "Detects ICS calendar files that contain references to AWS Lambda URLs, which may be used to deliver malicious content or redirect users to suspicious resources."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and any(attachments,
+          (
+            .file_extension in~ ('ics')
+            or .content_type in ("application/ics", "text/calendar")
+          )
+          and (
+            regex.icontains(file.parse_text(.).text, 'lambda-url')
+            //
+            // This rule makes use of a beta feature and is subject to change without notice
+            // using the beta feature in custom rules is not suggested until it has been formally released
+            //
+            or any(beta.file.parse_ics(.).events,
+                   any(.links,
+                       strings.icontains(.href_url.domain.domain, "lambda-url")
+                   )
+            )
+          )
+  )
+
+attack_types:
+  - "Credential Phishing"
+  - "Malware/Ransomware"
+tactics_and_techniques:
+  - "Evasion"
+  - "Free file host"
+  - "ICS Phishing"
+detection_methods:
+  - "Content analysis"
+  - "File analysis"
+  - "URL analysis"
+id: "49a93fd9-87a5-5496-a053-0b3763af6cb2"
+og_id: "ecc8c457-f171-5f22-a3c1-dac281d7b3e0"
+testing_pr: 4893
+testing_sha: d58a6505cb19533e96633a09524a6b9b439d2560
