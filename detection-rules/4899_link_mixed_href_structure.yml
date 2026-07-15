@@ -1,0 +1,42 @@
+name: "Link: Uniform href with mixed text and image anchor structure"
+description: "Detects inbound messages where all anchor elements within a nested table structure share a single unique destination URL, contain exactly two distinct display text values, have matching inner and display text, and include a mix of image and non-image anchor elements. This pattern can be indicative of structured lure content designed to direct recipients to a single malicious destination."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and length(distinct(flatten(map(html.xpath(body.html,
+                                             '//body/table/tbody/tr[2]/td/div/table//a'
+                                  ).nodes,
+                                  map(.links, .href_url.url)
+                              )
+                      )
+             )
+  ) == 1
+  and length(distinct(html.xpath(body.html,
+                                 '//body/table/tbody/tr[2]/td/div/table//a'
+                      ).nodes,
+                      .display_text
+             )
+  ) == 2
+  and all(html.xpath(body.html, '//body/table/tbody/tr[2]/td/div/table//a').nodes,
+          .inner_text == .display_text
+  )
+  and length(distinct(map(html.xpath(body.html,
+                                     '//body/table/tbody/tr[2]/td/div/table//a'
+                          ).nodes,
+                          strings.icontains(.raw, '<img ')
+                      )
+             )
+  ) == 2
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "HTML analysis"
+  - "URL analysis"
+id: "89fef320-6c97-5bf8-a6a7-1a82abe0869b"
+og_id: "3597dc0f-c8ad-5d89-bb5e-4b523536ec33"
+testing_pr: 4899
+testing_sha: 716b39a731269dd54501a3e3bd1526c0f1187397
