@@ -1,17 +1,26 @@
 name: "Message content: Request for author engagement"
-description: "Detects inbound messages containing language consistent with unsolicited book/author related scam. Often used to ask for payment related to promotion of an upcoming or recently published book."
+description: "Detects inbound messages containing language consistent with unsolicited book/author related scam from a free email provider. Often used to ask for payment related to promotion of an upcoming or recently published book."
 type: "rule"
 severity: "low"
 source: |
   type.inbound
-  and sender.email.domain.domain in $free_email_providers
-  and strings.icontains(body.current_thread.text, "would be")
-  and strings.icontains(body.current_thread.text, "moderat")
-  and strings.icontains(body.current_thread.text, "goodread")
-  and strings.icontains(body.current_thread.text, "reader")
-  and strings.icontains(body.current_thread.text, "feature")
-  and strings.icontains(body.current_thread.text, "book")
-
+  // freemailer
+  and sender.email.domain.root_domain in $free_email_providers
+  // goodreads mention
+  and strings.icontains(body.current_thread.text, "goodreads")
+  // addresses the recipient as the author of their own work
+  and regex.icontains(body.current_thread.text,
+                      '\byour (?:books?|work|text|title|novel|manuscript|writing|scholarship|research|reporting|story)\b'
+  )
+  //
+  and regex.icontains(body.current_thread.text,
+                      '\b(?:featur|spotlight|showcase|introduce your|invite you|selected your|reading (?:cycle|circle|challenge|community|discussion))'
+  )
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and not (
+    sender.email.domain.root_domain in $high_trust_sender_root_domains
+    and coalesce(headers.auth_summary.dmarc.pass, false)
+  )
 attack_types:
   - "Spam"
 tactics_and_techniques:
@@ -21,4 +30,4 @@ detection_methods:
 id: "d6961e44-c74b-5006-829a-b13de3475fb1"
 og_id: "c52f5f19-0928-59bf-8409-d58df640c5a7"
 testing_pr: 4864
-testing_sha: 139d0b0c2a60765bb3f408f339ae8ef426817236
+testing_sha: d28a36fc031ac4988ec2d7e6df2304cfc1e8a1a8
