@@ -1,0 +1,48 @@
+name: "Attachment: Office macro file with single image and self-service platform hyperlink"
+description: "Detects inbound Office macro-enabled attachments where the embedded relationship file contains exactly one image and one hyperlink, with the hyperlink pointing to a self-service creation platform domain. This technique is commonly used to lure recipients into clicking a malicious link hosted on a trusted-looking platform while minimizing the complexity of the document to evade detection."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  // office docs
+  and any(filter(attachments, .file_extension in $file_extensions_macros),
+          // explode them
+          any(filter(file.explode(.),
+                     .depth == 1
+                     and .file_extension == "rels"
+                     // single image and hyperlink in relationships
+                     and strings.icount(.scan.strings.raw, 'Relationship Id=') == 2
+                     and strings.icount(.scan.strings.raw, 'relationships/image') == 1
+                     and strings.icount(.scan.strings.raw,
+                                        'relationships/hyperlink'
+                     ) == 1
+              ),
+              // get the full relationship first so we don't have to worry about the ordering of the target value
+              any(regex.iextract(.scan.strings.raw,
+                                 '<Relationship[^\>]+Type=\"[^\"]+relationships/hyperlink[^\>]+\>'
+                  ),
+                  // extract and  the url from the target variable 
+                  strings.parse_url(regex.iextract(.full_match,
+                                                   'Target="(?P<url>[^\"]+)\"'
+                                    )[0].named_groups["url"]
+                  ).domain.domain in $self_service_creation_platform_domains
+                  or strings.parse_url(regex.iextract(.full_match,
+                                                      'Target="(?P<url>[^\"]+)\"'
+                                       )[0].named_groups["url"]
+                  ).domain.root_domain in $self_service_creation_platform_domains
+              )
+          )
+  )
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Macros"
+  - "Free file host"
+  - "Social engineering"
+  - "Image as content"
+detection_methods:
+  - "Archive analysis"
+  - "File analysis"
+  - "XML analysis"
+  - "URL analysis"
+  - "Macro analysis"
