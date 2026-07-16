@@ -1,0 +1,35 @@
+name: "PR# 4905 - Link: Suspicious HTML structure with subject mirrored in body and single link"
+description: "Detects messages where the subject is mirrored in a styled HTML table element, while containing exactly one link. This structural pattern is indicative of templated lures designed to appear legitimate."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and any(html.xpath(body.html,
+                     '//body/div//table/tbody/tr//table/tbody/tr/td[contains(@style, "rgb(41, 88, 140)")]/div/b'
+          ).nodes,
+          subject.base == .display_text
+  )
+  and any(html.xpath(body.html,
+                     '//body/div//table/tbody/tr//table/tbody/tr/td/div[contains(@style, "margin-top: 12pt")]/div'
+          ).nodes,
+          strings.icontains(subject.base, .inner_text)
+  )
+  and length(html.xpath(body.html,
+                        '//body/div//table/tbody/tr//table/tbody/tr/td/div[contains(@style, "margin-top: 12pt")]/div//a'
+             ).nodes
+  ) == 1
+attack_types:
+  - "Callback Phishing"
+tactics_and_techniques:
+  - "Social engineering"
+  - "Impersonation: Brand"
+detection_methods:
+  - "Content analysis"
+  - "HTML analysis"
+id: "4c64d77f-13fb-5db9-8c69-c68de1008582"
+tags:
+  - created_from_open_prs
+  - rule_status_added
+  - pr_author_keaton-sublime
+references:
+  - https://github.com/sublime-security/sublime-rules/pull/4905
