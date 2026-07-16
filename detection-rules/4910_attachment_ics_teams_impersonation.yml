@@ -1,0 +1,54 @@
+name: "PR# 4910 - Attachment: Fake Microsoft Teams meeting invite via ICS attachment"
+description: "Detects inbound messages containing ICS calendar attachments that reference Microsoft Teams meetings but contain links pointing to non-Microsoft domains. The rule specifically filters out legitimate Microsoft-generated calendar files by checking the product ID, then inspects event details for Teams-related references in the location or description fields while flagging any links that do not resolve to known Microsoft domains."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and any(attachments,
+          (
+            .file_type == "ics"
+            or .file_extension == "ics"
+            or .content_type in ("application/ics", "text/calendar")
+          )
+          //
+          // This rule makes use of a beta feature and is subject to change without notice
+          // using the beta feature in custom rules is not suggested until it has been formally released
+          //
+          and not strings.icontains(beta.file.parse_ics(.).product_id,
+                                    "microsoft"
+          )
+          and any(beta.file.parse_ics(.).events,
+                  (
+                    regex.icontains(.location, '(?:microsoft\s)?teams$')
+                    or strings.icontains(.description,
+                                         "microsoft teams",
+                                         "teams meeting",
+                                         "join microsoft teams",
+                                         "join teams meeting"
+                    )
+                  )
+                  and not any(.links,
+                              .href_url.domain.root_domain in (
+                                "microsoft.com",
+                                "microsoftsupport.com",
+                                "office.com"
+                              )
+                  )
+          )
+  )
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Social engineering"
+detection_methods:
+  - "File analysis"
+  - "Content analysis"
+  - "URL analysis"
+id: "13eb2bdc-76fd-5078-91c7-dffb525d1e55"
+tags:
+  - created_from_open_prs
+  - rule_status_added
+  - pr_author_JFarina5
+references:
+  - https://github.com/sublime-security/sublime-rules/pull/4910
