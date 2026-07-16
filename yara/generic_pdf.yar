@@ -416,3 +416,148 @@ rule fake_invoice_pdf_structure_01 {
 		$header at 0 and
 		$rect1
 }
+
+rule w9_c001_signatures {
+	meta:
+		author      = "kyle eaton"
+		date        = "2026-06-24"
+		description = "matching re-used signature bytes observed in multiple fake w9 documents"
+	strings:
+		$header = { 25 50 44 46 2D 31 2E }
+		$sig1   = { 2F 49 6D 61 67 65 0A 2F 57 69 64 74 68 20 32 39 31 0A 2F 48 65 69 67 68 74 20 31 33 38 0A 2F 43 6F 6C 6F 72 53 70 61 63 65 20 2F 44 65 76 69 63 65 47 72 61 79 0A 2F 42 69 74 73 50 65 72 43 6F 6D 70 6F 6E 65 6E 74 20 38 0A 2F 46 69 6C 74 65 72 20 2F 46 6C 61 74 65 44 65 63 6F 64 65 0A 2F 4C 65 6E 67 74 68 20 32 31 31 30 3E 3E 20 73 74 72 65 61 6D 0A 78 9C ED 9C CD 6B 1B C7 1B C7 87 39 E8 AE 9B 0E 31 39 D9 02 09 91 4B 0D F9 0F 84 17 4B C7 1E 4A AE A9 11 C4 92 31 B9 04 7A B4 31 AD C9 0B 2B E7 0F C8 25 C6 26 09 2D 96 2C A1 DF A9 39 E4 87 49 E3 46 2E 2B 92 A2 53 7B EB A1 E4 50 84 66 76 E7 AB 76 76 F5 B6 7A 8F 63 79 }
+		$sig2   = { 2F 49 6D 61 67 65 0A 2F 57 69 64 74 68 20 33 36 33 0A 2F 48 65 69 67 68 74 20 31 34 30 0A 2F 43 6F 6C 6F 72 53 70 61 63 65 20 2F 44 65 76 69 63 65 47 72 61 79 0A 2F 42 69 74 73 50 65 72 43 6F 6D 70 6F 6E 65 6E 74 20 38 0A 2F 46 69 6C 74 65 72 20 2F 46 6C 61 74 65 44 65 63 6F 64 65 0A 2F 4C 65 6E 67 74 68 20 33 39 38 31 3E 3E 20 73 74 72 65 61 6D 0A 78 9C ED 9D 7D 7C 14 C5 19 C7 37 C9 5D 12 92 90 40 08 41 2A BE A0 88 28 84 20 60 5B 25 80 48 D5 6A D5 2A D6 6A 0A 42 A5 7E C4 56 C0 B6 58 4B 2D 88 20 2F 96 8A 54 C1 37 A8 EF 82 55 AB 58 45 AA 58 05 3E 80 A8 A0 C8 A7 80 F1 03 0A D6 50 90 08 88 90 E4 EE 76 F7 F9 D5 }
+		$sig3   = { 2F 49 6D 61 67 65 0A 2F 57 69 64 74 68 20 33 36 30 0A 2F 48 65 69 67 68 74 20 38 38 0A 2F 43 6F 6C 6F 72 53 70 61 63 65 20 5B 2F 49 43 43 42 61 73 65 64 20 39 20 30 20 52 5D 0A 2F 53 4D 61 73 6B 20 38 20 30 20 52 0A 2F 42 69 74 73 50 65 72 43 6F 6D 70 6F 6E 65 6E 74 20 38 0A 2F 46 69 6C 74 65 72 20 2F 46 6C 61 74 65 44 65 63 6F 64 65 0A 2F 4C 65 6E 67 74 68 20 36 34 38 36 3E 3E 20 73 74 72 65 61 6D 0A 78 9C ED 5D D9 73 DA 48 B7 67 47 48 68 97 D0 82 D8 C1 C6 18 DB 38 8E B7 C9 66 27 13 67 96 4C 5E BE 4A CD CB E4 35 55 B7 E6 FB FF 9F 6F 5D 7E 95 BE 5D DD 92 10 18 5B 38 EE DF 43 2A 16 A8 39 EA }
+	condition:
+		$header at 0 and any of ($sig*)
+}
+
+rule w9_c001_structure {
+	meta:
+		author      = "kyle eaton"
+		date        = "2026-06-24"
+		description = "repeated object parameters observed in fake w9 documents"
+	strings:
+		$header = { 25 50 44 46 2D 31 2E }
+		$obj_7  = { 37 20 30 20 6F 62 6A 0A 3C 3C 2F 54 79 70 65 20 2F 58 4F 62 6A 65 63 74 0A 2F 53 75 62 74 79 70 65 20 2F 49 6D 61 67 65 0A }
+		$obj_8  = { 0A 37 20 30 20 6F 62 6A 0A 3C 3C 2F 54 79 70 65 20 2F 58 4F 62 6A 65 63 74 0A 2F 53 75 62 74 79 70 65 20 2F 49 6D 61 67 65 0A }
+		$lw_1   = { 3C 3C 2F 43 41 20 31 0A 2F 63 61 20 31 0A 2F 4C 43 20 30 0A 2F 4C 4A 20 30 0A 2F 4C 57 20 31 2E 35 32 36 39 39 39 39 35 0A 2F 4D 4C 20 31 30 0A 2F 53 41 20 74 72 75 65 0A 2F 42 4D 20 2F 4E 6F 72 6D 61 6C 3E 3E }
+		$lw_2   = { 3C 3C 2F 43 41 20 31 0A 2F 63 61 20 31 0A 2F 4C 43 20 30 0A 2F 4C 4A 20 30 0A 2F 4C 57 20 2E 37 36 33 30 30 30 30 31 0A 2F 4D 4C 20 31 30 0A 2F 53 41 20 74 72 75 65 0A 2F 42 4D 20 2F 4E 6F 72 6D 61 6C 3E 3E }
+		$lw_3   = { 3C 3C 2F 43 41 20 31 0A 2F 63 61 20 31 0A 2F 4C 43 20 30 0A 2F 4C 4A 20 30 0A 2F 4C 57 20 31 2E 31 34 34 39 39 39 39 38 0A 2F 4D 4C 20 31 30 0A 2F 53 41 20 74 72 75 65 0A 2F 42 4D 20 2F 4E 6F 72 6D 61 6C 3E 3E }
+	condition:
+		$header at 0
+		and all of ($obj_*)
+		and all of ($lw_*)
+}
+
+rule pdf_quote_lure_01 {
+	meta:
+		author      = "kyle eaton"
+		date        = "2026-06-29"
+		description = "Matches the rect value associated with a 'quote' themed PDF lure. All of the samples so far have been the same other than a modified date/time in the metadata."
+	strings:
+		$header = { 25 50 44 46 2D 31 2E }
+		$rect   = { 2F 52 65 63 74 20 5B 32 33 30 2E 33 34 35 32 38 20 34 }
+	condition:
+		$header at 0 and $rect
+}
+
+rule pdf_w9_signature_c003 {
+	meta:
+		author      = "kyle eaton"
+		date        = "2026-06-29"
+		description = "matching on signature re-use in this set of fake w9 activity"
+	strings:
+		$header = { 25 50 44 46 2D 31 2E }
+		$sig_1  = { 02 80 0A 00 28 00 A0 0A D6 57 B6 9A 8D AC 17 B6 37 30 DD DA 5C A0 92 0B 88 1D 64 8A 54 27 19 56 52 46 43 02 AC BF 79 1D 4A 30 0C 08 50 0B 34 00 50 07 C3 BF B6 67 FC 14 5F F6 46 FD 83 3C 3B 69 AD 7E D1 7F 16 F4 3F 0C EB 5A A1 03 C3 3F 0D B4 }
+	condition:
+		$header at 0 and any of ($sig_*)
+}
+
+rule pdf_blurred_invoice_lure {
+	meta:
+		author      = "kyle eaton"
+		date        = "2026-07-06"
+		description = "matching a blurred invoice lure used in malicious PDFs"
+	strings:
+		$header = { 25 50 44 46 2D 31 2E }
+		$image  = { 2F 49 6D 61 67 65 0A 2F 4C 65 6E 67 74 68 20 39 36 34 38 38 0A 2F 46 69 6C 74 65 72 20 2F 46 6C 61 74 65 44 65 63 6F 64 65 0A 2F 57 69 64 74 68 20 34 34 38 0A 2F 48 65 69 67 68 74 20 36 30 30 0A }
+	condition:
+		$header at 0 and $image
+}
+
+rule w9inv_2page_image {
+	meta:
+		author      = "kyle eaton"
+		date        = "2026-07-07"
+		description = "PDF with specific invoice and w9 images embedded"
+	strings:
+		$header     = { 25 50 44 46 2D 31 2E }
+		$w9_img_01  = { FD F6 C1 1C 52 10 B9 FF 00 3C 7A D2 95 C8 DB D6 8F 42 38 E3 AD 30 13 2A 46 D3 C6 7D E9 72 32 39 E7 B5 04 00 3E 5E 45 20 C0 19 EF D7 F3 A0 62 F1 9C 9E C6 8C 91 D7 8C 51 9C F5 ED 47 CD D0 8C D0 21 71 C7 A8 34 DF 62 7F CF E3 4E ED EB 49 }
+		$inv_img_01 = { FF DD 00 04 00 50 FF DA 00 0C 03 01 00 02 11 03 11 00 3F 00 FD F7 20 67 BD 27 71 91 CD 03 23 9F 5A 07 2D 4C 03 AF 3E 87 A5 27 D3 A1 ED 48 33 82 07 18 EF CF 5A 5E B9 E7 8F 4A 40 80 76 C9 E0 E3 07 D6 8C 1E B9 E9 F9 7E 14 10 46 00 E8 29 C7 38 39 1C 0A 06 34 EE C1 2B C5 0C 40 19 3C 7B 50 47 }
+	condition:
+		$header and (any of ($w9_img*) or any of ($inv_img*))
+}
+
+rule pdf_js_function_box_lure {
+	meta:
+		author      = "kyle eaton"
+		date        = "2026-07-07"
+		description = "matching javascript for PDFs with box shaped lure and embedded javascript - s/o greg"
+	strings:
+		$header = { 25 50 44 46 2D 31 2E }
+		$js1    = { 2E 72 65 70 6C 61 63 65 28 2F 5C 5C 78 2F 67 2C 20 22 25 22 29 }
+		$js2    = { 2F 4A 61 76 61 53 63 72 69 70 74 0A 2F 4A 53 20 28 76 61 72 20 }
+	condition:
+		$header at 0 and $js1 and $js2
+}
+
+rule pdf_rect_size_box_lure {
+	meta:
+		author      = "kyle eaton"
+		date        = "2026-07-07"
+		description = "matching rect sizes for PDFs with box shaped lure and embedded javascript - s/o greg"
+	strings:
+		$header    = { 25 50 44 46 2D 31 2E }
+		$rect_size = { 2f 52 65 63 74 20 5b 32 38 30 20 33 34 30 20 34 32 30 20 33 37 32 5d }
+	condition:
+		$header at 0 and $rect_size
+}
+
+rule pdf_view_doc_here_title_box {
+	meta:
+		aurthor     = "kyle eaton"
+		date        = "2026-07-09"
+		description = "matching PDFs with VIEW DOCUMENT HERE language, matching specific title and positioning parameters"
+	strings:
+		$header     = { 25 50 44 46 2D 31 2E }
+		$title      = { 2F 54 69 74 6C 65 20 28 56 49 45 57 20 44 4F 43 55 4D 45 4E 54 53 20 48 45 52 45 29 0A 2F 44 65 73 74 20 5B 35 20 30 20 52 20 2F 58 59 5A 20 36 39 }
+		$link       = { 2F 52 65 63 74 20 5B 30 20 37 39 32 20 30 20 37 39 32 5D }
+		$image_size = { 20 2F 49 6D 61 67 65 0A 2F 57 69 64 74 68 20 32 37 32 0A 2F 48 65 69 67 68 74 20 33 33 33 0A }
+	condition:
+		$header at 0 and $image_size and ($title or $link)
+}
+
+rule pdf_prompt_ack_secure_document_link {
+	meta:
+		author      = "kyle eaton"
+		date        = "2026-07-14"
+		description = "PDF with a 'please acknowledge quickly' lure and an open secure document button, matching the button positioning"
+	strings:
+		$header = { 25 50 44 46 2D 31 2E }
+		$rect   = { 2F 52 65 63 74 20 5B 20 35 33 2E 32 35 20 34 32 35 }
+	condition:
+		$header at 0 and $rect
+}
+
+rule pdf_prompt_ack_secure_document_image_sizes {
+	meta:
+		author      = "kyle eaton"
+		date        = "2026-07-14"
+		description = "PDF with a 'please acknowledge quickly' lure and an open secure document button, matching the clip art sizes"
+	strings:
+		$header = { 25 50 44 46 2D 31 2E }
+		$img1   = { 2F 53 75 62 74 79 70 65 20 2F 49 6D 61 67 65 0A 2F 57 69 64 74 68 20 31 36 34 0A 2F 48 65 69 67 68 74 20 31 36 34 0A 2F 42 69 74 73 50 65 72 43 6F 6D 70 6F 6E 65 6E 74 20 38 0A 2F 43 6F 6C 6F 72 53 70 61 63 65 20 2F 44 65 76 69 63 65 47 72 61 79 0A }
+		$img2   = { 2F 53 75 62 74 79 70 65 20 2F 49 6D 61 67 65 0A 2F 57 69 64 74 68 20 31 36 34 0A 2F 48 65 69 67 68 74 20 31 36 34 0A 2F 42 69 74 73 50 65 72 43 6F 6D 70 6F 6E 65 6E 74 20 38 0A 2F 43 6F 6C 6F 72 53 70 61 63 65 20 2F 44 65 76 69 63 65 52 47 42 }
+	condition:
+		$header at 0 and all of ($img*)
+}
