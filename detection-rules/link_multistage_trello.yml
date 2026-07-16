@@ -24,34 +24,39 @@ source: |
             )
           )
           or any(ml.link_analysis(.).additional_responses,
-                 // less than 4 cards on the Trello board
-                 length(.json['cards']) < 4
-                 or any(.json['cards'],
-                        // suspicious link in a card title
-                        (
-                          strings.parse_url(.['name']).domain.valid
-                          and (
-                            ml.link_analysis(strings.parse_url(.['name'])).credphish.disposition == "phishing"
-                            or ml.link_analysis(strings.parse_url(.['name'])).credphish.contains_captcha
-                            // CF Turnstile
-                            or any(ml.link_analysis(strings.parse_url(.['name'])).unique_urls_accessed,
-                                   .domain.domain == "challenges.cloudflare.com"
+                 // make sure we have a valid response first
+                 .json is not null
+                 and .status_code == 200
+                 and (
+                   // less than 4 cards on the Trello board
+                   length(.json['cards']) < 4
+                   or any(.json['cards'],
+                          // suspicious link in a card title
+                          (
+                            strings.parse_url(.['name']).domain.valid
+                            and (
+                              ml.link_analysis(strings.parse_url(.['name'])).credphish.disposition == "phishing"
+                              or ml.link_analysis(strings.parse_url(.['name'])).credphish.contains_captcha
+                              // CF Turnstile
+                              or any(ml.link_analysis(strings.parse_url(.['name'])
+                                     ).unique_urls_accessed,
+                                     .domain.domain == "challenges.cloudflare.com"
+                              )
                             )
                           )
-                        )
-                        // Trello detected a malicious card attachment
-                        or .['badges']['maliciousAttachments'] > 0
-                 )
-                 // Trello has blocked the user account
-                 or any(.json['members'], .['activityBlocked'] == true)
-                 // the user is the sole member of their Trello account and is the admin
-                 or (
-                   length(.json['memberships']) == 1
-                   and all(.json['memberships'], .['orgMemberType'] == "admin")
+                          // Trello detected a malicious card attachment
+                          or .['badges']['maliciousAttachments'] > 0
+                   )
+                   // Trello has blocked the user account
+                   or any(.json['members'], .['activityBlocked'] == true)
+                   // the user is the sole member of their Trello account and is the admin
+                   or (
+                     length(.json['memberships']) == 1
+                     and all(.json['memberships'], .['orgMemberType'] == "admin")
+                   )
                  )
           )
   )
-
 attack_types:
   - "Credential Phishing"
 tactics_and_techniques:
