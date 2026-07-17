@@ -11,47 +11,54 @@ type: "rule"
 severity: "high"
 source: |
   type.inbound
-  
+
   // message contains links
   and 0 < length(body.links) < 15
-  
-  // NLU detects credential theft intent
-  and any(ml.nlu_classifier(body.current_thread.text).intents,
-          .name in ("cred_theft") and .confidence in ("medium", "high")
-  )
-  
-  // REQUIRED: email must contain explicit copy-paste-to-terminal instruction
-  // or keystroke-only variant (e.g. press Windows+R, Ctrl+V, Enter) — UAT-11795/ClickFix
+
+  // NLU detects credential theft or malware delivery intent
   and (
+    any(ml.nlu_classifier(body.current_thread.text).intents,
+        .name in ("cred_theft", "malware") and .confidence in ("medium", "high")
+    )
+    or any(ml.nlu_classifier(body.current_thread.text).entities,
+           .name == "urgency"
+    )
+  )
+
+  // require 2 of the following ClickFix-specific signals
+  and 2 of (
+
+    // explicit copy-paste-to-terminal instruction
     (
       strings.icontains(body.current_thread.text, "copy")
       and (
         strings.icontains(body.current_thread.text, "paste")
         or strings.icontains(body.current_thread.text, "pasting")
       )
-      and regex.icontains(body.current_thread.text,
-                          '(?:terminal|powershell|command prompt|run dialog|win(?:dows)?\s*\+\s*r|\bcmd\b|mshta)'
-      )
-    )
-    or (
-      // keystroke-only variant — no copy/paste language, just key instructions
-      regex.icontains(body.current_thread.text,
-                      '(?:ctrl\s*[+-]\s*v|press win(?:dows)?\s*\+\s*r)'
-      )
-      and regex.icontains(body.current_thread.text,
-                          '(?:terminal|powershell|command prompt|run dialog|win(?:dows)?\s*\+r|\bcmd\b|mshta)'
-      )
-    )
-  )
-  
-  // require 1 additional supporting signal
-  and 1 of (
-  
-    // fake CAPTCHA or browser verification framing
-    regex.icontains(body.current_thread.text,
-                    '(?:captcha|verify you are human|human verification|browser check|press windows|press win\s*\+\s*r|i am not a robot)'
+      and any([
+        strings.icontains(body.current_thread.text, "terminal"),
+        strings.icontains(body.current_thread.text, "powershell"),
+        strings.icontains(body.current_thread.text, "command prompt"),
+        strings.icontains(body.current_thread.text, "run dialog"),
+        strings.icontains(body.current_thread.text, "win+r"),
+        strings.icontains(body.current_thread.text, "windows+r"),
+        strings.icontains(body.current_thread.text, "cmd")
+      ], .)
     ),
-  
+
+    // fake CAPTCHA or browser verification framing
+    (
+      any([
+        strings.icontains(body.current_thread.text, "captcha"),
+        strings.icontains(body.current_thread.text, "verify you are human"),
+        strings.icontains(body.current_thread.text, "human verification"),
+        strings.icontains(body.current_thread.text, "browser check"),
+        strings.icontains(body.current_thread.text, "press windows"),
+        strings.icontains(body.current_thread.text, "press win+r"),
+        strings.icontains(body.current_thread.text, "i am not a robot")
+      ], .)
+    ),
+
     // link resolves to or redirects through a suspicious TLD
     any(body.links,
         .href_url.domain.tld in $suspicious_tlds
@@ -59,20 +66,42 @@ source: |
                .domain.tld in $suspicious_tlds
         )
     ),
-  
-    // freemail sender — should never send terminal instructions
+
+    // freemail sender — should never send CAPTCHA or terminal instructions
     sender.email.domain.domain in $free_email_providers
+
   )
-  
+
+  // unsolicited sender
+  and (
+    (
+      profile.by_sender().prevalence in ("new", "outlier")
+      and not profile.by_sender().solicited
+    )
+    or (
+      profile.by_sender().any_messages_malicious_or_spam
+      and not profile.by_sender().any_messages_benign
+    )
+  )
+  and not profile.by_sender().any_messages_benign
+
   // negate highly trusted sender domains unless they fail DMARC
-  and not (
+  and (
     (
       sender.email.domain.root_domain in $high_trust_sender_root_domains
-      // and org_domains
-      or sender.email.domain.domain in $org_domains
+      and not headers.auth_summary.dmarc.pass
     )
-    and coalesce(headers.auth_summary.dmarc.pass, false)
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
   )
+
+  // negate known security awareness training platforms
+  and sender.email.domain.root_domain not in (
+    "knowbe4.com",
+    "proofpoint.com",
+    "cofense.com",
+    "terranovasecurity.com"
+  )
+
 tags:
   - "Attack surface reduction"
 attack_types:
@@ -91,4 +120,4 @@ references:
   - "https://www.elastic.co/security-labs/telepuz-maas-malware-clickfix"
   - "https://www.microsoft.com/en-us/security/blog/2026/04/30/email-threat-landscape-q1-2026-trends-and-insights/"
   - "https://yanaivanov.com/writing/clickfix_field_note.html"
-id: "df51b2bb-8f40-51b0-ae6f-ed742cf00109"
+id: ""
