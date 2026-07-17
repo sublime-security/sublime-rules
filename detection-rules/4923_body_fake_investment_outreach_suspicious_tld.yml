@@ -1,0 +1,59 @@
+name: "BEC/Fraud: Fake investment outreach from suspicious TLD"
+description: |
+  Detects unsolicited investment/funding outreach emails from suspicious TLDs.
+  Targets mass-mailed spam campaigns offering business funding, capital allocation,
+  family office outreach, and personalized investment pitches.
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+
+  // subject content
+  and (
+    strings.istarts_with(subject.base, 'investment into', 'financing for')
+    or strings.icontains(subject.base, "family office")
+    // subject starts with mailbox first name
+    or strings.istarts_with(subject.subject, mailbox.first_name)
+  )
+
+  // financial body content
+  and (
+    any(ml.nlu_classifier(body.current_thread.text).topics,
+        .name == "Financial Communications" and .confidence != "low"
+    )
+    or (
+      any(ml.nlu_classifier(body.current_thread.text).topics,
+          .name == "B2B Cold Outreach" and .confidence != "low"
+      )
+      and regex.icontains(body.current_thread.text,
+                          'funding',
+                          'capital',
+                          '\d{3}k',
+                          'rates from \d+%',
+                          'funded in \d+'
+      )
+    )
+  )
+
+  // suspicious sender
+  and (
+    sender.email.domain.tld in $suspicious_tlds
+    or sender.email.domain.tld == "info"
+  )
+
+tags:
+ - "Attack surface reduction"
+attack_types:
+  - "BEC/Fraud"
+  - "Spam"
+tactics_and_techniques:
+  - "Social engineering"
+detection_methods:
+  - "Header analysis"
+  - "Sender analysis"
+  - "Content analysis"
+  - "Natural Language Understanding"
+id: "96e47d0a-2721-500f-9f1a-fa42b8fb4ddc"
+og_id: "5d4c4a15-661c-5fd1-9d5f-1c72c8230be8"
+testing_pr: 4923
+testing_sha: 25a748f25d0b1dcdd1af742b1cda7602f597e356
