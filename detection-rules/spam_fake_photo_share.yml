@@ -14,7 +14,14 @@ source: |
             length(body.html.display_text) < 500
             and length(body.current_thread.text) == 0
           )
-          or (length(body.current_thread.text) < 500)
+          or length(body.current_thread.text) < 500
+          or any(map(filter(ml.nlu_classifier(body.current_thread.text).entities,
+                            .name == "disclaimer"
+                     ),
+                     .text
+                 ),
+                 (length(body.current_thread.text) - length(.)) < 500
+          )
         )
         and strings.ilike(subject.subject,
                           "*picture*",
@@ -23,7 +30,14 @@ source: |
                           "*sad news*",
                           "*sad announcement*",
                           "*sad update*",
-                          "*new pics*"
+                          "*new pics*",
+                          "*Reunion*",
+                          "*planing*",
+                          "*back memories*",
+                          "*any memories*",
+                          "*old memories*",
+                          "*evoke memories*",
+                          "*bittersweet memories*"
         )
       )
       or (
@@ -39,7 +53,12 @@ source: |
                             "*sad news*",
                             "*sad announcement*",
                             "*sad update*",
-                            "*new pics*"
+                            "*new pics*",
+                            "*back memories*",
+                            "*any memories*",
+                            "*old memories*",
+                            "*evoke memories*",
+                            "*bittersweet memories*"
           )
         )
         or (
@@ -51,7 +70,12 @@ source: |
                             "*sad news*",
                             "*sad announcement*",
                             "*sad update*",
-                            "*new pics*"
+                            "*new pics*",
+                            "*back memories*",
+                            "*any memories*",
+                            "*old memories*",
+                            "*evoke memories*",
+                            "*bittersweet memories*"
           )
           and not strings.icontains(body.plain.raw, "[cid:image")
         )
@@ -64,7 +88,12 @@ source: |
                             "*sad news*",
                             "*sad announcement*",
                             "*sad update*",
-                            "*new pics*"
+                            "*new pics*",
+                            "*back memories*",
+                            "*any memories*",
+                            "*old memories*",
+                            "*evoke memories*",
+                            "*bittersweet memories*"
           )
         )
       )
@@ -98,7 +127,12 @@ source: |
                           "*sad news*",
                           "*sad announcement*",
                           "*sad update*",
-                          "*pics*"
+                          "*pics*",
+                          "*back memories*",
+                          "*any memories*",
+                          "*old memories*",
+                          "*evoke memories*",
+                          "*bittersweet memories*"
         )
         and not strings.istarts_with(body.plain.raw, "[cid:image")
         and strings.icontains(subject.subject, sender.display_name)
@@ -125,16 +159,22 @@ source: |
               length(.display_text) == 1
               and .href_url.domain.root_domain in ("facebook.com", "youtube.com")
             )
+            or (
+              // random 5-6 character subdomain
+              regex.icontains(.href_url.domain.domain,
+                              '^[a-z]{5,6}\.[a-z]{5,}\.[a-z]+'
+              )
+              // subdomain contains 3+ consecutive consonants
+              and regex.icontains(.href_url.domain.domain,
+                                  '^[a-z]*[b-df-hj-np-tv-z]{3,}[a-z]*\.'
+              )
+              and network.whois(.href_url.domain).days_old < 365
+            )
     )
   )
   and (
     (
-      (
-        length(headers.references) > 0
-        or not any(headers.hops,
-                   any(.fields, strings.ilike(.name, "In-Reply-To"))
-        )
-      )
+      (length(headers.references) > 0 or headers.in_reply_to is null)
       and not (
         (
           strings.istarts_with(subject.subject, "RE:")

@@ -1,0 +1,75 @@
+name: "Scam soliciting employer review/rating"
+description: "Detects scam content that impersonates employer review/rating platforms (e.g., Glassdoor, Indeed, Comparably, Great Place to Work) and solicits the recipient to review or rate their employer, while excluding legitimate review/rating platform senders."
+type: "rule"
+severity: "low"
+source: |
+    type.inbound
+    // credential theft or scam intent
+    and any(ml.nlu_classifier(body.current_thread.text).intents,
+            .name in ("cred_theft", "job_scam") and .confidence != "low"
+    )
+    // employer/workplace review solicitation phrasing
+    and regex.icontains(body.current_thread.text,
+                        '\brate\s+(?:your\s+)?(?:employer|workplace|job)\b',
+                        '\breview\s+(?:your\s+)?(?:experience\s+(?:at|with)\s+(?:your|the)\s)',
+                        '\b(?:employer|workplace|job)\s+(?:review|rating|feedback)\b',
+                        '\bleave\s+(?:a\s+)?(?:review|rating).{0,40}(?:employer|workplace|job)',
+                        '(?:glassdoor|comparably|great\s+place\s+to\s+work|kununu|jobcase).{0,40}(?:review|rate|rating|feedback)'
+    )
+    and (
+      // credential harvesting
+      regex.icontains(body.current_thread.text,
+                      '(?:enter|provide|confirm|verify).{0,40}(?:password|credentials|login|email\s+and\s+password)',
+                      'verify\s+your\s+(?:identity|eligibility|account|profile)',
+                      '(?:password|credential|login).{0,30}(?:enter|provide|confirm|verify|required)'
+      )
+      // or monetary incentive
+      or regex.icontains(body.current_thread.text,
+                         'gift.?card',
+                         '(?:receive|earn|get|claim).{0,30}[\$€£]\d+',
+                         '[\$€£]\d+.{0,30}(?:gift|reward|credit|incentive|voucher|bonus|prize)',
+                         'token\s+of\s+(?:our\s+)?(?:appreciation|thanks|gratitude)'
+      )
+    )
+    // negating legitimate/trusted employer review/rating senders
+    and not (
+      (
+        sender.email.domain.root_domain in (
+          'comparably.com',
+          'greatplacetowork.com',
+          'builtin.com',
+          'lensa.com',
+          'ziprecruiter.com',
+          'kununu.com',
+          'jobcase.com',
+          'trustpilot.com'
+        )
+        or sender.email.domain.root_domain in $high_trust_sender_root_domains
+      )
+      and coalesce(headers.auth_summary.dmarc.pass, false)
+    )
+    // subject cites employer review / rating / feedback context
+    and regex.icontains(subject.subject,
+                        '\breview\b',
+                        '\brating\b',
+                        '\brate\b',
+                        '\bfeedback\b',
+                        '\btestimonial\b',
+                        '\b(?:employer|workplace|company|employee|job)\b',
+                        '\b(?:glassdoor|indeed|linkedin|comparably|great\s+place\s+to\s+work|built\s?in|lensa|ziprecruiter|kununu|jobcase|trustpilot)\b',
+                        '\bexperience\b',
+                        '\bsurvey\b',
+                        '\bopinion\b'
+    )
+attack_types:
+  - "BEC/Fraud"
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Social engineering"
+  - "Impersonation: Brand"
+detection_methods:
+  - "Content analysis"
+  - "Natural Language Understanding"
+  - "Header analysis"
+  - "Sender analysis"
+id: "ad3c63e8-02a8-5583-bb60-e5ebd76d0331"

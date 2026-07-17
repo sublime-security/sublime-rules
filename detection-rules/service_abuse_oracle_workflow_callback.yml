@@ -1,0 +1,24 @@
+name: "Service abuse: Oracle Cloud Workflow callback scam"
+description: "Detects inbound messages sent through Oracle Cloud's workflow mail service (workflow.mail.us2.cloud.oracle.com) that contain callback scam content within styled HTML table cells. Natural language understanding is used to identify callback scam intent with medium or high confidence within the message body, indicating misuse of legitimate Oracle infrastructure to deliver fraudulent content."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and sender.email.domain.domain == "workflow.mail.us2.cloud.oracle.com"
+  and any(html.xpath(body.html,
+                     "//td[contains(@style, 'padding: 20px 40px')]//font[@style='']"
+          ).nodes,
+          any(ml.nlu_classifier(.inner_text).intents,
+              .name == "callback_scam" and .confidence != "low"
+          )
+  )   
+attack_types:
+  - "Callback Phishing"
+tactics_and_techniques:
+  - "Social engineering"
+  - "Impersonation: Brand"
+detection_methods:
+  - "Sender analysis"
+  - "HTML analysis"
+  - "Natural Language Understanding"
+id: "873f523d-20a9-534d-b05c-69d740b6e155"

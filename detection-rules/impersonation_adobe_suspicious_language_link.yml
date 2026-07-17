@@ -12,7 +12,7 @@ source: |
     )
     or length(attachments) == 0
   )
-  and length(body.links) > 0
+  and length(filter(body.links, .href_url.scheme != 'mailto')) > 0
   and (
     any(ml.logo_detect(file.message_screenshot()).brands,
         .name == "Adobe" and .confidence in ("high")
@@ -83,12 +83,7 @@ source: |
   // Negate replies & forwards
   and (
     (
-      (
-        length(headers.references) > 0
-        or not any(headers.hops,
-                   any(.fields, strings.ilike(.name, "In-Reply-To"))
-        )
-      )
+      (length(headers.references) > 0 or headers.in_reply_to is null)
       and not (
         (
           strings.istarts_with(subject.subject, "RE:")
@@ -153,7 +148,6 @@ source: |
     )
     or sender.email.domain.root_domain not in $high_trust_sender_root_domains
   )
-
 attack_types:
   - "Credential Phishing"
 tactics_and_techniques:

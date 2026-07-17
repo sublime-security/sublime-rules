@@ -1,0 +1,31 @@
+name: "Brand impersonation: Bids & Tenders"
+description: "Detects links impersonating the Bids & Tenders platform. The rule identifies suspicious links from non-legitimate domains that load Bids & Tenders logo assets, suggesting the sender is spoofing the platform to appear legitimate."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  // self sender or invaild recipent domain
+  and length(recipients.to) == 1
+  and (
+    sender.email.email == recipients.to[0].email.email
+    or recipients.to[0].email.domain.valid == false
+  )
+  and 0 < length(body.current_thread.links) < 10
+  and any(body.current_thread.links,
+          .href_url.domain.root_domain != 'bidsandtenders.ca'
+          and any(ml.link_analysis(.).unique_urls_accessed,
+                  .domain.domain == 'bids.bidsandtenders.ca'
+                  and strings.icontains(.path, '/Logo/')
+          )
+  )
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Spoofing"
+  - "Social engineering"
+detection_methods:
+  - "Sender analysis"
+  - "URL analysis"
+  - "Content analysis"
+id: "a525a341-3bd1-5acc-8275-0a8a3a5c532b"
