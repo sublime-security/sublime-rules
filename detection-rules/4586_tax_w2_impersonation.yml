@@ -4,6 +4,7 @@ type: "rule"
 severity: "medium"
 source: |
   type.inbound
+  // searching for common sender emails
   and sender.email.local_part in~ (
     "contact",
     "no-reply",
@@ -11,58 +12,59 @@ source: |
     "info",
     "admin"
   )
-  and not (
-    sender.email.domain.domain in $org_domains
-    and coalesce(headers.auth_summary.dmarc.pass, false)
-  )
-  
-  // mismatched From and Reply-to
+  // sender emails unmatched
   and (
     length(headers.reply_to) > 0
     and all(headers.reply_to,
             .email.domain.root_domain != sender.email.domain.root_domain
     )
   )
-  
-  // W-2 Language with a request
+  // subject lines with words correlating to (tax information)
   and (
-    strings.contains(subject.base, 'W-2')
-    or strings.icontains(subject.base, 'wage')
-    or strings.icontains(subject.base, 'tax form')
-    or strings.icontains(subject.base, 'irs')
-    or regex.icontains(subject.base, 'w2\b')
+    strings.icontains(subject.base, 'wage')
+    or strings.icontains(subject.base,
+                         'Ŵ-2'
+    ) // contains a diacritical mark
+    or regex.icontains(subject.base, 'tax (?:form|state?ment|year)')
+    or regex.icontains(subject.base, '\bw-?2?\b')
+    or regex.icontains(strings.replace_confusables(subject.base), '\birs\b')
   )
-  // body text containing variations of "W2"
+  // body text containing variations of "w2" or "wage statements"
   and (
     (
-      strings.icontains(body.current_thread.text, "w2")
-      or regex.icontains(body.current_thread.text, 'w-2\b')
-      or strings.icontains(body.current_thread.text, "Ẇ-2")
-      or regex.icontains(body.current_thread.text, 'w-2[a-z]?\b')
+      strings.icontains(body.current_thread.text,
+                        "Ẇ-2"
+      ) // contains a diacritical mark
       or strings.icontains(body.current_thread.text, "wage statements")
-    )
-    or (
-      length(headers.reply_to) > 0
-      and all(headers.reply_to, network.whois(.email.domain).days_old <= 60)
-      and strings.icontains(body.current_thread.text, "w-2")
+      or regex.icontains(body.current_thread.text, 'w-?2[a-z]?\b')
     )
   )
+  // ml classifying for requests
   and any(ml.nlu_classifier(body.current_thread.text).entities,
           .name == "request"
   )
-  and sender.email.domain.root_domain not in (
-    "excel.com",
-    "sharepoint.com",
-    "sharepointonline.com",
-    "powerpoint.com",
-    "onenote.com",
-    "microsoft.com"
-  )
+  // exclude legitimate senders or domains
   and not any(ml.nlu_classifier(body.current_thread.text).intents,
               .name == "benign" and .confidence == "high"
   )
-  
-  // negate highly trusted sender domains unless they fail DMARC authentication
+  and not (
+    sender.email.domain.domain in $org_domains
+    and coalesce(headers.auth_summary.dmarc.pass, false)
+  )
+  and not (
+    sender.email.domain.root_domain in (
+      "excel.com",
+      "sharepoint.com",
+      "sharepointonline.com",
+      "powerpoint.com",
+      "onenote.com",
+      "microsoft.com",
+      "jotform.com",
+      "wetrasnfer.com"
+    )
+    and coalesce(headers.auth_summary.dmarc.pass, false)
+  )
+  // // negate highly trusted sender domains unless they fail DMARC authentication
   and not (
     sender.email.domain.root_domain in $high_trust_sender_root_domains
     and coalesce(headers.auth_summary.dmarc.pass, false)
@@ -83,4 +85,4 @@ detection_methods:
 id: "63c3bc52-a276-5c6b-8f63-98e01313df92"
 og_id: "4834a45e-6d70-5ad9-9043-024eea995e95"
 testing_pr: 4586
-testing_sha: 457c33fe4cc96a0b833a4c5f2b9f489817cc099f
+testing_sha: 6fbcbc16c364c6a0b11ca952ff6e4ff920e3b7c8
