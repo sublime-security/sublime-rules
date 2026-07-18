@@ -1,28 +1,33 @@
-name: "Brand impersonation: Anthropic and Claude lure"
+name: "Brand impersonation: Anthropic/Claude with newly registered domain"
 description: "Detects messages impersonating Anthropic or Claude using sender display names of 'Anthropic' or 'Claude' from domains not affiliated with the legitimate brands. The rule flags messages where the sending domain, reply-to domain, or return-path domain is newly registered (under 90 days old)."
 type: "rule"
 severity: "medium"
 source: |
   type.inbound
-  // sender display name Anthropic and Claude
-  and sender.display_name in ("Anthropic", "Claude")
-  // sender suspicious domains
-  and not sender.email.domain.root_domain in ("claude.com", "anthropic.com")
-  // links created less than 90 days
-  and any(body.links, network.whois(.href_url.domain).days_old <= 90)
-  and (
-    network.whois(sender.email.domain).days_old <= 90
-    or network.whois(headers.return_path.domain).days_old <= 90
-  )
-  // look for common subject lines & body text for claude, anthropic, ads
+  // look for common subject lines for claude, anthropic, ads
   and (
     strings.icontains(subject.base, "claude")
     or strings.icontains(subject.base, "anthropic")
-    or regex.icontains(subject.base, "(?:early.access|ads)")
+    or regex.icontains(subject.base, '\bads\b')
   )
   and (
-    strings.icontains(body.current_thread.text, "claude")
-    or strings.icontains(body.current_thread.text, "anthropic")
+    // sender display name with claude, anthropic - created less than 90 days
+    regex.icontains(sender.display_name, '(?:claude|anthropic)')
+    and (
+      network.whois(sender.email.domain).days_old <= 90
+      or network.whois(headers.return_path.domain).days_old <= 90
+    )
+  )
+  // common theme for suspicious claude, anthropic
+  and 2 of (
+    strings.icontains(body.current_thread.text, "ad account"),
+    strings.icontains(body.current_thread.text, "claude ads"),
+    strings.icontains(body.current_thread.text, "trial access"),
+    strings.icontains(body.current_thread.text, "subscription"),
+    strings.icontains(body.current_thread.text, "workspace"),
+    regex.icontains(body.current_thread.text, '\bads( team)?\b'),
+    regex.icontains(body.current_thread.text, "connect.{0,30}account"),
+    regex.icontains(body.current_thread.text, '\banthropic( team|pbc)?\b')
   )
   // negate highly trusted sender domains unless they fail DMARC authentication
   and not (
@@ -44,4 +49,4 @@ detection_methods:
 id: "eea62f23-04c6-59ad-af52-8677a33f164a"
 og_id: "02d16c54-a773-5286-b7a8-7b37551ccba5"
 testing_pr: 4683
-testing_sha: 31311ffd7afe969a5933d10267971d3f82eecfa1
+testing_sha: b93a65a8bc16ffca8c66c4be924a6b5ebd18e0c8
