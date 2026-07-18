@@ -1,0 +1,127 @@
+name: "Reconnaissance: Short generic greeting message"
+description: |
+  Detects potential reconnaissance messages with very short, generic content like 'Hi' or 'Hello' from external senders. These messages are often used to validate email addresses and test deliverability before launching larger attacks.
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  // detect generic greetings
+  and length(body.current_thread.text) <= 20
+  and (
+    length(subject.base) <= 15
+    // tighter scoped tactics for display name variants
+    or (
+      length(subject.base) <= 20
+      and sender.display_name is not null
+      and length(sender.display_name) >= 4
+      and (
+        // full display name in subject
+        strings.icontains(subject.base, sender.display_name)
+
+        // or any 4+ letter word from display name appears in subject
+        or any(regex.extract(sender.display_name, '[A-Za-z]{4,}'),
+               strings.icontains(subject.base, .full_match)
+        )
+
+        // or first + last(-name)? that is not referenced anywhere
+        or (
+          regex.match(subject.base, '^[A-Z][a-z]+ [A-Z][a-z]+(-[A-Z][a-z]+)?$')
+          and subject.base != sender.display_name
+          and not any(recipients.to, subject.base == .display_name)
+          and not any(recipients.cc, subject.base == .display_name)
+          and not any(recipients.bcc, subject.base == .display_name)
+        )
+      )
+    )
+  )
+  // exclude messages with previous thread context (forwards/replies)
+  and length(body.previous_threads) == 0
+  and (
+    any(ml.nlu_classifier(body.current_thread.text).entities, .name == "greeting")
+    or strings.ilike(body.current_thread.text, "*hi*", "*hello*", "*hey*")
+    or length(body.current_thread.text) <= 5
+    or regex.match(body.current_thread.text, '\d+')
+  )
+  // external freemail sender
+  and sender.email.domain.root_domain in $free_email_providers
+  and (
+    sender.email.domain.root_domain not in (
+      recipients.to[0].email.domain.root_domain
+    )
+    or (
+      (
+        all(recipients.to, .email.domain.valid == false)
+        and all(recipients.cc, .email.domain.valid == false)
+      )
+      or length(recipients.to) == 0
+    )
+  )
+  and (
+    length(recipients.cc) == 0
+    or (
+      length(recipients.cc) > 0
+      and all(recipients.cc,
+              .email.domain.root_domain != sender.email.domain.root_domain
+      )
+    )
+  )
+  and (
+    length(recipients.bcc) == 0
+    or (
+      length(recipients.bcc) > 0
+      and all(recipients.bcc,
+              .email.domain.root_domain != sender.email.domain.root_domain
+      )
+    )
+  )
+  // no attachments or links
+  and length(attachments) == 0
+  and length(body.current_thread.links) == 0
+  
+  // not where the sender and mailbox display_anames indicate this might be a personal email --> work email
+  // impersonation is covered by other core feed rules
+  and not (
+    sum([length(recipients.to), length(recipients.bcc), length(recipients.cc)]) == 1
+    // use coalesce to deal with either the sender.display_name or the mailbox element being null
+    // if either are null, the function returns false, as it cannot be true if either is null
+    and coalesce(strings.icontains(sender.display_name, mailbox.first_name),
+                 false
+    )
+    and coalesce(strings.icontains(sender.display_name, mailbox.last_name), false)
+  )
+  and (
+    // auth failed (or absent) - ignore the profile
+    coalesce(headers.auth_summary.dmarc.pass, false) == false
+    or coalesce(headers.auth_summary.spf.pass, false) == false
+    // auth passed - use the profile
+    or (
+      // no benign messages
+      not profile.by_sender_email().any_messages_benign
+      and (
+        // not soliticed OR common
+        not (
+          profile.by_sender_email().solicited
+          or profile.by_sender_email().prevalence == "common"
+        )
+        // or HAS been spam_malicious
+        or profile.by_sender_email().any_messages_malicious_or_spam
+      )
+    )
+  )
+tags:
+ - "Attack surface reduction"
+attack_types:
+  - "BEC/Fraud"
+  - "Callback Phishing"
+tactics_and_techniques:
+  - "Social engineering"
+  - "Free email provider"
+detection_methods:
+  - "Content analysis"
+  - "Header analysis"
+  - "Natural Language Understanding"
+  - "Sender analysis"
+id: "1b65b77b-aa82-5ea0-a020-04d4c7cde8b7"
+og_id: "c67dedab-91f5-5bbe-af81-f9895a02c065"
+testing_pr: 4927
+testing_sha: 86026d07c15fd21c0d5856938354c42760019a51
