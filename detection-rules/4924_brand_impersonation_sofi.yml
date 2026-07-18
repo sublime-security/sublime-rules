@@ -1,0 +1,89 @@
+name: "Brand impersonation: SoFi"
+description: "Detects messages impersonating SoFi by analyzing sender display name, domain, body content including specific address references and phone numbers, while excluding legitimate SoFi communications with proper DMARC authentication."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  // standard brand template
+  and (
+    (
+      // disclaimer
+      (
+        regex.icontains(body.current_thread.text,
+                        '\bsofi (?:bank|invest|securities|team|tech|wealth)\b'
+        )
+        and regex.icontains(body.current_thread.text,
+                            '©.20[0-9]{2}.(?:sofi|social finance)'
+        )
+        // phone numbers
+        and regex.icontains(body.current_thread.text,
+                            '\(855\)[\s\-\.]456[\s\-\.]7634',
+                            '\(844\)[\s\-\.]908[\s\-\.]7634'
+        )
+      )
+
+      // address
+      or (
+        regex.icontains(body.current_thread.text, '\bsofi\b')
+        and strings.icontains(body.current_thread.text, "2750 E Cottonwood Pkwy")
+        and strings.icontains(body.current_thread.text,
+                              "Salt Lake City, UT 84121"
+        )
+      )
+
+      // observed cred theft ttp
+      or (
+        regex.icontains(sender.display_name, '\bsofi\b')
+        and (
+          strings.icontains(body.current_thread.text,
+                            "trade confirmation",
+                            "self-directed investing account"
+          )
+        )
+      )
+    )
+
+    // negate legitimate replies
+    and not (
+      (length(headers.references) > 0 or headers.in_reply_to is not null)
+      and (subject.is_forward or subject.is_reply)
+      and length(body.previous_threads) >= 1
+    )
+
+    // topic negations
+    and not any(ml.nlu_classifier(body.current_thread.text).topics,
+                .name in ("Newsletters and Digests")
+    )
+
+    // negate sofi & related domains
+    and not (
+      sender.email.domain.root_domain in (
+        "sofi.com", // parent domain
+        "sofi.org", // observed sender domain
+        "samsung.com", // financial partnership
+        "investordelivery.com" // financials delivery platform
+      )
+      and coalesce(headers.auth_summary.dmarc.pass, false)
+    )
+
+    // negate high trust sender root domains unless they fail authentication
+    and not (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and coalesce(headers.auth_summary.dmarc.pass, false)
+    )
+  )
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Header analysis"
+  - "Sender analysis"
+  - "Natural Language Understanding"
+  - "URL analysis"
+id: "588b7c86-1298-5dd0-acb1-3b629cd788f4"
+og_id: "a1b2c3d4-e5f6-4a5b-8c9d-0e1f2a3b4c5d"
+testing_pr: 4924
+testing_sha: df88c3d894c88f22c1997c9b4712ac52ea65af14
