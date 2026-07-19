@@ -5,7 +5,26 @@ severity: "high"
 source: |
   type.inbound
   and (
-    any($org_vips, strings.contains(sender.display_name, .display_name))
+    any($org_vips,
+        (
+          .display_name != ""
+          and strings.contains(sender.display_name, .display_name)
+        )
+        or (
+          .first_name != ""
+          and .last_name != ""
+          and strings.contains(sender.display_name,
+                               strings.concat(.first_name, " ", .last_name)
+          )
+        )
+        or (
+          .first_name != ""
+          and .last_name != ""
+          and strings.contains(sender.display_name,
+                               strings.concat(.last_name, ", ", .first_name)
+          )
+        )
+    )
     or any(regex.extract(sender.display_name, '^(?<first>\S+)\s+(?<second>\S+)$'),
            any($org_vips,
                strings.contains(.display_name, ..named_groups["first"])
