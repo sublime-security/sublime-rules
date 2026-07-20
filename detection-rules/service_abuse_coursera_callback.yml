@@ -14,12 +14,19 @@ source: |
         // the domain is newly registered
         and network.whois(.href_url.domain).days_old < 365
     )
-    or 
     // in other cases the email address isn't in the email body and it's only as a rcpt
-    network.whois(recipients.to[0].email.domain).days_old < 365
+    or network.whois(recipients.to[0].email.domain).days_old < 365
+    // extract the first line and do NLU on it
+    or any(ml.nlu_classifier(regex.extract(body.current_thread.text,
+                                        '^(?P<first_line>[^\n]+)\n'
+                          )[0].named_groups["first_line"]
+        ).intents,
+        .name == "callback_scam" and .confidence == "high"
+    )
   )
   // not in org_domains
   and all(recipients.to, .email.domain.domain not in $org_domains)
+
 attack_types:
   - "Callback Phishing"
 tactics_and_techniques:
