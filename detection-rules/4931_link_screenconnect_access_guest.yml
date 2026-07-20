@@ -1,0 +1,34 @@
+name: "Link: ScreenConnect remote access tool delivery with unattended guest access"
+description: "Detects inbound messages containing ScreenConnect links that direct recipients to download a Guest Access installer (.msi or .exe). The links use ScreenConnect's integration parameters specifying Guest session type and Access mode, indicating unsolicited remote access tool deployment. Lures observed include fake invoices, payment proofs, event invitations, and social gathering notifications — often urging recipients to open the link on a Windows desktop and install the downloaded file."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  // at least one link to screenconnect
+  and length(filter(body.links,
+                    .href_url.domain.root_domain == "screenconnect.com"
+                    // exclude tenant_domains (if the customer users screenconnect and has their own subdomain)
+                    and .href_url.domain.domain not in $tenant_domains
+             )
+  ) > 0
+  // all the screenconnect links include an msi/exe with Guesst Access
+  and all(filter(body.links, .href_url.domain.root_domain == "screenconnect.com"),
+          strings.iends_with(.href_url.path, '.msi', '.exe')
+          // https://docs.connectwise.com/ScreenConnect_Documentation/Developers/Integration_guide
+          // e = SessionType. Support, Meet, or Access
+          and strings.icontains(.href_url.query_params, "e=Access")
+          // y = ProcessType (host vs guest)
+          and strings.icontains(.href_url.query_params, "y=Guest")
+  )
+attack_types:
+  - "Malware/Ransomware"
+tactics_and_techniques:
+  - "Social engineering"
+  - "Out of band pivot"
+detection_methods:
+  - "URL analysis"
+  - "Content analysis"
+id: "9ae6daf6-be2e-51f2-854a-bab3575a5f48"
+og_id: "ed0e62be-7385-522b-ac10-6636b0b2c0de"
+testing_pr: 4931
+testing_sha: 7dbab72325de056097fdc7299f0e4d9f60d02413
