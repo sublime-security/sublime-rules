@@ -1,0 +1,33 @@
+name: "Service abuse: Coursera callback scam"
+description: "Detects inbound messages spoofing Coursera transactional notifications - such as email confirmation requests or account change alerts - sent from Coursera's legitimate sending infrastructure, but targeting recipients on newly registered domains or containing mailto links pointing to newly registered non-Coursera domains. The combination of authentic-looking Coursera branding with anomalous recipient or embedded contact domains suggests account takeover or credential harvesting activity targeting Coursera users."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  // message is sent from coursera (auth doesn't really matter here)
+  and sender.email.domain.root_domain == "coursera.org"
+  
+  and (
+    // the email being changed appears in the body as a link
+    any(body.links,
+        .href_url.scheme == "mailto"
+        and .href_url.domain.root_domain != "coursera.org"
+        // the domain is newly registered
+        and network.whois(.href_url.domain).days_old < 365
+    )
+    or 
+  // in other cases the email address isn't in the email body and it's only as a rcpt
+  network.whois(recipients.to[0].email.domain).days_old < 365
+  )
+  // not in org_domains 
+  and all(recipients.to, .email.domain.domain not in $org_domains)
+attack_types:
+  - "Callback Phishing"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Lookalike domain"
+  - "Social engineering"
+detection_methods:
+  - "Sender analysis"
+  - "URL analysis"
+  - "Whois"
