@@ -1,0 +1,30 @@
+name: "Phished phishing simulation"
+type: "query"
+source: |
+  type.inbound
+  // Phished stamps campaign headers (names are constant; numeric values are
+  // per-tenant/recipient, so match on the header name). X-PHISHTEST-INFO
+  // additionally carries a constant identifying string.
+  and (
+    any(headers.hops,
+        any(.fields,
+            .name in~ ("X-PHISHED-OrganisationID", "X-PHISHED-RecipientID")
+        )
+    )
+    or any(headers.hops,
+           any(.fields,
+               .name =~ "X-PHISHTEST-INFO"
+               and strings.icontains(.value, "phishing program of Phished")
+           )
+    )
+  )
+  // confirm Phished sending infrastructure (custom return path psr.phished.io,
+  // or the SendGrid IPs Phished sends from)
+  and (
+    headers.return_path.domain.root_domain == "phished.io"
+    or any(headers.ips, .ip in ("167.89.25.73", "149.72.177.106"))
+  )
+severity: "informational"
+tags:
+  - "Headers"
+  - "Phishing simulation"
