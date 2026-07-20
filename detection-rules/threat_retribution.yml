@@ -1,0 +1,73 @@
+name: "Acts of Violence: Retribution and revenge threats"
+description: "Detects revenge-driven threats with 'you will pay' or payback language."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and (
+    // Retribution + violence/harm
+    (
+      regex.icontains(body.current_thread.text,
+                      '(?:you|they|everyone)\s+(?:all\s+)?(?:will|gonna|going to)\s+(?:[^\r\n\x20]+\s+){0,5}(?:pay|regret|be sorry|suffer)'
+      )
+      and (
+        // Combined with violence verbs
+        regex.icontains(body.current_thread.text,
+                        '(?:kill|murder|shoot|stab|hurt|harm|attack|assault|beat|destroy|eliminate|slaughter|slay|strangle|choke)'
+        )
+        // Or harm nouns
+        or regex.icontains(body.current_thread.text,
+                           '(?:pain|suffering|death|blood|corpse|agony|torture|injury)'
+        )
+        // Or weapons
+        or regex.icontains(body.current_thread.text,
+                           '(?:gun|knife|weapon|blade|rifle|pistol)'
+        )
+      )
+    )
+    // Explicit revenge with violence — require first-person actor making the threat
+    or (
+      regex.icontains(body.current_thread.text,
+                      '(?:revenge|payback|get back at|settle the score|make (?:you|them) pay)'
+      )
+      and regex.icontains(body.current_thread.text,
+                          '(?:kill|murder|shoot|stab|hurt|harm|attack|assault|beat|destroy|eliminate|slaughter|slay|strangle|choke)'
+      )
+      and regex.icontains(body.current_thread.text,
+                          '(?:i|we|i''m|i''ll|we''ll)\s+(?:[^\r\n\x20]+\s+){0,6}(?:kill|murder|shoot|stab|hurt|harm|attack|assault|beat|destroy|eliminate|slaughter|slay|strangle|choke)'
+      )
+    )
+    // "You will" + negative consequences — exclude hedged language (e.g. "you will probably die")
+    or (
+      regex.icontains(body.current_thread.text,
+                      'you\s+(?:all\s+)?will\s+(?:[^\r\n\x20]+\s+){0,5}(?:die|bleed|suffer|scream|beg|cry|regret)'
+      )
+      and not regex.icontains(body.current_thread.text,
+                              'you\s+will\s+(?:probably|maybe|possibly|likely|eventually|someday|never)\s+(?:[^\r\n\x20]+\s+){0,4}(?:die|bleed|suffer|scream|beg|cry|regret)'
+      )
+    )
+    // Swearing vengeance/violence
+    or regex.icontains(body.current_thread.text,
+                       '(?:i|we)\s+(?:swear|promise|vow)\s+(?:[^\r\n\x20]+\s+){0,5}(?:to\s+)?(?:kill|murder|shoot|stab|hurt|harm|attack|assault|beat|destroy|eliminate|slaughter|slay|strangle|choke)\s+(?:[^\r\n\x20]+\s+){0,5}(?:you|them|everyone)'
+    )
+    // "Make you" + suffering
+    or regex.icontains(body.current_thread.text,
+                       '(?:i|we)\s+(?:will|gonna)\s+(?:[^\r\n\x20]+\s+){0,5}make\s+(?:[^\r\n\x20]+\s+){0,5}(?:you|them)\s+(?:[^\r\n\x20]+\s+){0,5}(?:pay|suffer|regret|scream|bleed|die)'
+    )
+  )
+  and length(body.current_thread.text) > 50
+  and length(body.current_thread.text) < 10000
+  and any(ml.nlu_classifier(body.current_thread.text).topics,
+          .name == "Acts of Violence" and .confidence == "high"
+  )
+  
+  // Negate benign contexts
+  and not any(ml.nlu_classifier(body.current_thread.text).topics,
+              .name in (
+                "News and Current Events",
+                "Newsletters and Digests",
+                "Entertainment and Sports"
+              )
+              and .confidence == "high"
+  )
+id: "c025c2ac-1a2e-582a-bfa1-a24ec45fbf20"
