@@ -11,8 +11,23 @@ source: |
   
   // not self sender from the org_domain, this rule is not going to detect spoofed domains to limit FPs caused by various email auth issues.
   and not sender.email.domain.domain in $org_domains
-  and profile.by_sender_email().prevalence == "new"
-  
+  and (
+    profile.by_sender_email().prevalence == "new"
+    // potential thread hijacking
+    or (
+      length(body.previous_threads) > 1
+      // short current_thread
+      and length(body.current_thread.text) < 500
+      // excessive whitespace
+      and regex.icount(body.html.raw, '(<br\s*/?>[\s\n]*)') > 50
+      // negate common automated sender localparts
+      and not strings.icontains(sender.email.local_part,
+                                "notification",
+                                "noreply",
+                                "info"
+      )
+    )
+  )
   // org name in the subject, removing the subject from NLU to prevent the org being extracted from the subject
   and any(filter(ml.nlu_classifier(body.current_thread.text, subject="").entities,
                  .name == "org"
@@ -26,8 +41,25 @@ source: |
   and 0 < length(body.current_thread.links) < 20
   
   // cred theft
-  and any(ml.nlu_classifier(body.current_thread.text).intents,
-          .name == "cred_theft" and .confidence == "high"
+  and (
+    any(ml.nlu_classifier(body.current_thread.text).intents,
+        .name == "cred_theft" and .confidence == "high"
+    )
+    // request to view/sign an invoice
+    or (
+      any(ml.nlu_classifier(body.current_thread.text).topics,
+          .name == "Request to View Invoice" and .confidence != "low"
+      )
+      // with the org name as indicated by NLU present in link display_text
+      and any(filter(ml.nlu_classifier(body.current_thread.text, subject="").entities,
+                     .name == "org"
+                     and .text != sender.email.domain.sld
+                     and .text != sender.email.domain.domain
+              ),
+              // not an istarts_with, make it an exact match
+              any(body.links, strings.starts_with(.display_text, ..text))
+      )
+    )
   )
   // all attachments are inline images or there are 0 attachments
   and (
