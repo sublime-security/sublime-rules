@@ -1,0 +1,80 @@
+name: "Link: Google Forms abuse"
+description: "Detects Google Forms links with suspicious display text containing credential theft keywords, or form fields requesting password information."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and length(attachments) == 0
+  and any(filter(body.links, .href_url.domain.domain == "forms.gle"),
+          // avoid invoking Link Analysis if the display-text has strong indications of phishing
+          (
+            regex.icontains(strings.replace_confusables(.display_text),
+                            'review|proposal|document|efax|restore|\b[o0]pen\b|secure|messaging|reset|account|verify|login|notification|alert|urgent|immediate|access|\bupdate\b|download|attachment|service|payment|remittance|invoice'
+            )
+            // add confidence to these strings by using profile.by_sender()
+            and (
+              not profile.by_sender().solicited
+              and profile.by_sender().prevalence in ('new', 'outlier')
+            )
+            // further FP reduction
+            and not (
+              // negate replies and forwards
+              (
+                length(headers.references) > 0
+                or any(headers.hops,
+                       any(.fields, strings.ilike(.name, "In-Reply-To"))
+                )
+              )
+              // negate listservs
+              or (
+                any(headers.hops, any(.fields, .name == "List-Unsubscribe"))
+                and (
+                  strings.contains(sender.display_name, "via")
+                  or strings.icontains(subject.subject, "monitor")
+                  or any(recipients.to, strings.icontains(.display_name, 'list'))
+                )
+              )
+              // negate newsletters and graymail
+              or (
+                any(ml.nlu_classifier(body.current_thread.text).topics,
+                    .name in (
+                      "Newsletters and Digests",
+                      "Educational and Research",
+                      "B2B Cold Outreach"
+                    )
+                )
+              )
+            )
+          )
+          or 
+          // analyze the final_dom
+          // if the page has been taken down, match
+          strings.icontains(ml.link_analysis(., mode="aggressive").final_dom.inner_text,
+                            "You can't access this item because it is in violation"
+          )
+          or 
+          // credential phishing indicators in short answer form fields
+          any(html.xpath(ml.link_analysis(., mode="aggressive").final_dom,
+                         "/html/body/div//form/div[2]/div/div[2]/div"
+              ).nodes,
+              strings.iends_with(.inner_text, "Your Answer")
+              // match any variation of the word "password" in data-params tags
+              // legitimate forms should never ask the user to input credentials, there is a disclaimer to that effect
+              and regex.icontains(strings.replace_confusables(.inner_text),
+                                  '(p[a@*·][s$*·]{2}(w[o0]rd|[\*·]{1,4}))'
+              )
+          )
+  )
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Social engineering"
+  - "Evasion"
+detection_methods:
+  - "Content analysis"
+  - "Header analysis"
+  - "HTML analysis"
+  - "Sender analysis"
+  - "URL analysis"
+  - "URL screenshot"
+id: "d8b5e4ac-2154-550a-9e25-219a07f69e7d"
