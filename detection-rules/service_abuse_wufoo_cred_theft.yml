@@ -1,0 +1,24 @@
+name: "Service abuse: Wufoo credential theft"
+description: "Detects malicious messages sent from Wufoo's legitimate sending address (no-reply@wufoo.com) that are abusing the platform to deliver credential theft content. This rule identifies messages that lack Wufoo's standard display name and structural HTML elements found in legitimate Wufoo emails, while containing a small number of links and content classified as credential theft by NLU analysis."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and sender.email.email == 'no-reply@wufoo.com'
+  and not strings.icontains(sender.display_name, 'Wufoo')
+  // table found in legit wufoo emails
+  and not length(html.xpath(body.html, "//table[@class='readonly']").nodes) == 1
+  and 0 < length(body.links) < 10
+  and any(ml.nlu_classifier(body.current_thread.text).intents,
+          .name == 'cred_theft' and .confidence != 'low'
+  )
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "HTML analysis"
+  - "Natural Language Understanding"
+  - "Sender analysis"
+id: "a8d53c37-e26a-53b9-aeba-74486e4504f8"
