@@ -1,0 +1,29 @@
+name: "Service abuse: FileMail callback scam"
+description: "Detects inbound messages from FileMail's no-reply address where the first line of the email body is classified with high confidence as a callback scam using natural language understanding. Attackers leverage legitimate file sharing services to deliver fraudulent messages that instruct recipients to call a phone number, often impersonating tech support or financial institutions."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and sender.email.email == "no-reply@filemail.com"
+  and any(ml.nlu_classifier(regex.extract(body.current_thread.text,
+                                          '^(?P<first_line>[^\n]+)\n'
+                            )[0].named_groups["first_line"]
+          ).intents,
+          .name == "callback_scam" and .confidence == "high"
+  )
+  
+  
+attack_types:
+  - "Callback Phishing"
+tactics_and_techniques:
+  - "Social engineering"
+  - "Free file host"
+  - "Out of band pivot"
+detection_methods:
+  - "Natural Language Understanding"
+  - "Sender analysis"
+  - "Content analysis"
+id: "63998589-ad20-5df9-a997-7e3634a07883"
+og_id: "9305a806-2c58-5bd7-8c96-c8b2b74d9961"
+testing_pr: 4936
+testing_sha: d9ebafd37c1af9da20c065e9d3676b97ed8cd1ad
