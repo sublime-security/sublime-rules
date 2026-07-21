@@ -1,0 +1,65 @@
+name: "Link: PDF with suspicious Request for Quote or Purchase (RFQ|RFP)"
+description: "Detects messages containing links that display as PDF files, specifically targeting Request for Quotation (RFQ) or Request for Purchase (RFP) terminology."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and 0 < length(body.current_thread.links) <= 3
+  // no PDF attachments
+  and length(filter(attachments, .file_type == "pdf")) == 0
+  // link display_text ends in .pdf
+  and any(body.current_thread.links,
+          strings.iends_with(.display_text, '.pdf')
+          // the display text references a Request for Quotation (RFQ) or Request for Purchase (RFP)
+          and (
+            regex.icontains(.display_text,
+                            '(?:\bR\.?F\.?P\b|\bR\.?F\.?Q\b)|(?:Request.for.(?:Quot(e|ation)|Purchas(e|ing)))'
+            )
+          )
+          and (
+            // suspicious link destination
+            (
+              .href_url.domain.domain in $free_file_hosts
+              or .href_url.domain.root_domain in $free_file_hosts
+              or .href_url.domain.domain in $self_service_creation_platform_domains
+              or .href_url.domain.root_domain in $self_service_creation_platform_domains
+            )
+            // suspicious sender behaviour
+            or (
+              sender.email.domain.root_domain in $free_email_providers
+              or sender.email.email in map(recipients.to, .email.email)
+              or length(recipients.to) == 0
+              or (
+                all(recipients.to, .email.domain.valid == false)
+                and all(recipients.cc, .email.domain.valid == false)
+              )
+            )
+          )
+  )
+  // additional suspicious indicator
+  and (
+    any(ml.nlu_classifier(body.current_thread.text).intents,
+        .name in ("cred_theft", "bec") and .confidence != "low"
+    )
+    or strings.ilike(body.current_thread.text,
+                     "*kindly*",
+                     "*find attached*",
+                     "*secure*",
+                     "*enter code*"
+    )
+  )
+
+attack_types:
+  - "BEC/Fraud"
+  - "Malware/Ransomware"
+tactics_and_techniques:
+  - "Free file host"
+  - "Social engineering"
+  - "Evasion"
+detection_methods:
+  - "Content analysis"
+  - "Header analysis"
+  - "HTML analysis"
+  - "Sender analysis"
+  - "URL analysis"
+id: "9b0e6a27-5f3f-5e9f-ab63-e481e4bd30c1"
