@@ -1,0 +1,34 @@
+name: "Open redirect: Shibboleth SSO Logout Return Parameter"
+description: "Detects links that contain a Shibboleth SSO logout endpoint with a return parameter, which could be used for open redirect attacks. The rule checks for both direct path inclusion and URL-encoded versions in query parameters. Only triggers on senders with non-common prevalence."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and any(body.links,
+          // uses shibboleth.sso directly within the path
+          (
+            strings.icontains(.href_url.path, '/Shibboleth.sso/Logout')
+            and (
+              strings.icontains(.href_url.path, 'return=')
+              or strings.icontains(.href_url.query_params, 'return=')
+            )
+          )
+          // or url encoded within the query_params
+          or (
+            strings.icontains(.href_url.query_params, 'Shibboleth.sso%2fLogout')
+            and strings.icontains(.href_url.query_params, "return%3d")
+          )
+  )
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Open redirect"
+  - "Evasion"
+detection_methods:
+  - "HTML analysis"
+  - "URL analysis"
+  - "Sender analysis"
+id: "3c39fdc3-791e-5ea8-bdca-e79d28727624"
+og_id: "374b7517-bb48-5fed-885c-16d27f561e55"
+testing_pr: 4945
+testing_sha: b9d89c2a292d09c1b9f10cc20cec9cd076fc74c1
