@@ -34,7 +34,7 @@ source: |
              or any(body.links,
                     any(recipients.to,
                         strings.icontains(..href_url.url, .email.email)
-                        and any(recipients.to, .email.domain.valid)
+                        and .email.domain.valid
                     )
              )
              or .href_url.domain.root_domain == "beehiiv.com"
@@ -67,16 +67,20 @@ source: |
    
    // Planner logo
    // LogoDetect coming soon
+   and length(filter(attachments, .file_type in $file_types_images)) > 0
    and (
      all(attachments,
          .file_type in $file_types_images
-         and any(file.explode(.),
-                 // small, relatively square image
-                 (
-                   .scan.exiftool.image_height / .scan.exiftool.image_width
-                 ) > 0.9
-                 and (.scan.exiftool.image_height + .scan.exiftool.image_width) < 500
-         )
+         and 
+         // small, relatively square image
+         //
+         // This rule makes use of a beta feature and is subject to change without notice
+         // using the beta feature in custom rules is not suggested until it has been formally released
+         //
+         (
+           beta.parse_exif(.).image_height / beta.parse_exif(.).image_width
+         ) > 0.9
+         and (beta.parse_exif(.).image_height + beta.parse_exif(.).image_width) < 500
      )
    )
    
@@ -105,19 +109,24 @@ source: |
        )
      )
    )
-   and sender.email.domain.root_domain not in (
-     "bing.com",
-     "microsoft.com",
-     "microsoftonline.com",
-     "microsoftproject.com",
-     "microsoftstoreemail.com",
-     "microsoftsupport.com",
-     "microsoft365.com",
-     "office.com",
-     "office365.com",
-     "onedrive.com",
-     "sharepointonline.com",
-     "yammer.com",
+   // skip senders 
+   and not (
+     headers.auth_summary.dmarc.pass
+     and sender.email.domain.root_domain in (
+       "bing.com",
+       "microsoft.com",
+       "microsoftonline.com",
+       "microsoftproject.com",
+       "microsoftstoreemail.com",
+       "microsoftsupport.com",
+       "microsoft365.com",
+       "office.com",
+       "office365.com",
+       "onedrive.com",
+       "sharepointonline.com",
+       "yammer.com",
+       "outlign.co"
+     )
    )
    
    // negate highly trusted sender domains unless they fail DMARC authentication
