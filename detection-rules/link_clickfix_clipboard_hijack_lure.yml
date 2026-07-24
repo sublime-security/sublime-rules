@@ -11,10 +11,10 @@ type: "rule"
 severity: "high"
 source: |
   type.inbound
-
+  
   // message contains links
   and 0 < length(body.links) < 15
-
+  
   // NLU detects credential theft or malware delivery intent
   and (
     any(ml.nlu_classifier(body.current_thread.text).intents,
@@ -24,10 +24,10 @@ source: |
            .name == "urgency"
     )
   )
-
+  
   // require 2 of the following ClickFix-specific signals
   and 2 of (
-
+  
     // explicit copy-paste-to-terminal instruction
     (
       strings.icontains(body.current_thread.text, "copy")
@@ -36,29 +36,33 @@ source: |
         or strings.icontains(body.current_thread.text, "pasting")
       )
       and any([
-        strings.icontains(body.current_thread.text, "terminal"),
-        strings.icontains(body.current_thread.text, "powershell"),
-        strings.icontains(body.current_thread.text, "command prompt"),
-        strings.icontains(body.current_thread.text, "run dialog"),
-        strings.icontains(body.current_thread.text, "win+r"),
-        strings.icontains(body.current_thread.text, "windows+r"),
-        strings.icontains(body.current_thread.text, "cmd")
-      ], .)
+                strings.icontains(body.current_thread.text, "terminal"),
+                strings.icontains(body.current_thread.text, "powershell"),
+                strings.icontains(body.current_thread.text, "command prompt"),
+                strings.icontains(body.current_thread.text, "run dialog"),
+                strings.icontains(body.current_thread.text, "win+r"),
+                strings.icontains(body.current_thread.text, "windows+r"),
+                strings.icontains(body.current_thread.text, "cmd")
+              ],
+              .
+      )
     ),
-
+  
     // fake CAPTCHA or browser verification framing
     (
       any([
-        strings.icontains(body.current_thread.text, "captcha"),
-        strings.icontains(body.current_thread.text, "verify you are human"),
-        strings.icontains(body.current_thread.text, "human verification"),
-        strings.icontains(body.current_thread.text, "browser check"),
-        strings.icontains(body.current_thread.text, "press windows"),
-        strings.icontains(body.current_thread.text, "press win+r"),
-        strings.icontains(body.current_thread.text, "i am not a robot")
-      ], .)
+            strings.icontains(body.current_thread.text, "captcha"),
+            strings.icontains(body.current_thread.text, "verify you are human"),
+            strings.icontains(body.current_thread.text, "human verification"),
+            strings.icontains(body.current_thread.text, "browser check"),
+            strings.icontains(body.current_thread.text, "press windows"),
+            strings.icontains(body.current_thread.text, "press win+r"),
+            strings.icontains(body.current_thread.text, "i am not a robot")
+          ],
+          .
+      )
     ),
-
+  
     // link resolves to or redirects through a suspicious TLD
     any(body.links,
         .href_url.domain.tld in $suspicious_tlds
@@ -66,12 +70,11 @@ source: |
                .domain.tld in $suspicious_tlds
         )
     ),
-
+  
     // freemail sender — should never send CAPTCHA or terminal instructions
     sender.email.domain.domain in $free_email_providers
-
   )
-
+  
   // negate known security awareness training platforms
   and sender.email.domain.root_domain not in (
     "knowbe4.com",
@@ -79,13 +82,12 @@ source: |
     "cofense.com",
     "terranovasecurity.com"
   )
-
+  
   // negate highly trusted sender domains unless they fail DMARC
   and not (
     sender.email.domain.root_domain in $high_trust_sender_root_domains
     and coalesce(headers.auth_summary.dmarc.pass, false)
   )
-
 tags:
   - "Attack surface reduction"
 attack_types:
@@ -105,3 +107,4 @@ references:
   - "https://www.microsoft.com/en-us/security/blog/2026/04/30/email-threat-landscape-q1-2026-trends-and-insights/"
   - "https://yanaivanov.com/writing/clickfix_field_note.html"
 id: ""
+id: "df51b2bb-8f40-51b0-ae6f-ed742cf00109"
