@@ -1,0 +1,49 @@
+name: "Brand impersonation: Anthropic/Claude with newly registered domain"
+description: "Detects messages impersonating Anthropic or Claude using sender display names of 'Anthropic' or 'Claude' from domains not affiliated with the legitimate brands. The rule flags messages where the sending domain, reply-to domain, or return-path domain is newly registered (under 90 days old)."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  // look for common subject lines for claude, anthropic, ads
+  and (
+    strings.icontains(subject.base, "claude")
+    or strings.icontains(subject.base, "anthropic")
+    or regex.icontains(subject.base, '\bads\b')
+  )
+  and (
+    // sender display name with claude, anthropic - created less than 90 days
+    regex.icontains(sender.display_name, '(?:claude|anthropic)')
+    and (
+      network.whois(sender.email.domain).days_old <= 90
+      or network.whois(headers.return_path.domain).days_old <= 90
+    )
+  )
+  // common theme for suspicious claude, anthropic
+  and 2 of (
+    strings.icontains(body.current_thread.text, "ad account"),
+    strings.icontains(body.current_thread.text, "claude ads"),
+    strings.icontains(body.current_thread.text, "trial access"),
+    strings.icontains(body.current_thread.text, "subscription"),
+    strings.icontains(body.current_thread.text, "workspace"),
+    regex.icontains(body.current_thread.text, '\bads( team)?\b'),
+    regex.icontains(body.current_thread.text, "connect.{0,30}account"),
+    regex.icontains(body.current_thread.text, '\banthropic( team|pbc)?\b')
+  )
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and not (
+    sender.email.domain.root_domain in $high_trust_sender_root_domains
+    and coalesce(headers.auth_summary.dmarc.pass, false)
+  )
+attack_types:
+  - "BEC/Fraud"
+  - "Spam"
+tactics_and_techniques:
+  - "Lookalike domain"
+  - "Social engineering"
+  - "Spoofing"
+detection_methods:
+  - "Content analysis"
+  - "Header analysis"
+  - "Sender analysis"
+  - "Whois"
+id: "02d16c54-a773-5286-b7a8-7b37551ccba5"
