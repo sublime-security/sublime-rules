@@ -4,20 +4,10 @@ type: "rule"
 severity: "medium"
 source: |
   type.inbound
-  // look for common subject lines for claude, anthropic, ads
-  and (
-    strings.icontains(subject.base, "claude")
-    or strings.icontains(subject.base, "anthropic")
-    or regex.icontains(subject.base, '\bads\b')
-  )
-  and (
-    // sender display name with claude, anthropic - created less than 90 days
-    regex.icontains(sender.display_name, '(?:claude|anthropic)')
-    and (
-      network.whois(sender.email.domain).days_old <= 90
-      or network.whois(headers.return_path.domain).days_old <= 90
-    )
-  )
+  and regex.icontains(sender.display_name, '(?:claude|anthropic)')
+  // sender display name with claude, anthropic - created less than 90 days
+  and network.whois(sender.email.domain).days_old <= 90
+  
   // common theme for suspicious claude, anthropic
   and 2 of (
     strings.icontains(body.current_thread.text, "ad account"),
@@ -25,10 +15,22 @@ source: |
     strings.icontains(body.current_thread.text, "trial access"),
     strings.icontains(body.current_thread.text, "subscription"),
     strings.icontains(body.current_thread.text, "workspace"),
-    regex.icontains(body.current_thread.text, '\bads( team)?\b'),
+    strings.icontains(body.current_thread.text, 'ads team'),
+    strings.icontains(body.current_thread.text, 'google ads'),
     regex.icontains(body.current_thread.text, "connect.{0,30}account"),
-    regex.icontains(body.current_thread.text, '\banthropic( team|pbc)?\b')
+    regex.icontains(body.current_thread.text, '\banthropic\s+(?:team|pbc)\b'),
+    2 of (
+      strings.icontains(body.current_thread.text, '548 Market Street'),
+      strings.icontains(body.current_thread.text, 'San Francisco'),
+      strings.icontains(body.current_thread.text, 'CA 94104')
+    ),
+    any(ml.nlu_classifier(body.current_thread.text).entities,
+        .name == "sender"
+        and strings.icontains(.text, "Claude", "Anthropic")
+        and strings.iends_with(.text, "Team")
+    )
   )
+  
   // negate highly trusted sender domains unless they fail DMARC authentication
   and not (
     sender.email.domain.root_domain in $high_trust_sender_root_domains
