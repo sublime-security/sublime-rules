@@ -1,0 +1,110 @@
+name: "ClickFix: Clipboard hijack lure with copy-paste-to-terminal instruction"
+description: |
+  Detects emails delivering ClickFix social engineering lures — messages that
+  instruct the recipient to copy and paste a command into their terminal, Run
+  dialog, or PowerShell, typically combined with a fake CAPTCHA, browser error,
+  or verification prompt. ClickFix attacks use JavaScript to silently replace
+  clipboard contents, causing the user to unknowingly execute a malicious command.
+  Active campaigns in 2026 include TELEPUZ (April 2026+), which uses this
+  technique to deliver a modular MaaS payload via a ClickFix-VIDAR chain.
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  
+  // message contains links
+  and 0 < length(body.links) < 15
+  
+  // NLU detects credential theft or malware delivery intent
+  and (
+    any(ml.nlu_classifier(body.current_thread.text).intents,
+        .name in ("cred_theft") and .confidence in ("medium", "high")
+    )
+    or any(ml.nlu_classifier(body.current_thread.text).entities,
+           .name == "urgency"
+    )
+  )
+  
+  // require 2 of the following ClickFix-specific signals
+  and 2 of (
+  
+    // explicit copy-paste-to-terminal instruction
+    (
+      strings.icontains(body.current_thread.text, "copy")
+      and (
+        strings.icontains(body.current_thread.text, "paste")
+        or strings.icontains(body.current_thread.text, "pasting")
+      )
+      and any([
+                strings.icontains(body.current_thread.text, "terminal"),
+                strings.icontains(body.current_thread.text, "powershell"),
+                strings.icontains(body.current_thread.text, "command prompt"),
+                strings.icontains(body.current_thread.text, "run dialog"),
+                strings.icontains(body.current_thread.text, "win+r"),
+                strings.icontains(body.current_thread.text, "windows+r"),
+                strings.icontains(body.current_thread.text, "cmd")
+              ],
+              .
+      )
+    ),
+  
+    // fake CAPTCHA or browser verification framing
+    (
+      any([
+            strings.icontains(body.current_thread.text, "captcha"),
+            strings.icontains(body.current_thread.text, "verify you are human"),
+            strings.icontains(body.current_thread.text, "human verification"),
+            strings.icontains(body.current_thread.text, "browser check"),
+            strings.icontains(body.current_thread.text, "press windows"),
+            strings.icontains(body.current_thread.text, "press win+r"),
+            strings.icontains(body.current_thread.text, "i am not a robot")
+          ],
+          .
+      )
+    ),
+  
+    // link resolves to or redirects through a suspicious TLD
+    any(body.links,
+        .href_url.domain.tld in $suspicious_tlds
+        or any(ml.link_analysis(., mode="aggressive").redirect_history,
+               .domain.tld in $suspicious_tlds
+        )
+    ),
+  
+    // freemail sender — should never send CAPTCHA or terminal instructions
+    sender.email.domain.domain in $free_email_providers
+  )
+  
+  // negate known security awareness training platforms
+  and sender.email.domain.root_domain not in (
+    "knowbe4.com",
+    "proofpoint.com",
+    "cofense.com",
+    "terranovasecurity.com"
+  )
+  
+  // negate highly trusted sender domains unless they fail DMARC
+  and not (
+    sender.email.domain.root_domain in $high_trust_sender_root_domains
+    and coalesce(headers.auth_summary.dmarc.pass, false)
+  )
+tags:
+  - "Attack surface reduction"
+attack_types:
+  - "Malware/Ransomware"
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Evasion"
+  - "Social engineering"
+  - "Scripting"
+detection_methods:
+  - "Content analysis"
+  - "Natural Language Understanding"
+  - "Sender analysis"
+  - "URL analysis"
+references:
+  - "https://www.elastic.co/security-labs/telepuz-maas-malware-clickfix"
+  - "https://www.microsoft.com/en-us/security/blog/2026/04/30/email-threat-landscape-q1-2026-trends-and-insights/"
+  - "https://yanaivanov.com/writing/clickfix_field_note.html"
+id: ""
+id: "df51b2bb-8f40-51b0-ae6f-ed742cf00109"
