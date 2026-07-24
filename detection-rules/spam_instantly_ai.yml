@@ -1,0 +1,25 @@
+name: "Spam: Instantly.ai unsolicited B2B cold outreach"
+description: "Detects unsolicited inbound messages routed through Instantly.ai, a bulk outreach platform, where the sending infrastructure is identified via the X-Mail-Abuse-Inquiries header and the message content is classified as B2B cold outreach with medium or high confidence."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and any(headers.hops,
+          any(.fields,
+              .name == "X-Mail-Abuse-Inquiries"
+              and strings.icontains(.value, "instantly.ai")
+          )
+  )
+  and network.whois(sender.email.domain).days_old < 60
+  and any(ml.nlu_classifier(body.current_thread.text).topics,
+          .name == "B2B Cold Outreach" and .confidence != "low"
+  )
+attack_types:
+  - "Spam"
+tactics_and_techniques:
+  - "Social engineering"
+detection_methods:
+  - "Header analysis"
+  - "Natural Language Understanding"
+  - "Sender analysis"
+id: "75e48c9a-d493-52b8-9413-4277ca7474f2"
