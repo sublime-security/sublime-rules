@@ -1,0 +1,37 @@
+name: "Attachment: Callback scam file extension"
+description: "Detects inbound messages with short or no text content containing an attachment that exhibit callback scam characteristics, sent from untrusted domains."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and length(body.current_thread.text) < 2000
+  and any(attachments,
+          .file_extension in~ ("ppt", "pptx")
+          and any(file.explode(.),
+                  any(ml.nlu_classifier(.scan.strings.raw).intents,
+                      .name == "callback_scam" and .confidence != "low"
+                  )
+          )
+  )
+  and sender.email.domain.root_domain in $free_email_providers
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and (
+    coalesce(sender.email.domain.root_domain in $high_trust_sender_root_domains
+             and not headers.auth_summary.dmarc.pass,
+             false
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+  and not (
+    any(ml.nlu_classifier(body.current_thread.text).intents,
+        .name == "benign" and .confidence == "high"
+    )
+  )
+attack_types:
+  - "Callback Phishing"
+tactics_and_techniques:
+  - "Social engineering"
+detection_methods:
+  - "File analysis"
+  - "Sender analysis"
+id: "769b3333-4cde-544c-a081-ef9a75dddd24"
