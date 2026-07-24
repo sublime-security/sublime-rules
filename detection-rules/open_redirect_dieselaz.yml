@@ -1,0 +1,28 @@
+name: "Open redirect: Diesel.az"
+description: "Detects inbound messages containing links that abuse Diesel.az's open redirect functionality at '/az/redirect', where the 'url' query parameter points to an external domain. The rule flags messages where the sender is not from diesel.az and the redirect destination leads outside of the diesel.az domain."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and any(body.links,
+          .href_url.domain.root_domain == "diesel.az"
+          and strings.istarts_with(.href_url.path, '/az/redirect')
+          and length(.href_url.query_params_decoded["url"]) > 0
+          // redirect is not going back to diesel.az
+          and not any(.href_url.query_params_decoded["url"],
+                      strings.parse_url(.).domain.root_domain == "diesel.az"
+          )
+  )
+  and not (
+    sender.email.domain.root_domain == "diesel.az"
+    and coalesce(headers.auth_summary.dmarc.pass, false)
+  )
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Open redirect"
+  - "Impersonation: Brand"
+detection_methods:
+  - "URL analysis"
+  - "Sender analysis"
+id: "49dfbf9d-2f4e-50dd-ad49-71b40aaad26f"
