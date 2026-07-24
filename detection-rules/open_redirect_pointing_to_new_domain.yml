@@ -6,11 +6,17 @@ source: |
   type.inbound
   and length(recipients.to) == 1
   and any(body.current_thread.links,
-          strings.contains(.href_url.url, recipients.to[0].email.email)
-          and length(.href_url.query_params_decoded['url']) > 0
+          length(.href_url.query_params_decoded['url']) > 0
           and any(.href_url.query_params_decoded['url'],
-                  strings.contains(strings.parse_url(.).url,
-                                   recipients.to[0].email.email
+                  // it contains the email address of the recipient
+                  (
+                    strings.contains(strings.parse_url(.).url,
+                                     recipients.to[0].email.email
+                    )
+                    // or the base64 encoded email
+                    or any(strings.scan_base64(strings.parse_url(.).url),
+                           . == recipients.to[0].email.email
+                    )
                   )
                   and network.whois(strings.parse_url(.).domain).days_old < 100
           )
