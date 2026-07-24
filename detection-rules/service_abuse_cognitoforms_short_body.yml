@@ -1,0 +1,28 @@
+name: "Service abuse: Cognito Forms with short body from unknown sender"
+description: "Detects messages with a very short body (under 200 characters) that contain a link to Cognito Forms, where the sender is not Cognito Forms itself."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and (
+    length(body.current_thread.text) < 200
+    or strings.icontains(subject.base, 'document')
+  )
+  and sender.email.domain.root_domain != "cognitoforms.com"
+  and any(body.current_thread.links,
+          .href_url.domain.root_domain == "cognitoforms.com"
+          // negating benign hits
+          and not .display_text =~ "opt-out"
+          and not strings.icontains(.display_text, "cognitoforms.com")
+  )
+  // negating messages which use cognito and other mailing platforms
+  and not any(body.current_thread.links, .display_text =~ "unsubscribe")
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Sender analysis"
+  - "URL analysis"
+id: "d2657717-2ef4-5d9e-8266-472cef985148"
