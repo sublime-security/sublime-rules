@@ -1,0 +1,29 @@
+name: "Link: Suspicious HTML structure with subject mirrored in body and single link"
+description: "Detects messages where the subject is mirrored in a styled HTML table element, while containing exactly one link. This structural pattern is indicative of templated lures designed to appear legitimate."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and any(html.xpath(body.html,
+                     '//body/div//table/tbody/tr//table/tbody/tr/td[contains(@style, "rgb(41, 88, 140)")]/div/b'
+          ).nodes,
+          subject.base == .display_text
+  )
+  and any(html.xpath(body.html,
+                     '//body/div//table/tbody/tr//table/tbody/tr/td/div[contains(@style, "margin-top: 12pt")]/div'
+          ).nodes,
+          strings.icontains(subject.base, .inner_text)
+  )
+  and length(html.xpath(body.html,
+                        '//body/div//table/tbody/tr//table/tbody/tr/td/div[contains(@style, "margin-top: 12pt")]/div//a'
+             ).nodes
+  ) == 1
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Social engineering"
+  - "Impersonation: Brand"
+detection_methods:
+  - "Content analysis"
+  - "HTML analysis"
+id: "bb5986b8-3bd2-52b5-813f-3e7f2fec6f29"
