@@ -40,3 +40,25 @@ rule zip_smuggler_default {
 			($ext in ((@pklfh[i] + 30 + uint16(@pklfh[i] + 26) - !ext)..(@pklfh[i] + 30 + uint16(@pklfh[i] + 26))))
 		)
 }
+
+rule zip_excel_dll {
+	meta:
+		author      = "kyle eaton"
+		date        = "2026-07-16"
+		description = "Matching zip files that include the CRC32 of a known excel binary and an unknown DLL"
+	strings:
+		$pklfh = { 50 4b 03 04 }
+		$dll   = ".dll"
+		$exe   = ".exe"
+	condition:
+		uint16be(0) == 0x504B and
+		for any i in (1..100): (
+			($dll in ((@pklfh[i] + 30 + uint16(@pklfh[i] + 26) - 4)..(@pklfh[i] + 30 + uint16(@pklfh[i] + 26))))
+		) and
+		for any i in (1..100): (
+			($exe in ((@pklfh[i] + 30 + uint16(@pklfh[i] + 26) - 4)..(@pklfh[i] + 30 + uint16(@pklfh[i] + 26))))
+			and uint32(@pklfh[i] + 14) == 0x420b8579
+			and uint32(@pklfh[i] + 22) == 74719472
+		)
+
+}
