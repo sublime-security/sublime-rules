@@ -1,0 +1,64 @@
+name: "Link: Romance/Sexual Language With Suspicious Link"
+description: "Detects messages containing romantic or adult-themed language, combined with links to newly registered domains or suspicious reply-to addresses."
+type: "rule"
+severity: "low"
+source: |
+  type.inbound
+  and length(body.previous_threads) == 0
+  and (
+    any(ml.nlu_classifier(body.current_thread.text).topics,
+        .name in ("Romance", "Sexually Explicit Messages")
+        and .confidence == "high"
+    )
+    // form submissions can sometimes throw NLU off
+    or (
+      strings.icontains(subject.subject,
+                        "form",
+                        "submission",
+                        "submit",
+                        "new message",
+                        "cisco press"
+      )
+      and headers.mailer is not null
+      // common automated form submission systems
+      and regex.icontains(headers.mailer,
+                          'phpmailer|wpmail|wp mail smtp|easywpsmtp|post.smtp|drupal|typo3|codeigniter|nette|activecampaign|symfony|laravel|zend|cakephp|yii|enginemailer|msgsend|sailthru|sympa'
+      )
+      // now check for explicit language in the URL path
+      and any(body.links,
+              regex.icontains(.href_url.path,
+                              '(?:sex|horny|cock|fuck|\bass\b|pussy|dick|tits|cum\b|girlfriend|boyfriend|naked|porn|video|webcam|masturbate|orgasm|breasts|penis|vagina|strip|suck|blowjob|hardcore|nudes?|sexting|cheating|affair|erotic|\blust\b|desire|intimate|explicit|fetish|kinky|seduce|adult\s*(?:\w+\s+){0,2}\s*community|cam shows|local (?:girls?|women|single)|hook.?up|bed partner)'
+              )
+      )
+    )
+  )
+  and 1 of (
+    any(body.links, network.whois(.href_url.domain).days_old < 30),
+    any(body.links, .href_url.domain.root_domain in $url_shorteners),
+    any(body.links, .href_url.domain.domain in $free_subdomain_hosts),
+    any(body.links, .href_url.domain.tld in ('ru', 'app', 'digital', 'click')),
+    any(headers.reply_to, network.whois(.email.domain).days_old < 30),
+    // link leads to telegram hosting infra
+    any(body.links, .href_url.domain.root_domain in ("telegra.ph", "graph.org"))
+  )
+  and 0 < length(distinct(body.links,
+                          .href_url.domain.root_domain not in ("aka.ms")
+                 )
+  ) < 3
+  and all(filter(body.links, .parser != "plain"),
+          .href_url.domain.root_domain != sender.email.domain.root_domain
+  )
+
+attack_types:
+  - "Spam"
+tactics_and_techniques:
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Header analysis"
+  - "URL analysis"
+  - "Whois"
+id: "f1cd7862-db92-5a7a-9583-c73c94a03733"
+og_id: "d5694cae-bee8-588e-8123-2c3e3459118b"
+testing_pr: 4964
+testing_sha: f67108b1784cb504f961f597dc16ffcd2310d684
