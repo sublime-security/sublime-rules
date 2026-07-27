@@ -1,0 +1,43 @@
+name: "PR# 4957 - Link: Compromised WordPress site redirecting to suspicious root domain"
+description: "Inbound messages contain links routing through compromised WordPress installations (matching paths such as /wp-admin, /wp-includes, or /wp-content) that ultimately redirect to the root of an unrelated domain with no query parameters. The lure theme across observed samples centers on urgency around agreement review, document signing, and fund/profit notifications — designed to pressure recipients into clicking. The redirect pattern, combined with WordPress path indicators, suggests adversaries are abusing vulnerable WordPress sites as an intermediary hop to obscure the true destination."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and any(filter(body.current_thread.links,
+                 regex.icontains(.href_url.path,
+                                 '^\/wp-(?:admin|includes|content)'
+                 )
+                 // remove "the newsletter plugin" encoded URLs
+                 and not (
+                   .href_url.path == "/wp-admin/admin-ajax.php"
+                   and .href_url.query_params_decoded["action"][0] == "tnptr"
+                   and 'nltr' in keys(.href_url.query_params_decoded)
+                 )
+          ),
+          // redirected to a page that is a "root" page
+          any(ml.link_analysis(.).redirect_history,
+              .path == "/"
+              and .domain.root_domain != ..href_url.domain.root_domain
+              // no query_params
+              and (.query_params == "" or .query_params is null)
+              and (.domain.subdomain is null or .domain.subdomain == "www")
+          )
+  )
+attack_types:
+  - "Credential Phishing"
+  - "BEC/Fraud"
+tactics_and_techniques:
+  - "Open redirect"
+  - "Evasion"
+  - "Social engineering"
+detection_methods:
+  - "URL analysis"
+  - "Content analysis"
+id: "3125f093-5d2f-50e2-aa28-2d4c220aaf08"
+tags:
+  - created_from_open_prs
+  - rule_status_added
+  - pr_author_zoomequipd
+references:
+  - https://github.com/sublime-security/sublime-rules/pull/4957
