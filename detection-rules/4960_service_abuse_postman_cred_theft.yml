@@ -1,0 +1,27 @@
+name: "Service abuse: Postman reply-to mismatch with credential theft intent"
+description: "Detects inbound messages sent from Postman.io where the reply-to address belongs to a different domain than the sender, combined with high or medium confidence credential theft intent detected in the message body. This technique leverages a legitimate service to deliver messages while redirecting replies to an attacker-controlled address."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and sender.email.domain.root_domain == "postman.io"
+  and any(headers.reply_to,
+          .email.domain.root_domain != sender.email.domain.root_domain
+  )
+  and any(ml.nlu_classifier(body.current_thread.text).intents,
+          .name == "cred_theft" and .confidence != "low"
+  )
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Social engineering"
+  - "Out of band pivot"
+detection_methods:
+  - "Sender analysis"
+  - "Header analysis"
+  - "Natural Language Understanding"
+id: "15fe8059-0cf8-5329-b0e2-aeab81a1bb5f"
+og_id: "d7177124-8e9f-5916-a3c5-45c22b34ce4f"
+testing_pr: 4960
+testing_sha: 88b951b7d14e4cef6668483c489772efea2faa3a
