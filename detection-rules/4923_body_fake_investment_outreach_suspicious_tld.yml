@@ -7,34 +7,18 @@ type: "rule"
 severity: "medium"
 source: |
   type.inbound
-
-  // subject content
+  // subject contains investment language
   and (
-    strings.istarts_with(subject.base, 'investment into', 'financing for')
-    or strings.icontains(subject.base, "family office")
-    // subject starts with mailbox first name
-    or strings.istarts_with(subject.subject, mailbox.first_name)
+    strings.istarts_with(subject.base, 'financing for', 'investment into')
+    or strings.icontains(subject.base, "expansion", "family office")
   )
-
+  
   // financial body content
-  and (
-    any(ml.nlu_classifier(body.current_thread.text).topics,
-        .name == "Financial Communications" and .confidence != "low"
-    )
-    or (
-      any(ml.nlu_classifier(body.current_thread.text).topics,
-          .name == "B2B Cold Outreach" and .confidence != "low"
-      )
-      and regex.icontains(body.current_thread.text,
-                          'funding',
-                          'capital',
-                          '\d{3}k',
-                          'rates from \d+%',
-                          'funded in \d+'
-      )
-    )
+  and any(ml.nlu_classifier(body.current_thread.text).topics,
+          .name in ("B2B Cold Outreach", "Financial Communications")
+          and .confidence != "low"
   )
-
+  
   // suspicious sender
   and (
     sender.email.domain.tld in $suspicious_tlds
@@ -56,4 +40,4 @@ detection_methods:
 id: "96e47d0a-2721-500f-9f1a-fa42b8fb4ddc"
 og_id: "5d4c4a15-661c-5fd1-9d5f-1c72c8230be8"
 testing_pr: 4923
-testing_sha: 25a748f25d0b1dcdd1af742b1cda7602f597e356
+testing_sha: 56bfafb51b842fac5e2797344b028a405740e4b1
