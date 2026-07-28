@@ -2,7 +2,7 @@ name: "BEC/Fraud: Fake investment outreach from suspicious TLD"
 description: |
   Detects unsolicited investment/funding outreach emails from suspicious TLDs.
   Targets mass-mailed spam campaigns offering business funding, capital allocation,
-  family office outreach, and personalized investment pitches.
+  and family office outreach.
 type: "rule"
 severity: "medium"
 source: |
@@ -10,26 +10,51 @@ source: |
   // subject contains investment language
   and (
     strings.istarts_with(subject.base, 'financing for', 'investment into')
-    or strings.icontains(subject.base, "expansion", "family office")
-  )
-  
-  // financial body content
-  and any(ml.nlu_classifier(body.current_thread.text).topics,
-          .name in ("B2B Cold Outreach", "Financial Communications")
-          and .confidence != "low"
+    or strings.icontains(subject.base, "family office")
+    or (
+      regex.icontains(subject.base, '\bexpansion\b') and length(subject.base) < 50
+    )
   )
   
   // suspicious sender
   and (
-    sender.email.domain.tld in $suspicious_tlds
-    or sender.email.domain.tld == "info"
+    (
+      sender.email.domain.tld in $suspicious_tlds
+      or sender.email.domain.tld == "info"
+    )
+    // sender negations
+    and not (
+      sender.email.domain.domain == "zoom.us"
+      and coalesce(headers.auth_summary.dmarc.pass, false)
+    )
+  )
+  
+  // financial body content
+  and (
+    any(ml.nlu_classifier(body.plain.raw).topics,
+        .name in ("B2B Cold Outreach", "Financial Communications")
+        and .confidence != "low"
+    )
+    or any(ml.nlu_classifier(body.current_thread.text).topics,
+           .name in ("B2B Cold Outreach", "Financial Communications")
+           and .confidence != "low"
+    )
+  )
+  
+  // topic negations
+  and not (
+    any(ml.nlu_classifier(body.plain.raw).topics,
+        .name in ("E-vite with External RSVP", ) and .confidence == "high"
+    )
+    or any(ml.nlu_classifier(body.current_thread.text).topics,
+           .name in ("E-vite with External RSVP", ) and .confidence == "high"
+    )
   )
 
 tags:
  - "Attack surface reduction"
 attack_types:
   - "BEC/Fraud"
-  - "Spam"
 tactics_and_techniques:
   - "Social engineering"
 detection_methods:
