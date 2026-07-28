@@ -1,0 +1,32 @@
+name: "Link: Unformatted template with literal placeholder in mailto link"
+description: "Detects inbound messages containing mailto links whose href URL still contains an unresolved template placeholder, indicating the sender used a templating system but failed to substitute real values before sending. Two patterns are flagged: an '@{domain}' placeholder, treated as a strong standalone signal; and a '{RECIPIENT_EMAIL}' or '{SENDER_EMAIL}' placeholder (case-insensitive, allowing an underscore or space before 'EMAIL'), which fires only when the NLU classifier detects high-confidence credential-theft (cred_theft) or business-email-compromise (bec) intent in the current thread, suppressing benign templated mail."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and any(body.links,
+          .href_url.scheme == "mailto"
+          and (
+            // @{domain} pattern is strong
+            regex.icontains(.href_url.url, '@\s*{\s*domain\s*}')
+            // combine {RECIPIENT_EMAIL} and {SENDER EMAIL} with NLU to remove a bunch of
+            // benign use cases
+            or (
+              regex.icontains(.href_url.url,
+                              '{\s*(?:RECIPIENT|SENDER)[_\s]?EMAIL\s*}'
+              )
+              and any(ml.nlu_classifier(body.current_thread.text).intents,
+                      .name in ("cred_theft", "bec") and .confidence == "high"
+              )
+            )
+          )
+  )
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Social engineering"
+  - "Evasion"
+detection_methods:
+  - "URL analysis"
+  - "Content analysis"
+id: "b27e9e2a-a979-584f-9da7-a2936829ae0c"

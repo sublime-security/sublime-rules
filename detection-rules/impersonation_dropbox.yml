@@ -19,7 +19,17 @@ source: |
     )
     or regex.icontains(body.current_thread.text,
                        'invited you to view the file ".*" on Dropbox',
-                       'dr[o0]pb[o0]x.{0,20}share.{0,20}f[i1|][i1|l]es?'
+                       'dr[o0]pb[o0]x.{0,20}share.{0,20}f[i1|][i1|l]es?',
+                       'dropbox sign (?:account|team)'
+    )
+    // dropbox style button
+    or length(html.xpath(body.html,
+                         "//a[contains(@style, 'background-color: #0070e0') and contains(@style, 'color: white') and contains(@style, 'width: 210px')  and contains(@style, 'max-width: 210px') and contains(@style, 'border-radius: 4px') and contains(@style, 'text-align: center') and contains(@style, 'font-size: 15px')]"
+              ).nodes
+    ) == 1
+    or any(attachments,
+           .file_type not in $file_types_images
+           and regex.icontains(.file_name, 'dr[o0]pb[o0]x')
     )
   )
   and sender.email.domain.root_domain not in~ (
@@ -51,15 +61,26 @@ source: |
                and .href_url.domain.root_domain in $free_file_hosts
              )
            )
-           and .href_url.domain.root_domain != "dropbox.com"
-           and any(ml.nlu_classifier(body.current_thread.text).intents,
-                   .name == "cred_theft" and .confidence in ("medium", "high")
+           and (
+             .href_url.domain.root_domain != "dropbox.com"
+             and any(ml.nlu_classifier(body.current_thread.text).intents,
+                     .name == "cred_theft" and .confidence in ("medium", "high")
+             )
            )
     )
     or (
       length(ml.logo_detect(file.message_screenshot()).brands) != 0
       and all(ml.logo_detect(file.message_screenshot()).brands,
               .name == "Dropbox"
+      )
+    )
+    or (
+      any(attachments,
+          .file_type not in $file_types_images
+          and regex.icontains(.file_name, 'dr[o0]pb[o0]x')
+      )
+      and any(ml.nlu_classifier(body.current_thread.text).intents,
+              .name == "cred_theft" and .confidence != "low"
       )
     )
   )
@@ -70,7 +91,7 @@ source: |
   
   // negate iCloud Private Message Relay
   and not (
-    sender.email.domain.root_domain == "privaterelay.appleid.com"
+    sender.email.domain.domain == "privaterelay.appleid.com"
     or any(headers.hops, any(.fields, .name == "X-ICLOUD-HME"))
   )
   

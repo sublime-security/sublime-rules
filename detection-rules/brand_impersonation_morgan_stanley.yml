@@ -1,0 +1,70 @@
+name: "Brand impersonation: Morgan Stanley"
+description: "Detects messages impersonating Morgan Stanley that contain indicators of credential theft or callback scams, including references to secure email systems, client service centers, financial advisors, and registration processes. The rule identifies spoofed communications by checking for Morgan Stanley branding elements while excluding legitimate domains."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and (
+    strings.ilike(strings.replace_confusables(sender.display_name),
+                  '*morgan stanley*',
+                  '*morganstanley*'
+    )
+    or strings.ilevenshtein(strings.replace_confusables(sender.display_name),
+                            'morgan stanley'
+    ) <= 2
+    or any(ml.nlu_classifier(body.current_thread.text).entities,
+           .name in ("org", "sender")
+           and strings.icontains(.text, 'Morgan Stanley')
+    )
+    or strings.icontains(body.current_thread.text,
+                         'secure.emailhelp@morganstanley.com'
+    )
+  )
+  and strings.icontains(body.current_thread.text, "Morgan Stanley")
+  and 3 of (
+    strings.icontains(body.current_thread.text, "Client Service Center"),
+    regex.icontains(body.current_thread.text,
+                    'Financial Advis?or\s*[|/]\s*(?:Portfolio\s+)?Manager'
+    ),
+    regex.icontains(body.current_thread.text, 'Secure (?:E-)?Mail'),
+    strings.icontains(body.current_thread.text, "Click here to view"),
+    strings.icontains(body.current_thread.text, "encrypted messages"),
+    strings.icontains(body.current_thread.text, "1-800-780-0256"),
+    strings.icontains(body.current_thread.text,
+                      "secure.emailhelp@morganstanley.com"
+    ),
+    regex.icontains(body.current_thread.text,
+                    'Morgan Stanley\s+(?:Smith Barney|Wealth Management|\w+\s+Team)'
+    ),
+    strings.icontains(body.current_thread.text, "one-time registration"),
+    strings.icontains(body.current_thread.text, "see payment activity"),
+    regex.icontains(body.current_thread.text,
+                    'link will expire on \d{4}-\d{2}-\d{2}'
+    ),
+    any(ml.nlu_classifier(body.current_thread.text).intents,
+        .name in ("cred_theft", "callback_scam") and .confidence == "high"
+    )
+  )
+  and not (
+    sender.email.domain.root_domain in ("docusign.net", "morganstanley.com", )
+    and coalesce(headers.auth_summary.dmarc.pass, false)
+  )
+  and not (
+    any(headers.hops,
+        any(.fields,
+            .name == "X-ProofpointSecure"
+            and strings.icontains(.value, "Encrypted")
+        )
+    )
+    and any(headers.domains, .root_domain == "pphosted.com")
+  )
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Natural Language Understanding"
+  - "Sender analysis"
+id: "3bb49b76-bf8f-598c-9854-7b8f3aadf3df"

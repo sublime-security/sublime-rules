@@ -10,14 +10,44 @@ source: |
   and 0 < length(distinct(body.current_thread.links, .href_url.domain.root_domain)
   ) <= 3
   and any(body.links,
-          any(.href_url.query_params_decoded["email"],
-              strings.parse_email(.).email in map(recipients.to, .email.email)
+          (
+            any(values(.href_url.query_params_decoded),
+                any(.,
+                    strings.parse_email(.).email in map(recipients.to,
+                                                        .email.email
+                    )
+                )
+            )
+          )
+          or regex.icontains(.display_text,
+                             '(?:(open|view|read|private).{0,15}message)'
+          )
+          or any([.href_url.path, .display_text],
+                 any((ml.nlu_classifier(.).topics),
+                     .name in ("Romance", "Sexually Explicit Messages")
+                 )
+          )
+          // visit the URL and check the effecitve url
+          or any(values(ml.link_analysis(.).effective_url.query_params_decoded),
+                 any(.,
+                     strings.parse_email(.).email in map(recipients.to,
+                                                         .email.email
+                     )
+                 )
           )
   )
   and (
     any(ml.nlu_classifier(body.current_thread.text).entities,
         .name == "org"
-        and strings.ilike(.text, "*Date*", "*Dating*", "*Girls*", "*Love*")
+        and strings.ilike(.text,
+                          "*Flirt*",
+                          "*Singles*",
+                          "*Date*",
+                          "*Dating*",
+                          "*Girls*",
+                          "*Love*",
+                          "*Hook*up*"
+        )
     )
     or any(ml.nlu_classifier(body.current_thread.text).topics, .name == "Romance")
   )

@@ -1,0 +1,43 @@
+name: "Brand impersonation: Canada Revenue Agency"
+description: "Detects messages impersonating the Canada Revenue Agency (CRA) in English or French that contain credential theft indicators. The rule identifies senders claiming to be CRA through display names or subject line references, uses natural language understanding to detect credential theft intent, and excludes legitimate senders with proper authentication."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  // sender claims to be CRA
+  and (
+    strings.icontains(sender.display_name, 'canada revenue agency')
+    or strings.icontains(sender.display_name, 'agence du revenu du canada')
+    or (
+      // cra display name and cra reference in subject
+      regex.icontains(sender.display_name, '\bcra\b')
+      and regex.icontains(subject.base,
+                          '(?:T4|cra|tax|canada revenue|revenu du canada)'
+      )
+    )
+  )
+  // nlu cred theft
+  and any(ml.nlu_classifier(body.current_thread.text).intents,
+          .name == "cred_theft" and .confidence != 'low'
+  )
+  and not (
+    (
+      // negate highly trusted sender domains
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      // negate legit senders from merck
+      or sender.email.domain.root_domain == "cra-arc.gc.ca"
+    )
+    // enforce auth
+    and coalesce(headers.auth_summary.dmarc.pass, false)
+  )
+attack_types:
+  - "BEC/Fraud"
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Header analysis"
+  - "Sender analysis"
+id: "72607c4c-52dc-5df6-b547-54ee321b7a7a"

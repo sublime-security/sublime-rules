@@ -1,0 +1,30 @@
+name: "Message content: Request for author engagement"
+description: "Detects inbound messages containing language consistent with unsolicited book/author related scam from a free email provider. Often used to ask for payment related to promotion of an upcoming or recently published book."
+type: "rule"
+severity: "low"
+source: |
+  type.inbound
+  // freemailer
+  and sender.email.domain.root_domain in $free_email_providers
+  // goodreads mention
+  and strings.icontains(body.current_thread.text, "goodreads")
+  // addresses the recipient as the author of their own work
+  and regex.icontains(body.current_thread.text,
+                      '\byour (?:books?|work|text|title|novel|manuscript|writing|scholarship|research|reporting|story)\b'
+  )
+  //
+  and regex.icontains(body.current_thread.text,
+                      '\b(?:featur|spotlight|showcase|introduce your|invite you|selected your|reading (?:cycle|circle|challenge|community|discussion))'
+  )
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and not (
+    sender.email.domain.root_domain in $high_trust_sender_root_domains
+    and coalesce(headers.auth_summary.dmarc.pass, false)
+  )
+attack_types:
+  - "Spam"
+tactics_and_techniques:
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+id: "c52f5f19-0928-59bf-8409-d58df640c5a7"

@@ -1,0 +1,30 @@
+name: "Service Abuse: Zoom with freemail reply-to and recipient address in greeting"
+description: "Detects messages impersonating Zoom that use a freemail provider for the reply-to address, have a new and unsolicited reply-to profile, and contain the recipient's email address in the greeting line where a name would normally appear."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  // is from zoom
+  and sender.email.email == "no-reply@zoom.us"
+  // has a freemail for a reply-to address
+  and headers.reply_to[0].email.domain.domain in $free_email_providers
+  // the reply-to address is new 
+  and beta.profile.by_reply_to().prevalence == "new"
+  and not beta.profile.by_reply_to().solicited
+  // the "greeting" line contains an email address matching the recipient's email root domain
+  // this is normally a name
+  and any(regex.iextract(body.current_thread.text,
+                         '^\S+\s+(?P<last_word>\S+?),?(?:\n|\z)'
+          ),
+          strings.parse_email(.named_groups["last_word"]).domain.root_domain == recipients.to[0].email.domain.root_domain
+  )
+attack_types:
+  - "Spam"
+tactics_and_techniques:
+  - "Free email provider"
+  - "Social engineering"
+detection_methods:
+  - "Sender analysis"
+  - "Header analysis"
+  - "Content analysis"
+id: "d582b240-8126-540f-8934-d9914780cebb"
