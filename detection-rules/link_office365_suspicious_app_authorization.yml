@@ -13,7 +13,12 @@ source: |
     // links in email body
     any([body.links, body.current_thread.links],
         any(.,
-            .href_url.domain.domain == 'login.microsoftonline.com'
+            (
+              .href_url.domain.domain == 'login.microsoftonline.com'
+              or strings.icontains(.href_url.query_params,
+                                   "login.microsoftonline.com"
+              )
+            )
             and (
               strings.ilike(.href_url.query_params,
                             '*offline_access*',
@@ -23,7 +28,12 @@ source: |
                             '*prompt=none*'
               )
               or (
-                strings.icontains(.href_url.path, '/common/reprocess')
+                (
+                  strings.icontains(.href_url.path, '/common/reprocess')
+                  or strings.icontains(.href_url.query_params,
+                                       "/common/reprocess"
+                  )
+                )
                 and strings.icontains(.href_url.query_params, 'ctx=')
                 and strings.icontains(.href_url.query_params, 'sessionId=')
               )
@@ -85,6 +95,7 @@ source: |
            )
     )
   )
+
 attack_types:
   - "Credential Phishing"
 detection_methods:
