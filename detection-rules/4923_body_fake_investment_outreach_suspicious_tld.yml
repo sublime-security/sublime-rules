@@ -11,44 +11,31 @@ source: |
   and (
     strings.istarts_with(subject.base, 'financing for', 'investment into')
     or strings.icontains(subject.base, "family office")
+  )
+  
+  // financial body content
+  and (
+    any(ml.nlu_classifier(body.current_thread.text).topics,
+        .name == "Financial Communications" and .confidence != "low"
+    )
     or (
-      regex.icontains(subject.base, '\bexpansion\b') and length(subject.base) < 50
+      any(ml.nlu_classifier(body.current_thread.text).topics,
+          .name == "B2B Cold Outreach" and .confidence != "low"
+      )
+      and regex.icontains(body.current_thread.text,
+                          'funding',
+                          'capital',
+                          '\d{3}k',
+                          'rates from \d+%',
+                          'funded in \d+'
+      )
     )
   )
   
   // suspicious sender
   and (
-    (
-      sender.email.domain.tld in $suspicious_tlds
-      or sender.email.domain.tld == "info"
-    )
-    // sender negations
-    and not (
-      sender.email.domain.domain == "zoom.us"
-      and coalesce(headers.auth_summary.dmarc.pass, false)
-    )
-  )
-  
-  // financial body content
-  and (
-    any(ml.nlu_classifier(body.plain.raw).topics,
-        .name in ("B2B Cold Outreach", "Financial Communications")
-        and .confidence != "low"
-    )
-    or any(ml.nlu_classifier(body.current_thread.text).topics,
-           .name in ("B2B Cold Outreach", "Financial Communications")
-           and .confidence != "low"
-    )
-  )
-  
-  // topic negations
-  and not (
-    any(ml.nlu_classifier(body.plain.raw).topics,
-        .name in ("E-vite with External RSVP", ) and .confidence == "high"
-    )
-    or any(ml.nlu_classifier(body.current_thread.text).topics,
-           .name in ("E-vite with External RSVP", ) and .confidence == "high"
-    )
+    sender.email.domain.tld in $suspicious_tlds
+    or sender.email.domain.tld == "info"
   )
 
 tags:
