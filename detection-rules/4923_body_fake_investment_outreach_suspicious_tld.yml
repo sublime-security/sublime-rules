@@ -11,44 +11,31 @@ source: |
   and (
     strings.istarts_with(subject.base, 'financing for', 'investment into')
     or strings.icontains(subject.base, "family office")
+  )
+  
+  // financial body content
+  and (
+    any(ml.nlu_classifier(body.current_thread.text).topics,
+        .name == "Financial Communications" and .confidence != "low"
+    )
     or (
-      regex.icontains(subject.base, '\bexpansion\b') and length(subject.base) < 50
+      any(ml.nlu_classifier(body.current_thread.text).topics,
+          .name == "B2B Cold Outreach" and .confidence != "low"
+      )
+      and regex.icontains(body.current_thread.text,
+                          'funding',
+                          'capital',
+                          '\d{3}k',
+                          'rates from \d+%',
+                          'funded in \d+'
+      )
     )
   )
   
   // suspicious sender
   and (
-    (
-      sender.email.domain.tld in $suspicious_tlds
-      or sender.email.domain.tld == "info"
-    )
-    // sender negations
-    and not (
-      sender.email.domain.domain == "zoom.us"
-      and coalesce(headers.auth_summary.dmarc.pass, false)
-    )
-  )
-  
-  // financial body content
-  and (
-    any(ml.nlu_classifier(body.plain.raw).topics,
-        .name in ("B2B Cold Outreach", "Financial Communications")
-        and .confidence != "low"
-    )
-    or any(ml.nlu_classifier(body.current_thread.text).topics,
-           .name in ("B2B Cold Outreach", "Financial Communications")
-           and .confidence != "low"
-    )
-  )
-  
-  // topic negations
-  and not (
-    any(ml.nlu_classifier(body.plain.raw).topics,
-        .name in ("E-vite with External RSVP", ) and .confidence == "high"
-    )
-    or any(ml.nlu_classifier(body.current_thread.text).topics,
-           .name in ("E-vite with External RSVP", ) and .confidence == "high"
-    )
+    sender.email.domain.tld in $suspicious_tlds
+    or sender.email.domain.tld == "info"
   )
 
 tags:
@@ -65,4 +52,4 @@ detection_methods:
 id: "96e47d0a-2721-500f-9f1a-fa42b8fb4ddc"
 og_id: "5d4c4a15-661c-5fd1-9d5f-1c72c8230be8"
 testing_pr: 4923
-testing_sha: 1fcdc7f84de954afd0e0a1b48636afd754d79bf2
+testing_sha: 8e9ac6325de49a71dd549adb21d172add57353ca
