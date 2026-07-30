@@ -41,8 +41,18 @@ source: |
                           .href_url.domain.root_domain not in ("aka.ms")
                  )
   ) < 3
-  and all(filter(body.links, .parser != "plain"),
-          .href_url.domain.root_domain != sender.email.domain.root_domain
+  and (
+    all(filter(body.links, .parser != "plain"),
+        .href_url.domain.root_domain != sender.email.domain.root_domain
+    )
+    // negate if every clickable link is authenticated Klaviyo tracking
+    and not (
+      all(filter(body.links, .parser != "plain"),
+          .href_url.domain.root_domain in ("klclick.com", "klclick1.com")
+      )
+      // ensure message passes auth
+      and coalesce(headers.auth_summary.dmarc.pass, false)
+    )
   )
 
 attack_types:
