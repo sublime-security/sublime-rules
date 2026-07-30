@@ -1,0 +1,62 @@
+name: "Spam: Microsoft Applications sender default domain (onmicrosoft.com) invite from unknown sender"
+description: "Detects inbound messages sent via Microsoft's default OnMicrosoft domains using standard invite infrastructure (local part 'invites', onmicrosoft.com root domain, and 'pepf' in the message ID) that do not originate from known or trusted senders. False positives are reduced by excluding messages from known recipient domains, trusted reply-to domains, and legitimate Microsoft infrastructure where all links resolve to microsoft.com."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  // this rule matches any default microsoft onmicrosoft domains that are not msft themselves
+  // rule can be modified
+  
+  // action link present
+  and length(body.links) > 0
+  and (
+    (
+      // standard structure local part
+      sender.email.local_part == "invites"
+      // standard structure default domain
+      and sender.email.domain.root_domain == "onmicrosoft.com"
+      // infra validated message id
+      and strings.icontains(headers.message_id, "pepf")
+    )
+    // ignore terminated access notifications
+    and not strings.istarts_with(subject.base, 'you’ve left the')
+  )
+  
+  // false positve reduction/negations
+  and not (
+    // extract the subdomain & tld, then check it against known recipients
+    strings.concat(sender.email.domain.subdomain, ".", sender.email.domain.tld) in $recipient_domains
+    or 
+    // or check if reply-to exists and is a solicited recipient
+    (
+      length(headers.reply_to) > 0
+      and (
+        // domain has communicated with recipient
+        any(headers.reply_to, .email.domain.root_domain in $sender_domains)
+        // solicited sender
+        and any(headers.reply_to, .email.domain.root_domain in $recipient_domains)
+      )
+    )
+    // negate high trust sender root domains
+    or any(headers.reply_to,
+           .email.domain.root_domain in $high_trust_sender_root_domains
+    )
+  )
+  
+  // negate microsoft's domain
+  and not (
+    sender.email.domain.domain == "microsoft.onmicrosoft.com"
+    and headers.auth_summary.spf.pass
+    and all(body.links, .href_url.domain.root_domain == "microsoft.com")
+  )
+tags:
+  - "Attack surface reduction"
+attack_types:
+  - "Spam"
+tactics_and_techniques:
+  - "Free subdomain host"
+  - "Social engineering"
+detection_methods:
+  - "Header analysis"
+  - "Sender analysis"
+  - "URL analysis"
