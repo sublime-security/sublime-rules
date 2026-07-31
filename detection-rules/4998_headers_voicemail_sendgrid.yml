@@ -1,0 +1,34 @@
+name: "Sendgrid voicemail phish"
+description: |
+  The message may contain a fake voicemail notification being sent via Sendgrid.
+references:
+  - "https://krebsonsecurity.com/2020/08/sendgrid-under-siege-from-hacked-accounts/comment-page-1/"
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and headers.return_path.domain.domain == 'sendgrid.net'
+  and (
+    regex.icontains(strings.replace_confusables(subject.subject),
+                    'v[o0][il1]cema[il1][li1]',
+                    'v[o0][il1]ce message'
+    )
+    or any(ml.nlu_classifier(body.current_thread.text).topics,
+           .name == "Voicemail Call and Missed Call Notifications"
+           and .confidence != "low"
+    )
+  )
+  and any(ml.nlu_classifier(body.current_thread.text).intents,
+          .name not in ("benign")
+  )
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Header analysis"
+id: "eaf8a2a6-3022-5d86-8fce-527aeb432c37"
+og_id: "21cad89c-55e0-5cf1-8677-bf0242633a82"
+testing_pr: 4998
+testing_sha: dc498cadfb65a6cbcf9ca408a7bed9d112a1eaef
