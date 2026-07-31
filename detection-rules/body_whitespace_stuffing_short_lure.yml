@@ -28,8 +28,13 @@ source: |
     or regex.icontains(body.html.raw,
                        '(?:<div[^>]*>\s*<br\s*/?\s*>\s*</div>\s*){20,}'
     )
-    or regex.icontains(body.html.raw,
-                       '(?:<p[^>]*>\s*<o:p>\s*(?:&nbsp;|&#160;)\s*</o:p>\s*</p>\s*){10,}'
+    or (
+      regex.icontains(body.html.raw,
+                      '(?:<p[^>]*>\s*<o:p>\s*(?:&nbsp;|&#160;)\s*</o:p>\s*</p>\s*){10,}'
+      )
+      and any(ml.nlu_classifier(body.current_thread.text).intents,
+              .name in ("cred_theft", "bec")
+      )
     )
   )
   // low word count excludes legitimate long threads
@@ -56,7 +61,6 @@ source: |
     sender.email.domain.root_domain in $high_trust_sender_root_domains
     and coalesce(headers.auth_summary.dmarc.pass, false)
   )
-  and any(ml.nlu_classifier(body.current_thread.text).intents, .name != 'benign')
   
   // negate authenticated senders with unsubscribe mechanism (marketing)
   and not (
