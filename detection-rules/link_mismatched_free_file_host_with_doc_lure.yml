@@ -1,0 +1,57 @@
+name: "Link: Mismatched free file host links with document lure"
+description: "Detects inbound emails containing mismatched hyperlinks where the displayed URL references a free file hosting service but the actual destination points to another free file host or a suspicious TLD. The rule combines this with NLU classification identifying BEC or credential theft intent, along with body text patterns common to fake document/scan notifications (e.g., 'scanned from', 'shared via', 'for your review') or short, urgency-driven messages. Trusted senders with passing DMARC are excluded to reduce false positives."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and any(filter(body.current_thread.links, .mismatched),
+          any([.display_url.domain.domain, .display_url.domain.root_domain],
+              . in $free_file_hosts
+          )
+          and (
+            any([.href_url.domain.domain, .href_url.domain.root_domain],
+                . in $free_file_hosts
+            )
+            or .href_url.domain.tld in $suspicious_tlds
+          )
+  )
+  and any(ml.nlu_classifier(body.current_thread.text).intents,
+          .name in ("bec", "cred_theft") and .confidence != "low"
+  )
+  and 2 of (
+    regex.icontains(body.current_thread.text,
+                    'scanned from',
+                    'total images',
+                    'attachment format',
+                    'scan information',
+                    'statement/remittance',
+                    'versalink',
+                    'made a file available',
+                    'document from .{0,40}is available',
+                    '(?:uploaded|shared) via',
+                    '(?:report|available) for your review'
+    ),
+    regex.icontains(body.current_thread.text, '={5,}|_{10,}'),
+    length(body.current_thread.text) < 700,
+    regex.icontains(body.current_thread.text,
+                    'kindly review',
+                    'review the attached',
+                    'let us know the next step',
+                    'for your review',
+                    'please review the'
+    )
+  )
+  and not (
+    sender.email.domain.root_domain in $high_trust_sender_root_domains
+    and coalesce(headers.auth_summary.dmarc.pass, false)
+  )
+attack_types:
+  - "BEC/Fraud"
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Free file host"
+  - "Social engineering"
+detection_methods:
+  - "Natural Language Understanding"
+  - "URL analysis"
+  - "Content analysis"
