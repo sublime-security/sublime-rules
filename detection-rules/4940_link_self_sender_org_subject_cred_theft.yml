@@ -16,15 +16,18 @@ source: |
     // potential thread hijacking
     or (
       length(body.previous_threads) > 1
+      // most recent thread is a reply to this sender
+      and any(body.previous_threads[0].recipients.to,
+              strings.icontains(.email.email, sender.email.email)
+      )
       // short current_thread
       and length(body.current_thread.text) < 500
       // excessive whitespace
       and regex.icount(body.html.raw, '(<br\s*/?>[\s\n]*)') > 50
-      // negate common automated sender localparts
-      and not strings.icontains(sender.email.local_part,
-                                "notification",
-                                "noreply",
-                                "info"
+      // negate messages sent via google groups
+      and not (
+        any(headers.hops, any(.fields, .name == "X-Google-Group-Id"))
+        and strings.icontains(sender.display_name, "via")
       )
     )
   )
@@ -56,8 +59,12 @@ source: |
                      and .text != sender.email.domain.sld
                      and .text != sender.email.domain.domain
               ),
-              // not an istarts_with, make it an exact match
-              any(body.links, strings.starts_with(.display_text, ..text))
+              any(filter(body.links,
+                         .parser == "hyperlink" and .href_url.scheme != "mailto"
+                  ),
+                  // not an istarts_with, make it an exact match
+                  strings.starts_with(.display_text, ..text)
+              )
       )
     )
   )
@@ -94,4 +101,4 @@ detection_methods:
 id: "0ffe97b3-58cf-5ede-96d0-d03438f18cc1"
 og_id: "bfa9aa08-ed3b-5e4a-a83c-192efd126530"
 testing_pr: 4940
-testing_sha: 72b88e5b89b8aad2cbb5ac067a8fc420d3ac058b
+testing_sha: caefa0881b28864ea8509ae773fb8ffaa06d48e5
