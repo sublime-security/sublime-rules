@@ -5,7 +5,7 @@ severity: "medium"
 source: |
   type.inbound
   and (
-    regex.icontains(sender.display_name, 'sirius[\s._-]?xm')
+    regex.icontains(sender.display_name, 'sirius[._-]?xm')
     or strings.ilevenshtein(sender.display_name, 'siriusxm') <= 1
     or strings.ilike(sender.email.domain.domain, '*siriusxm*')
     or strings.istarts_with(body.current_thread.text, 'sirius xm', 'siriusxm')
@@ -26,10 +26,17 @@ source: |
         'engagement360.net', // SiriusXM survey vendor
         'sciquest.com' // SiriusXM Procurement
       )
-      and not headers.auth_summary.dmarc.pass
+      and not coalesce(headers.auth_summary.dmarc.pass, false)
     )
   )
   and not profile.by_sender().solicited
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and not coalesce(headers.auth_summary.dmarc.pass, false)
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
 attack_types:
   - "Callback Phishing"
   - "Credential Phishing"
