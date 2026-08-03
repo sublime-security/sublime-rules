@@ -8,7 +8,12 @@ source: |
     regex.icontains(sender.display_name, 'sirius[._-]?xm')
     or strings.ilevenshtein(sender.display_name, 'siriusxm') <= 1
     or strings.ilike(sender.email.domain.domain, '*siriusxm*')
-    or strings.istarts_with(body.current_thread.text, 'sirius xm')
+    or (
+      strings.istarts_with(body.current_thread.text, 'sirius xm')
+      and regex.contains(body.current_thread.text,
+                         '[\x{1F600}-\x{1F64F}]|[\x{1F300}-\x{1F5FF}]|[\x{1F680}-\x{1F6FF}]|[\x{1F1E0}-\x{1F1FF}]|[\x{2600}-\x{26FF}]|[\x{2700}-\x{27BF}]'
+      )
+    )
   )
   and (
     sender.email.domain.root_domain not in (
@@ -30,12 +35,10 @@ source: |
     )
   )
   and not profile.by_sender().solicited
-  and (
-    (
-      sender.email.domain.root_domain in $high_trust_sender_root_domains
-      and not coalesce(headers.auth_summary.dmarc.pass, false)
-    )
-    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and not (
+    sender.email.domain.root_domain in $high_trust_sender_root_domains
+    and coalesce(headers.auth_summary.dmarc.pass, false)
   )
 attack_types:
   - "Callback Phishing"
@@ -52,4 +55,4 @@ detection_methods:
 id: "9a21b780-2578-5241-bbca-b8a2b936328b"
 og_id: "70eb3792-cd7a-5369-b1c3-65a3b772de00"
 testing_pr: 4987
-testing_sha: 4ee4a392b7ea8d3ba2f47a9ac9a7f1cf378f0277
+testing_sha: e0a5c6e3b2d04445af19eb0026c1a33edc524dfa
