@@ -4,29 +4,33 @@ type: "rule"
 severity: "medium"
 source: |
   type.inbound
+  // should have one unique URL
   and length(distinct(flatten(map(html.xpath(body.html,
-                                             '//body/table[contains(@style, "width: 451pt;")]/tbody/tr[2]/td/div/table//a'
+                                             '//body/table/tbody/tr[2]/td/div/table//a'
                                   ).nodes,
                                   map(.links, .href_url.url)
                               )
                       )
              )
   ) == 1
+  // should have two unique display text values
   and length(distinct(html.xpath(body.html,
-                                 '//body/table[contains(@style, "width: 451pt;")]/tbody/tr[2]/td/div/table//a'
+                                 '//body/table/tbody/tr[2]/td/div/table//a'
                       ).nodes,
                       .display_text
              )
   ) == 2
-  and all(html.xpath(body.html,
-                     '//body/table[contains(@style, "width: 451pt;")]/tbody/tr[2]/td/div/table//a'
-          ).nodes,
+  and all(html.xpath(body.html, '//body/table/tbody/tr[2]/td/div/table//a').nodes,
           .inner_text == .display_text
   )
+  // we need one true one false for this check
   and length(distinct(map(html.xpath(body.html,
-                                     '//body/table[contains(@style, "width: 451pt;")]/tbody/tr[2]/td/div/table//a'
+                                     '//body/table/tbody/tr[2]/td/div/table//a'
                           ).nodes,
-                          strings.icontains(.raw, '<img ')
+                          (
+                            strings.icontains(.raw, '<img ')
+                            and strings.icontains(.raw, 'src="cid:')
+                          )
                       )
              )
   ) == 2
@@ -41,4 +45,4 @@ detection_methods:
 id: "89fef320-6c97-5bf8-a6a7-1a82abe0869b"
 og_id: "3597dc0f-c8ad-5d89-bb5e-4b523536ec33"
 testing_pr: 4899
-testing_sha: 3f805e26785630b0e85bbf777a6fe7310390170f
+testing_sha: 77812ba049a522c23cef82bd13c71f8502991fe6
