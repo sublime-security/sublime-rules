@@ -4,29 +4,33 @@ type: "rule"
 severity: "medium"
 source: |
   type.inbound
+  // should have one unique URL
   and length(distinct(flatten(map(html.xpath(body.html,
-                                             '//body/table[contains(@style, "width: 451pt;")]/tbody/tr[2]/td/div/table//a'
+                                             '//body/table/tbody/tr[2]/td/div/table//a'
                                   ).nodes,
                                   map(.links, .href_url.url)
                               )
                       )
              )
   ) == 1
+  // should have two unique display text values
   and length(distinct(html.xpath(body.html,
-                                 '//body/table[contains(@style, "width: 451pt;")]/tbody/tr[2]/td/div/table//a'
+                                 '//body/table/tbody/tr[2]/td/div/table//a'
                       ).nodes,
                       .display_text
              )
   ) == 2
-  and all(html.xpath(body.html,
-                     '//body/table[contains(@style, "width: 451pt;")]/tbody/tr[2]/td/div/table//a'
-          ).nodes,
+  and all(html.xpath(body.html, '//body/table/tbody/tr[2]/td/div/table//a').nodes,
           .inner_text == .display_text
   )
+  // we need one true one false for this check
   and length(distinct(map(html.xpath(body.html,
-                                     '//body/table[contains(@style, "width: 451pt;")]/tbody/tr[2]/td/div/table//a'
+                                     '//body/table/tbody/tr[2]/td/div/table//a'
                           ).nodes,
-                          strings.icontains(.raw, '<img ')
+                          (
+                            strings.icontains(.raw, '<img ')
+                            and strings.icontains(.raw, 'src="cid:')
+                          )
                       )
              )
   ) == 2
