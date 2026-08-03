@@ -5,18 +5,17 @@ severity: "low"
 source: |
   type.inbound
   // newly registered sender domain
-  and network.whois(sender.email.domain).days_old < 70
+  and network.whois(sender.email.domain).days_old < 90
   // there are 2 name servers which have subdomains ending with .ns
   and length(network.whois(sender.email.domain).name_servers) == 2
   and all(network.whois(sender.email.domain).name_servers,
           strings.iends_with(.subdomain, '.ns')
           and .root_domain == 'cloudflare.com'
   )
-  and any([subject.base, body.current_thread.text],
-          (any(ml.nlu_classifier(.).topics, .name == 'B2B Cold Outreach'))
+  and any(ml.nlu_classifier(body.current_thread.text).topics,
+          .name == 'B2B Cold Outreach'
   )
   and length(body.current_thread.text) < 350
-  and not sender.email.domain.tld in $suspicious_tlds
 attack_types:
   - "Spam"
 tactics_and_techniques:
