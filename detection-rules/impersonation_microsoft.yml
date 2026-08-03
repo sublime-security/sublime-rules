@@ -108,15 +108,27 @@ source: |
   // negate other legitimate MS notifications
   and not (
     length(body.links) > 0
-    and all(body.links,
+    and (
+      (
+        all(body.links,
             .href_url.domain.root_domain in (
               "aka.ms",
               "microsoftonline.com",
               "microsoft.com"
             )
             or .href_url.domain.tld == "microsoft"
+        )
+        and headers.auth_summary.dmarc.pass
+      )
+  
+      // microsoft b2b applications invitations - no auth checks
+      or (
+        sender.email.local_part == "invites"
+        and sender.email.domain.root_domain == "onmicrosoft.com"
+        // infra validated message id
+        and strings.icontains(headers.message_id, "pepf")
+      )
     )
-    and headers.auth_summary.dmarc.pass
   )
   
   // negate highly trusted sender domains unless they fail DMARC authentication
