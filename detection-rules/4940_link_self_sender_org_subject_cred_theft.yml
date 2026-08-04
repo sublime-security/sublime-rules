@@ -23,7 +23,7 @@ source: |
       // short current_thread
       and length(body.current_thread.text) < 500
       // excessive whitespace
-      and regex.icount(body.html.raw, '(<br\s*/?>[\s\n]*)') > 50
+      // and regex.icount(body.html.raw, '(<br\s*/?>[\s\n]*)') > 50
       // negate messages sent via google groups
       and not (
         any(headers.hops, any(.fields, .name == "X-Google-Group-Id"))
@@ -45,29 +45,49 @@ source: |
   
   // cred theft
   and (
-    any(ml.nlu_classifier(body.current_thread.text).intents,
-        .name == "cred_theft" and .confidence == "high"
-    )
-    // request to view/sign an invoice
-    or (
-      any(ml.nlu_classifier(body.current_thread.text).topics,
-          .name == "Request to View Invoice" and .confidence != "low"
+    (
+      any(ml.nlu_classifier(body.current_thread.text).intents,
+          .name == "cred_theft" and .confidence == "high"
       )
-      // with the org name as indicated by NLU present in link display_text
-      and any(filter(ml.nlu_classifier(body.current_thread.text, subject="").entities,
-                     .name == "org"
-                     and .text != sender.email.domain.sld
-                     and .text != sender.email.domain.domain
-              ),
-              any(filter(body.links,
-                         .parser == "hyperlink" and .href_url.scheme != "mailto"
-                  ),
-                  // not an istarts_with, make it an exact match
-                  strings.starts_with(.display_text, ..text)
+      // BEC combined with request to view/sign an invoice
+      or (
+        (
+          (
+            any(ml.nlu_classifier(body.current_thread.text).topics,
+                .name == "Request to View Invoice" and .confidence != "low"
+            )
+            and any(ml.nlu_classifier(body.current_thread.text).intents,
+                    .name == "bec" and .confidence == "high"
+            )
+          )
+          // suspicious request terminology
+          or (
+            (
+              any(ml.nlu_classifier(body.current_thread.text).entities,
+                  .name == "request"
+                  and strings.icontains(.text, "sign", "kindly")
               )
+            )
+          )
+        )
+        // with the org name as indicated by NLU present in link display_text
+        and any(filter(ml.nlu_classifier(body.current_thread.text, subject="").entities,
+                       .name == "org"
+                       and .text != sender.email.domain.sld
+                       and .text != sender.email.domain.domain
+                ),
+                // only look at hyperlinks, filter out email addresses
+                any(filter(body.links,
+                           .parser == "hyperlink" and .href_url.scheme != "mailto"
+                    ),
+                    // not an istarts_with, make it an exact match
+                    strings.starts_with(.display_text, ..text)
+                )
+        )
       )
     )
   )
+  
   // all attachments are inline images or there are 0 attachments
   and (
     length(attachments) == 0
@@ -101,4 +121,4 @@ detection_methods:
 id: "0ffe97b3-58cf-5ede-96d0-d03438f18cc1"
 og_id: "bfa9aa08-ed3b-5e4a-a83c-192efd126530"
 testing_pr: 4940
-testing_sha: caefa0881b28864ea8509ae773fb8ffaa06d48e5
+testing_sha: 34cab59247035371634ecc8233d73a29caae51e3
