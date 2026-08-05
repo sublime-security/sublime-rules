@@ -1,0 +1,30 @@
+name: "Open redirect: searchbd.net"
+description: "Detects inbound messages containing links that abuse searchbd.net as an open redirect. The rule identifies links where the recipient's email address is embedded in the URL and the redirect destination points away from searchbd.net rather than back to it, indicating the domain is being leveraged to disguise the true destination. Messages are excluded when the sender's domain is searchbd.net and passes DMARC authentication, filtering out legitimate use of the service."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and any(body.links,
+          .href_url.domain.root_domain == "searchbd.net"
+          and length(.href_url.query_params_decoded["url"]) > 0
+          and strings.contains(.href_url.url, recipients.to[0].email.email)
+          // redirect is not going back to searchbd.net
+          and not any(.href_url.query_params_decoded["url"],
+                      strings.parse_url(.).domain.root_domain == "searchbd.net"
+          )
+  )
+  and not (
+    sender.email.domain.root_domain == "searchbd.net"
+    and coalesce(headers.auth_summary.dmarc.pass, false)
+  )
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Open redirect"
+  - "Evasion"
+detection_methods:
+  - "URL analysis"
+id: "13bfc165-8fac-5ee2-ab50-d7cde822aad4"
+og_id: "33bb35b9-dfaa-5e54-8a27-8daba4ded842"
+testing_pr: 5029
+testing_sha: 89b4435f7a23ca27ad688385fdfe2de326ecc64b
