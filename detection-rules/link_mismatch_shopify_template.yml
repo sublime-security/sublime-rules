@@ -1,0 +1,38 @@
+name: "Link: Mismatched Shopify template button href"
+description: "Flags inbound messages where the sender's display name contains a space and the HTML body includes a styled table cell with a linked button whose title attribute reveals a leftover Shopify CDN file path, but the button's actual href does not point to that same path on cdn.shopify.com. This mismatch suggests a hijacked or repurposed Shopify email template being used to redirect recipients to an unintended destination. Messages from highly trusted sender domains that pass DMARC authentication are excluded."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and strings.icontains(sender.display_name, ' ')
+  and any(html.xpath(body.html,
+                     '//td[contains(@style, "background-color")]//a[@title and @href]'
+          ).nodes,
+          // the leftover template title advertises a shopify file path...
+          any(regex.iextract(.raw,
+                             'title="https://cdn\.shopify\.com(?P<tpath>/s/files/\d+/\d+/\d+/\d+/)'
+              ),
+              // ...that the button's actual href doesn't point to
+              not any(..links,
+                      .href_url.domain.domain == "cdn.shopify.com"
+                      and strings.istarts_with(.href_url.path,
+                                               ..named_groups["tpath"]
+                      )
+              )
+          )
+  )
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and not (
+    sender.email.domain.root_domain in $high_trust_sender_root_domains
+    and coalesce(headers.auth_summary.dmarc.pass, false)
+  )
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Evasion"
+  - "Social engineering"
+detection_methods:
+  - "HTML analysis"
+  - "URL analysis"
+  - "Header analysis"
+  - "Sender analysis"
