@@ -5,15 +5,15 @@ severity: "low"
 source: |
   type.inbound
   // a link whose effective destination is evernote
-  and any(filter(body.current_thread.links,
-                 coalesce(strings.parse_url(strings.concat("https://",
-                                                           .href_url.query_params_decoded["domain"][0]
-                                            )
-                          ).domain.root_domain,
-                          .href_url.domain.root_domain
-                 ) == "evernote.com"
-          ),
+  and any(body.current_thread.links,
           (
+            .href_url.domain.root_domain == "evernote.com"
+            or .display_url.domain.root_domain == "evernote.com"
+            or any(.href_url.query_params_decoded["domain"],
+                   strings.iends_with(., "evernote.com")
+            )
+          )
+          and (
             any(ml.nlu_classifier(.display_text).topics, .name == 'E-Signature')
             or regex.icontains(.display_text,
                                '\b(?:view|open|review|access|download|see|shared?)\b[^\n]{0,30}\b(?:document|doc|file|contract|invoice|statement|agreement|draft|attachment|folder)\b'
