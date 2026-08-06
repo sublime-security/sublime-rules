@@ -10,21 +10,7 @@ source: |
   // a single recipient (this is in the link so there can be only one)
   and length(recipients.to) == 1
   and all(recipients.to, .email.domain.valid)
-  and any(filter(attachments,
-                 .file_type == "pdf"
-                 and (
-                   // contains the SLD or local part of recipient
-                   all(recipients.to,
-                       strings.icontains(..file_name, .email.domain.sld)
-                       or strings.icontains(..file_name, .email.local_part)
-                   )
-                   // contains financial refernces
-                   or any(ml.nlu_classifier(.file_name).entities,
-                          .name == "financial"
-                          and strings.contains(..file_name, .text)
-                   )
-                 )
-          ),
+  and any(filter(attachments, .file_type == "pdf"),
           (
             // the urls in the PDF
             any(filter(file.explode(.), .depth == 0),
@@ -74,16 +60,20 @@ source: |
             )
             // or there is a QR code
             or (
-              any(filter(file.explode(.), .depth == 1),
-                  .scan.qr.url.domain.valid
+              //
+              // This rule makes use of a beta feature and is subject to change without notice
+              // using the beta feature in custom rules is not suggested until it has been formally released
+              //
+              any(beta.scan_qr(.).items,
+                  .url.domain.valid
                   and any(recipients.to,
                           // QR code contains the email
                           (
-                            strings.icontains(..scan.qr.url.url, .email.email)
+                            strings.icontains(..url.url, .email.email)
                             // QR code contains the base64 endcoded email
-                            or any(beta.scan_base64(..scan.qr.url.url,
-                                                    format="url",
-                                                    ignore_padding=true
+                            or any(strings.scan_base64(..url.url,
+                                                       format="url",
+                                                       ignore_padding=true
                                    ),
                                    strings.icontains(., ..email.email)
                             )
@@ -93,6 +83,8 @@ source: |
             )
           )
   )
+tags:
+ - "Attack surface reduction"
 attack_types:
   - "Credential Phishing"
 tactics_and_techniques:

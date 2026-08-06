@@ -11,6 +11,12 @@ source: |
       strings.icontains(body.current_thread.text, '6309 Carpinteria Ave'),
       strings.icontains(body.current_thread.text, 'Carpinteria, CA 93013')
     )
+    or (
+      strings.iends_with(sender.display_name, 'via Procore')
+      and any(body.current_thread.links,
+              .href_url.domain.root_domain in $free_subdomain_hosts
+      )
+    )
   )
   and not (
     sender.email.domain.root_domain in ("procore.com", "procoretech.com")
@@ -28,10 +34,7 @@ source: |
       )
       or strings.istarts_with(subject.subject, "Réponse automatique")
     )
-    and (
-      length(headers.references) > 0
-      and any(headers.hops, any(.fields, strings.ilike(.name, "In-Reply-To")))
-    )
+    and (length(headers.references) > 0 and headers.in_reply_to is not null)
   )
   // negate bounce backs
   and not (
@@ -48,7 +51,6 @@ source: |
             )
     )
   )
-
 attack_types:
   - "BEC/Fraud"
   - "Credential Phishing"

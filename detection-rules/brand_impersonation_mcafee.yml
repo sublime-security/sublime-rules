@@ -9,7 +9,13 @@ source: |
                     'McAfee.{0,30}(?:Defense|Protection)'
     )
     or regex.icontains(subject.base, 'McAfee.{0,30}(?:Defense|Protection)')
-    or regex.icontains(sender.display_name, '^[\s[:punct:]]*mc\s*afee(?:$|[^,])')
+    or (
+      strings.icontains(sender.email.local_part, "mcafee")
+      and regex.icontains(subject.subject, 'billing|account|payment|unpaid')
+    )
+    or regex.icontains(sender.display_name,
+                       '^[\s[:punct:]]*mc\s*a+f+ee+(?:$|[^,])'
+    )
     or (
       any(ml.nlu_classifier(body.current_thread.text).entities,
           .name in ("org", "sender") and strings.icontains(.text, 'mcafee')
@@ -26,11 +32,11 @@ source: |
   )
   and not (
     sender.email.domain.root_domain in ('mcafee.com', 'mcafeesecure.com')
-    and headers.auth_summary.dmarc.pass
+    and coalesce(headers.auth_summary.dmarc.pass, false)
   )
   and not (
     sender.email.domain.root_domain in $high_trust_sender_root_domains
-    and headers.auth_summary.dmarc.pass
+    and coalesce(headers.auth_summary.dmarc.pass, false)
   )
 
 attack_types:

@@ -27,6 +27,10 @@ source: |
                          "//a[contains(@style, 'background-color: #0070e0') and contains(@style, 'color: white') and contains(@style, 'width: 210px')  and contains(@style, 'max-width: 210px') and contains(@style, 'border-radius: 4px') and contains(@style, 'text-align: center') and contains(@style, 'font-size: 15px')]"
               ).nodes
     ) == 1
+    or any(attachments,
+           .file_type not in $file_types_images
+           and regex.icontains(.file_name, 'dr[o0]pb[o0]x')
+    )
   )
   and sender.email.domain.root_domain not in~ (
     'dropbox.com',
@@ -70,6 +74,15 @@ source: |
               .name == "Dropbox"
       )
     )
+    or (
+      any(attachments,
+          .file_type not in $file_types_images
+          and regex.icontains(.file_name, 'dr[o0]pb[o0]x')
+      )
+      and any(ml.nlu_classifier(body.current_thread.text).intents,
+              .name == "cred_theft" and .confidence != "low"
+      )
+    )
   )
   and sender.email.email not in $recipient_emails
   
@@ -90,6 +103,7 @@ source: |
     )
     or sender.email.domain.root_domain not in $high_trust_sender_root_domains
   )
+
 attack_types:
   - "Credential Phishing"
 tactics_and_techniques:

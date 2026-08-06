@@ -1,0 +1,51 @@
+name: "VIP impersonation: Invoice fraud with mobile device sign-off"
+description: "Detects inbound messages where a prior thread contains a reply from a known VIP - identifiable by display name or email address and signed off with a 'Sent from my iPhone' or 'Sent from my iPad' footer. However that VIP has been silently dropped from the current message's recipients. This pattern is consistent with fraudulent invoice and payment request lures where an attacker impersonates an internal executive in a thread, then removes them before requesting payment action from the remaining recipients."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and any(map(filter(body.previous_threads,
+                     any($org_vips,
+                         strings.icontains(..sender.display_name, .display_name)
+                         or (
+                           .email != ""
+                           and strings.icontains(..sender.email.email, .email)
+                         )
+                     )
+                     and (
+                       strings.iends_with(.text, "sent from my iphone.")
+                       or strings.iends_with(.text, "sent from my ipad.")
+                     )
+                     and (
+                       any(ml.nlu_classifier(.text, subject=.subject.base).topics,
+                           (
+                             .name == "Financial Communications"
+                             or .name == "Request to View Invoice"
+                           )
+                           and .confidence != "low"
+                       )
+                       or any(ml.nlu_classifier(.text, subject=.subject.base).tags,
+                              (.name == "invoice" or .name == "payment")
+                              and .confidence != "low"
+                       )
+                     )
+              ),
+              .sender.email.email
+          ),
+          . == ""
+          or (
+            not strings.icontains(sender.email.email, .)
+            and not any(flatten([recipients.to, recipients.cc, recipients.bcc]),
+                        strings.icontains(.email.email, ..)
+            )
+          )
+  )
+attack_types:
+  - "BEC/Fraud"
+tactics_and_techniques:
+  - "Impersonation: VIP"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Sender analysis"
+id: "7b3b9dcb-adcf-5335-813b-51f1a42cb4d6"

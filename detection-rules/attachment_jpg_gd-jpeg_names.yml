@@ -1,0 +1,29 @@
+name: "Attachment: JPEG with gd-jpeg creator and suspicious file name"
+description: "Detects inbound messages containing a single JPEG attachment with specific filename patterns and EXIF metadata indicating creation by gd-jpeg v1.0. This has been observed being used to produce company logos used within phishing messages."
+type: "rule"
+severity: "high"
+source: |
+    type.inbound
+    and length(filter(attachments, .file_type == "jpg")) == 1
+    and any(attachments,
+            .file_type == "jpg"
+            and .file_extension == "jpeg"
+            and strings.icontains(.file_name, 'images')
+            and (
+              strings.count(.file_name, '/') == 1
+              or strings.count(.file_name, 'image') == 2
+            )
+            and any(beta.parse_exif(.).fields,
+                    .key =~ "Comment"
+                    and strings.istarts_with(.value, 'CREATOR: gd-jpeg v1.0')
+            )
+    )
+  
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Evasion"
+detection_methods:
+  - "File analysis"
+  - "Exif analysis"
+id: "76870456-a2e7-5745-98e9-3d9db87da296"

@@ -1,0 +1,27 @@
+name: "Attachment: SVG file with hyperlinks and cursor styling"
+description: "Detects inbound messages containing SVG attachments that include clickable hyperlink elements and CSS pointer cursor styling, which may be used to deceive recipients into clicking malicious links disguised as legitimate images."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and any(attachments,
+          (
+            .file_extension == "svg"
+            or .content_type in ("image/svg+xml")
+            or .file_type == "svg"
+          )
+          and any(file.explode(.), any(.scan.xml.tags, . == "a"))
+          and regex.icontains(file.parse_text(., encodings=["ascii", "utf8"]).text,
+                              'cursor\s*=\s*["\x27]pointer'
+          )
+  )
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Evasion"
+  - "Image as content"
+detection_methods:
+  - "File analysis"
+  - "XML analysis"
+  - "Content analysis"
+id: "01347141-5757-5bb6-a7ee-0930cee86d16"
