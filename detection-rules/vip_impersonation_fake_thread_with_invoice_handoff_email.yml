@@ -8,12 +8,18 @@ source: |
                      // VIP authored the segment: display_name OR real email (OR, not AND -- the actor guesses
                      // the exec's address, so a fabricated From: is often the wrong format at the right org).
                      any($org_vips,
-                         strings.icontains(..sender.display_name, .display_name)
-                         or (
-                           .email != ""
-                           and strings.icontains(..sender.email.email, .email)
-                         )
-                     )
+                              strings.icontains(..sender.display_name,
+                                                .display_name
+                              )
+                              or (
+                                .email != ""
+                                and strings.icontains(..sender.email.email,
+                                                      .email
+                                )
+                              )
+                       )
+                     
+  
                      // skip auto-replies; coalesce the null on subject-less segments before `not`.
                      and not coalesce(.subject.is_auto_reply, false)
                      // the live recipient is the payee the VIP names, at an org domain.
@@ -26,33 +32,49 @@ source: |
                      and regex.icontains(.text,
                                          'accounts? payable',
                                          '(?:forward|send|rout|direct|remit|submit|issue) it (?:directly )?to',
-                                         '(?:forward|send|direct|remit|submit|route) (?:the |all |related )?(?:invoice|correspondence|payment|billing)',
+                                         '(?:forward|send|direct|remit|submit|route) (?:the |all |related |for )?(?:invoice|correspondence|payment|billing|processing)',
                                          'for payment processing,? please contact',
                                          '(?:please )?direct (?:it|all|the)[^\n]{0,60}\bto\b',
                                          '(?:as follows|provided below|find below|details are|contact is)[^\n]{0,10}:',
-                                         'billing (?:contact|correspondence|team|department)'
+                                         'billing (?:contact|correspondence|team|department)',
+                                         'a copy.{0,20}sent to',
                      )
               ),
-              .sender.email.email
+              [.sender.email.email, .sender.display_name]
           ),
-          . != ""
           // the VIP is no longer present in the live message.
-          and not strings.icontains(sender.email.email, .)
-          and not any(flatten([recipients.to, recipients.cc, recipients.bcc]),
-                      strings.icontains(.email.email, ..)
+          // if we only have a display_name, we can't verify the
+          (
+            // the sender email
+            (
+              // the first element in the mapped array is the .sender.email.email of the VIP
+              .[0] != ""
+              and not strings.icontains(sender.email.email, .[0])
+              and not any(flatten([recipients.to, recipients.cc, recipients.bcc]),
+                          strings.icontains(.email.email, ..[0])
+              )
+            )
+            // if the email is empty, we still pass and we'll end up using the display_name
+            or .[0] == ""
           )
           // any previous thread authored by the "VIP" has invoice/payment
-          and any(filter(body.previous_threads, .sender.email.email == ..),
-                  any(ml.nlu_classifier(.text, subject=.subject.base).tags,
-                      .name in ("invoice", "payment") and .confidence != "low"
-                  )
-                  or any(ml.nlu_classifier(.text, subject=.subject.base).topics,
-                         .name in (
-                           "Request to View Invoice",
-                           "Payment Information"
-                         )
-                         and .confidence != "low"
-                  )
+          and (
+            any(filter(body.previous_threads,
+                       .sender.email.email == ..[0]
+                       or .sender.display_name == ..[1]
+                ),
+                any(ml.nlu_classifier(.text, subject=.subject.base).tags,
+                    .name in ("invoice", "payment") and .confidence != "low"
+                )
+                or any(ml.nlu_classifier(.text, subject=.subject.base).topics,
+                       .name in ("Request to View Invoice", "Payment Information")
+                       and .confidence != "low"
+                )
+            )
+            // if we don't get NLU but there is a W9 or Inv attached, we can assume it's invoice related
+            or any(attachments,
+                   strings.istarts_with(.file_name, 'INV', "W-9", 'W9')
+            )
           )
   )
   // exactly one org-domain recipient (the payee); external sender.
