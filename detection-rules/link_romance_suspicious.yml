@@ -5,23 +5,54 @@ severity: "low"
 source: |
   type.inbound
   and length(body.previous_threads) == 0
-  and any(ml.nlu_classifier(body.current_thread.text).topics,
-          .name in ("Romance", "Sexually Explicit Messages")
-          and .confidence == "high"
+  and (
+    any(ml.nlu_classifier(body.current_thread.text).topics,
+        .name in ("Romance", "Sexually Explicit Messages")
+        and .confidence == "high"
+    )
+    // form submissions can sometimes throw NLU off
+    or (
+      regex.icontains(subject.subject,
+                      '(?:\bform\b|submi(?:t|ssion)|new message|cisco press)'
+      )
+      and headers.mailer is not null
+      // common automated form submission systems
+      and regex.icontains(headers.mailer,
+                          'phpmailer|wpmail|wp mail smtp|easywpsmtp|post.smtp|drupal|typo3|codeigniter|nette|activecampaign|symfony|laravel|zend|cakephp|yii|enginemailer|msgsend|sailthru|sympa'
+      )
+      // now check for explicit language in the URL path
+      and any(body.links,
+              regex.icontains(.href_url.path,
+                              '(?:sex|horny|cock|fuck|\bass\b|pussy|dick|tits|cum\b|girlfriend|boyfriend|naked|porn|webcam|masturbate|orgasm|breasts|penis|vagina|suck|blowjob|hardcore|nudes?|sexting|erotic|\blust\b|fetish|kinky|seduce|adult\s*(?:\w+\s+){0,2}\s*community|cam shows|local (?:girls?|women|single)|hook.?up|bed partner)'
+              )
+      )
+    )
   )
   and 1 of (
     any(body.links, network.whois(.href_url.domain).days_old < 30),
     any(body.links, .href_url.domain.root_domain in $url_shorteners),
     any(body.links, .href_url.domain.domain in $free_subdomain_hosts),
     any(body.links, .href_url.domain.tld in ('ru', 'app', 'digital', 'click')),
-    any(headers.reply_to, network.whois(.email.domain).days_old < 30)
+    any(headers.reply_to, network.whois(.email.domain).days_old < 30),
+    // link leads to telegram hosting infra
+    any(body.links, .href_url.domain.root_domain in ("telegra.ph", "graph.org"))
   )
   and 0 < length(distinct(body.links,
                           .href_url.domain.root_domain not in ("aka.ms")
                  )
   ) < 3
-  and all(body.links,
-          .href_url.domain.root_domain != sender.email.domain.root_domain
+  and (
+    all(filter(body.links, .parser != "plain"),
+        .href_url.domain.root_domain != sender.email.domain.root_domain
+    )
+    // negate if every clickable link is authenticated Klaviyo tracking
+    and not (
+      all(filter(body.links, .parser != "plain"),
+          .href_url.domain.root_domain in ("klclick.com", "klclick1.com")
+      )
+      // ensure message passes auth
+      and coalesce(headers.auth_summary.dmarc.pass, false)
+    )
   )
 
 attack_types:
