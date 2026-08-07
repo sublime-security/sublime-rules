@@ -1,0 +1,38 @@
+name: "Brand impersonation: OpenSea"
+description: "Detects inbound messages where the sender display name impersonates OpenSea but the sending domain is not opensea.io. Triggers when an image reference contains 'opensea' or when the message body references OpenSea alongside its known corporate address (228 Park Avenue South, New York, NY), indicating an attempt to spoof the legitimate brand."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and strings.icontains(sender.display_name, 'opensea')
+  and (
+    any(html.xpath(body.html, '//img').nodes, regex.icontains(.raw, 'opensea'))
+    or (
+      strings.icontains(body.current_thread.text, 'opensea')
+      and (
+        (
+          regex.icontains(body.current_thread.text,
+                          '228 Park (?:Avenue|Ave) South'
+          )
+          and strings.icontains(body.current_thread.text, 'New York, NY')
+        )
+      )
+      and sender.email.domain.root_domain not in ('opensea.io')
+    )
+  )
+attack_types:
+  - "Credential Phishing"
+  - "BEC/Fraud"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Spoofing"
+  - "Social engineering"
+  - "Image as content"
+detection_methods:
+  - "Sender analysis"
+  - "Content analysis"
+  - "HTML analysis"
+id: "8c4cca60-a655-5417-84d1-700b98396369"
+og_id: "875479a2-7e51-5e93-9b07-80ca85c64f65"
+testing_pr: 5056
+testing_sha: 2ce9521ca05f81ab1db41d41c7f9b302238ec00c
