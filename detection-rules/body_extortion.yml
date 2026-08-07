@@ -21,7 +21,9 @@ source: |
   )
   and (
     (
-      any(ml.nlu_classifier(strings.replace_confusables(body.current_thread.text)).intents,
+      any(ml.nlu_classifier(strings.replace_confusables(body.current_thread.text
+                            )
+          ).intents,
           (.name == "extortion" and .confidence == "high")
       )
       and (
@@ -45,7 +47,10 @@ source: |
     )
     // catches extortion content delivered as inline base64 images
     or (
-      (body.current_thread.text is null or length(body.current_thread.text) < 10)
+      (
+        body.current_thread.text is null
+        or length(body.current_thread.text) < 100
+      )
       and any(ml.nlu_classifier(beta.ocr(file.message_screenshot()).text).intents,
               .name == "extortion" and .confidence == "high"
       )
@@ -88,7 +93,7 @@ source: |
       // bitcoin language (excluding newsletters)
       (
         regex.icontains(strings.replace_confusables(body.current_thread.text),
-                        '[bḆḂ]it[cĉƈ][oöة]i[nņɲ]|\bbtc\b|blockchain'
+                        '[bḆḂ]i[tṯ][cĉƈ][oöة]i[nņɲň]|\bbtc\b|blockchain'
         )
         // negate cryptocurrency newsletters
         and not (
@@ -111,7 +116,8 @@ source: |
         regex.icontains(strings.replace_confusables(body.current_thread.text),
                         '(?:contact the police|(?:bitcoin|\bbtc\b).{0,20}(?:wallet|address))'
         )
-        and regex.icontains(strings.replace_confusables(body.current_thread.text),
+        and regex.icontains(strings.replace_confusables(body.current_thread.text
+                            ),
                             '(?:\b[13][a-km-zA-HJ-NP-Z0-9]{24,34}\b)|\bX[1-9A-HJ-NP-Za-km-z]{33}\b|\b(?:0x[a-fA-F0-9]{40})\b|\b[LM3][a-km-zA-HJ-NP-Z1-9]{26,33}\b|\b[48][0-9AB][1-9A-HJ-NP-Za-km-z]{93}\b'
         )
       ),
@@ -133,7 +139,7 @@ source: |
       and not profile.by_sender().any_messages_benign
     )
     or any(headers.hops, any(.fields, .name == "X-Google-Group-Id"))
-  
+
     // many extortion emails spoof sender domains and fail sender authentication
     or (
       not headers.auth_summary.dmarc.pass
