@@ -1,0 +1,55 @@
+name: "PR# 5053 - Sendgrid voicemail phish"
+description: |
+  The message may contain a fake voicemail notification being sent via Sendgrid.
+references:
+  - "https://krebsonsecurity.com/2020/08/sendgrid-under-siege-from-hacked-accounts/comment-page-1/"
+  - https://github.com/sublime-security/sublime-rules/pull/5053
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and headers.return_path.domain.domain == 'sendgrid.net'
+  and (
+    regex.icontains(strings.replace_confusables(subject.subject),
+                    'v[o0][il1]cema[il1][li1]',
+                    'v[o0][il1]ce message'
+    )
+    or any(ml.nlu_classifier(body.current_thread.text).topics,
+           .name == "Voicemail Call and Missed Call Notifications"
+           and .confidence == "high"
+    )
+  )
+  // suspicious intent or fake message thread
+  and (
+    any(ml.nlu_classifier(body.current_thread.text).intents,
+        .name not in ("benign")
+    )
+    or (
+      (
+        regex.icontains(subject.subject, '\b(?:RE|FWD?)\s*:')
+        or any([body.current_thread.text, body.html.display_text, body.plain.raw],
+               3 of (
+                 strings.icontains(., "from:"),
+                 strings.icontains(., "to:"),
+                 strings.icontains(., "sent:"),
+                 strings.icontains(., "date:"),
+                 strings.icontains(., "cc:"),
+                 strings.icontains(., "subject:")
+               )
+        )
+      )
+      and (length(headers.references) == 0 or headers.in_reply_to is null)
+    )
+  )
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Header analysis"
+id: "05154ac9-5762-58a2-a874-86b6e61ce331"
+tags:
+  - created_from_open_prs
+  - rule_status_modified
+  - pr_author_D-Bolton
