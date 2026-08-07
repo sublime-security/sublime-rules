@@ -28,7 +28,13 @@ source: |
     or sender.email.domain.tld in $suspicious_tlds
     or any(["jp", "jo"], strings.iends_with(sender.email.domain.tld, .))
     or (
-      length(recipients.to) == 0
+      // an "undisclosed-recipients" placeholder is parsed as a To entry with an
+      // empty address, so it must be treated as equivalent to no disclosed
+      // recipients — otherwise all-bcc mailings evade this branch entirely
+      (
+        length(recipients.to) == 0
+        or all(recipients.to, .email.email == "")
+      )
       and any(headers.reply_to,
               .email.domain.root_domain != sender.email.domain.root_domain
       )
