@@ -1,0 +1,69 @@
+name: "Brand impersonation: Greetings Island"
+description: "Detects messages that impersonate the e-vite service Greetings Island by referencing its branding, copyright footer, or logo, while linking out to infrastructure not controlled by Greetings Island."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and (
+    // contains assets hosted on Greetings Island's CDN
+    (
+      strings.contains(body.html.raw, 'greetingsisland.com')
+      and (
+        any(html.xpath(body.html, '//img/@src').nodes,
+            strings.parse_url(.raw).domain.root_domain == "greetingsisland.com"
+        )
+      )
+    )
+    // copyright footer
+    or regex.icontains(body.current_thread.text,
+                       '(?:©|\(c\)|copyright)\s*greetings\s?island'
+    )
+    // Greetings Island logo present in message screenshot
+    or (
+      any(ml.logo_detect(file.message_screenshot()).brands,
+          .name == "Invite Company" and .confidence != "low"
+      )
+      // "Invite Company" matches many different e-vite provider logos
+      // we want to filter this to greetings island specifically
+      and (
+        regex.icontains(body.current_thread.text, 'greetings\s?island')
+        //
+        // This rule makes use of a beta feature and is subject to change without notice
+        // using the beta feature in custom rules is not suggested until it has been formally released
+        //
+        or regex.icontains(beta.ocr(file.message_screenshot()).text,
+                           'greetings\s?island'
+        )
+      )
+    )
+  )
+  
+  // not from Greetings Island actual
+  and not (
+    sender.email.domain.root_domain == "greetingsisland.com"
+    and headers.auth_summary.dmarc.pass
+  )
+  
+  // negate replies and forwards
+  and not (
+    (subject.is_forward or subject.is_reply)
+    and (length(headers.references) != 0 or headers.in_reply_to is not null)
+    and length(body.previous_threads) > 0
+  )
+attack_types:
+  - "Credential Phishing"
+  - "Malware/Ransomware"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Social engineering"
+  - "Image as content"
+  - "Spoofing"
+detection_methods:
+  - "Content analysis"
+  - "Computer Vision"
+  - "Optical Character Recognition"
+  - "URL analysis"
+  - "Header analysis"
+  - "HTML analysis"
+  - "Sender analysis"
+id: "c859e338-be3b-522d-956a-289de226d7a5"
