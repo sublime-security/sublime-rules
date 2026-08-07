@@ -1,0 +1,77 @@
+name: "Link: Medium.com link abuse"
+description: "Detects messages linking to Medium.com profiles with financial language or credential harvesting indicators, which has been observed abused for phishing landing pages."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and length(body.links) < 20
+  and length(body.current_thread.text) < 1500
+  // link leading to a medium.com profile
+  and any(body.current_thread.links, .href_url.domain.root_domain == "medium.com")
+  and sender.email.domain.root_domain != "medium.com"
+  and length(filter(body.current_thread.links,
+                    .href_url.domain.root_domain == "medium.com"
+                    and strings.starts_with(.href_url.path, '/@')
+             )
+  ) == 1
+  and not (
+    // negate presence of a medium.com link if there are other social media links
+    length(distinct(filter(body.current_thread.links,
+                           .href_url.domain.root_domain in~ (
+                             "facebook.com",
+                             "twitter.com",
+                             "instagram.com",
+                             "youtube.com",
+                             "linkedin.com",
+                             "google.com"
+                           )
+                    ),
+                    .href_url.url
+           )
+    ) >= 2
+  )
+  and (
+    // financial or crypto-related terms in subject
+    strings.ilike(subject.subject,
+                  '*remittance*',
+                  '*payment*',
+                  '*disbursement*',
+                  '*proposal*',
+                  '*settlement*',
+                  'ACH',
+                  '*report*',
+                  '*airdrop*',
+                  '*token*',
+                  '*solana*',
+                  '*blockchain*'
+    )
+    // cred_theft NLU disposition
+    or any(ml.nlu_classifier(body.current_thread.text).intents,
+           .name in ("cred_theft") and .confidence == "high"
+    )
+  )
+  
+  // negate replies
+  and (
+    length(headers.references) == 0
+    or not any(headers.hops, any(.fields, strings.ilike(.name, "In-Reply-To")))
+  )
+  
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and (
+    (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and not coalesce(headers.auth_summary.dmarc.pass, false)
+    )
+    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  )
+
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Natural Language Understanding"
+  - "URL analysis"
+id: "4f80d5f0-ddcd-5a87-92ba-ec2ebb9c5fba"
