@@ -1,0 +1,114 @@
+name: "Impersonation: Law enforcement agency with advance fee fraud"
+description: |
+  Detects advance fee fraud in which the sender asserts the identity of a federal law
+  enforcement agency (FBI, Interpol, EFCC, CBP) to lend authority to a fabricated payout,
+  restitution, or compensation claim. Requires both an identity assertion (agency in the
+  display name, agency letterhead, an agency rank in the signature block, or impersonation
+  of named agency leadership) and a fraud mechanism (advance fee/extortion intent, or two
+  of: PII harvesting form, unearned windfall language, out-of-band pivot to an
+  agency-themed mailbox on a non-government domain, disbursement method menu).
+
+  Agency mentions alone are deliberately insufficient — news commentary and personal
+  narratives referencing the FBI will not match without an accompanying identity assertion.
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  
+  // the sender ASSERTS the agency's identity rather than merely mentioning it
+  and (
+    // a display name bearing the agency is itself the identity claim
+    regex.icontains(strings.replace_confusables(sender.display_name),
+                    '\b(?:f\.?b\.?i|federal bureau of investigation|interpol|international criminal police|scotland yard|cyber ?crimes? commission|economic and financial crimes commission|efcc)\b'
+    )
+    // a subject naming the agency in full reads as agency-authored correspondence
+    or regex.icontains(strings.replace_confusables(subject.subject),
+                       '\b(?:federal bureau of investigation|interpol|international criminal police|scotland yard|economic and financial crimes commission)\b'
+    )
+    // a bare acronym only counts when framed as official correspondence, which
+    // keeps narrative mentions ("FBI found out that...") out of the rule
+    or (
+      regex.icontains(strings.replace_confusables(subject.subject),
+                      '\b(?:f\.?b\.?i|efcc|interpol)\b'
+      )
+      and regex.icontains(strings.replace_confusables(subject.subject),
+                          '\b(?:notice|notification|memo|payment|compensation|beneficiar|director|office|department|funds?|claim|approv(?:al|ed)|award)'
+      )
+    )
+    // agency letterhead opening the message
+    or regex.icontains(body.current_thread.text,
+                       '^\s*\W{0,5}(?:federal bureau of investigation|fbi\b|interpol|international criminal police)'
+    )
+    // signature block asserting an agency rank
+    or regex.icontains(body.current_thread.text,
+                       '(?:special agent|deputy director|assistant director|director)[\s,.]{1,30}(?:of the )?(?:federal bureau of investigation|fbi)\b'
+    )
+    // impersonating named agency leadership
+    or regex.icontains(body.current_thread.text,
+                       '\b(?:i am|this is)\b.{0,40}\b(?:k[ae]sh patel|dan bongino|christopher wray)\b'
+    )
+    // pasted FBI headquarters letterhead address
+    or strings.icontains(body.current_thread.text, '935 Pennsylvania Avenue')
+  )
+  
+  // the fraud mechanism — the ask, not merely the theme
+  and (
+    any(ml.nlu_classifier(body.current_thread.text).intents,
+        .name in ("advance_fee", "extortion")
+        and .confidence in ("medium", "high")
+    )
+    or 2 of (
+      // PII harvesting form
+      regex.icontains(body.current_thread.text,
+                      '(?:full|residential|delivery)\s+(?:name|address)s?\s*:'
+      ),
+      // unearned windfall
+      regex.icontains(body.current_thread.text,
+                      '\b(?:compensation|compensated|beneficiar(?:y|ies)|inheritance|lottery|winning|unclaimed funds?|atm card)\b'
+      ),
+      // out-of-band pivot to an agency-themed mailbox on any non-government domain.
+      // The TLD alternation is an inverted "not gov/mil" — RE2 forbids lookahead, so
+      // the exclusion is spelled out via first-character classes rather than (?!gov).
+      regex.icontains(body.current_thread.text,
+                      '[\w.+-]*(?:fbi|interpol|agent|deputy)[\w.+-]*@(?:[\w-]+\.)+(?:[a-fh-ln-z][a-z]+|g[a-np-z][a-z]*|go[a-uw-z][a-z]*|m[a-hj-z][a-z]*|mi[a-km-z][a-z]*)'
+      ),
+      // disbursement method menu
+      regex.icontains(body.current_thread.text,
+                      '\b(?:bank transfer|cashier(?:''s)? che(?:ck|que)|cash delivery|digital wallet|wire transfer)\b'
+      )
+    )
+  )
+  
+  // the sender is not the authenticated government agency it claims to be. Scoped to
+  // gov/mil TLDs — a general DMARC pass is deliberately NOT an exclusion, since these
+  // campaigns routinely relay through compromised authenticated .edu and .ac accounts.
+  and not (
+    any(["gov", "gov.uk", "gov.au", "mil"],
+        strings.iends_with(sender.email.domain.tld, .)
+    )
+    and headers.auth_summary.dmarc.pass
+  )
+  
+  // reporting and commentary about these agencies rather than correspondence from them
+  and not any(ml.nlu_classifier(body.current_thread.text).topics,
+              .name in ("Newsletters and Digests", "Marketing and Promotions")
+              and .confidence in ("medium", "high")
+  )
+  // established conversations
+  and not (length(headers.references) > 0 or length(body.previous_threads) > 0)
+  and not profile.by_sender().any_messages_benign
+attack_types:
+  - "BEC/Fraud"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Social engineering"
+  - "Out of band pivot"
+detection_methods:
+  - "Content analysis"
+  - "Header analysis"
+  - "Natural Language Understanding"
+  - "Sender analysis"
+id: "d3cb57f9-7a1f-520b-a083-3fbb421a476d"
+og_id: "3b3ad7af-7034-559e-b938-d286ace72768"
+testing_pr: 5062
+testing_sha: fae5a02df76c52722ff3ec4e9ef9fdbf7f827934
