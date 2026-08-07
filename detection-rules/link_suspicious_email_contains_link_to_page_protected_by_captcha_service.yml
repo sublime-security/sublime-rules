@@ -1,0 +1,67 @@
+name: "Link: Suspicious Email Contains Link to Page Protected by Captcha Service"
+description: "Detects messages containing links to credential theft pages that implement CAPTCHA or human verification challenges, including hCaptcha, Cloudflare Turnstile, or reCAPTCHA services. The linked pages contain verification prompts designed to appear legitimate while harvesting credentials."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and 0 < length(body.links) < 10
+  and length(recipients.to) == 1
+  and recipients.to[0].email.domain.valid
+  and any(body.links,
+          .parser == 'hyperlink'
+          and (
+            (
+              .href_url.domain.domain in $url_shorteners
+              or .href_url.domain.root_domain in $url_shorteners
+              or .href_url.domain.domain in $free_file_hosts
+              or .href_url.domain.root_domain in $free_file_hosts
+              or .href_url.domain.domain in $free_subdomain_hosts
+              or .href_url.domain.root_domain in $free_subdomain_hosts
+              or .href_url.domain.domain in $self_service_creation_platform_domains
+              or .href_url.domain.root_domain in $self_service_creation_platform_domains
+              or .href_url.domain.tld in $suspicious_tlds
+              or network.whois(.href_url.domain).days_old < 30
+            )
+            and not ml.link_analysis(.).effective_url.domain.root_domain in $tranco_10k
+            and not .href_url.domain.root_domain in (
+              'zendesk.com',
+              'cloudfront.net',
+              'onehub.com'
+            )
+          )
+          and regex.icontains(ml.link_analysis(.).final_dom.raw,
+                              // page references hcaptcha
+                              'hcaptcha\.com\/1\/api\.js',
+                              // page references cloudflare
+                              '(?:Cloudflare Ray ID|cloudflare\.com\/turnstile\/)',
+                              // other captcha phrases
+                              '\b(?:prove|verify) (?:that )?you are human\b',
+                              'enter (?:all of )?the characters you see',
+                              'reached the limit for number of attempts',
+                              'switch to the audio challenge',
+                              'really you sending the requests',
+                              'enter text above',
+                              'type the code',
+                              'Solve the following tasks',
+                              "I'm not a robot",
+                              "ensure you're not a bot"
+          )
+  )
+  // no box links
+  and not any(body.current_thread.links,
+              regex.icontains(.href_url.url, '\.box\.com\/(?:signup|link)\/')
+  )
+  // negating phish reports
+  and not any(recipients.to, .email.email in ('support@vimeo.com'))
+
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Evasion"
+  - "Social engineering"
+  - "Impersonation: Brand"
+detection_methods:
+  - "Natural Language Understanding"
+  - "URL analysis"
+  - "Content analysis"
+id: "c48be36f-a404-5a15-957b-4c92d03d0181"
