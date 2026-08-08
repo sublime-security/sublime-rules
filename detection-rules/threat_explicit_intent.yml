@@ -1,0 +1,46 @@
+name: "Acts of Violence: Explicit violence intent"
+description: "Catches direct 'I will kill you' style threats with clear future intent."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and (
+    // Future intent + violence verb + target
+    regex.icontains(body.current_thread.text,
+                    '(?:i|we)[\s''](?:will|''ll|gonna|going to|am going to|shall|promise|swear)\s+(?:[^\r\n\x20]+\s+){0,5}(?:kill|murder|shoot|stab|hurt|harm|attack|assault|beat|destroy|eliminate|slaughter|slay|strangle|choke)\s+(?:[^\r\n\x20]+\s+){0,5}(?:you|your|everyone|everybody|them|those|they|their)'
+    )
+    // Violence verb + target (present/imperative) — require first-person actor to avoid third-party narrative
+    or regex.icontains(body.current_thread.text,
+                       '(?:(?:i|we|i''m|i''ll|we''ll)\s+(?:[^\r\n\x20]+\s+){0,3}|gonna\s+)(?:kill|murder|shoot|stab|hurt|harm|attack|assault|beat|destroy|eliminate|slaughter|slay|strangle|choke)\s+(?:[^\r\n\x20]+\s+){0,5}(?:you|your|everyone|everybody|them|those|they|their)'
+    )
+    // Stalking threats
+    or regex.icontains(body.current_thread.text,
+                       '(?:i|we)\s+(?:will|''ll|gonna|going to|am going to|shall|promise|swear)\s+(?:[^\r\n\x20]+\s+){0,5}(?:find|hunt|track|come for|get)\s+(?:[^\r\n\x20]+\s+){0,5}(?:you|your|everyone|everybody|them|those|they|their)'
+    )
+    // Weapon + violence combination
+    or regex.icontains(body.current_thread.text,
+                       '(?:gun|knife|weapon|blade|rifle|pistol)(?:[^\r\n\x20]+\s+){0,10}(?:kill|murder|shoot|stab|hurt|harm|attack|assault|beat|destroy|eliminate|slaughter|slay|strangle|choke)'
+    )
+  )
+  // Must have reasonable message length (not just signature/footer)
+  and length(body.current_thread.text) > 50
+  and length(body.current_thread.text) < 10000
+  and any(ml.nlu_classifier(body.current_thread.text).topics,
+          .name == "Acts of Violence" and .confidence == "high"
+  )
+  
+  // Negate benign contexts
+  and not any(ml.nlu_classifier(body.current_thread.text).topics,
+              .name in (
+                "News and Current Events",
+                "Newsletters and Digests",
+                "Entertainment and Sports"
+              )
+              and .confidence == "high"
+  )
+  // Negate bulk/marketing emails with unsubscribe links
+  and not any(body.links,
+              strings.icontains(.display_text, "unsubscribe")
+              or strings.icontains(.href_url.url, "unsubscribe")
+  )
+id: "889b64a0-503a-57c2-88c7-7cd384f1eade"
