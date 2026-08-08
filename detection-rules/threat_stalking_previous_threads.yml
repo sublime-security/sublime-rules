@@ -1,0 +1,81 @@
+name: "Acts of Violence: Stalking and location-based threats (previous threads)"
+description: "Detects in previous email threads stalking behavior and 'I know where you live' type threats."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and length(body.previous_threads) > 0
+  and any(body.previous_threads,
+          any(ml.nlu_classifier(.text).topics,
+              .name == "Acts of Violence" and .confidence == "high"
+          )
+          and (
+            // Find/hunt threats
+            (
+              regex.icontains(.text,
+                              '(?:i|we)\s+(?:will|''ll|gonna|going to|am going to|shall|promise|swear)\s+(?:[^\r\n\x20]+\s+){0,5}(?:find|hunt|track|locate|come for|get to)\s+(?:[^\r\n\x20]+\s+){0,5}(?:you|them|everyone)'
+              )
+              and (
+                // Can't hide/run/escape
+                regex.icontains(.text,
+                                '(?:can''t|cannot|won''t be able to)\s+(?:[^\r\n\x20]+\s+){0,5}(?:hide|run|escape|get away)'
+                )
+                // Or know where they are
+                or regex.icontains(.text,
+                                   '(?:i|we)\s+(?:know|found|have)\s+(?:[^\r\n\x20]+\s+){0,5}(?:where you|your address|where you live|your location)'
+                )
+                // Or with violence
+                or regex.icontains(.text,
+                                   '(?:kill|murder|shoot|stab|hurt|harm|attack|assault|beat|destroy|eliminate|slaughter|slay|strangle|choke)'
+                )
+              )
+            )
+            // Coming for you/them
+            or regex.icontains(.text,
+                               '(?:i''m|i am|we''re|we are)\s+coming\s+(?:for|to get|after)\s+(?:[^\r\n\x20]+\s+){0,5}(?:you|them|everyone)'
+            )
+            // Hunt down language
+            or regex.icontains(.text,
+                               '(?:hunt|track|chase)\s+(?:[^\r\n\x20]+\s+){0,5}(?:you|them)\s+down'
+            )
+            // Find + violence
+            or regex.icontains(.text,
+                               '(?:when|once|after)\s+(?:i|we)\s+find\s+(?:[^\r\n\x20]+\s+){0,5}you\s*,?\s*(?:[^\r\n\x20]+\s+){0,5}(?:kill|die|hurt|attack|shoot|dead|over)'
+            )
+            // Specific location threats
+            or regex.icontains(.text,
+                               '(?:i|we)\s+(?:know|see|watch)\s+(?:[^\r\n\x20]+\s+){0,5}(?:where you|you live|your house|your (?:home|address|work|school|office))'
+            )
+            // Watching/following
+            or (
+              regex.icontains(.text,
+                              '(?:i''m|i am|i have been|i''ve been)\s+(?:[^\r\n\x20]+\s+){0,5}(?:watching|following|tracking|stalking)\s+(?:[^\r\n\x20]+\s+){0,5}you'
+              )
+              and regex.icontains(.text,
+                                  '(?:kill|murder|shoot|stab|hurt|harm|attack|assault|beat|destroy|eliminate|slaughter|slay|strangle|choke)'
+              )
+            )
+            // Can't run/hide + threat
+            or (
+              regex.icontains(.text,
+                              '(?:you|they)\s+(?:can''t|cannot|won''t)\s+(?:[^\r\n\x20]+\s+){0,5}(?:hide|run|escape)'
+              )
+              and regex.icontains(.text,
+                                  '(?:i|we)\s+(?:will|gonna|''ll)\s+(?:[^\r\n\x20]+\s+){0,5}(?:find|get|kill|hurt)'
+              )
+            )
+          )
+          and length(.text) > 50
+          and length(.text) < 10000
+  
+          // Negate benign contexts
+          and not any(ml.nlu_classifier(.text).topics,
+                      .name in (
+                        "News and Current Events",
+                        "Newsletters and Digests",
+                        "Entertainment and Sports"
+                      )
+                      and .confidence == "high"
+          )
+  )
+id: "307d5e24-d216-5d19-9add-a280e9bfd513"
