@@ -1,0 +1,38 @@
+name: "Link: URL fragmented by hidden spans"
+description: "Detects messages where a link's URL is broken into multiple pieces using anchor tags containing hidden spans (via CSS such as display:none, visibility:hidden, font-size:0, or opacity:0). This technique reconstructs a visible URL in the rendered text while keeping the full URL absent from the raw HTML, evading scanners that inspect raw content. The rule confirms this by finding a URL in the displayed text that does not appear in the raw HTML, and further exempts messages from high-trust sending domains that pass DMARC."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  
+  // a tag contains spans indicating it's not visable
+  // the random tokens the kit uses to fragment the URL are longer than 4
+  and length(filter(html.xpath(body.html,
+                               '//a//span[contains(@style,"display:none") or contains(@style,"display: none") or contains(@style,"visibility:hidden") or contains(@style,"font-size:0") or  contains(@style,"opacity:0")]'
+                    ).nodes,
+                    // the node contains at least 4 word chars
+                    regex.contains(.inner_text, '\w{4,}')
+             )
+  ) >= 2
+  
+  // A URL appears in the rendered/visible text but is NOT present
+  // in the raw HTML because hidden spans fragmented it.
+  and any(regex.extract(body.html.display_text, 'https?://\S+'),
+          strings.parse_url(.full_match, strict=false).domain.valid
+          and not strings.icontains(body.html.raw, .full_match)
+  )
+  
+  and not (
+         sender.email.domain.root_domain not in $high_trust_sender_root_domains
+         and coalesce(headers.auth_summary.dmarc.pass, fasle)
+  )
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Evasion"
+  - "HTML smuggling"
+  - "Social engineering"
+detection_methods:
+  - "HTML analysis"
+  - "URL analysis"
+  - "Content analysis"
