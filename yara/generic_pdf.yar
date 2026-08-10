@@ -561,3 +561,19 @@ rule pdf_prompt_ack_secure_document_image_sizes {
 	condition:
 		$header at 0 and all of ($img*)
 }
+
+rule quickbooks_pdf_lures {
+	meta:
+		author      = "kyle eaton"
+		date        = "2026-08-10"
+		description = "matching 2 quickbook lures observed in malicious PDFs (error in payment processing and remittance)"
+	strings:
+		$header         = { 25 50 44 46 2D 31 2E }
+		$qb_logo        = { 2F 49 6D 61 67 65 0A 2F 57 69 64 74 68 20 33 31 30 0A 2F 48 65 69 67 68 74 20 31 33 36 0A 2F }
+		$optional_rect  = { 2F 53 75 62 74 79 70 65 20 2F 49 6D 61 67 65 0A 2F 57 69 64 74 68 20 31 32 30 30 0A 2F 48 65 69 67 68 74 20 31 30 30 }
+		$optional_image = { 2F 52 65 63 74 20 5B 33 36 20 37 30 35 2E 37 35 20 32 35 37 2E 32 35 20 37 36 35 2E 37 35 5D }
+	condition:
+		$header at 0
+		and $qb_logo
+		and 1 of ($optional_*)
+}
