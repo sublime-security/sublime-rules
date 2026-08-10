@@ -26,11 +26,12 @@ source: |
                      and regex.icontains(.text,
                                          'accounts? payable',
                                          '(?:forward|send|rout|direct|remit|submit|issue) it (?:directly )?to',
-                                         '(?:forward|send|direct|remit|submit|route) (?:the |all |related )?(?:invoice|correspondence|payment|billing)',
+                                         '(?:forward|send|direct|remit|submit|route) (?:the |all |related |for )?(?:invoice|correspondence|payment|billing|processing)',
                                          'for payment processing,? please contact',
                                          '(?:please )?direct (?:it|all|the)[^\n]{0,60}\bto\b',
                                          '(?:as follows|provided below|find below|details are|contact is)[^\n]{0,10}:',
-                                         'billing (?:contact|correspondence|team|department)'
+                                         'billing (?:contact|correspondence|team|department)',
+                                         'a copy.{0,20}sent to',
                      )
               ),
               .sender.email.email
@@ -42,17 +43,26 @@ source: |
                       strings.icontains(.email.email, ..)
           )
           // any previous thread authored by the "VIP" has invoice/payment
-          and any(filter(body.previous_threads, .sender.email.email == ..),
-                  any(ml.nlu_classifier(.text, subject=.subject.base).tags,
-                      .name in ("invoice", "payment") and .confidence != "low"
-                  )
-                  or any(ml.nlu_classifier(.text, subject=.subject.base).topics,
-                         .name in (
-                           "Request to View Invoice",
-                           "Payment Information"
-                         )
-                         and .confidence != "low"
-                  )
+          and (
+            any(filter(body.previous_threads,
+                       .sender.email.email == ..[0]
+                       or .sender.display_name == ..[1]
+                ),
+                any(ml.nlu_classifier(.text, subject=.subject.base).tags,
+                    .name in ("invoice", "payment") and .confidence != "low"
+                )
+                or any(ml.nlu_classifier(.text, subject=.subject.base).topics,
+                       .name in (
+                         "Request to View Invoice",
+                         "Payment Information"
+                       )
+                       and .confidence != "low"
+                )
+            )
+            // if we don't get NLU but there is a W9 or Inv attached, we can assume it's invoice related
+            or any(attachments,
+                   strings.istarts_with(.file_name, 'INV', "W-9", 'W9')
+            )
           )
   )
   // exactly one org-domain recipient (the payee); external sender.
