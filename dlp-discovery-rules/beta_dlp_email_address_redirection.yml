@@ -1,0 +1,50 @@
+name: "beta.DLP: Outbound references an email address outside recipient domains"
+description: "Detects outbound messages where an email address extracted from the subject, body, or attachments resolves to a domain different from every recipient's domain and not one of the sender's own domains. Catches email redirection patterns where content points to a third party not in the recipient list."
+type: "dlp"
+severity: "low"
+attack_types:
+  - "DLP: Data Redirection"
+tags:
+  - "PII"
+  - "Email redirection"
+  - "Exfiltration"
+source: |
+  //
+  // This rule makes use of a beta feature and is subject to change without notice
+  // using the beta feature in custom rules is not suggested until it has been formally released
+  //
+  type.outbound
+  and (
+    any(beta.ml_extract_sensitive_information(body.current_thread.text).elements,
+      .type == "email_address"
+      and .confidence in ("medium", "high")
+      and all(recipients.to, .email.domain.root_domain != regex.iextract(..text, '@([a-zA-Z0-9.-]+\.[a-zA-Z]{2,})')[0])
+      and all(recipients.cc, .email.domain.root_domain != regex.iextract(..text, '@([a-zA-Z0-9.-]+\.[a-zA-Z]{2,})')[0])
+      and all(recipients.bcc, .email.domain.root_domain != regex.iextract(..text, '@([a-zA-Z0-9.-]+\.[a-zA-Z]{2,})')[0])
+    )
+    or any(beta.ml_extract_sensitive_information(subject.subject).elements,
+      .type == "email_address"
+      and .confidence in ("medium", "high")
+      and all(recipients.to, .email.domain.root_domain != regex.iextract(..text, '@([a-zA-Z0-9.-]+\.[a-zA-Z]{2,})')[0])
+      and all(recipients.cc, .email.domain.root_domain != regex.iextract(..text, '@([a-zA-Z0-9.-]+\.[a-zA-Z]{2,})')[0])
+      and all(recipients.bcc, .email.domain.root_domain != regex.iextract(..text, '@([a-zA-Z0-9.-]+\.[a-zA-Z]{2,})')[0])
+    )
+    or any(attachments,
+      any(file.explode(.),
+        any(beta.ml_extract_sensitive_information(.scan.strings.raw).elements,
+          .type == "email_address"
+          and .confidence in ("medium", "high")
+        )
+        or any(beta.ml_extract_sensitive_information(.scan.ocr.raw).elements,
+          .type == "email_address"
+          and .confidence in ("medium", "high")
+        )
+      )
+    )
+  )
+  and not any(recipients.to, .email.domain.root_domain in $org_domains)
+detection_methods:
+  - "Content analysis"
+  - "Natural Language Understanding"
+  - "File analysis"
+  - "Optical Character Recognition"
