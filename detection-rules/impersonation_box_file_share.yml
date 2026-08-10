@@ -20,18 +20,23 @@ source: |
       strings.icontains(body.current_thread.text, '900 Jefferson Ave'),
       strings.icontains(body.current_thread.text, 'Redwood City, CA 94063')
     )
+    or strings.icontains(body.current_thread.text,
+                         "who is using SignRequest.com, an electronic signature tool"
+    )
+    or strings.icontains(body.current_thread.text, "sent by SignRequest BV")
   )
   and not (
-    sender.email.domain.root_domain in ("box.com", "liftoff.io")
-    and headers.auth_summary.dmarc.pass
+    sender.email.domain.root_domain in (
+      "box.com",
+      "liftoff.io",
+      "signrequest.com"
+    )
+    and coalesce(headers.auth_summary.dmarc.pass, false)
   )
   // negate highly trusted sender domains unless they fail DMARC authentication
-  and (
-    (
-      sender.email.domain.root_domain in $high_trust_sender_root_domains
-      and not headers.auth_summary.dmarc.pass
-    )
-    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  and not (
+    sender.email.domain.root_domain in $high_trust_sender_root_domains
+    and coalesce(headers.auth_summary.dmarc.pass, false)
   )
   // not a forward or reply
   and (headers.in_reply_to is null or length(headers.references) == 0)

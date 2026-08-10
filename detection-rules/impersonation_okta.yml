@@ -9,10 +9,7 @@ source: |
     or strings.ilike(sender.email.domain.domain, '*Okta*')
     or strings.ilike(subject.subject, '*Okta*')
   )
-  and not (
-    length(headers.references) > 0
-    or any(headers.hops, any(.fields, strings.ilike(.name, "In-Reply-To")))
-  )
+  and not (length(headers.references) > 0 or headers.in_reply_to is not null)
   and not (
     sender.email.domain.root_domain in~ (
       'oktacdn.com',
@@ -21,7 +18,8 @@ source: |
       'okta-gov.com',
       'oktapreview.com',
       'polaris.me',
-      'examity.com' // exam service used by okta
+      'examity.com', // exam service used by okta
+      'discoursemail.com' // used by okta's dev community
     )
     and headers.auth_summary.dmarc.pass
   )
@@ -29,7 +27,7 @@ source: |
           .name == "Okta" and .confidence in ("medium", "high")
   )
   and (
-    profile.by_sender().prevalence in ("new", "outlier")
+    profile.by_sender().prevalence != "common"
     or (
       profile.by_sender().any_messages_malicious_or_spam
       and not profile.by_sender().any_messages_benign
@@ -40,14 +38,10 @@ source: |
               .domain == "mailrelay.okta.com"
   )
   // negate highly trusted sender domains unless they fail DMARC authentication
-  and (
-    (
-      sender.email.domain.root_domain in $high_trust_sender_root_domains
-      and not headers.auth_summary.dmarc.pass
-    )
-    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  and not (
+    sender.email.domain.root_domain in $high_trust_sender_root_domains
+    and coalesce(headers.auth_summary.dmarc.pass, false)
   )
-
 attack_types:
   - "Credential Phishing"
 tactics_and_techniques:

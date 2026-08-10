@@ -4,13 +4,15 @@ type: "rule"
 severity: "medium"
 source: |
   type.inbound
-  
+
   // the sender or the reply-to is a freemail provider
   and (
     sender.email.domain.domain in $free_email_providers
-    or any(headers.reply_to,
-           .email.domain.root_domain in $free_email_providers
-           and not sender.email.domain.root_domain in $free_email_providers
+    or (
+      not sender.email.domain.root_domain in $free_email_providers
+      and any(headers.reply_to,
+              .email.domain.root_domain in $free_email_providers
+      )
     )
   )
   
@@ -23,10 +25,7 @@ source: |
   )
   
   // not a reply
-  and (
-    length(headers.references) == 0
-    or not any(headers.hops, any(.fields, strings.ilike(.name, "In-Reply-To")))
-  )
+  and (length(headers.references) == 0 or headers.in_reply_to is null)
   
   // negate highly trusted sender domains unless they fail DMARC authentication
   and (
@@ -36,7 +35,6 @@ source: |
     )
     or sender.email.domain.root_domain not in $high_trust_sender_root_domains
   )
-
 attack_types:
   - "BEC/Fraud"
 tactics_and_techniques:

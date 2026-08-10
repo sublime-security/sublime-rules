@@ -56,13 +56,10 @@ source: |
           )
   )
   and (
-    not any(headers.hops,
-            .authentication_results.compauth.verdict is not null
-            and .authentication_results.compauth.verdict == "pass"
-            and sender.email.domain.domain in (
-              "microsoft.com",
-              "sharepointonline.com"
-            )
+    not sender.email.domain.domain in ("microsoft.com", "sharepointonline.com")
+    or not any(headers.hops,
+               .authentication_results.compauth.verdict is not null
+               and .authentication_results.compauth.verdict == "pass"
     )
   )
   
@@ -82,12 +79,7 @@ source: |
   // negate replies
   and (
     (
-      (
-        length(headers.references) > 0
-        or not any(headers.hops,
-                   any(.fields, strings.ilike(.name, "In-Reply-To"))
-        )
-      )
+      (length(headers.references) > 0 or headers.in_reply_to is null)
       and not (
         (
           strings.istarts_with(subject.subject, "RE:")
