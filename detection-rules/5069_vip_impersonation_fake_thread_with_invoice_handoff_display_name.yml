@@ -1,0 +1,87 @@
+name: "PR# 5069 - VIP impersonation: Payment handoff with VIP display name authored fake threads"
+description: "Detects inbound messages where an external sender, absent from the original conversation, targets a single internal recipient after a VIP previously instructed that party to handle invoice or payment correspondence. The rule identifies prior threads where a known VIP explicitly redirected billing or payment contact to an internal address — using language such as forwarding instructions, accounts payable references, or billing handoff phrasing — and flags follow-up messages from external senders who are no longer accompanied by the VIP. NLU classifiers confirm financial context in the prior thread. This pattern is consistent with adversaries monitoring or fabricating invoice-related threads to insert themselves at the point of payment handoff."
+type: "rule"
+severity: "high"
+source: |
+  // note to rule writers
+  // this rule has a related rule which covers the same logic, but handles the "email address" but no display name in preivous threads
+  // very likely the logic will need updated in the corresponding rule
+  // see vip_impersonation_fake_thread_with_invoice_handoff_email.yml
+  type.inbound
+  and any(map(filter(body.previous_threads,
+                     .sender.email.email == ""
+                     and .sender.display_name != ""
+                     and any($org_vips,
+                             strings.icontains(..sender.display_name,
+                                               .display_name
+                             )
+                     )
+                     and not coalesce(.subject.is_auto_reply, false)
+                     and any(recipients.to,
+                             .email.domain.root_domain in $org_domains
+                             and strings.icontains(..text, .email.email)
+                     )
+                     // payment "handoff" phrasing.
+                     and regex.icontains(.text,
+                                         'accounts? payable',
+                                         '(?:forward|send|rout|direct|remit|submit|issue) (?:it|a copy) (?:directly )?to',
+                                         '(?:forward|send|direct|remit|submit|route) (?:the |all |related |for )?(?:invoice|correspondence|payment|billing|processing)',
+                                         'for payment processing,? please contact',
+                                         '(?:please )?direct (?:it|all|the)[^\n]{0,60}\bto\b',
+                                         '(?:as follows|provided below|find below|details are|contact is)[^\n]{0,10}:',
+                                         'billing (?:contact|correspondence|team|department)',
+                                         'a copy.{0,20}sent to',
+                     )
+              ),
+              .sender.display_name
+          ),
+          . != ""
+          // any previous thread authored by the "VIP" has invoice/payment
+          and (
+            any(filter(body.previous_threads, .sender.email.email == ..),
+                any(ml.nlu_classifier(.text, subject=.subject.base).tags,
+                    .name in ("invoice", "payment") and .confidence != "low"
+                )
+                or any(ml.nlu_classifier(.text, subject=.subject.base).topics,
+                       .name in ("Request to View Invoice", "Payment Information")
+                       and .confidence != "low"
+                )
+            )
+            // if we don't get NLU but there is a W9 or Inv attached, we can assume it's invoice related
+            or any(attachments,
+                   strings.istarts_with(.file_name, 'INV', "W-9", 'W9')
+            )
+          )
+          and not any(flatten([recipients.to, recipients.cc, recipients.bcc]),
+                      any($org_vips,
+                          strings.icontains(..., .display_name)
+                          and .email != ""
+                          and strings.icontains(..email.email, .email)
+                      )
+          )
+  )
+  and length(filter(flatten([recipients.to, recipients.cc, recipients.bcc]),
+                    .email.domain.root_domain in $org_domains
+             )
+  ) == 1
+  and not (
+    sender.email.domain.root_domain in $org_domains
+    and coalesce(headers.auth_summary.dmarc.pass, false)
+  )
+attack_types:
+  - "BEC/Fraud"
+tactics_and_techniques:
+  - "Impersonation: VIP"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Natural Language Understanding"
+  - "Sender analysis"
+  - "Header analysis"
+id: "8ecb255f-e18f-5a49-a6bc-4ec9695a93d3"
+tags:
+  - created_from_open_prs
+  - rule_status_modified
+  - pr_author_zoomequipd
+references:
+  - https://github.com/sublime-security/sublime-rules/pull/5069
