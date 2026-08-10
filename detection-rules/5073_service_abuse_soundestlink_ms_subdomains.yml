@@ -1,0 +1,52 @@
+name: "Service abuse: Soundestlink.com Microsoft impersonation"
+description: "Detects links or extracted domains hosted on soundestlink.com where the subdomain contains Microsoft-related keywords such as 'microsoft', 'teams', 'login', 'office', '365', or 'outlook'. This pattern indicates abuse of a legitimate link redirection/tracking service to disguise malicious URLs as Microsoft login or authentication pages, a common technique used to harvest credentials."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and (
+    // parsed urls
+    any(body.links,
+        (
+          .href_url.domain.root_domain == "soundestlink.com"
+          and regex.icontains(.href_url.domain.subdomain,
+                              '(?:microsoft|teams|login|office|365|outlook)'
+          )
+        )
+        // handle mimecast
+        or (
+          .href_url.domain.root_domain in ("mimecastprotect.com", "mimecast.com")
+          and any(.href_url.query_params_decoded['domain'],
+                  strings.parse_domain(.).root_domain == "soundestlink.com"
+                  and regex.icontains(strings.parse_domain(.).subdomain,
+                                      '(?:microsoft|teams|login|office|365|outlook)'
+                  )
+          )
+        )
+    )
+    // unparsed and extracted
+    or (
+      strings.icontains(body.html.display_text, 'soundestlink.com')
+      and any(regex.extract(body.html.display_text,
+                            '(?P<domain>[a-z0-9.\-]+\.soundestlink\.com)'
+              ),
+              regex.icontains(strings.parse_domain(.named_groups["domain"]).subdomain,
+                              '(?:microsoft|teams|login|office|365|outlook)'
+              )
+      )
+    )
+  )
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Lookalike domain"
+  - "Social engineering"
+detection_methods:
+  - "URL analysis"
+  - "Content analysis"
+  - "HTML analysis"
+id: "88eb2f73-9a20-59fa-97ba-6ed1080149f2"
+og_id: "2dcd961f-c397-5519-9ff3-d5653a893744"
+testing_pr: 5073
+testing_sha: 0ed7f0724eb51b1aa5be56e41798a1dbb5f1d857
