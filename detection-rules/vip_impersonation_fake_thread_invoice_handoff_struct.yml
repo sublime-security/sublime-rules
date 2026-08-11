@@ -1,0 +1,68 @@
+name: "VIP Impersonation: VIP handoff with fake forwarded invoice thread"
+description: "Flags inbound messages that fabricate a forwarded thread to impersonate a VIP and redirect payment on a fake past-due invoice. The oldest thread segment shows a forward addressed to the VIP, immediately preceded by a message purportedly from that same VIP containing a mailto link pointing to an attacker-controlled address. The live message routes to that mailto address instead of the VIP's legitimate address, which has been dropped from the recipient list, while only a single organizational recipient remains. This pattern is consistent with invoice or overdue-account lures that exploit a hijacked thread to trick a target into paying a fraudulent account."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and length(body.previous_threads) > 1
+  
+  // the oldest segment is a forward and has a single recipient which is the VIP
+  and length(body.previous_threads[length(body.previous_threads) - 1].recipients.to
+  ) == 1
+  // the segment is a forward
+  // handle where there is no subject
+  and coalesce(body.previous_threads[length(body.previous_threads) - 1].subject.is_forward,
+               false
+  )
+  and any($org_vips,
+          // oldest thread (len-1) forward is TO the VIP
+          body.previous_threads[length(body.previous_threads) - 1].recipients.to[0].display_name =~ .display_name
+          // next oldest thread (len-2) is FROM the same VIP;
+          and body.previous_threads[length(body.previous_threads) - 2].sender.display_name =~ .display_name
+  )
+  // the rcpt email format of the oldest thread matches the sender email format of the next oldest thread
+  and body.previous_threads[length(body.previous_threads) - 1].recipients.to[0].email.email =~ body.previous_threads[length(body.previous_threads
+  ) - 2].sender.email.email
+  
+  // the message authored by the "VIP" links to an email (parsed mailto:) that the live message now routes to
+  // this is the "VIP handoff" step, the fake VIP mentions the email address, which becomes the "victim", the actor sends it to that address and includes the faked emails emails in the chain. 
+  
+  and any(body.previous_threads[length(body.previous_threads) - 2].links,
+          .href_url.url != ""
+          and .href_url.scheme == "mailto"
+          and any(flatten([recipients.to, recipients.cc, recipients.bcc]),
+                  strings.icontains(.email.email, ..href_url.url)
+          )
+  )
+  
+  // the VIP's authoritative list-email is NOT among the live recipients (dropped)
+  and not any(flatten([recipients.to, recipients.cc, recipients.bcc]),
+              any($org_vips,
+                  .email != ""
+                  and strings.icontains(..email.email, .email)
+                  and body.previous_threads[length(body.previous_threads) - 2].sender.display_name =~ .display_name
+              )
+  )
+  // we only have a single org_domain recipient
+  and length(filter(flatten([recipients.to, recipients.cc, recipients.bcc]),
+                    .email.domain.root_domain in $org_domains
+             )
+  ) == 1
+  // this message is not from the org itself
+  and not (
+    sender.email.domain.root_domain in $org_domains
+    and coalesce(headers.auth_summary.dmarc.pass, false)
+  )
+  
+attack_types:
+  - "BEC/Fraud"
+tactics_and_techniques:
+  - "Impersonation: VIP"
+  - "Social engineering"
+  - "Spoofing"
+  - "Out of band pivot"
+detection_methods:
+  - "Header analysis"
+  - "Content analysis"
+  - "URL analysis"
+  - "Sender analysis"
