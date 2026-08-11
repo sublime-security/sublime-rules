@@ -1,0 +1,31 @@
+name: "PR# 5082 - Spam: Newly registered domain with default GoDaddy name servers"
+description: "Detects inbound messages where the sender's domain was registered within the past year and uses exactly two name servers, both with subdomains starting with 'ns' under domaincontrol.com. This pattern reflects unconfigured, default GoDaddy DNS settings indicating abuse of GoDaddy's DNS infrastructure to rapidly stand up new domains"
+type: "rule"
+severity: "low"
+source: |
+  type.inbound
+  // newly registered sender domain
+  and network.whois(sender.email.domain).days_old < 365
+  
+  // there are 2 name servers which have subdomains containing .ns
+  and length(network.whois(sender.email.domain).name_servers) == 2
+  and all(network.whois(sender.email.domain).name_servers,
+          strings.istarts_with(.subdomain, 'ns')
+          and .root_domain == 'domaincontrol.com'
+  )
+  
+attack_types:
+  - "Spam"
+tactics_and_techniques:
+  - "Evasion"
+  - "Social engineering"
+detection_methods:
+  - "Whois"
+  - "Sender analysis"
+id: "d1225b38-1d0f-55d3-9954-3a6277999dc7"
+tags:
+  - created_from_open_prs
+  - rule_status_added
+  - pr_author_missingn0pe
+references:
+  - https://github.com/sublime-security/sublime-rules/pull/5082
