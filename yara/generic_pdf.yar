@@ -577,3 +577,28 @@ rule quickbooks_pdf_lures {
 		and $qb_logo
 		and 1 of ($optional_*)
 }
+
+rule pdf_rfp_template_lure {
+	meta:
+		author      = "kyle eaton"
+		date        = "2026-08-11"
+		description = "Matches PDF with a templated RPF lure."
+	strings:
+		$header  = { 25 50 44 46 2D }
+		$title   = { 31 20 30 20 6F 62 6A 0A 3C 3C 2F 54 69 74 6C 65 20 28 52 65 71 75 65 73 74 20 66 6F 72 20 50 72 6F 70 6F 73 61 6C 20 }
+		$a_rect1 = "/Rect [90.75"
+		$a_rect2 = /\/Rect \[208\.5\s[\d.]+\s403\.5/
+		$b_rect  = /\/Rect \[218\.25\s[\d.]+\s393\.75/
+		$c_rect1 = /\/Rect \[213\.75\s[\d.]+\s398\.25/
+		$c_img   = { 2F 49 6D 61 67 65 0A 2F 57 69 64 74 68 20 32 36 33 38 0A 2F 48 65 69 67 68 74 20 33 34 34 38 }
+		$d_rect  = { 2F 52 65 63 74 20 5B 31 30 38 20 }
+	condition:
+		$header at 0
+		and $title
+		and (
+			all of ($a_*)
+			or all of ($c_*)
+			or $b_rect
+			or $d_rect
+		)
+}
