@@ -1,0 +1,29 @@
+name: "PR# 5094 - Attachment: PDF with newly registered suspicious link"
+description: "Detects inbound messages containing PDF attachments that embed URLs pointing to domains with suspicious top-level domains. These URLs are further validated through WHOIS lookups to confirm the domain was registered within the last 30 days, a strong indicator of malicious infrastructure recently stood up for malicious use."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and any(filter(attachments, .file_type == "pdf"),
+          any(file.explode(.),
+              any(.scan.url.urls,
+                  .domain.tld in $suspicious_tlds
+                  and network.whois(.domain).days_old <= 30
+              )
+          )
+  )
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "PDF"
+detection_methods:
+  - "File analysis"
+  - "URL analysis"
+  - "Whois"
+id: "f80cd013-3f25-5676-a3c5-0e4a740ef1fb"
+tags:
+  - created_from_open_prs
+  - rule_status_added
+  - pr_author_D-Bolton
+references:
+  - https://github.com/sublime-security/sublime-rules/pull/5094
