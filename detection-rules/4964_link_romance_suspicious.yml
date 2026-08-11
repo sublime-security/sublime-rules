@@ -20,7 +20,7 @@ source: |
       and regex.icontains(headers.mailer,
                           'phpmailer|wpmail|wp mail smtp|easywpsmtp|post.smtp|drupal|typo3|codeigniter|nette|activecampaign|symfony|laravel|zend|cakephp|yii|enginemailer|msgsend|sailthru|sympa'
       )
-      // now check for explicit language in the URL path
+      // check for explicit language in the URL path
       and any(body.links,
               regex.icontains(.href_url.path,
                               '(?:sex|horny|cock|fuck|\bass\b|pussy|dick|tits|cum\b|girlfriend|boyfriend|naked|porn|webcam|masturbate|orgasm|breasts|penis|vagina|suck|blowjob|hardcore|nudes?|sexting|erotic|\blust\b|fetish|kinky|seduce|adult\s*(?:\w+\s+){0,2}\s*community|cam shows|local (?:girls?|women|single)|hook.?up|bed partner)'
@@ -42,19 +42,17 @@ source: |
                  )
   ) < 3
   and (
-    all(filter(body.links, .parser != "plain"),
-        .href_url.domain.root_domain != sender.email.domain.root_domain
+    all(body.links,
+        .parser == "hyperlink"
+        and .href_url.domain.root_domain != sender.email.domain.root_domain
     )
-    // negate if every clickable link is authenticated Klaviyo tracking
-    and not (
-      all(filter(body.links, .parser != "plain"),
-          .href_url.domain.root_domain in ("klclick.com", "klclick1.com")
-      )
-      // ensure message passes auth
-      and coalesce(headers.auth_summary.dmarc.pass, false)
-    )
+    // allow for a single plain link that matches the sender's domain
+    or length(filter(body.links,
+                     .parser == "plain"
+                     and .href_url.domain.root_domain == sender.email.domain.root_domain
+              )
+    ) == 1
   )
-
 attack_types:
   - "Spam"
 tactics_and_techniques:
@@ -67,4 +65,4 @@ detection_methods:
 id: "f1cd7862-db92-5a7a-9583-c73c94a03733"
 og_id: "d5694cae-bee8-588e-8123-2c3e3459118b"
 testing_pr: 4964
-testing_sha: 645d44dd51f1e909303801b1483034587f2ab2d4
+testing_sha: dc89897934bfd38a65c9b671a9d00b3d9672f9c6
