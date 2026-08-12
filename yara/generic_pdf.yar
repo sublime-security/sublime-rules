@@ -602,3 +602,31 @@ rule pdf_rfp_template_lure {
 			or $d_rect
 		)
 }
+
+rule pdf_templated_lure_blue_white {
+	meta:
+		author      = "kyle eaton"
+		date        = "2026-08-11"
+		description = "Matching a specific templated PDF lure (mainly blue and white) with a specfic rect value and page size"
+	strings:
+		$header = { 25 50 44 46 2D }
+		$rect_1 = { 5B 31 32 37 2E 35 20 31 32 38 2E 36 36 39 39 38 33 20 33 31 38 2E 37 35 20 31 36 33 2E 31 36 39 39 38 33 5D }
+		$mb     = { 2F 4D 65 64 69 61 42 6F 78 20 5B 30 20 30 20 34 34 35 2E 39 32 20 36 33 31 2E 39 32 5D }
+	condition:
+		$header at 0
+		and $rect_1
+		and $mb   
+}
+
+rule pdf_blue_confidential_fax_lure {
+	meta:
+		author      = "kyle eaton"
+		date        = "2026-08-12"
+		description = "matching PDFs with a blue 'confidential fax' lure, based on specific overlaps"
+	strings:
+		$header = { 25 50 44 46 2D }
+		$rect   = { 2F 52 65 63 74 20 5B 32 37 39 20 33 39 39 2E 37 35 20 35 31 33 20 34 34 30 2E 32 35 5D }
+	condition:
+		$header at 0
+		and $rect
+}
