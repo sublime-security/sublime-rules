@@ -50,23 +50,29 @@ source: |
   
   // the body references an attachment
   and (
-    strings.contains(body.current_thread.text, "attach", "download")
-    // negate warning banners warning about the attachment(s)
-    and (
-      not (
-        (
-          regex.count(body.current_thread.text, "attach") == 1
-          and regex.icontains(body.current_thread.text,
-                              "(caution|warning).{0,30}attach"
+    (
+      strings.contains(body.current_thread.text, "attach")
+      // negate warning banners warning about the attachment(s)
+      and (
+        not (
+          (
+            regex.count(body.current_thread.text, "attach") == 1
+            and regex.icontains(body.current_thread.text,
+                                "(caution|warning).{0,30}attach"
+            )
           )
-        )
-        or ( // WeTransfer expiry warning notification
-          sender.email.email == "noreply@wetransfer.com"
-          and any(body.links,
-                  .display_text == "Don't send me these expiry reminders anymore"
+          or ( // WeTransfer expiry warning notification
+            sender.email.email == "noreply@wetransfer.com"
+            and any(body.links,
+                    .display_text == "Don't send me these expiry reminders anymore"
+            )
           )
         )
       )
+    )
+    or strings.contains(body.current_thread.text,
+                        "download the invoice",
+                        "see below"
     )
   )
   
@@ -84,7 +90,7 @@ source: |
       )
       or any(ml.nlu_classifier(body.current_thread.text).entities,
              .name == "request" and strings.icontains(.text, "kindly")
-             or .name == "financial" and regex.match(.text, '(?:INVOICE|Inv)')
+             or .name == "financial" and regex.match(.text, 'Inv')
       )
     )
   )
