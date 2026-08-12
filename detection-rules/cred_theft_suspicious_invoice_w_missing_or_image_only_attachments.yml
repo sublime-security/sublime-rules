@@ -4,21 +4,24 @@ type: "rule"
 severity: "high"
 source: |
   type.inbound
-  
+
   // more than 0 but less than 20 links
   and 0 < length(body.links) < 20
   
   // all attachments are images or there are 0 attachments
   and (
-    length(attachments) > 0 and all(attachments, .file_type in $file_types_images)
-    or length(attachments) == 0
+    length(attachments) > 0
+    and (
+      all(attachments, .file_type in $file_types_images)
+      or length(attachments) == 0
+    )
   )
   
   // subject contains payment/invoice language
   and (
     any(ml.nlu_classifier(subject.subject).tags, .name in ("payment", "invoice"))
     or regex.contains(subject.subject,
-                      '(?:\binv(?:oice|o)\b|in_v|in-voice|pay(?:ment|mnt)|pymt|\brec(?:eipt|pt|iept)\b|rcpt|confirm(?:ation)|cnfrm|cnf|po\b|p\.o\.|purch(?:ase)?-?order|\bord(?:er)?\b|bill(?:ing)|billing-info|transact(?:ion)|txn|trx|\bstmt\b|\bstmnt\b|remit(?:tance)|rmt|remndr|remind|\bdue(?:-date)\b|ovrdue|overdue|\bbal(?:ance)\b|\bpaid(?:-invoice)\b|requires\s+your\s+a(?:ttention|ction)|\b[fF]inal\s+(?:[nN]otice|[uU]npaid).{0,20}[iI]nvoice)',
+                      '(?:\binv(?:oice|o)\b|outstanding\s+inv\b|in_v|in-voice|pay(?:ment|mnt)|pymt|\brec(?:eipt|pt|iept)\b|rcpt|confirm(?:ation)|cnfrm|cnf|po\b|p\.o\.|purch(?:ase)?-?order|\bord(?:er)?\b|bill(?:ing)|billing-info|transact(?:ion)|txn|trx|\bstmt\b|\bstmnt\b|remit(?:tance)|rmt|remndr|remind|\bdue(?:-date)\b|ovrdue|overdue|\bbal(?:ance)\b|\bpaid(?:-invoice)\b|requires\s+your\s+a(?:ttention|ction)|\b[fF]inal\s+(?:[nN]otice|[uU]npaid).{0,20}[iI]nvoice)',
                       // suspicious invoice format
                       '\d{6}\b.{10,30}(\d{2}\.){3}pdf'
     )
@@ -48,9 +51,9 @@ source: |
     )
   )
   
-  // the body references an attachment 
+  // the body references an attachment
   and (
-    strings.contains(body.current_thread.text, "attach")
+    strings.contains(body.current_thread.text, "attach", "download")
     // negate warning banners warning about the attachment(s)
     and (
       not (
@@ -83,7 +86,8 @@ source: |
           .name == "cred_theft"
       )
       or any(ml.nlu_classifier(body.current_thread.text).entities,
-             .name == "request" and (strings.icontains(.text, "kindly"))
+             .name == "request" and strings.icontains(.text, "kindly")
+             or .name == "financial" and regex.match(.text, '(?:INVOICE|Inv)')
       )
     )
   )
@@ -95,7 +99,10 @@ source: |
     )
     or sender.email.domain.root_domain not in $high_trust_sender_root_domains
   )
-  and not profile.by_sender().solicited
+  and (
+    not profile.by_sender().solicited
+    or profile.by_sender().days_since.last_outbound > 280
+  )
 attack_types:
   - "Credential Phishing"
 tactics_and_techniques:
