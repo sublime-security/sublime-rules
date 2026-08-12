@@ -590,5 +590,18 @@ rule pdf_templated_lure_blue_white {
 	condition:
 		$header at 0
 		and $rect_1
-		and $mb
+		and $mb   
+}
+
+rule pdf_blue_confidential_fax_lure {
+	meta:
+		author      = "kyle eaton"
+		date        = "2026-08-12"
+		description = "matching PDFs with a blue 'confidential fax' lure, based on specific overlaps"
+	strings:
+		$header = { 25 50 44 46 2D }
+		$rect   = { 2F 52 65 63 74 20 5B 32 37 39 20 33 39 39 2E 37 35 20 35 31 33 20 34 34 30 2E 32 35 5D }
+	condition:
+		$header at 0
+		and $rect
 }
