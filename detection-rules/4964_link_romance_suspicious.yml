@@ -15,11 +15,6 @@ source: |
       regex.icontains(subject.subject,
                       '(?:\bform\b|submi(?:t|ssion)|new message|cisco press)'
       )
-      and headers.mailer is not null
-      // common automated form submission systems
-      and regex.icontains(headers.mailer,
-                          'phpmailer|wpmail|wp mail smtp|easywpsmtp|post.smtp|drupal|typo3|codeigniter|nette|activecampaign|symfony|laravel|zend|cakephp|yii|enginemailer|msgsend|sailthru|sympa'
-      )
       // check for explicit language in the URL path
       and any(body.links,
               regex.icontains(.href_url.path,
@@ -43,15 +38,19 @@ source: |
   ) < 3
   and (
     all(body.links,
-        .parser == "hyperlink"
-        and .href_url.domain.root_domain != sender.email.domain.root_domain
+        .href_url.domain.root_domain != sender.email.domain.root_domain
     )
-    // allow for a single plain link that matches the sender's domain
-    or length(filter(body.links,
-                     .parser == "plain"
-                     and .href_url.domain.root_domain == sender.email.domain.root_domain
-              )
-    ) == 1
+    // allow for links that match the sender's domain, if they lead to form submission results
+    or (
+      any(body.links,
+          .href_url.domain.root_domain == sender.email.domain.root_domain
+      )
+      and all(filter(body.links,
+                     .href_url.domain.root_domain == sender.email.domain.root_domain
+              ),
+              strings.icontains(.href_url.path, "submission", "submit")
+      )
+    )
   )
 attack_types:
   - "Spam"
