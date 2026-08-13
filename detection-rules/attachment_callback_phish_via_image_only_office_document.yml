@@ -1,0 +1,63 @@
+name: "Attachment: Image-only docx/pptx callback phishing"
+description: "Detects inbound emails with docx or pptx attachments that contain no text but exactly one embedded image, a common tactic to evade text-based scanning by presenting content as a picture. The rule then inspects any extracted text from the image for a combination of callback phishing lures—such as references to subscriptions, invoices, refunds, or antivirus renewals alongside phone numbers or dollar amounts—paired with impersonation of well-known brands like PayPal, McAfee, Norton, or Best Buy, indicating a fraudulent phone-based scam attempt."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+    and any(attachments,
+            .file_type in ("docx", "pptx")
+            and any(file.explode(.),
+                    (.scan.docx.word_count == 0 and .scan.docx.image_count == 1)
+                    or (
+                      .scan.pptx.word_count == 0 and .scan.pptx.image_count == 1
+                    )
+            )
+            and any(file.explode(.),
+                    (.depth == 0 or .flavors.mime == "text/plain")
+                    // 4 of the following strings are found
+                    and 4 of (
+                      // this section is synced with attachment_callback_phish_with_pdf.yml and body_callback_phishing_no_attachment.yml
+                      strings.icontains(.scan.strings.raw, "purchase"),
+                      strings.icontains(.scan.strings.raw, "payment"),
+                      strings.icontains(.scan.strings.raw, "transaction"),
+                      strings.icontains(.scan.strings.raw, "subscription"),
+                      strings.icontains(.scan.strings.raw, "antivirus"),
+                      strings.icontains(.scan.strings.raw, "order"),
+                      strings.icontains(.scan.strings.raw, "support"),
+                      strings.icontains(.scan.strings.raw, "help line"),
+                      strings.icontains(.scan.strings.raw, "receipt"),
+                      strings.icontains(.scan.strings.raw, "invoice"),
+                      strings.icontains(.scan.strings.raw, "call"),
+                      strings.icontains(.scan.strings.raw, "helpdesk"),
+                      strings.icontains(.scan.strings.raw, "cancel"),
+                      strings.icontains(.scan.strings.raw, "renew"),
+                      strings.icontains(.scan.strings.raw, "refund"),
+                      regex.icontains(.scan.strings.raw,
+                                      "(?:reach|contact) us at"
+                      ),
+                      strings.icontains(.scan.strings.raw, "+1"),
+                      strings.icontains(.scan.strings.raw, "amount"),
+                      strings.icontains(.scan.strings.raw, "charged"),
+                      strings.icontains(.scan.strings.raw, "crypto"),
+                      strings.icontains(.scan.strings.raw, "wallet address"),
+                      regex.icontains(.scan.strings.raw, '\$\d{3}\.\d{2}\b'),
+                      regex.icontains(.scan.strings.raw,
+                                      '\+?([ilo0-9]{1}.)?\(?[ilo0-9]{3}?\)?.[ilo0-9]{3}.?[ilo0-9]{4}',
+                                      '\+?([ilo0-9]{1,2})?\s?\(?\d{3}\)?[\s\.\-⋅]{0,5}[ilo0-9]{3}[\s\.\-⋅]{0,5}[ilo0-9]{4}'
+                      ),
+                    )
+                    and regex.icontains(.scan.strings.raw,
+                                        '(p.{0,3}a.{0,3}y.{0,3}p.{0,3}a.{0,3}l|ma?c.?fee|n[o0]rt[o0]n|geek.{0,5}squad|ebay|symantec|best buy|lifel[o0]c|secure anywhere|starz|utilities premium|pc security|at&t|quickbooks|amazon)'
+                    )
+            )
+    )
+attack_types:
+  - "Callback Phishing"
+tactics_and_techniques:
+  - "Image as content"
+  - "Impersonation: Brand"
+  - "Social engineering"
+detection_methods:
+  - "File analysis"
+  - "Optical Character Recognition"
+  - "Content analysis"
