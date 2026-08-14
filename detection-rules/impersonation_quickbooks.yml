@@ -6,18 +6,22 @@ source: |
   type.inbound
   and (
     (
-      strings.ilike(sender.display_name, 'quickbook*')
-      or strings.like(sender.display_name, "QB-*")
-      or strings.ilike(sender.display_name, 'intuit*')
+      strings.ilike(sender.display_name,
+                    'quickboo*',
+                    'QuickB*',
+                    'QBook*',
+                    'intuit*'
+      )
+      or strings.like(sender.display_name, "QB-*", "QB *")
       or strings.ilevenshtein(sender.display_name, 'quickbooks') <= 1
       or strings.ilike(sender.email.domain.domain, '*quickbook*')
       or (
         length(filter(ml.nlu_classifier(body.current_thread.text).entities,
                       strings.icontains(.text, "quickbooks")
                )
-        ) > 2
+        ) >= 2
         and any(ml.nlu_classifier(body.current_thread.text).intents,
-                .name == "cred_theft"
+                .name in ("cred_theft", "callback_scam")
         )
       )
     )
@@ -27,18 +31,25 @@ source: |
     any(ml.logo_detect(file.message_screenshot()).brands,
         .name == "Quickbooks" and .confidence in ("medium", "high")
     )
-    // contains the address and copyright 
+    // contains the address and copyright
     or (
       strings.icontains(body.current_thread.text,
-                        '2800 E. Commerce Center Place, Tucson, AZ 85706'
+                        '2800 E. Commerce Center Place, Tucson, AZ 85706',
+                        '2700 Coast Ave, Mountain View, CA 94043'
       )
       and regex.icontains(body.current_thread.text, '©\s*(?:\d+)\s*Intuit')
     )
-    or strings.icontains(body.current_thread.text, 'Powered by QuickBooks')
     or strings.icontains(body.current_thread.text,
-                         'QuickBooks and Intuit are trademarks of Intuit Inc.'
+                         'Powered by QuickBooks',
+                         'QuickBooks and Intuit are trademarks of Intuit Inc.',
+                         "QuickBooks Cloud Services",
+                         "QuickBooks Support Center",
+                         "QuickBooks subscription"
     )
-    or strings.icontains(body.current_thread.text, "QuickBooks Cloud Services")
+    or regex.icontains(body.current_thread.text,
+                       '(?:Secured by )?QuickBooks Payments'
+    )
+  
     // phone number and update language
     or (
       regex.icontains(body.current_thread.text,
@@ -52,9 +63,13 @@ source: |
       // we need to re-check for QB indicators, otherwise we can have "*invoice*"
       // and this block, which is much more than just QB impersonation
       and (
-        strings.ilike(sender.display_name, 'quickbook*')
-        or strings.like(sender.display_name, "QB-*")
-        or strings.ilike(sender.display_name, 'intuit*')
+        strings.ilike(sender.display_name,
+                      'quickbook*',
+                      'QuickB*',
+                      'QBook*',
+                      'intuit*'
+        )
+        or strings.like(sender.display_name, "QB-*", "QB *")
         or strings.ilevenshtein(sender.display_name, 'quickbooks') <= 1
         or strings.ilike(sender.email.domain.domain, '*quickbook*')
         or (
@@ -68,16 +83,47 @@ source: |
         )
       )
     )
+    or any(body.links,
+           (
+             regex.icontains(.display_url.url, '(?:quickbooks|intuit)')
+             and .mismatched
+             and not .href_url.domain.root_domain in (
+               "mimecast.com",
+               "mimecastprotect.com"
+             )
+           )
+           or (
+             regex.icontains(.href_url.path, '(?:quickbooks|intuit)')
+             and not strings.icontains(.href_url.domain.root_domain,
+                                       "quickbooks",
+                                       "intuit"
+             )
+             and not any(ml.nlu_classifier(body.current_thread.text).topics,
+                         .name == "Advertising and Promotions"
+             )
+           )
+    )
+    or (
+      any(ml.nlu_classifier(body.current_thread.text).entities,
+          .name == "sender" and regex.icontains(.text, 'quickbooks?')
+      )
+      and any(ml.nlu_classifier(body.current_thread.text).intents,
+              .name == "cred_theft" and .confidence == "high"
+      )
+    )
   )
-  and sender.email.domain.root_domain not in~ (
-    'intuit.com',
-    'turbotax.com',
-    'intuit.ca',
-    'meliopayments.com',
-    'qemailserver.com',
-    'intuit.co.uk',
-    'quickbooksonline.com',
-    'tsheets.com'
+  and not (
+    sender.email.domain.root_domain in~ (
+      'intuit.com',
+      'turbotax.com',
+      'intuit.ca',
+      'meliopayments.com',
+      'qemailserver.com',
+      'intuit.co.uk',
+      'quickbooksonline.com',
+      'tsheets.com'
+    )
+    and coalesce(headers.auth_summary.dmarc.pass, false)
   )
   and (
     not profile.by_sender().any_messages_benign
@@ -129,7 +175,7 @@ source: |
             .href_url.domain.domain == "connect.intuit.com"
             and strings.icontains(.href_url.query_params, 'cta=viewinvoicenow')
           )
-          // Mimecast links 
+          // Mimecast links
           or (
             .href_url.domain.root_domain == "mimecastprotect.com"
             and (
@@ -147,14 +193,10 @@ source: |
   // negate common sender of quickbooks reseller
   and not strings.icontains(body.current_thread.text, 'Purchasing Reviews, Inc')
   // negate highly trusted sender domains unless they fail DMARC authentication
-  and (
-    (
-      sender.email.domain.root_domain in $high_trust_sender_root_domains
-      and not headers.auth_summary.dmarc.pass
-    )
-    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  and not (
+    sender.email.domain.root_domain in $high_trust_sender_root_domains
+    and coalesce(headers.auth_summary.dmarc.pass, false)
   )
-
 attack_types:
   - "Callback Phishing"
   - "Credential Phishing"

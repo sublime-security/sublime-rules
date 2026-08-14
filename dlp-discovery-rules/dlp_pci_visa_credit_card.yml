@@ -1,0 +1,55 @@
+name: "DLP - PCI: Visa Credit Card Number"
+description: |
+  Detects outbound emails containing Visa credit card numbers in the message body or
+  text-parseable attachments. Visa card numbers begin with 4 and are 13 or 16 digits long,
+  optionally separated by spaces or dashes (e.g. 4111 1111 1111 1111 or 4111-1111-1111-1111).
+
+  Deploy this rule with the "Block Delivery" action to prevent PCI data exfiltration,
+  or in passive mode to monitor and audit outbound mail containing card numbers.
+
+  Regex engine: RE2 (Golang). No PCRE lookbehind — word boundaries (\b) are used instead.
+  Attachment content is extracted via file.explode() / .scan.strings.strings.
+type: rule
+severity: high
+references:
+  - https://www.regular-expressions.info/creditcard.html
+  - https://en.wikipedia.org/wiki/Payment_card_number
+  - https://www.pcisecuritystandards.org/
+  - https://docs.sublime.security/docs/regex-module
+  - https://docs.sublime.security/docs/how-to-detect-text-in-attachments
+authors:
+  - name: Sublime Security
+tags:
+  - dlp
+  - pci
+  - credit-card
+  - visa
+false_positives:
+  - Test or example card numbers used in developer documentation (e.g. 4111111111111111)
+  - Masked card numbers where most digits are replaced (e.g. 4111 **** **** 1234)
+  - Numeric identifiers in financial reports that happen to start with 4
+source: |
+  type.outbound
+  and (
+    // Body: Visa 16-digit (4XXX XXXX XXXX XXXX or 4XXX-XXXX-XXXX-XXXX)
+    regex.contains(body.current_thread.text,
+      '\b4\d{3}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}\b'
+    )
+
+    // Body: Visa 13-digit legacy (4XXX XXXX XXXXX)
+    or regex.contains(body.current_thread.text,
+      '\b4\d{3}[\s-]?\d{4}[\s-]?\d{5}\b'
+    )
+
+    // Attachments: scan extracted strings from PDFs, Office docs, CSVs, etc.
+    or any(attachments,
+      .file_extension in~ ('pdf', 'doc', 'docx', 'xls', 'xlsx', 'txt', 'csv', 'eml', 'msg')
+      and any(file.explode(.),
+        any(.scan.strings.strings,
+          regex.contains(., '\b4\d{3}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}\b')
+          or regex.contains(., '\b4\d{3}[\s-]?\d{4}[\s-]?\d{5}\b')
+        )
+      )
+    )
+  )
+id: "a81ebea6-c2d5-559f-8e94-dcc4c842efdf"
