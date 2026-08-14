@@ -1,0 +1,34 @@
+name: "Attachment: ICS calendar file with suspicious UID domain"
+description: "Detects inbound messages containing ICS calendar attachments where the event UID property ends with a specific domain (@example.com). Malicious actors may use calendar invites to socially engineer recipients into accepting fraudulent meetings or following malicious instructions embedded in calendar events."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and any(attachments,
+          (
+            .file_type == "ics"
+            or .file_extension == "ics"
+            or .content_type in ("application/ics", "text/calendar")
+          )
+          //
+          // This rule makes use of a beta feature and is subject to change without notice
+          // using the beta feature in custom rules is not suggested until it has been formally released
+          //
+          and any(beta.file.parse_ics(.).events,
+                  any(.raw_properties,
+                      .key == "UID" and strings.iends_with(.value, "@example.com")
+                  )
+          )
+  )    
+tags:
+  - "Attack surface reduction"
+attack_types:
+  - "ICS Phishing"
+  - "Credential Phishing"
+  - "BEC/Fraud"
+tactics_and_techniques:
+  - "Social engineering"
+detection_methods:
+  - "File analysis"
+  - "Content analysis"
+id: "cbe06f4f-f041-501b-bfc0-957cd545cd83"

@@ -8,7 +8,10 @@ source: |
   and length(attachments) < 5
   and (
     any(attachments,
-        (.file_type in $file_types_images or .file_type in ("pdf", "xlsx"))
+        (
+          .file_type in $file_types_images
+          or .file_type in ("pdf", "xlsx", "docx")
+        )
         and (
           any(ml.nlu_classifier(beta.ocr(.).text).intents,
               .name == "callback_scam" and .confidence in ("medium", "high")
@@ -101,21 +104,20 @@ source: |
     and strings.icontains(body.html.raw, "bigcommerce.com")
   )
   and (
-    not profile.by_sender().solicited
+    not profile.by_sender_email().solicited
     or (
-      profile.by_sender().any_messages_malicious_or_spam
-      and not profile.by_sender().any_messages_benign
+      profile.by_sender_email().any_messages_malicious_or_spam
+      and not profile.by_sender_email().any_messages_benign
     )
   )
   
   // negate highly trusted sender domains unless they fail DMARC authentication
-  and (
-    (
-      sender.email.domain.root_domain in $high_trust_sender_root_domains
-      and not headers.auth_summary.dmarc.pass
-    )
-    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  and not (
+    sender.email.domain.root_domain in $high_trust_sender_root_domains
+    and coalesce(headers.auth_summary.dmarc.pass, false)
   )
+  // negate opsgenie email notifications
+  and not sender.email.email == 'opsgenie@opsgenie.net'
 attack_types:
   - "Callback Phishing"
 tactics_and_techniques:
