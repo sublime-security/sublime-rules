@@ -1,4 +1,4 @@
-name: "Brand impersonation: QuickBooks service from Intuit"
+name: "Brand impersonation: QuickBooks"
 description: "Impersonation of the Quickbooks service from Intuit."
 type: "rule"
 severity: "medium"
@@ -45,12 +45,13 @@ source: |
                          'QuickBooks and Intuit are trademarks of Intuit Inc.',
                          "QuickBooks Cloud Services",
                          "QuickBooks Support Center",
-                         "QuickBooks subscription"
+                         "QuickBooks subscription",
+                         "Quickbooks payment"
     )
     or regex.icontains(body.current_thread.text,
                        '(?:Secured by )?QuickBooks Payments'
     )
-  
+
     // phone number and update language
     or (
       regex.icontains(body.current_thread.text,
@@ -58,9 +59,12 @@ source: |
                       '\+?([ilo0-9]{1,2})?\s?\(?\d{3}\)?[\s\.\-⋅]{0,5}[ilo0-9]{3}[\s\.\-⋅]{0,5}[ilo0-9]{4}'
       )
       and any(ml.nlu_classifier(body.current_thread.text).topics,
-              .name in ("Software and App Updates", "Security and Authentication")
+              .name in (
+                "Software and App Updates",
+                "Security and Authentication"
+              )
       )
-  
+
       // we need to re-check for QB indicators, otherwise we can have "*invoice*"
       // and this block, which is much more than just QB impersonation
       and (
@@ -76,7 +80,7 @@ source: |
         or strings.ilike(sender.email.domain.domain, '*quickbook*')
         or (
           length(filter(ml.nlu_classifier(body.current_thread.text).entities,
-                        strings.icontains(.text, "quickbooks")
+                        strings.icontains(.text, "quickbooks", "intuit")
                  )
           ) > 2
           and any(ml.nlu_classifier(body.current_thread.text).intents,
@@ -107,8 +111,11 @@ source: |
     )
     or (
       any(ml.nlu_classifier(body.current_thread.text).entities,
-          .name in ("sender", "org")
-          and regex.icontains(.text, '(?:quickbooks?|\bintuit\b)')
+          .name == "sender"
+          and (
+            regex.icontains(.text, 'quickbooks?', 'intuit ach')
+            or strings.ilike(.text, "*QB*")
+          )
       )
       and any(ml.nlu_classifier(body.current_thread.text).intents,
               .name == "cred_theft" and .confidence == "high"
@@ -124,9 +131,7 @@ source: |
       'qemailserver.com',
       'intuit.co.uk',
       'quickbooksonline.com',
-      'tsheets.com',
-      'surveymonkeyuser.com',
-      'trustmineral.com'
+      'tsheets.com'
     )
     and coalesce(headers.auth_summary.dmarc.pass, false)
   )
