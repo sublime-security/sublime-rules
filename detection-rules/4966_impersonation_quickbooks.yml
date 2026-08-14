@@ -1,4 +1,4 @@
-name: "Brand impersonation: QuickBooks service from Intuit"
+name: "Brand impersonation: QuickBooks"
 description: "Impersonation of the Quickbooks service from Intuit."
 type: "rule"
 severity: "medium"
@@ -45,7 +45,8 @@ source: |
                          'QuickBooks and Intuit are trademarks of Intuit Inc.',
                          "QuickBooks Cloud Services",
                          "QuickBooks Support Center",
-                         "QuickBooks subscription"
+                         "QuickBooks subscription",
+                         "Quickbooks payment"
     )
     or regex.icontains(body.current_thread.text,
                        '(?:Secured by )?QuickBooks Payments'
@@ -76,7 +77,7 @@ source: |
         or strings.ilike(sender.email.domain.domain, '*quickbook*')
         or (
           length(filter(ml.nlu_classifier(body.current_thread.text).entities,
-                        strings.icontains(.text, "quickbooks")
+                        strings.icontains(.text, "quickbooks", "intuit")
                  )
           ) > 2
           and any(ml.nlu_classifier(body.current_thread.text).intents,
@@ -107,8 +108,11 @@ source: |
     )
     or (
       any(ml.nlu_classifier(body.current_thread.text).entities,
-          .name in ("sender", "org")
-          and regex.icontains(.text, '(?:quickbooks?|\bintuit\b)')
+          .name == "sender"
+          and (
+            regex.icontains(.text, 'quickbooks?', 'intuit ach')
+            or strings.ilike(.text, "*QB*")
+          )
       )
       and any(ml.nlu_classifier(body.current_thread.text).intents,
               .name == "cred_theft" and .confidence == "high"
@@ -124,9 +128,7 @@ source: |
       'qemailserver.com',
       'intuit.co.uk',
       'quickbooksonline.com',
-      'tsheets.com',
-      'surveymonkeyuser.com',
-      'trustmineral.com'
+      'tsheets.com'
     )
     and coalesce(headers.auth_summary.dmarc.pass, false)
   )
@@ -219,4 +221,4 @@ detection_methods:
 id: "0dea718f-5d90-5b21-9718-0145832bf50f"
 og_id: "4fd791d1-a053-5c2d-80dd-c6dcdc112a62"
 testing_pr: 4966
-testing_sha: 77746fc74cc32e32890749d9210451a82eb9869a
+testing_sha: 2503b77f8badb726fb826f7198b2667ae8e3edad
