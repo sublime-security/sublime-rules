@@ -52,36 +52,34 @@ source: |
         all(attachments, .file_type in $file_types_images)
         or (length(filter(attachments, .file_type == "pdf")) == 1)
       )
-      and any(attachments,
-              any(file.explode(.),
-                  strings.icontains(.scan.ocr.raw, 'ShareFile Attachments')
-                  or strings.icontains(.scan.ocr.raw,
-                                       'Click here to change how often ShareFile sends emails'
+      and (
+        any(attachments,
+            any(file.explode(.),
+                strings.icontains(.scan.ocr.raw, 'ShareFile Attachments')
+                or strings.icontains(.scan.ocr.raw,
+                                     'Click here to change how often ShareFile sends emails'
+                )
+                or strings.icontains(.scan.ocr.raw,
+                                     'uses ShareFile to share documents securely'
+                )
+                or strings.icontains(.scan.ocr.raw,
+                                     'ShareFile is a tool for sending, receiving, and organizing your business files online'
+                )
+                or strings.icontains(.scan.ocr.raw, 'Powered By Citrix ShareFile')
+                // Impersonation of Progress, ShareFile's new parent org
+                // https://www.techzine.eu/news/collaboration/124207/progress-buys-old-citrix-service-sharefile-with-an-eye-on-moveit/                
+                or (
+                  strings.ilike(.scan.ocr.raw, "*Progress*", "*ShareFile*")
+                  and 3 of (
+                    strings.icontains(.scan.ocr.raw, "621 Hillsborough St"),
+                    strings.icontains(body.current_thread.text, "Floor 7"),
+                    strings.icontains(.scan.ocr.raw, "Raleigh, NC"),
+                    strings.icontains(.scan.ocr.raw, "27603")
                   )
-                  or strings.icontains(.scan.ocr.raw,
-                                       'uses ShareFile to share documents securely'
-                  )
-                  or strings.icontains(.scan.ocr.raw,
-                                       'ShareFile is a tool for sending, receiving, and organizing your business files online'
-                  )
-                  or strings.icontains(.scan.ocr.raw,
-                                       'Powered By Citrix ShareFile'
-                  )
-                  // Impersonation of Progress, ShareFile's parent org
-                  // https://www.techzine.eu/news/collaboration/124207/progress-buys-old-citrix-service-sharefile-with-an-eye-on-moveit/
-                  or regex.icontains(.scan.ocr.raw,
-                                     '© 20\d\d (ShareFile|\bProgress\b)'
-                  )
-                  or (
-                    strings.ilike(.scan.ocr.raw, "*Progress*", "*ShareFile*")
-                    and 3 of (
-                      strings.icontains(.scan.ocr.raw, "621 Hillsborough St"),
-                      strings.icontains(body.current_thread.text, "Floor 7"),
-                      strings.icontains(.scan.ocr.raw, "Raleigh, NC"),
-                      strings.icontains(.scan.ocr.raw, "27603")
-                    )
-                  )
-              )
+                )
+            )
+        )
+        or regex.icontains(body.current_thread.text, '© 20\d\d (?:ShareFile|\bProgress\b)')
       )
     )
   )

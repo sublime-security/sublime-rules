@@ -6,8 +6,10 @@ source: |
   type.inbound
   and length(body.previous_threads) == 0
   and length(body.current_thread.text) < 5000
-  and 0 < length(body.links) < 10
-
+  and (
+    0 < length(body.links) < 10 or beta.scan_qr(file.message_screenshot()).found
+  )
+  
   // common strings in subject or base
   and (
     2 of (
@@ -46,7 +48,7 @@ source: |
       strings.ilike(sender.display_name, '*Advisory*'),
     )
   )
-
+  
   // common strings in email current thread
   and 15 of (
     strings.ilike(body.current_thread.text, '*copyright*'),
@@ -118,17 +120,17 @@ source: |
     strings.ilike(body.current_thread.text, '*privileged*'),
     strings.ilike(body.current_thread.text, '*directive*'),
   )
-
+  
   // remove phrase from legitimate complaint
   and not regex.icontains(body.current_thread.text,
                           '(?:we are passing the notice below|content has been removed|removed from our website|notice of intended action|I have not granted|I am the original creator|content you reported has been removed|complaint will be carefully reviewed|provide a list of violations|document confirming your right to act)'
   )
-
+  
   // not copyright reports
   and not regex.icontains(body.current_thread.text,
                           '(?:confirmation|received).{0,100}copyright report'
   )
-
+  
   // verified dmca receiving/sending address
   and not any([recipients.cc, recipients.to, recipients.bcc],
               any(.,

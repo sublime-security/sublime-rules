@@ -10,6 +10,9 @@ source: |
     or strings.icontains(sender.display_name, "United States Postal Service")
     or regex.contains(body.html.display_text, 'USPS\s*\.\s*COM')
     or strings.icontains(body.current_thread.text, 'USPS Delivery Team')
+    or any(ml.nlu_classifier(body.current_thread.text).entities,
+           .name == "org" and .text =~ "USPS"
+    )
   )
   and length(body.links) > 0
   and 3 of (
@@ -22,7 +25,8 @@ source: |
                       "*update*",
                       '*delivery address*',
                       "*parcel allocation*",
-                      "*claim your parcel*"
+                      "*claim your parcel*",
+                      "*delivery details*"
         )
     ),
     strings.ilike(body.current_thread.text,
@@ -34,7 +38,8 @@ source: |
                   '*package details*',
                   '*sorry tolet*',
                   '*Due to an incorrect*',
-                  '*remain undeliverable*'
+                  '*remain undeliverable*',
+                  "*service updates*"
     ),
     // impersonal greeting
     any(ml.nlu_classifier(body.current_thread.text).entities,
@@ -59,6 +64,12 @@ source: |
       )
     ),
     any(body.links, regex.icontains(.href_url.url, 'https?://[0-9]{7,12}/.+')),
+    (
+      any(body.links,
+          strings.icontains(.display_url.domain.root_domain, 'usps')
+          and .mismatched
+      )
+    )
   )
   and (
     sender.email.domain.root_domain not in (
@@ -77,7 +88,7 @@ source: |
   )
   // negate newsletters
   and not (
-    length(body.links) > 20
+    length(filter(body.links, .visible == true)) > 20
     or any(ml.nlu_classifier(body.html.display_text).topics,
            .name == "Newsletters and Digests"
     )

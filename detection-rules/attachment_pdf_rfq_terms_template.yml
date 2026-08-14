@@ -1,0 +1,96 @@
+name: "Attachment: Duplicated header pages in fraudulent multi-page PDF Request for Quotation"
+description: "Detects inbound PDF attachments between 2-3 pages where the first three lines of the header text appear nearly identical (within a Levenshtein distance of 5) on multiple pages, combined with terminology commonly found in fraudulent Request for Quotation (RFQ) documents such as procurement language, payment conditions, and preference point systems. This pattern is consistent with fabricated or manipulated procurement documents used in BEC or fraud schemes."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and any(attachments,
+          .file_type == "pdf"
+          //
+          // This rule makes use of a beta feature and is subject to change without notice
+          // using the beta feature in custom rules is not suggested until it has been formally released
+          //
+          and 1 < beta.parse_exif(.).page_count <= 3
+          //
+          // This rule makes use of a beta feature and is subject to change without notice
+          // using the beta feature in custom rules is not suggested until it has been formally released
+          //
+          and beta.ocr(.).page_results[0].text != ""
+          // extract the first 3 lines from the first page
+          and any(regex.iextract(beta.ocr(.).page_results[0].text,
+                                 '^(?P<page_1_3_lines>(?:[^\r\n]+[\r\n]+){3})'
+                  ),
+                  // make sure we have something
+                  .named_groups["page_1_3_lines"] != ""
+                  // either page 2 or page 3 contain VERY close text
+                  // we have to do very close because sometimes the address format changes in trivial ways
+                  // like a comma is removed or something
+                  and (
+                    any(regex.iextract(beta.ocr(..).page_results[1].text,
+                                       '^(?P<page_2_3_lines>(?:[^\r\n]+[\r\n]+){3})'
+                        ),
+                        strings.levenshtein(.named_groups["page_2_3_lines"],
+                                            ..named_groups["page_1_3_lines"]
+                        ) <= 5
+                    )
+                    or any(regex.iextract(beta.ocr(..).page_results[2].text,
+                                          '^(?P<page_3_3_lines>(?:[^\r\n]+[\r\n]+){3})'
+                           ),
+                           strings.levenshtein(.named_groups["page_3_3_lines"],
+                                               ..named_groups["page_1_3_lines"]
+                           ) <= 5
+                    )
+                  )
+          )
+          and (
+            3 of (
+              strings.icontains(beta.ocr(.).text,
+                                "Contact Person",
+                                "Date of issue",
+                                "Date Issued",
+                                "Closing Time and Date",
+                                "Closing Date",
+                                "QUOTATIONS ARE HEREBY INVITED FOR THE SUPPLY OF",
+                                "COMPULSORY BIDDERS MUST QUOTE",
+                                "Method of RFQ Submission"
+              ),
+              strings.icontains(beta.ocr(.).text,
+                                "Must be inclusive",
+                                "Tax on Price Quotation",
+                                "100% payment made in the form",
+                                "Conditions for Release of Payment",
+                                "Period of Validity of Quotes",
+                                "Partial Bids",
+                                "PRICING QUOTATION",
+                                "Payment Terms and Conditions",
+                                "freight, insurance until acceptance"
+              ),
+              strings.icontains(beta.ocr(.).text,
+                                "80/20 preference point system",
+                                "80:20",
+                                "Selection of suppliers will be based on",
+                                "plant upgrade and maintenance",
+                                "plant maintenance",
+                                "without an Official Purchase Order",
+                                "If unable to quote"
+              ),
+              strings.icontains(beta.ocr(.).text,
+                                "remain binding upon me/us",
+                                "Authorized Signature",
+                                "Name and Capacity",
+                                "must be completed and accompanied by",
+                                "This is not a Purchase Order"
+              )
+            )
+          )
+  )
+attack_types:
+  - "BEC/Fraud"
+tactics_and_techniques:
+  - "PDF"
+  - "Social engineering"
+detection_methods:
+  - "Optical Character Recognition"
+  - "Content analysis"
+  - "File analysis"
+id: "947071ba-ae40-5ac2-b5cb-9d939dea268f"

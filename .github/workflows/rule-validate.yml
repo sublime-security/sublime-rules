@@ -246,6 +246,26 @@ jobs:
         run: |
           ! /bin/sh -c 'ls *.yml'
 
+      - name: Verify no rule files exist in sub-folders
+        if: github.event_name != 'issue_comment'
+        run: |
+          # The validation globs only match one level deep (`*-rules/*.yml`,
+          # `exclusions/*.yml` -- see the "Validate Rules" step). A rule placed in
+          # a sub-folder like `detection-rules/html_cred_link/html_cred_link.yml`
+          # silently slips past validation, MQL formatting, and rule-ID assignment.
+          # Catch that here with a helpful error. `insights` is exempt -- it nests
+          # into category sub-folders by design.
+          found=$(find *-rules exclusions -mindepth 2 -name '*.yml' 2>/dev/null)
+          if [[ -n "$found" ]]; then
+            echo "::error::Rule files must live directly in their top-level directory, not in a sub-folder."
+            while IFS= read -r f; do
+              suggested="${f%%/*}/$(basename "$f")"
+              echo "::error file=$f::'$f' is in a sub-folder and will be skipped by validation. Did you mean '$suggested'?"
+            done <<< "$found"
+            exit 1
+          fi
+          echo "No rule files found in sub-folders."
+
       - name: Commit & Push Results, if needed
         if: github.event_name != 'issue_comment'
         id: final_basic_validation
