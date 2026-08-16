@@ -18,7 +18,7 @@ type: "rule"
 severity: "high"
 source: |
   type.inbound
-
+  
   // message contains a pkpass attachment
   and any(attachments,
           (
@@ -27,10 +27,10 @@ source: |
             or .content_type =~ "application/pkpass"
           )
   )
-
+  
   // message contains links
   and length(body.links) > 0
-
+  
   // NLU detects credential theft intent or urgency
   and (
     any(ml.nlu_classifier(body.current_thread.text).intents,
@@ -40,10 +40,10 @@ source: |
            .name == "urgency"
     )
   )
-
+  
   // at least one suspicious signal in links or sender
   and 1 of (
-
+  
     // link resolves to or redirects through a suspicious TLD
     any(body.links,
         .href_url.domain.tld in $suspicious_tlds
@@ -51,12 +51,10 @@ source: |
                .domain.tld in $suspicious_tlds
         )
     ),
-
+  
     // link goes to a recently registered domain
-    any(body.links,
-        network.whois(.href_url.domain).days_old < 30
-    ),
-
+    any(body.links, network.whois(.href_url.domain).days_old < 30),
+  
     // sender domain does not match display name — lookalike indicator
     (
       length(headers.reply_to) > 0
@@ -64,18 +62,16 @@ source: |
               .email.domain.root_domain != sender.email.domain.root_domain
       )
     ),
-
+  
     // freemail sender — airlines and hotels do not send pkpass from Gmail etc.
     sender.email.domain.domain in $free_email_providers
-
   )
-
+  
   // negate highly trusted sender domains unless they fail DMARC
   and not (
     sender.email.domain.root_domain in $high_trust_sender_root_domains
     and coalesce(headers.auth_summary.dmarc.pass, false)
   )
-
 tags:
   - "Attack surface reduction"
 attack_types:
@@ -96,3 +92,4 @@ references:
   - "https://developer.apple.com/documentation/walletpasses"
   - "https://research.checkpoint.com/2026/travel-phishing-surging/"
   - "https://yanaivanov.com/analysis/pkpass_analysis.html"
+id: "3b9ce57f-796e-5d8c-985c-13099827b415"
