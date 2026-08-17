@@ -29,7 +29,7 @@ source: |
     or any(ml.nlu_classifier(body.current_thread.text).entities,
            .name == "org"
            and (
-             .text =~ "DHL" 
+             .text =~ "DHL"
              or .text =~ "DHL Express"
              or strings.istarts_with(.text, "DHL International")
            )
@@ -68,12 +68,7 @@ source: |
   )
   and (
     (
-      (
-        length(headers.references) > 0
-        or not any(headers.hops,
-                   any(.fields, strings.ilike(.name, "In-Reply-To"))
-        )
-      )
+      (length(headers.references) > 0 or headers.in_reply_to is null)
       and not (
         (
           strings.istarts_with(subject.subject, "RE:")
@@ -122,6 +117,10 @@ source: |
     'dhlgpi.com', // DHL Australia
     'dhlfreight-news.com'
   )
+  and not (
+    sender.email.domain.tld in ('dhl')
+    and coalesce(headers.auth_summary.dmarc.pass, false)
+  )
   and (
     profile.by_sender().prevalence in ("new", "outlier")
     or (
@@ -138,7 +137,6 @@ source: |
     )
     or sender.email.domain.root_domain not in $high_trust_sender_root_domains
   )
-
 attack_types:
   - "Credential Phishing"
 tactics_and_techniques:

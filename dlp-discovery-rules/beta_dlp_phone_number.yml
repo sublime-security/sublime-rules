@@ -1,0 +1,36 @@
+name: "beta.DLP: Phone Number"
+description: "Detects messages containing phone numbers."
+type: "dlp"
+severity: "low"
+source: |
+  type.outbound
+  and (
+    any(beta.ml_extract_sensitive_information(body.current_thread.text).elements,
+      .type == "phone_number" and .confidence in ("medium", "high")
+    )
+    or any(beta.ml_extract_sensitive_information(subject.subject).elements,
+      .type == "phone_number" and .confidence in ("medium", "high")
+    )
+    or any(attachments,
+    any(file.explode(.),
+      (
+        any(beta.ml_extract_sensitive_information(.scan.strings.raw).elements,
+          .type == "phone_number" and .confidence in ("medium", "high")
+        )
+        or any(beta.ml_extract_sensitive_information(.scan.ocr.raw).elements,
+          .type == "phone_number" and .confidence in ("medium", "high")
+        )
+      )
+    )
+  )
+  )
+tags:
+  - "PII"
+attack_types:
+  - "DLP: PII"
+detection_methods:
+  - "Content analysis"
+  - "Natural Language Understanding"
+  - "File analysis"
+  - "Optical Character Recognition"
+id: "fa5c33c7-0fe7-59cb-92bd-bdca985bbb57"

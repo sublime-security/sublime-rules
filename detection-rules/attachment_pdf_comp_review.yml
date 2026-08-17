@@ -5,12 +5,7 @@ severity: "high"
 source: |
   type.inbound
   and (
-    (
-      length(attachments) == 1
-      and any(attachments,
-              .content_type == "application/pdf" or .file_type == "pdf"
-      )
-    )
+    any(attachments, .content_type == "application/pdf" or .file_type == "pdf")
     and (
       // short or null message body
       (
@@ -41,13 +36,16 @@ source: |
                  strings.icontains(..file_name, .email.domain.sld)
                  and .email.domain.valid
           )
+          or regex.icontains(beta.parse_exif(.).title,
+                             'salary|pay(?:roll)|bonus|comp(?:ensation|liance|\b)|remuneration|disbursement|incentive|merit|vesting'
+          )
         )
         // add conditions for text and any QR code within the pdf attachment
         and (
           // conditions for QR code via text
           any(file.explode(.),
               any([.scan.strings.raw, .scan.ocr.raw],
-                  regex.icontains(., 'scan|camera')
+                  regex.icontains(., 'scan|camera|review and sign')
                   and regex.icontains(., '\bQR\b|Q\.R\.|barcode')
               )
           )
@@ -57,8 +55,8 @@ source: |
         )
         // conditions for text
         and any(file.explode(.),
-                // review/change terms in file content      
-                any([.scan.strings.raw, .scan.ocr.raw],
+                // review/change terms in file content
+                any([.scan.strings.raw, .scan.ocr.raw, .scan.exiftool.title],
                     (
                       regex.icontains(.,
                                       '\b(?:Remuneration Overview|Updated Compensation (?:Summary|Schedule|Details)|Access Your Statements?|Staff Performance Appraisal|Compensation Adjustment|performance appraisal|Appraisal Overview|appraisal and compensation|salary (?:increment|deduction))\b'

@@ -10,14 +10,20 @@ source: |
                     strings.parse_url(.raw).domain.root_domain == 'ppassets.com'
              )
   ) >= 2
-  and length(filter(body.links,
-                    .href_url.domain.domain == "links.paperlesspost.com"
-                    or (
-                      .href_url.domain.root_domain == "paperlesspost.com"
-                      and strings.istarts_with(.href_url.path, '/go/')
-                    )
-             )
-  ) < 2
+  and (
+    length(filter(body.links,
+                  .href_url.domain.domain == "links.paperlesspost.com"
+                  or (
+                    .href_url.domain.root_domain == "paperlesspost.com"
+                    and strings.istarts_with(.href_url.path, '/go/')
+                  )
+           )
+    ) < 2
+    or any(body.links,
+           regex.icontains(.display_text, '(?:view the card|view and reply)')
+           and .href_url.domain.root_domain != "paperlesspost.com"
+    )
+  )
   and not (
     (subject.is_forward or subject.is_reply)
     and (
@@ -29,6 +35,7 @@ source: |
     sender.email.domain.root_domain == "paperlesspost.com"
     and headers.auth_summary.dmarc.pass
   )
+
 attack_types:
   - "Credential Phishing"
   - "Malware/Ransomware"
