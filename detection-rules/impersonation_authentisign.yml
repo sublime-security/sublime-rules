@@ -1,0 +1,33 @@
+name: "Brand impersonation: AuthentiSign"
+description: "Detects messages impersonating AuthentiSign through display name, domain, subject, or body content that either originate from non-AuthentiSign or spoofed domains."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and strings.icontains(body.current_thread.text, "authentisign")
+  and (
+    regex.icontains(body.current_thread.text, 'signing (?:name|party)')
+    or strings.ilike(sender.display_name, '*authentisign*')
+    or strings.ilevenshtein(sender.display_name, 'authentisign') <= 1
+    or strings.ilike(sender.email.domain.domain, '*authentisign*')
+  )
+  and (
+    sender.email.domain.root_domain != "authentisign.com"
+    or (
+      sender.email.domain.root_domain == "authentisign.com"
+      and not (headers.auth_summary.spf.pass or headers.auth_summary.dmarc.pass)
+    )
+  )
+
+attack_types:
+  - "Credential Phishing"
+  - "BEC/Fraud"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Lookalike domain"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Header analysis"
+  - "Sender analysis"
+id: "445a8c8b-cd38-5161-bf56-2eab83419e24"

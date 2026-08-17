@@ -17,12 +17,22 @@ source: |
               (
                 .email.domain.root_domain in $free_email_providers
                 or .email.domain.tld in $suspicious_tlds
+                or (
+                  network.whois(.email.domain).days_old < 365
+                  and length(coalesce(body.html.raw, "")) == 0
+                )
               )
               and .email.email != sender.email.email
       )
     )
     or sender.email.domain.tld in $suspicious_tlds
-    or strings.iends_with(sender.email.domain.tld, ".jp")
+    or any(["jp", "jo"], strings.iends_with(sender.email.domain.tld, .))
+    or (
+      length(recipients.to) == 0
+      and any(headers.reply_to,
+              .email.domain.root_domain != sender.email.domain.root_domain
+      )
+    )
   )
   and (
     any(ml.nlu_classifier(body.current_thread.text).intents,
@@ -31,24 +41,19 @@ source: |
     or (
       length(body.current_thread.text) < 200
       and regex.icontains(body.current_thread.text,
-                          '(donation|inheritence|\$\d,\d{3}\,\d{3}|lottery)'
+                          '(?:donation|inheritence|\$\d,\d{3}\,\d{3}|lottery)'
       )
       and not regex.icontains(body.current_thread.text,
-                              '(closed.{0,50})?\$\d,\d{3}\,\d{3}.{0,100}(homes|realty|sale)?'
+                              '(?:closed.{0,50})?\$\d,\d{3}\,\d{3}.{0,100}(?:homes|realty|sale)?'
       )
       and not any(body.links,
                   regex.icontains(.href_url.url,
-                                  '(donation|inheritence|\$\d,\d{3}\,\d{3}|lottery)'
+                                  '(?:donation|inheritence|\$\d,\d{3}\,\d{3}|lottery)'
                   )
       )
       and (
         (
-          (
-            length(headers.references) > 0
-            or not any(headers.hops,
-                       any(.fields, strings.ilike(.name, "In-Reply-To"))
-            )
-          )
+          (length(headers.references) > 0 or headers.in_reply_to is null)
           and not (
             (
               strings.istarts_with(subject.subject, "RE:")

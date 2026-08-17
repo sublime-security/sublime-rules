@@ -5,22 +5,21 @@ severity: "medium"
 source: |
   type.inbound
   and length(attachments) == 0
+  and length(body.current_thread.text) < 1750
   
-  // Legitimate MicrosoftOnline sending infratructure
+  // Legitimate MicrosoftOnline sending infrastructure
   // or invites@microsoft.com abuse
   and (
     (
       sender.email.domain.root_domain in ('microsoftonline.com')
       or sender.email.email == "invites@microsoft.com"
     )
-    and (headers.auth_summary.spf.pass or headers.auth_summary.dmarc.pass)
   
     // Callback Phishing
     and (
       any(ml.nlu_classifier(body.current_thread.text).intents,
-          .name in ("callback_scam")
+          .name in ("callback_scam", "cred_theft")
           and .confidence in ("medium", "high")
-          and length(body.current_thread.text) < 1750
       )
       or 3 of (
         strings.ilike(body.current_thread.text, '*purchase*'),
@@ -38,12 +37,14 @@ source: |
         strings.ilike(body.current_thread.text, '*renew*'),
         strings.ilike(body.current_thread.text, '*refund*')
       )
+      or regex.count(body.current_thread.text, '[^\x00-\x7F]') > 20
     )
     // phone number regex
     and any([body.current_thread.text, subject.subject],
             regex.icontains(.,
                             '\+?([ilo0-9]{1}.)?\(?[ilo0-9]{3}?\)?.[ilo0-9]{3}.?[ilo0-9]{4}',
-                            '\+?([ilo0-9]{1,2})?\s?\(?\d{3}\)?[\s\.\-⋅]{0,5}[ilo0-9]{3}[\s\.\-⋅]{0,5}[ilo0-9]{4}'
+                            '\+?([ilo0-9]{1,2})?\s?\(?\d{3}\)?[\s\.\-⋅]{0,5}[ilo0-9]{3}[\s\.\-⋅]{0,5}[ilo0-9]{4}',
+                            '\(?[ilo0-9]{3}\)?[^ilo0-9]{0,3}\(?[ilo0-9]{3}\)?.?[ilo0-9]{4}'
             )
     )
   )
