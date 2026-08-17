@@ -1,0 +1,54 @@
+name: "Attachment: PDF proposal with credential theft indicators"
+description: "PDF attachment with 'proposal' in filename contains sender or recipient domain, credential theft language detected via OCR, and includes a single URL link."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and not (
+    (subject.is_reply or subject.is_forward)
+    and (length(headers.references) > 0 or headers.in_reply_to is not null)
+  )
+  // a single PDFs
+  and length(filter(attachments, .file_type == "pdf")) == 1
+  and any(attachments,
+          .file_type == "pdf"
+          and regex.icontains(.file_name, '(?:proposal|bid|document|rf[pq])\b')
+          and beta.parse_exif(.).page_count == 1
+          // OCR is cred_theft
+          and any(ml.nlu_classifier(beta.ocr(.).text).intents,
+                  .name == "cred_theft"
+          )
+          and length(beta.ocr(.).text) < 2000
+          and beta.ocr(.).success
+          // contains exactly one link on the root pdf
+          and any(file.explode(.),
+                  .depth == 0
+                  and length(.scan.url.urls) == 1
+                  and all(.scan.url.urls,
+                          .domain.root_domain not in (
+                            'iso.org',
+                            'w3.org',
+                            'bfo.com', // pdf producer
+                            'camscanner.com', // pdf producer
+                          )
+                          and not strings.istarts_with(.url, 'mailto')
+                  )
+          )
+  )
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and not (
+    sender.email.domain.root_domain in $high_trust_sender_root_domains
+    and coalesce(headers.auth_summary.dmarc.pass, false)
+  )
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "PDF"
+  - "Social engineering"
+  - "Evasion"
+detection_methods:
+  - "File analysis"
+  - "Natural Language Understanding"
+  - "Optical Character Recognition"
+  - "URL analysis"
+id: "364658e4-8a02-5632-a5ee-11bd869fb896"

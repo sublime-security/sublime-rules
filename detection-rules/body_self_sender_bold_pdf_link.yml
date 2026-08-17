@@ -1,0 +1,39 @@
+name: "Link: Self-sent PDF lure with subject correlation"
+description: "Detects messages sent from a user to themselves containing bold PDF links where the link text correlates with the subject line or sender domain, potentially indicating a compromised account or social engineering technique."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  // self sender
+  and (
+    length(recipients.to) == 1
+    and recipients.to[0].email.email == sender.email.email
+  )
+  // bold a tags ending in PDF
+  and any(html.xpath(body.html, '//a[./b]').nodes,
+          strings.iends_with(.display_text, ".pdf")
+          and (
+            // subject appears as the .pdf link
+            any(regex.extract(subject.base, '(?P<word>\w+)'),
+                strings.contains(..display_text, .named_groups["word"])
+            )
+            // OR sender domain appears as the pdf link
+            or strings.icontains(.display_text, sender.email.domain.sld)
+          )
+          // we should NOT match urls
+          and strings.parse_url(.display_text, strict=false).url is null
+          and not any(.links, strings.iends_with(.href_url.path, '.pdf'))
+  )
+
+attack_types:
+  - "BEC/Fraud"
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Social engineering"
+  - "Evasion"
+detection_methods:
+  - "Header analysis"
+  - "HTML analysis"
+  - "Sender analysis"
+  - "Content analysis"
+id: "a902702f-0e69-57dd-af81-08225218cffb"
