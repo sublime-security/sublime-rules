@@ -1,0 +1,41 @@
+name: "Service abuse: Adobe share containing newly observed email address domain"
+description: "Detects legitimate Adobe notification emails that contain a genuine Adobe-hosted document link alongside a mailto link with an external email address that is not the recipient, not part of the organization's domains, not associated with Adobe, and has never been observed in prior inbound or outbound mail. This pattern indicates abuse of Adobe's trusted email infrastructure to redirect victims into contacting an attacker-controlled address outside the normal mail flow."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  // from Adobe
+  and sender.email.email == 'message@adobe.com'
+  // the email address in the body
+  and any(filter(body.links,
+                 .href_url.scheme == 'mailto'
+                 // is not the recipient
+                 and .href_url.url !~ recipients.to[0].email.email
+                 // not in org domains
+                 and .href_url.domain.domain not in $org_domains
+                 // and not adobe
+                 and .href_url.domain.root_domain != "adobe.com"
+          ),
+          // and has not been observed inbound/outbound in the environment
+          .href_url.domain.domain not in $sender_domains
+          and .href_url.domain.domain not in $recipient_domains
+  )
+  // there is a single link to an adobe hosted content
+  and length(distinct(filter(body.links,
+                             .href_url.domain.root_domain == "adobe.com"
+                             and strings.istarts_with(.href_url.path, '/id/urn:')
+                      ),
+                      .href_url.url
+             )
+  ) == 1
+attack_types:
+  - "Credential Phishing"
+  - "BEC/Fraud"
+tactics_and_techniques:
+  - "Out of band pivot"
+  - "Social engineering"
+detection_methods:
+  - "URL analysis"
+  - "Sender analysis"
+  - "Content analysis"
+id: "35605b1f-f640-53ae-8dfb-59ecba1d0e09"

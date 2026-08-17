@@ -21,17 +21,26 @@ source: |
         or strings.istarts_with(body.current_thread.text, 'FedEx')
       )
     )
+    or 2 of (
+      strings.icontains(body.current_thread.text, "FedEx"),
+      strings.icontains(body.current_thread.text, "942 South Shady Grove Road"),
+      strings.icontains(body.current_thread.text, "3620 Hacks Cross Road"),
+      strings.icontains(body.current_thread.text, "Memphis, TN")
+    )
   )
-  and sender.email.domain.root_domain not in~ (
-    'fedex.com',
-    'fedexfreight.com', // added 2026-05-08
-    'cj.com', // CJ is a global affiliate marketing network
-    'sedex.com', // sedex.com is not affiliated with FedEx, but is an apparent FP
-    'myworkday.com',
-    'billtrust.com',
-    'flying-cargo.rs', // Serbian arm of Fedex (https://www.fedex.com/en-rs/customer-support.html)
-    'confirmit.com', // survey/market research company
-    'centercode.com' // survey company
+  and not (
+    sender.email.domain.root_domain in~ (
+      'fedex.com',
+      'fedexfreight.com', // added 2026-05-08
+      'cj.com', // CJ is a global affiliate marketing network
+      'sedex.com', // sedex.com is not affiliated with FedEx, but is an apparent FP
+      'myworkday.com',
+      'billtrust.com',
+      'flying-cargo.rs', // Serbian arm of Fedex (https://www.fedex.com/en-rs/customer-support.html)
+      'confirmit.com', // survey/market research company
+      'centercode.com' // survey company
+    )
+    and coalesce(headers.auth_summary.dmarc.pass, false)
   )
   and (
     not profile.by_sender().any_messages_benign
@@ -39,12 +48,9 @@ source: |
   )
   
   // negate highly trusted sender domains unless they fail DMARC authentication
-  and (
-    (
-      sender.email.domain.root_domain in $high_trust_sender_root_domains
-      and not headers.auth_summary.dmarc.pass
-    )
-    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  and not (
+    sender.email.domain.root_domain in $high_trust_sender_root_domains
+    and coalesce(headers.auth_summary.dmarc.pass, false)
   )
 
 attack_types:

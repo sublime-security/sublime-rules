@@ -1,12 +1,15 @@
 name: "Link: Suspicious wp-admin path from mismatched sender domain"
-description: "Detects inbound messages containing links that point to a WordPress admin path (single directory under /wp-admin/ with no subdirectories or file extensions) where the link domain does not match the sender's domain. This mismatch, combined with the use of a sensitive admin path, is indicative of malicious activity. Messages from high-trust senders and known web security services passing DMARC are excluded."
+description: "Detects inbound messages containing links to a WordPress /wp-admin/ path where the link domain does not match the sender's domain. Matches two patterns: a single directory under /wp-admin/ with no file extension, or a .php payload nested at least one subdirectory below /wp-admin/ (e.g. /wp-admin/foo/bar.php). Both are indicative of compromised WordPress sites being repurposed to host phishing pages; legitimate WP notification paths like/wp-admin/admin.php are excluded by the subdirectory requirement."
 type: "rule"
 severity: "medium"
 source: |
   type.inbound
-  // single file/directory under wp-admin which doesn't contain a .
+  // either a single dir under /wp-admin/ with no file extension or a .php payload nested at least one subdirectory below /wp-admin/
   and any(body.links,
-          regex.icontains(.href_url.path, '^/wp-admin/[^/\.]+/?$')
+          regex.icontains(.href_url.path,
+                          '^/wp-admin/[^/\.]+/?$',
+                          '/wp-admin/[^/]+/[^/]+\.php$'
+          )
           // domain is not the same as the sender domain
           and .href_url.domain.root_domain != sender.email.domain.root_domain
   )
