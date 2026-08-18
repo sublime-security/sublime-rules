@@ -1,0 +1,29 @@
+name: "Link: Observed URL pattern with specific domain registrar"
+description: "Detects messages using Element Email service infrastructure, identified by characteristic URL patterns with /f/ paths, unsubscribe links, single domain usage, and Cloudflare domain registration. This pattern indicates potential abuse of legitimate email marketing services."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  // Signs of Email Element use
+  // all links are the same domain
+  and length(distinct(body.current_thread.links, .href_url.domain.root_domain)) == 1
+  // all links contain the /f/
+  and all(body.current_thread.links,
+          regex.icontains(.href_url.path, '^/(?:unsubscribe/)?f/')
+  )
+  // there is an unsub link
+  and length(filter(body.current_thread.links,
+                    strings.icontains(.href_url.path, '/unsubscribe/f/')
+             )
+  ) == 1
+  // this actor uses CF for domain management
+  and network.whois(sender.email.domain).registrar_name == "Cloudflare, Inc."
+attack_types:
+  - "Spam"
+tactics_and_techniques:
+  - "Free email provider"
+detection_methods:
+  - "URL analysis"
+  - "Sender analysis"
+  - "Whois"
+id: "82ee7653-deb3-533a-941a-59d047be9b5c"

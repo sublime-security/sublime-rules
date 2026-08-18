@@ -5,6 +5,8 @@ from .constants import (
     AUTHOR_MEMBERSHIP_EXCLUSION_LABEL,
     BULK_PR_LABEL,
     LINK_ANALYSIS_EXCLUSION_LABEL,
+    SHARED_SAMPLES_AUTHOR_MEMBERSHIP_EXCLUSION_LABEL,
+    SHARED_SAMPLES_BULK_PR_LABEL,
     DEFAULT_COMMENT_TRIGGER,
 )
 
@@ -100,6 +102,26 @@ Once triggered, the rules will be synced on the next scheduled run (every 10 min
 This PR contains **{rule_count} rules**, which exceeds the maximum of **{max_rules} rules** allowed per PR for automatic syncing.
 
 This limit helps ensure the test-rules environment remains manageable. If you need to test these rules, consider:
+- Splitting the PR into smaller PRs with fewer rules
+- Contacting Detection Operations to request a manual sync
+"""
+    elif exclusion_type == SHARED_SAMPLES_AUTHOR_MEMBERSHIP_EXCLUSION_LABEL:
+        body = f"""{COMMENT_MARKER}
+### Shared Samples Sync - Action Required
+
+This PR was not automatically synced to shared-samples because the author is not a member of the `{org_name}` organization.
+
+**To enable syncing**, an organization member can comment `{comment_trigger}` on this PR.
+
+Once triggered, the rules will be synced on the next scheduled run (every 10 minutes).
+"""
+    elif exclusion_type == SHARED_SAMPLES_BULK_PR_LABEL:
+        body = f"""{COMMENT_MARKER}
+### Shared Samples Sync - Excluded
+
+This PR contains **{rule_count} rules**, which exceeds the maximum of **{max_rules} rules** allowed per PR for automatic syncing.
+
+This limit helps ensure the shared-samples environment remains manageable. If you need to test these rules, consider:
 - Splitting the PR into smaller PRs with fewer rules
 - Contacting Detection Operations to request a manual sync
 """

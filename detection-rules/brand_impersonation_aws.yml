@@ -13,10 +13,12 @@ source: |
         .name in ("Security and Authentication", "Secure Message")
         and .confidence == "high"
     )
-    or any(ml.nlu_classifier(beta.ocr(file.message_screenshot()).text).topics,
-           .name in ("Security and Authentication", "Secure Message")
-           and .confidence == "high"
-           and beta.ocr(file.message_screenshot()).text != ""
+    or (
+      beta.ocr(file.message_screenshot()).text != ""
+      and any(ml.nlu_classifier(beta.ocr(file.message_screenshot()).text).topics,
+              .name in ("Security and Authentication", "Secure Message")
+              and .confidence == "high"
+      )
     )
     or any(ml.nlu_classifier(body.current_thread.text).intents,
            .name == "cred_theft" and .confidence == "high"
@@ -34,6 +36,7 @@ source: |
       "amazonaws.com",
       "amazonses.com",
       "awsevents.com",
+      "awsmp-seller-conference.com",
       "aws-experience.com",
       "marketplace.aws",
       "aws.com",
@@ -56,7 +59,16 @@ source: |
     )
     or sender.email.domain.root_domain not in $high_trust_sender_root_domains
   )
-  and not profile.by_sender().solicited
+  // sender email specific
+  and not (
+    profile.by_sender_email().solicited
+    // sender domain specific
+    or (
+      profile.by_sender().solicited
+      // 30 day decay
+      and (profile.by_sender().days_since.last_contact < 30)
+    )
+  )
 
 attack_types:
   - "Credential Phishing"
