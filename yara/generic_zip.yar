@@ -62,3 +62,20 @@ rule zip_excel_dll {
 		)
 
 }
+
+rule zip_pklfh_cd_mismatch_fname {
+    meta:
+        author      = "kyle eaton"
+        date        = "2026-08-18"
+        description = "zip file with a mismatch file name between the local file header and the central directory entry"
+    strings:
+        $pklfh = { 50 4B 03 04 }
+        $pkcd  = { 50 4B 01 02 }
+    condition:
+        for any i in (1..100): (
+            uint16(@pklfh[i] + 26) < 100
+            and for any j in (1..uint16(@pklfh[i] + 26)): (
+                uint8(@pklfh[i] + 30 + j - 1) != uint8(@pkcd[i] + 46 + j - 1)
+            )
+        )
+}
