@@ -1,0 +1,44 @@
+name: "Service abuse: Demio notifications with suspicious content patterns"
+description: "Detects messages from Demio notifications service containing suspicious patterns including phone numbers, monetary amounts, suspicious domain references, explicit content lures, or lengthy action-oriented subjects designed to manipulate recipients."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  //
+  //  Warning: This rule contains sexually explicit keywords
+  //
+  and sender.email.email == 'notifications@demio.com'
+  and (
+    // phone number regex
+    regex.icontains(subject.base,
+                    '\+?(?:[ilo0-9]{1}.)?\(?[ilo0-9]{3}?\)?.[ilo0-9]{3}.?[ilo0-9]{4}',
+                    '\+?(?:[ilo0-9]{1,2})?\s?\(?\d{3}\)?[\s\.\-⋅]{0,5}[ilo0-9]{3}[\s\.\-⋅]{0,5}[ilo0-9]{4}'
+    )
+    // dollar amounts
+    or regex.icontains(subject.base, '(?:USD|\$)\s?\d')
+    or regex.icontains(subject.base, '\d+\.\d{2}\s?(?:USD|usd)')
+    // suspicious TLDs
+    or regex.icontains(subject.base,
+                       '\.(?:ac\.th|biz\.id|co\.(?:cl|id|za)|com\.(?:ge|py)|my\.id|ne\.jp|net\.ms|nom\.za|web\.id|accountants|am|app|ar|army|beauty|best|bet|bio|biz|bond|cam|cc|cf|cfd|chat|cl|click|cloud|club|cm|company|consulting|country|cricket|cyou|date|dev|digital|directory|domains|download|enterprises|es|expert|fashion|finance|fit|foo|free|fun|ga|gdn|gf|gq|gu|help|i2p|icu|il|ing|ink|ir|jetzt|kim|kz|lat|life|limited|link|live|loan|lol|ltd|ly|me|meme|men|ml|mom|monster|mov|mq|one|online|ooo|party|photos|pictures|pizza|press|pro|pub|pw|racing|re|ren|rest|review|ro|rsvp|ru|run|sale|sbs|science|shop|site|so|social|solutions|space|store|stream|su|sx|tech|tk|today|tokyo|top|trade|tt|ua|uno|us|vip|vu|wang|website|win|work|works|world|ws|xin|xyz|zip|zone)\b'
+    )
+    // dating/spam/explicit content lures
+    or regex.icontains(strings.replace_confusables(subject.base),
+                       '(?:\bs\s?e\s?x\b|horny|hook.?up|private room|wanna meet|wants to meet|naked|porn|webcam|nudes?|sexting|erotic|kinky|seduce|adult community|cam shows|local (?:girls?|women|single)|bed partner)'
+    )
+    // action verbs + length
+    or (
+      strings.count(subject.base, " ") > 8
+      and regex.icontains(strings.replace_confusables(subject.base),
+                          '(?:call|dial|speak to|contact \d|to (?:stop|void|reverse|confirm|secure|verify|unfreeze))'
+      )
+    )
+  )
+attack_types:
+  - "Spam"
+tactics_and_techniques:
+  - "Social engineering"
+  - "Impersonation: Brand"
+detection_methods:
+  - "Sender analysis"
+  - "Content analysis"
+id: "d9365c88-cfcd-5046-9285-ef620441940e"

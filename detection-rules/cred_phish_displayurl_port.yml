@@ -1,0 +1,37 @@
+name: "Link: Non-standard port 8443 in display URL"
+description: "Detects links containing port 8443 in the display URL, which may indicate suspicious redirect or hosting infrastructure."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and (
+    // no previous threads
+    length(body.previous_threads) == 0
+    // or is a fake thread
+    or (
+      (length(headers.references) == 0 or headers.in_reply_to is null)
+      and (
+        subject.is_reply
+        or subject.is_forward
+        or length(body.previous_threads) > 0
+      )
+    )
+  )
+  and any(body.links,
+          strings.contains(.display_url.url, ':8443')
+          and network.whois(.href_url.domain).days_old <= 365
+  )
+  
+  // Negate noreply-spamdigest senders
+  and not (
+    sender.email.email == "noreply-spamdigest@google.com"
+    and headers.auth_summary.dmarc.pass
+  )
+attack_types:
+  - "Credential Phishing"
+  - "Malware/Ransomware"
+tactics_and_techniques:
+  - "Evasion"
+detection_methods:
+  - "URL analysis"
+id: "11f23791-a006-5ab5-83eb-9ad816ed5b4a"
