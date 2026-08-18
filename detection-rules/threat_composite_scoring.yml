@@ -1,0 +1,157 @@
+name: "Acts of Violence: Composite violence threat scoring"
+description: "Flexible scoring system that combines base threats, targets, and multiple warning signs to catch various threat types."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and (
+    // Violence verbs
+    regex.icontains(body.current_thread.text,
+                    '\b(?:kill|murder|shoot|stab|hurt|harm|attack|assault|beat|destroy|eliminate|slaughter|slay|strangle|choke)\b'
+    )
+    // Or death/harm nouns
+    or regex.icontains(body.current_thread.text,
+                       '\b(?:death|dead|dying|die|blood|corpse|pain|suffering|torture)\b'
+    )
+    // Or weapons
+    or regex.icontains(body.current_thread.text,
+                       '\b(?:gun|rifle|pistol|firearm|knife|blade|weapon|bomb|explosive|acid)\b'
+    )
+  )
+  
+  // CONTEXT REQUIREMENT: Must reference targets/victims
+  and (
+    // Direct second-person
+    regex.icontains(body.current_thread.text, '\b(?:you|your|yours)\b')
+    // Group targets
+    or regex.icontains(body.current_thread.text,
+                       '\b(?:everyone|everybody|all of (?:you|them)|each one|every (?:single )?one)\b'
+    )
+    // Third person threats
+    or regex.icontains(body.current_thread.text, '\b(?:them|those|they|their)\b')
+  )
+  
+  // Must have 2 of the following severity indicators
+  and 2 of (
+    // Future intent showing planning
+    regex.icontains(body.current_thread.text,
+                    '(?:i|we)\s+(?:will|''ll|gonna|going to|am going to|shall|promise|swear)\s+(?:[^\r\n\x20]+\s+){0,5}(?:kill|hurt|shoot|attack|destroy|die)'
+    ),
+  
+    // Victim can't escape or hide
+    regex.icontains(body.current_thread.text,
+                    '(?:can''t|cannot|won''t|nowhere to)\s+(?:[^\r\n\x20]+\s+){0,5}(?:hide|run|escape|stop me|get away)'
+    ),
+  
+    // Knows victim's location
+    regex.icontains(body.current_thread.text,
+                    '(?:i|we)\s+(?:know|found|have|got)\s+(?:[^\r\n\x20]+\s+){0,5}(?:where|address|location|you live|you work|you go)'
+    ),
+  
+    // Has or will get a weapon
+    (
+      regex.icontains(body.current_thread.text,
+                      '\b(?:gun|rifle|knife|weapon|bomb)\b'
+      )
+      and regex.icontains(body.current_thread.text,
+                          '(?:have|got|get|bring|use|take|carry|my|the)'
+      )
+    ),
+  
+    // Threat is imminent
+    regex.icontains(body.current_thread.text,
+                    '\b(?:today|tonight|tomorrow|now|soon|coming|on my way|be there)\b'
+    ),
+  
+    // Wants public attention for the violence
+    regex.icontains(body.current_thread.text,
+                    '(?:on the|in the|make the)\s+(?:[^\r\n\x20]+\s+){0,5}(?:news|headlines|television|tv|media|cnn|broadcast)'
+    ),
+  
+    // Motivated by revenge
+    (
+      regex.icontains(body.current_thread.text,
+                      '\b(?:pay|regret|sorry|revenge|payback)\b'
+      )
+      and regex.icontains(body.current_thread.text,
+                          '(?:you|they)\s+(?:will|gonna|are going to)'
+      )
+    ),
+  
+    // Describes specific body parts to target
+    regex.icontains(body.current_thread.text,
+                    '(?:in|at|on|through)\s+(?:the|your|their)\s+(?:head|face|throat|neck|chest|back|eyes|skull|body)'
+    ),
+  
+    // Threatens multiple people
+    regex.icontains(body.current_thread.text,
+                    '(?:all|every|each)\s+(?:[^\r\n\x20]+\s+){0,5}(?:of you|one|student|person|worker)'
+    ),
+  
+    // Stalking or hunting behavior
+    regex.icontains(body.current_thread.text,
+                    '\b(?:find|hunt|track|chase|follow|locate|watch|stalk)\s+(?:[^\r\n\x20]+\s+){0,5}(?:you|them)\b'
+    ),
+  
+    // Shouting violence words in all caps
+    regex.contains(body.current_thread.text,
+                   '(?:DIE|KILL|DEATH|MURDER|SHOOT|HURT|DEAD)'
+    ),
+  
+    // Makes a promise or oath to commit violence
+    (
+      regex.icontains(body.current_thread.text,
+                      '\b(?:promise|swear|vow|guarantee|oath)\b'
+      )
+      and regex.icontains(body.current_thread.text,
+                          '(?:kill|murder|shoot|stab|hurt|harm|attack|assault|beat|destroy|eliminate|slaughter|slay|strangle|choke)'
+      )
+    ),
+  
+    // Repeats violence words obsessively
+    regex.icontains(body.current_thread.text,
+                    '(?:die|kill|dead|hurt)\s+(?:[^\r\n\x20]+\s+){0,5}(?:die|kill|dead|hurt)'
+    ),
+  
+    // Targets a specific institution or workplace
+    regex.icontains(body.current_thread.text,
+                    '(?:at|to|in)\s+(?:the|your|their)?\s*(?:school|university|college|work|office|workplace|building|campus)'
+    ),
+  
+    // Shares victim's contact info or address
+    (
+      regex.contains(body.current_thread.text, '\d{3}[\s\-\.]\d{3}[\s\-\.]\d{4}')
+      or regex.contains(body.current_thread.text,
+                        '[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}'
+      )
+      or regex.icontains(body.current_thread.text,
+                         '\d+\s+\w+\s+(?:st|street|ave|avenue|rd|road)'
+      )
+    ),
+  
+    // Uses profanity with violence threats
+    regex.icontains(body.current_thread.text,
+                    '\b(?:fucking|goddamn|motherfucking)\s+(?:[^\r\n\x20]+\s+){0,5}(?:kill|hurt|destroy|dead|die)'
+    )
+  )
+  and length(body.current_thread.text) > 50
+  and length(body.current_thread.text) < 10000
+  and any(ml.nlu_classifier(body.current_thread.text).topics,
+          .name == "Acts of Violence" and .confidence == "high"
+  )
+  
+  // Negate benign contexts
+  and not any(ml.nlu_classifier(body.current_thread.text).topics,
+              .name in (
+                "News and Current Events",
+                "Newsletters and Digests",
+                "Entertainment and Sports"
+              )
+              and .confidence == "high"
+  )
+  // Negate bulk/marketing emails with unsubscribe links
+  and not any(body.links,
+              strings.icontains(.display_text, "unsubscribe")
+              or strings.icontains(.href_url.url, "unsubscribe")
+  )
+id: "d766b6b1-9da5-5de2-a921-d5486052427c"
