@@ -1,5 +1,5 @@
 name: "Attachment: SVG files with evasion elements"
-description: "This rule identifies incoming SVG vector graphics files containing specific patterns: circle elements combined with either embedded images, QR codes, or filenames that match recipient information. Limited to three attachments and validates sender authenticity. SVG circle elements have been used to obfuscate QR codes and bypass automated QR code scanning methods."
+description: "This rule identifies incoming SVG vector graphics files containing specific patterns: circle elements combined with either embedded images, hyperlinks, QR codes, or filenames that match recipient information. Limited to three attachments. SVG circle elements have been used to obfuscate QR codes and bypass automated QR code scanning methods."
 type: "rule"
 severity: "high"
 source: |
@@ -14,7 +14,7 @@ source: |
           and any(file.explode(.),
                   any(.scan.xml.tags, . == "circle")
                   and 1 of (
-                    any(.scan.xml.tags, . == "image"),
+                    any(.scan.xml.tags, . in ("image", "a")),
                     .scan.qr.data is not null,
                     any(recipients.to,
                         strings.icontains(..file_name, .email.local_part)
@@ -25,8 +25,6 @@ source: |
                   )
           )
   )
-  and not profile.by_sender_email().any_messages_benign
-  and not profile.by_sender_email().solicited
 tags:
  - "Attack surface reduction"
 attack_types:

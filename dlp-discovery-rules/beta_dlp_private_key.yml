@@ -1,0 +1,36 @@
+name: "beta.DLP: Private Key"
+description: "Detects messages containing private keys."
+type: "dlp"
+severity: "high"
+source: |
+  type.outbound
+  and (
+    any(beta.ml_extract_sensitive_information(body.current_thread.text).elements,
+      .type == "private_key" and .confidence in ("medium", "high")
+    )
+    or any(beta.ml_extract_sensitive_information(subject.subject).elements,
+      .type == "private_key" and .confidence in ("medium", "high")
+    )
+    or any(attachments,
+      any(file.explode(.),
+        (
+          any(beta.ml_extract_sensitive_information(.scan.strings.raw).elements,
+            .type == "private_key" and .confidence in ("medium", "high")
+          )
+          or any(beta.ml_extract_sensitive_information(.scan.ocr.raw).elements,
+            .type == "private_key" and .confidence in ("medium", "high")
+          )
+        )
+      )
+    )
+  )
+tags:
+  - "Credentials"
+attack_types:
+  - "DLP: Credential Exposure"
+detection_methods:
+  - "Content analysis"
+  - "Natural Language Understanding"
+  - "File analysis"
+  - "Optical Character Recognition"
+id: "38eeb33e-2774-5a93-a195-6c806ccb31ef"
