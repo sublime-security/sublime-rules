@@ -24,7 +24,11 @@ source: |
     or strings.ilevenshtein(sender.display_name, 'amazon marketplace') <= 1
     or strings.ilevenshtein(sender.display_name, 'amazon customer support') <= 1
     or regex.icontains(sender.display_name,
-                       "prime (subscription|notification|support)"
+                       "prime (?:subscription|notification|support)"
+    )
+    or regex.imatch(sender.display_name,
+                    '^(?:amazon\s)?prime (?:deals?|store)$',
+                    'amazon'
     )
     or any(regex.iextract(sender.display_name,
                           '\b((?:[a-zA-Z0-9][-a-zA-Z0-9]*\.)+[a-zA-Z]{2,})\b'
@@ -32,6 +36,11 @@ source: |
            any(.groups, strings.parse_domain(.).sld == "amazon")
     )
     or strings.ilike(subject.subject, "*prime membership*")
+    // prime subscription id ##
+    or (
+      strings.icontains(subject.base, "prime")
+      and regex.icontains(body.current_thread.text, 'subscription\s+id\s?.\s\w+')
+    )
     or (
       strings.ilevenshtein(sender.display_name, 'amazon') <= 1
       and sender.email.domain.root_domain in $free_email_providers
@@ -40,7 +49,7 @@ source: |
       any(ml.nlu_classifier(body.current_thread.text).intents,
           .name == "cred_theft" and .confidence == "high"
       )
-      and any(beta.ml_topic(body.current_thread.text).topics,
+      and any(ml.nlu_classifier(body.current_thread.text).topics,
               .name in (
                 "Security and Authentication",
                 "Secure Message",
@@ -70,7 +79,6 @@ source: |
     'amazonsellerservices.com',
     'amazon.ae',
     'amazon.sa',
-    'amazon.com.be',
     'amazon.com.sg',
     'amazon.co.uk',
     'amazon.co.jp',
@@ -104,11 +112,13 @@ source: |
     'amazonconnect.com',
     'aws-experience.com',
     'proofpointessentials.com',
-    'area1security.com'
+    'area1security.com',
+    'marketplace.aws',
+    'quicksight.aws'
   )
   
   // negate amazon.com.be explicitly, this cannot be part of the root_domain set above as it uses the PSL (Public suffix list) for parsing and com.be is owned by amazon directly.
-  and sender.email.domain.domain not in~ ('amazon.com.be', )
+  and sender.email.domain.domain not in~ ('amazon.com.be')
   and sender.email.email not in $recipient_emails
   and sender.email.domain.domain not in $org_domains
   
