@@ -1,0 +1,41 @@
+name: "beta.DLP: New Zealand Bank Account"
+description: "Detects messages containing New Zealand bank account numbers."
+type: "dlp"
+severity: "high"
+attack_types:
+  - "DLP: Financial Data"
+tags:
+  - "Financial data"
+  - "NZ Privacy Act"
+source: |
+  //
+  // This rule makes use of a beta feature and is subject to change without notice
+  // using the beta feature in custom rules is not suggested until it has been formally released
+  //
+  type.outbound
+  and (
+    any(beta.ml_extract_sensitive_information(body.current_thread.text).elements,
+      .type == "nz_bank_account" and .confidence in ("medium", "high")
+    )
+    or any(beta.ml_extract_sensitive_information(subject.subject).elements,
+      .type == "nz_bank_account" and .confidence in ("medium", "high")
+    )
+    or any(attachments,
+      any(file.explode(.),
+        (
+          any(beta.ml_extract_sensitive_information(.scan.strings.raw).elements,
+            .type == "nz_bank_account" and .confidence in ("medium", "high")
+          )
+          or any(beta.ml_extract_sensitive_information(.scan.ocr.raw).elements,
+            .type == "nz_bank_account" and .confidence in ("medium", "high")
+          )
+        )
+      )
+    )
+  )
+detection_methods:
+  - "Content analysis"
+  - "Natural Language Understanding"
+  - "File analysis"
+  - "Optical Character Recognition"
+id: "4792b1e9-c23a-5933-a163-df7f501845a5"

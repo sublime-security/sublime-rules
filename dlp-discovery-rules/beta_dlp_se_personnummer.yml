@@ -1,0 +1,42 @@
+name: "beta.DLP: Sweden Personnummer / Tax ID"
+description: "Detects messages containing Swedish personal identity numbers (personnummer) or tax identification numbers."
+type: "dlp"
+severity: "high"
+attack_types:
+  - "DLP: Personal Data"
+tags:
+  - "Personal data"
+  - "GDPR"
+  - "Sweden"
+source: |
+  //
+  // This rule makes use of a beta feature and is subject to change without notice
+  // using the beta feature in custom rules is not suggested until it has been formally released
+  //
+  type.outbound
+  and (
+    any(beta.ml_extract_sensitive_information(body.current_thread.text).elements,
+      .type == "se_personnummer" and .confidence in ("medium", "high")
+    )
+    or any(beta.ml_extract_sensitive_information(subject.subject).elements,
+      .type == "se_personnummer" and .confidence in ("medium", "high")
+    )
+    or any(attachments,
+      any(file.explode(.),
+        (
+          any(beta.ml_extract_sensitive_information(.scan.strings.raw).elements,
+            .type == "se_personnummer" and .confidence in ("medium", "high")
+          )
+          or any(beta.ml_extract_sensitive_information(.scan.ocr.raw).elements,
+            .type == "se_personnummer" and .confidence in ("medium", "high")
+          )
+        )
+      )
+    )
+  )
+detection_methods:
+  - "Content analysis"
+  - "Natural Language Understanding"
+  - "File analysis"
+  - "Optical Character Recognition"
+id: "cfb2f95a-e4ec-5c1e-9de0-775a62904e1b"
