@@ -1,0 +1,34 @@
+name: "Spam: Unsolicited B2B job outreach"
+description: "Flags single-recipient messages claiming someone asked the sender to reach out or referencing an open role or task, where the body is classified as B2B cold outreach with medium or high confidence. Excludes senders the recipient has previously solicited and excludes highly trusted sender domains that pass DMARC authentication."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  // direct outreach to sender
+  and length(recipients.to) == 1
+  // subject about a task or role
+  and regex.icontains(subject.base,
+                    '[a-zA-Z]{2,10}\s+asked me to reach out',
+                    '[Oo]pen.{0,10}role.{0,30}potential.{0,10}fit'
+    )
+  and any(ml.nlu_classifier(body.current_thread.text).topics,
+          .name == "B2B Cold Outreach" and .confidence != "low"
+  )
+  // not someone they have reached out to before
+  and not profile.by_sender().solicited
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and not (
+    sender.email.domain.root_domain in $high_trust_sender_root_domains
+    and coalesce(headers.auth_summary.dmarc.pass, false)
+  )
+attack_types:
+  - "Spam"
+tactics_and_techniques:
+  - "Social engineering"
+  - "Impersonation: Brand"
+  - "Lookalike domain"
+detection_methods:
+  - "Content analysis"
+  - "Natural Language Understanding"
+  - "Sender analysis"
+  - "Header analysis"
