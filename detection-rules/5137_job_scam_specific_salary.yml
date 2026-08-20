@@ -1,0 +1,93 @@
+name: "Job scam with specific salary pattern"
+description: "Detects job scam content that includes specific weekly salary mentions (e.g., '$XXX weekly' patterns) in either the current email thread or previous thread conversations, while excluding legitimate income verification services."
+type: "rule"
+severity: "low"
+source: |
+  type.inbound
+  and (
+    (
+      // job scam in current thread
+      any(ml.nlu_classifier(body.current_thread.text).intents,
+          .name in ("job_scam") and .confidence != "low"
+      )
+      // and salary mention in current thread
+      and regex.icontains(body.current_thread.text,
+                          '\$\d{3} weekly',
+                          'week \$\d{3}',
+                          'weekly(?:\s+\w+){0,4}\s+\$\d{3}[^\d]'
+      )
+    )
+    // job scam in previous thread
+    or any(body.previous_threads,
+           any(ml.nlu_classifier(.text).intents,
+               .name in ("job_scam") and .confidence != "low"
+           )
+           // and salary mention in previous thread
+           and regex.icontains(.text,
+                               '\$\d{3} weekly',
+                               'week \$\d{3}',
+                               'weekly(?:\s+\w+){0,4}\s+\$\d{3}[^\d]'
+           )
+    )
+    // job scam lure delivered as a PDF with an empty email body
+    or (
+      length(body.current_thread.text) == 0
+      and any(filter(attachments, .file_type == "pdf"),
+              any(file.explode(.),
+                  // specific weekly salary pattern in the OCR
+                  regex.icontains(.scan.ocr.raw,
+                                  '\$\d{3} week',
+                                  'week \$\d{3}',
+                                  'weekly(?:\s+\w+){0,4}\s+\$\d{3}[^\d]'
+                  )
+                  and regex.icontains(.scan.ocr.raw,
+                                      'fully remote',
+                                      'remote\b[\s-]*(?:work|position|role|job|employee|worker|assistant|opportunit)',
+                                      'remotely',
+                                      'work[\s-]?from[\s-]?home',
+                                      'equal opportunity employer',
+                                      'how to apply',
+                                      'submit (?:your )?application',
+                                      'remote\b[\s-]*(?:work|position|role|job|employee|worker|assistant|opportunit)',
+                                      'remotely',
+                                      'work[\s-]?from[\s-]?home',
+                                      'equal opportunity employer',
+                                      'how to apply',
+                                      'submit (?:your )?application',
+                                      'open to all (?:majors|backgrounds|students)',
+                                      'employment opportunity',
+                                      '\bhiring\b'
+                  )
+              )
+      )
+    )
+  )
+  and length(body.current_thread.links) < 10
+  
+  // negating income / job verification senders
+  and not (
+    sender.email.domain.root_domain in (
+      'loandepot.com',
+      'sofi.com',
+      'lensa.com',
+      'indeed.com',
+      'ziprecruiter.com',
+      'glassdoor.com',
+      'postjobfree.com',
+      'jobplacements.com'
+    )
+    and headers.auth_summary.dmarc.pass
+  )
+attack_types:
+  - "BEC/Fraud"
+tactics_and_techniques:
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Natural Language Understanding"
+  - "Header analysis"
+  - "Sender analysis"
+id: "b4da5290-cd2b-5f90-b10b-a6e6f9b5ac3d"
+og_id: "af7f9e21-54a1-5bba-a70d-e4d52a13eae3"
+testing_pr: 5137
+testing_sha: 1ffe4c399531dd276cb6af79c1cfe76c20b7222f
