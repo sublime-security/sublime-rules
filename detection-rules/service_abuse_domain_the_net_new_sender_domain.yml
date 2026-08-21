@@ -1,0 +1,26 @@
+name: "Service abuse: Newly registered domain from dtnt.info (Domain the Net)"
+description: "Detects inbound messages where the sender's domain was registered within the last 365 days and uses exactly three name servers, with subdomains starting with 'ns' under dtnt.info (Domain the Net). This pattern has been observed in both spam & malicious campaigns."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  
+  // newly registered sender domain
+  and network.whois(sender.email.domain).days_old < 365
+  
+  // there are 3 name servers which have subdomains containing .ns
+  and length(network.whois(sender.email.domain).name_servers) == 3
+  and all(network.whois(sender.email.domain).name_servers,
+          strings.istarts_with(.subdomain, 'ns') and .root_domain == 'dtnt.info'
+  )
+attack_types:
+  - "Spam"
+  - "Credential Phishing"
+  - "BEC/Fraud"
+tactics_and_techniques:
+  - "Evasion"
+  - "Social engineering"
+detection_methods:
+  - "Whois"
+  - "Sender analysis"
+id: "23cc8de2-1c76-50d9-9ec0-11d4acb004e0"
