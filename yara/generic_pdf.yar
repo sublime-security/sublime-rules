@@ -633,7 +633,7 @@ rule pdf_blue_confidential_fax_lure {
 rule pdf_doubloon_dredger_template_1 {
     meta:
         author      = "kyle eaton"
-        date        = "2026-08-20"
+        date        = "2026-08-21"
         description = "PDF matching known DOUBLOON DREDGER template"
     strings:
         $header   = { 25 50 44 46 2D }
