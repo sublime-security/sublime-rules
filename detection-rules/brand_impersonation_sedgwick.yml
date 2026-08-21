@@ -1,0 +1,32 @@
+name: "Brand impersonation: Sedgwick Claims"
+description: "Detects inbound messages that impersonate Sedgwick Claims Management Services, either through a display name containing 'Sedgwick Claim' or through NLU classification identifying Sedgwick as an organization entity alongside high-confidence financial communication topics. Legitimate messages from verified Sedgwick domains (sedgwick.com or sedgwickcms.com) that pass DMARC authentication are excluded."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and (
+    strings.icontains(sender.display_name, "Sedgwick Claim")
+    or (
+      any(ml.nlu_classifier(body.current_thread.text).entities,
+          .name == "org" and .text == "Sedgwick"
+      )
+      and any(ml.nlu_classifier(body.current_thread.text).topics,
+              .name == "Financial Communications" and .confidence == "high"
+      )
+    )
+  )
+  and not (
+    sender.email.domain.root_domain in~ ("sedgwick.com", "sedgwickcms.com")
+    and coalesce(headers.auth_summary.dmarc.pass, false)
+  )
+attack_types:
+  - "BEC/Fraud"
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Spoofing"
+  - "Social engineering"
+detection_methods:
+  - "Natural Language Understanding"
+  - "Sender analysis"
+  - "Header analysis"
