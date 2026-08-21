@@ -1,0 +1,44 @@
+name: "Brand impersonation: Verizon"
+description: "Detects inbound messages impersonating Verizon by matching sender display names, copyright footers, or combinations of brand-specific text such as company name and address, while excluding legitimate messages that pass DMARC authentication from verified Verizon domains and filtering out promotional content identified through NLU classification."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and (
+    strings.icontains(sender.display_name, "Verizon")
+    or regex.icontains(body.current_thread.text, '©\s*20[0-9]{2}\s*Verizon')
+    or 2 of (
+      strings.icontains(body.current_thread.text, "Verizon"),
+      strings.icontains(body.current_thread.text, "One Verizon Way"),
+      strings.icontains(body.current_thread.text, "Basking Ridge, NJ")
+    )
+  )
+  and not any(ml.nlu_classifier(body.current_thread.text).topics,
+              .name == "Advertising and Promotions" and .confidence != "low"
+  )
+  and not (
+    sender.email.domain.root_domain in (
+      "verizon.com",
+      "verizon.net",
+      "verizonwireless.com",
+      "verizonenterprise.com",
+      "verizonfinancialservices.com"
+    )
+    and coalesce(headers.auth_summary.dmarc.pass, false)
+  )
+attack_types:
+  - "Credential Phishing"
+  - "BEC/Fraud"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Spoofing"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Sender analysis"
+  - "Header analysis"
+  - "Natural Language Understanding"
+id: "0ceed5db-9f51-5012-bd18-cafac71217bd"
+og_id: "be03f523-4e86-5a85-8c01-4ba82fdb6e55"
+testing_pr: 5153
+testing_sha: d5d9991e0e3a1b578f5bfc8b02d2597a5d76d5f2
