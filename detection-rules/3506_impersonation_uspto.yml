@@ -1,7 +1,7 @@
 name: "PR# 3506 - Brand impersonation: United States Patent and Trademark Office"
 description: "Detects messages impersonating the United States Patent and Trademark Office (USPTO) using display name variations, confusable characters, or USPTO-related terminology in the sender or subject."
 type: "rule"
-severity: "high"
+severity: "medium"
 source: |
   type.inbound
   and (
@@ -27,7 +27,10 @@ source: |
   and length(body.links) >= 1
   
   // Not from a .gov domain
-  and not (sender.email.domain.tld == "gov" and headers.auth_summary.dmarc.pass)
+  and not (
+    sender.email.domain.tld == "gov"
+    and coalesce(headers.auth_summary.dmarc.pass, false)
+  )
   
   // Additional suspicious indicator
   and (
@@ -61,7 +64,11 @@ source: |
               and .confidence == "high"
   )
   // not a forward or reply
-  and (headers.in_reply_to is null or length(headers.references) == 0)
+  and not (
+    (length(headers.references) > 0 or headers.in_reply_to is not null)
+    and (subject.is_forward or subject.is_reply)
+    and length(body.previous_threads) >= 1
+  )
   and (
     not profile.by_sender().solicited
     or (
@@ -73,7 +80,6 @@ source: |
     sender.email.domain.root_domain in $high_trust_sender_root_domains
     and coalesce(headers.auth_summary.dmarc.pass, false)
   )
-
 attack_types:
   - "BEC/Fraud"
 tactics_and_techniques:
