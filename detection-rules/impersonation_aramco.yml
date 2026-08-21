@@ -24,19 +24,25 @@ source: |
               .name == "urgency"
       )
     )
+    or any(ml.nlu_classifier(body.current_thread.text).intents,
+           .name == "advance_fee" and .confidence != "low"
+    )
     or regex.icount(body.current_thread.text, "vendor|supplier") > 3
     or any(headers.reply_to, .email.domain.root_domain in $free_email_providers)
     or network.whois(sender.email.domain).days_old <= 90
     or any(headers.reply_to, network.whois(.email.domain).days_old < 90)
   )
   // Aramco domain negations
-  and sender.email.domain.root_domain not in~ (
-    'aramco.com',
-    'aramcoamericas.com',
-    'aramcoventures.com',
-    'aramcoworld.com',
-    'aramcodigital.com',
-    'aramcoeurope.com'
+  and not (
+    sender.email.domain.root_domain in~ (
+      'aramco.com',
+      'aramcoamericas.com',
+      'aramcoventures.com',
+      'aramcoworld.com',
+      'aramcodigital.com',
+      'aramcoeurope.com'
+    )
+    and coalesce(headers.auth_summary.dmarc.pass, false)
   )
   // negate emails sent by the Aston Martin Aramco F1 Team
   and sender.email.domain.root_domain != "astonmartinf1.com"
@@ -44,12 +50,9 @@ source: |
   and not regex.icontains(subject.subject, 'Formula (?:One|1)', '\bF1\b')
   
   // negate highly trusted sender domains unless they fail DMARC authentication
-  and (
-    (
-      sender.email.domain.root_domain in $high_trust_sender_root_domains
-      and not headers.auth_summary.dmarc.pass
-    )
-    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  and not (
+    sender.email.domain.root_domain in $high_trust_sender_root_domains
+    and coalesce(headers.auth_summary.dmarc.pass, false)
   )
 attack_types:
   - "BEC/Fraud"
