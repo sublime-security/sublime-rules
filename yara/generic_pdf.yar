@@ -629,3 +629,20 @@ rule pdf_blue_confidential_fax_lure {
 		$header at 0
 		and $rect
 }
+
+rule pdf_dubloon_dredger_template_1 {
+    meta:
+        author      = "kyle eaton"
+        date        = "2026-08-20"
+        description = "PDF matching known DUBLOON DREDGER template"
+    strings:
+        $header   = { 25 50 44 46 2D }
+        $obj_2    = { 32 20 30 20 6F 62 6A 0A 3C 3C 0A 2F 54 79 70 65 20 2F 43 61 74 61 6C 6F 67 0A 2F 50 61 67 65 73 20 34 20 30 20 52 0A 2F 56 69 65 77 65 72 50 72 65 66 65 72 65 6E 63 65 73 20 35 20 30 20 52 0A 2F 41 63 72 6F 46 6F 72 6D 20 36 20 30 20 52 0A 2F 56 65 72 73 69 6F 6E 20 2F 31 23 32 45 35 0A 3E 3E 0A 65 6E 64 6F 62 6A }
+        $stream_1 = { 3C 3C 0A 2F 46 69 6C 74 65 72 20 2F 46 6C 61 74 65 44 65 63 6F 64 65 0A 2F 4C 65 6E 67 74 68 20 33 30 35 0A 3E 3E }
+        $stream_2 = { 6F 62 6A 0A 3C 3C 0A 2F 46 69 6C 74 65 72 20 2F 46 6C 61 74 65 44 65 63 6F 64 65 0A 2F 4C 65 6E 67 74 68 20 33 32 34 0A 3E 3E 0A 73 74 72 65 61 6D }
+    condition:
+        $header at 0
+        and $obj_2
+        and $stream_1
+        and $stream_2
+}
