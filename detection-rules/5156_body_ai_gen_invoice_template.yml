@@ -1,0 +1,38 @@
+name: "PR# 5156 - Body: AI-generated invoice template artifacts"
+description: "Flags inbound messages where NLU classification of the thread text indicates medium or high confidence credential theft or BEC intent, and the message HTML contains comment artifacts characteristic of AI-generated invoice/billing templates (e.g. 'PDF icon', 'File row', 'Billing Table', 'CTA Button'). Messages from highly trusted sender domains are excluded unless they fail DMARC authentication."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and any(ml.nlu_classifier(body.current_thread.text).intents,
+          .name in ("cred_theft", "bec") and .confidence in ("medium", "high")
+  )
+  // templated ai-generated comments
+  and any(html.xpath(body.html, '//comment()').nodes,
+          regex.icontains(.raw,
+                          'PDF icon|File row|Status \+ Reference|Billing Table|Invoice Info|CTA Button'
+          )
+  )
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and not (
+    sender.email.domain.root_domain in $high_trust_sender_root_domains
+    and coalesce(headers.auth_summary.dmarc.pass, false)
+  )
+attack_types:
+  - "Credential Phishing"
+  - "BEC/Fraud"
+tactics_and_techniques:
+  - "Social engineering"
+  - "Spoofing"
+detection_methods:
+  - "Natural Language Understanding"
+  - "HTML analysis"
+  - "Header analysis"
+  - "Sender analysis"
+id: "0dfd628d-c8db-54dc-8cc2-4a94c8fd94d1"
+tags:
+  - created_from_open_prs
+  - rule_status_added
+  - pr_author_IndiaAce
+references:
+  - https://github.com/sublime-security/sublime-rules/pull/5156
