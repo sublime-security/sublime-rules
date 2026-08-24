@@ -18,16 +18,34 @@ source: |
               strings.icontains(.raw, 'sam%20renew%20entity')
       )
     )
+    // cred theft or callback related
     or (
       strings.icontains(body.current_thread.text, "sam registration")
       and any(body.links, .href_url.domain.root_domain != "sam.gov")
-      and any(ml.nlu_classifier(body.current_thread.text).entities,
-              .text == "SAM"
+      and any(ml.nlu_classifier(body.current_thread.text).intents,
+              .name in ("cred_theft", "callback_scam") and .confidence != "low"
       )
     )
+    // email body containing sam renewal information
+    or (
+      3 of (
+        strings.icontains(body.current_thread.text, "sam account"),
+        strings.icontains(body.current_thread.text, "sam registration"),
+        strings.icontains(body.current_thread.text, "annual renewal"),
+        strings.icontains(body.current_thread.text, "company"),
+        strings.icontains(body.current_thread.text, "cage code"),
+        strings.icontains(body.current_thread.text, "uei")
+      )
+      // any links under 120 days - most have been found which does not resolve
+      and any(body.links, network.whois(.href_url.domain).days_old <= 120)
+    )
   )
+  // negate legitimate senders or domains associated with sam.gov
   and not (
-    sender.email.domain.root_domain in $high_trust_sender_root_domains
+    (
+      sender.email.domain.root_domain in ("dla.mil", "govly.com")
+      or sender.email.domain.root_domain in $high_trust_sender_root_domains
+    )
     and coalesce(headers.auth_summary.dmarc.pass, false)
   )
 attack_types:
