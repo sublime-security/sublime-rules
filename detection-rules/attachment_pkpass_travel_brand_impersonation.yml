@@ -1,0 +1,96 @@
+name: "Attachment: pkpass (Apple Wallet pass) from unsolicited sender with suspicious indicators"
+description: |
+  Detects emails delivering Apple Wallet pass files (.pkpass) from unsolicited senders
+  combined with urgency language and suspicious link destinations. The pkpass format
+  (used for boarding passes, hotel keys, event tickets, and loyalty cards) is trusted
+  implicitly by recipients and adds directly to Apple Wallet without triggering
+  standard email security controls. Attackers use convincing pkpass attachments as
+  trust anchors to increase the credibility of phishing links in the same email.
+
+  The pkpass webServiceURL field can also establish a persistent device polling channel
+  that leaks push tokens, authentication tokens, and IP addresses to attacker
+  infrastructure each time Apple Wallet checks for pass updates.
+
+  Active delivery infrastructure identified: 47,318 travel-related domains registered
+  in May 2026 alone, including coordinated bulk-registration campaigns impersonating
+  major travel brands. Source: Check Point Research, June 2026.
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+
+  // message contains a pkpass attachment
+  and any(attachments,
+          (
+            .file_extension =~ "pkpass"
+            or .content_type =~ "application/vnd.apple.pkpass"
+            or .content_type =~ "application/pkpass"
+          )
+  )
+
+  // message contains links
+  and length(body.links) > 0
+
+  // NLU detects credential theft intent or urgency
+  and (
+    any(ml.nlu_classifier(body.current_thread.text).intents,
+        .name == "cred_theft" and .confidence in ("medium", "high")
+    )
+    or any(ml.nlu_classifier(body.current_thread.text).entities,
+           .name == "urgency"
+    )
+  )
+
+  // freemail sender — airlines and hotels do not send pkpass from Gmail etc.
+  and sender.email.domain.domain in $free_email_providers
+
+  // at least one suspicious signal in links or sender
+  and (
+    // link resolves to or redirects through a suspicious TLD
+    any(body.links,
+        .href_url.domain.tld in $suspicious_tlds
+        or any(ml.link_analysis(., mode="aggressive").redirect_history,
+               .domain.tld in $suspicious_tlds
+        )
+    )
+
+    // link goes to a recently registered domain
+    or any(body.links,
+        network.whois(.href_url.domain).days_old < 30
+    )
+
+    // sender domain does not match display name — lookalike indicator
+    or (
+      length(headers.reply_to) > 0
+      and all(headers.reply_to,
+              .email.domain.root_domain != sender.email.domain.root_domain
+      )
+    )
+  )
+
+  // negate highly trusted sender domains unless they fail DMARC
+  and not (
+    sender.email.domain.root_domain in $high_trust_sender_root_domains
+    and coalesce(headers.auth_summary.dmarc.pass, false)
+  )
+
+tags:
+  - "Attack surface reduction"
+attack_types:
+  - "Credential Phishing"
+  - "Malware/Ransomware"
+tactics_and_techniques:
+  - "Evasion"
+  - "Social engineering"
+  - "Impersonation: Brand"
+detection_methods:
+  - "Content analysis"
+  - "File analysis"
+  - "Natural Language Understanding"
+  - "Sender analysis"
+  - "URL analysis"
+  - "Whois"
+references:
+  - "https://developer.apple.com/documentation/walletpasses"
+  - "https://research.checkpoint.com/2026/travel-phishing-surging/"
+  - "https://yanaivanov.com/analysis/pkpass_analysis.html"
