@@ -18,21 +18,32 @@ source: |
             )
           )
   )
-  and any(attachments,
-          strings.istarts_with(.file_name, 'lnv')
-          or strings.istarts_with(.file_name, 'inv-')
-          or strings.istarts_with(.file_name, "invoice_")
-          or regex.contains(.file_name, '^Invoice\s\d{8,9}')
-          or regex.contains(.file_name, '^INV[0-9]{7}')
-          or regex.contains(.file_name, '^INV#[0-9]{12}')
+  and (
+    any(attachments,
+        strings.istarts_with(.file_name, 'lnv')
+        or strings.istarts_with(.file_name, 'inv-')
+        or strings.istarts_with(.file_name, "invoice_")
+        or regex.contains(.file_name, '^Invoice\s\d{8,9}')
+        or regex.contains(.file_name, '^INV[0-9]{7}')
+        or regex.contains(.file_name, '^INV#[0-9]{12}')
+        or strings.icontains(beta.ocr(.).text, "Executive Business Coaching")
+        or strings.icontains(beta.ocr(.).text, "Executive Coaching")
+        or strings.icontains(beta.ocr(.).text, "Professional Services")
+        or strings.icontains(beta.ocr(.).text, "Business Systems Integration")
+        or strings.icontains(beta.ocr(.).text, "Consulting & Advisory")
+        or strings.icontains(beta.ocr(.).text, "Zoomlnfo")
+    )
+    // generic invoice indicators are shared with legit AP/AR, so require a reply-to hijack (bec tell)
+    or (
+      any(attachments,
+          regex.contains(beta.ocr(.).text, 'INVOICE\s*\n')
           or regex.icontains(.file_name, '_inv_')
-          or regex.icontains(beta.ocr(.).text, 'INVOICE\s*\n')
-          or strings.icontains(beta.ocr(.).text, "Executive Business Coaching")
-          or strings.icontains(beta.ocr(.).text, "Executive Coaching")
-          or strings.icontains(beta.ocr(.).text, "Professional Services")
-          or strings.icontains(beta.ocr(.).text, "Business Systems Integration")
-          or strings.icontains(beta.ocr(.).text, "Consulting & Advisory")
-          or strings.icontains(beta.ocr(.).text, "Zoomlnfo")
+      )
+      and length(headers.reply_to) > 0
+      and all(headers.reply_to,
+              .email.domain.root_domain != sender.email.domain.root_domain
+      )
+    )
   )
   and any(attachments,
           .file_name == ".pdf"
@@ -57,4 +68,4 @@ detection_methods:
 id: "8e0762cb-da8c-5e89-a963-8659cafeabbf"
 og_id: "305d6e32-4104-5007-a209-ee4686081de2"
 testing_pr: 4975
-testing_sha: ada3d552d0748ddf4dac8671eb4190a56712d21a
+testing_sha: d0da787bd0e425eb8ede6df4f5b2098a0aae5561
