@@ -1,0 +1,45 @@
+name: "PR# 5166 - Brand impersonation: MyChart"
+description: "Detects inbound messages impersonating MyChart through spoofed display names or body content referencing MyChart alongside common lure phrases like feedback surveys or reward claims. Excludes newsletters, out-of-band pivots, quarantine notices, and messages from highly trusted sender domains that pass DMARC authentication."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and (
+    regex.icontains(sender.display_name, '^mychart\s\w+')
+    or strings.iends_with(sender.display_name, "from mychart")
+    or (
+      strings.icontains(body.current_thread.text, "mychart")
+      and strings.icontains(body.current_thread.text,
+                            "feedback survey",
+                            "claim your reward"
+      )
+    )
+  )
+  and not any(ml.nlu_classifier(body.current_thread.text).topics,
+              .name in ("Newsletters and Digests", "Out of Band Pivot")
+  )
+  and not strings.contains(subject.base, "Quarantine")
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and not (
+    sender.email.domain.root_domain in $high_trust_sender_root_domains
+    and coalesce(headers.auth_summary.dmarc.pass, false)
+  )
+attack_types:
+  - "Credential Phishing"
+  - "Spam"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Social engineering"
+  - "Spoofing"
+detection_methods:
+  - "Content analysis"
+  - "Natural Language Understanding"
+  - "Header analysis"
+  - "Sender analysis"
+id: "c09de871-d45e-5dfa-850c-9fc5454df9b3"
+tags:
+  - created_from_open_prs
+  - rule_status_added
+  - pr_author_JFarina5
+references:
+  - https://github.com/sublime-security/sublime-rules/pull/5166
