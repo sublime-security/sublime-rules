@@ -1,0 +1,43 @@
+name: "Brand impersonation: Automobile assistance associations"
+description: "Detects messages impersonating automobile associations (AAA, CAA, RAC, etc.) offering vehicle emergency kits or roadside assistance services from untrusted senders."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and (
+    any(ml.nlu_classifier(body.current_thread.text).entities,
+        .name in ("org", "sender")
+        and regex.contains(.text, '\b(?:AAA|RAC|RAA|CAA|BCAA|AMA)\b')
+    )
+    or strings.istarts_with(sender.email.local_part, 'aaa')
+  )
+  and regex.icontains(body.current_thread.text,
+                      '(?:car|vehicle|motor|driver|emergency|road.?side|break.?down|assist|save|discount|complimentary|free\b).{0,10}kit'
+  )
+  // and the sender is not from high trust sender root domains
+  and not (
+    sender.email.domain.root_domain in $high_trust_sender_root_domains
+    and coalesce(headers.auth_summary.dmarc.pass, false)
+  )
+  // negate newsletters and quarantine notifications
+  and not (
+    any(ml.nlu_classifier(body.current_thread.text).topics,
+        .name in ("Newsletters and Digests") and .confidence != "low"
+    )
+    or strings.icontains(subject.subject, "quarantine")
+  )
+
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Natural Language Understanding"
+  - "Header analysis"
+  - "Sender analysis"
+id: "eae6284c-7804-52f1-ab61-83cbd7602959"
+og_id: "283f7fe5-afa2-5a2b-bd6c-0df687ed4a11"
+testing_pr: 5157
+testing_sha: 01c80663f3040df3f241769978b4f047b237dc80
