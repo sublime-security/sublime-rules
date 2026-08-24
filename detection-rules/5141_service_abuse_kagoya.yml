@@ -1,11 +1,16 @@
 name: "PR# 5141 - Service abuse: Kagoya.net-hosted domains sending English business lures"
-description: "Flags inbound mail routed through infrastructure tied to the Japanese hosting provider Kagoya.net where the message body is written in English, a mismatch that surfaces abuse of these mail servers for business-themed lures. Matched samples span fake purchase order and quote requests, invoice and tax-preparer solicitations, urgent document notices, and LinkedIn overdue-invoice impersonation, often sent from legitimate-looking Japanese company domains or bounce (mailer-daemon) addresses on Kagoya-managed servers. The language mismatch combined with the hosting provider signal helps isolate compromised or abused accounts being used to deliver English-language fraud attempts to non-Japanese recipients."
+description: "Flags inbound mail routed through infrastructure tied to the Japanese hosting provider Kagoya.net where the message body is written in English, a mismatch that surfaces abuse of these mail servers for business-themed lures.."
 type: "rule"
 severity: "low"
 source: |
   type.inbound
   and any(headers.domains, .root_domain == "kagoya.net")
   and ml.nlu_classifier(body.current_thread.text).language == "english"
+  and not (
+    (length(headers.references) > 0 or headers.in_reply_to is not null)
+    and (subject.is_forward or subject.is_reply)
+    and length(body.previous_threads) >= 1
+  )
 tags:
   - "Attack surface reduction"
   - pr_author_markmsublime
