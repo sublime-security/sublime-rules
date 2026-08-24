@@ -12,17 +12,20 @@ source: |
   )
   and length(recipients.cc) == 0
   and length(recipients.bcc) == 0
-  and any(body.links,
-          ml.link_analysis(.).credphish.disposition == "phishing"
-          and ml.link_analysis(.).credphish.confidence in ("medium", "high")
+  and (
+    any(body.links,
+        ml.link_analysis(.).credphish.disposition == "phishing"
+        and ml.link_analysis(.).credphish.confidence in ("medium", "high")
+    )
+    or any(body.current_thread.links,
+           regex.icount(.href_url.path, '\.[a-z]{2,}/') >= 2
+           and not strings.icontains(.href_url.path, .href_url.domain.root_domain)
+    )
   )
   // negate highly trusted sender domains unless they fail DMARC authentication
-  and (
-    (
-      sender.email.domain.root_domain in $high_trust_sender_root_domains
-      and not headers.auth_summary.dmarc.pass
-    )
-    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  and not (
+    sender.email.domain.root_domain in $high_trust_sender_root_domains
+    and coalesce(headers.auth_summary.dmarc.pass, false)
   )
   and not profile.by_sender().solicited
   and not profile.by_sender().any_messages_benign
