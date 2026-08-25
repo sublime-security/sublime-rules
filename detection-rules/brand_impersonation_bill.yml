@@ -1,0 +1,43 @@
+name: "Brand impersonation: Bill.com"
+description: "Detects inbound messages containing text and branding elements characteristic of Bill.com or BILL Operations, LLC communications—such as copyright notices, registered office addresses, or signature phrases—while excluding legitimate newsletters/webinars (via NLU classification) and messages that authenticate via DMARC from trusted or verified Bill.com/Divvy domains, indicating potential brand impersonation."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and (
+    strings.icontains(body.current_thread.text,
+                      "Registered office: Bill.com, LLC"
+    )
+    or strings.icontains(body.current_thread.text, "From the Bill.com Team")
+    or strings.icontains(body.current_thread.text, "BILL Operations, LLC")
+    or regex.icontains(body.current_thread.text, '©\\s*20[0-9]{2}\\s*BILL')
+    or 2 of (
+      strings.icontains(body.current_thread.text, "Bill.com"),
+      strings.icontains(body.current_thread.text, '6220 America Center Dr'),
+      strings.icontains(body.current_thread.text, "San Jose, CA"),
+    )
+  )
+  and not any(ml.nlu_classifier(body.current_thread.text).topics,
+              .name in ("Newsletters and Digests", "Events and Webinars")
+              and .confidence == "high"
+  )
+  and not (
+    sender.email.domain.root_domain in $high_trust_sender_root_domains
+    and coalesce(headers.auth_summary.dmarc.pass, false)
+  )
+  and not (
+    sender.email.domain.root_domain in ("bill.com", "getdivvy.com")
+    and coalesce(headers.auth_summary.dmarc.pass, false)
+  )
+  
+attack_types:
+  - "BEC/Fraud"
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Spoofing"
+detection_methods:
+  - "Content analysis"
+  - "Natural Language Understanding"
+  - "Header analysis"
+  - "Sender analysis"
