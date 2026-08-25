@@ -1,0 +1,33 @@
+name: "Attachment: Risk assessment PDF with inline image"
+description: "Detects inbound messages containing a PDF attachment whose file name matches a 'risk assessment' naming pattern with an alphanumeric code, alongside an inline image attachment referenced via content ID in the HTML body. Messages from highly trusted sender domains that pass DMARC authentication are excluded."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and any(filter(attachments,
+                 .file_type in $file_types_images
+                 and .content_disposition == "inline"
+          ),
+          strings.icontains(body.html.raw, .content_id)
+  )
+  and any(attachments,
+          .file_type == "pdf"
+          and regex.icontains(.file_name, 'risk assessment [a-z]{2,4}[0-9]{6,}')
+  )
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and not (
+    sender.email.domain.root_domain in $high_trust_sender_root_domains
+    and coalesce(headers.auth_summary.dmarc.pass, false)
+  )
+attack_types:
+  - "Malware/Ransomware"
+  - "Spam"
+tactics_and_techniques:
+  - "Image as content"
+  - "PDF"
+  - "Social engineering"
+detection_methods:
+  - "File analysis"
+  - "HTML analysis"
+  - "Header analysis"
+  - "Sender analysis"
