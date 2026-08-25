@@ -41,24 +41,45 @@ rule zip_smuggler_default {
 		)
 }
 
-rule zip_excel_dll {
+rule zip_office_bin_dll {
 	meta:
 		author      = "kyle eaton"
 		date        = "2026-07-16"
-		description = "Matching zip files that include the CRC32 of a known excel binary and an unknown DLL"
+		updated     = "2026-08-19"
+        description = "Matching zip files that include the crc32 and file size of a known office binary and an unknown DLL"
 	strings:
 		$pklfh = { 50 4b 03 04 }
 		$dll   = ".dll"
 		$exe   = ".exe"
 	condition:
-		uint16be(0) == 0x504B and
-		for any i in (1..100): (
-			($dll in ((@pklfh[i] + 30 + uint16(@pklfh[i] + 26) - 4)..(@pklfh[i] + 30 + uint16(@pklfh[i] + 26))))
-		) and
-		for any i in (1..100): (
-			($exe in ((@pklfh[i] + 30 + uint16(@pklfh[i] + 26) - 4)..(@pklfh[i] + 30 + uint16(@pklfh[i] + 26))))
-			and uint32(@pklfh[i] + 14) == 0x420b8579
-			and uint32(@pklfh[i] + 22) == 74719472
-		)
+        uint16be(0) == 0x504b and
+        for any i in (1..100): (
+            ($dll in ((@pklfh[i] + 30 + uint16(@pklfh[i] + 26) - 4)..(@pklfh[i] + 30 + uint16(@pklfh[i] + 26))))
+        ) and
+        for any i in (1..100): (
+            ($exe in ((@pklfh[i] + 30 + uint16(@pklfh[i] + 26) - 4)..(@pklfh[i] + 30 + uint16(@pklfh[i] + 26))))
+            and (
+                // win word
+                (uint32(@pklfh[i] + 14) == 0xf863bd78 and uint32(@pklfh[i] + 22) == 1559784) or
+                // excel
+                (uint32(@pklfh[i] + 14) == 0x420b8579 and uint32(@pklfh[i] + 22) == 74719472)
+            )
+        )
+}
 
+rule zip_pklfh_cd_mismatch_fname {
+    meta:
+        author      = "kyle eaton"
+        date        = "2026-08-18"
+        description = "zip file with a mismatch file name between the local file header and the central directory entry"
+    strings:
+        $pklfh = { 50 4B 03 04 }
+        $pkcd  = { 50 4B 01 02 }
+    condition:
+        for any i in (1..100): (
+            uint16(@pklfh[i] + 26) < 100
+            and for any j in (1..uint16(@pklfh[i] + 26)): (
+                uint8(@pklfh[i] + 30 + j - 1) != uint8(@pkcd[i] + 46 + j - 1)
+            )
+        )
 }
