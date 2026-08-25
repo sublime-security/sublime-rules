@@ -562,20 +562,44 @@ rule pdf_prompt_ack_secure_document_image_sizes {
 		$header at 0 and all of ($img*)
 }
 
-rule quickbooks_pdf_lures {
+rule quickbooks_pdf_payment_lure {
 	meta:
 		author      = "kyle eaton"
-		date        = "2026-08-10"
-		description = "matching 2 quickbook lures observed in malicious PDFs (error in payment processing and remittance)"
+		date        = "2026-08-12"
+		description = "matching a quickbook lure observed in malicious PDFs (error in payment processing)"
 	strings:
-		$header         = { 25 50 44 46 2D 31 2E }
+		$header         = { 25 50 44 46 2D }
 		$qb_logo        = { 2F 49 6D 61 67 65 0A 2F 57 69 64 74 68 20 33 31 30 0A 2F 48 65 69 67 68 74 20 31 33 36 0A 2F }
-		$optional_rect  = { 2F 53 75 62 74 79 70 65 20 2F 49 6D 61 67 65 0A 2F 57 69 64 74 68 20 31 32 30 30 0A 2F 48 65 69 67 68 74 20 31 30 30 }
-		$optional_image = { 2F 52 65 63 74 20 5B 33 36 20 37 30 35 2E 37 35 20 32 35 37 2E 32 35 20 37 36 35 2E 37 35 5D }
+		$optional_image = { 2F 53 75 62 74 79 70 65 20 2F 49 6D 61 67 65 0A 2F 57 69 64 74 68 20 31 32 30 30 0A 2F 48 65 69 67 68 74 20 31 30 30 }
 	condition:
 		$header at 0
 		and $qb_logo
 		and 1 of ($optional_*)
+}
+
+rule pdf_rfp_template_lure {
+	meta:
+		author      = "kyle eaton"
+		date        = "2026-08-11"
+		description = "Matches PDF with a templated RPF lure."
+	strings:
+		$header  = { 25 50 44 46 2D }
+		$title   = { 31 20 30 20 6F 62 6A 0A 3C 3C 2F 54 69 74 6C 65 20 28 52 65 71 75 65 73 74 20 66 6F 72 20 50 72 6F 70 6F 73 61 6C 20 }
+		$a_rect1 = "/Rect [90.75"
+		$a_rect2 = /\/Rect \[208\.5\s[\d.]+\s403\.5/
+		$b_rect  = /\/Rect \[218\.25\s[\d.]+\s393\.75/
+		$c_rect1 = /\/Rect \[213\.75\s[\d.]+\s398\.25/
+		$c_img   = { 2F 49 6D 61 67 65 0A 2F 57 69 64 74 68 20 32 36 33 38 0A 2F 48 65 69 67 68 74 20 33 34 34 38 }
+		$d_rect  = { 2F 52 65 63 74 20 5B 31 30 38 20 }
+	condition:
+		$header at 0
+		and $title
+		and (
+			all of ($a_*)
+			or all of ($c_*)
+			or $b_rect
+			or $d_rect
+		)
 }
 
 rule pdf_templated_lure_blue_white {
@@ -604,4 +628,21 @@ rule pdf_blue_confidential_fax_lure {
 	condition:
 		$header at 0
 		and $rect
+}
+
+rule pdf_doubloon_dredger_template_1 {
+    meta:
+        author      = "kyle eaton"
+        date        = "2026-08-21"
+        description = "PDF matching known DOUBLOON DREDGER template"
+    strings:
+        $header   = { 25 50 44 46 2D }
+        $obj_2    = { 32 20 30 20 6F 62 6A 0A 3C 3C 0A 2F 54 79 70 65 20 2F 43 61 74 61 6C 6F 67 0A 2F 50 61 67 65 73 20 34 20 30 20 52 0A 2F 56 69 65 77 65 72 50 72 65 66 65 72 65 6E 63 65 73 20 35 20 30 20 52 0A 2F 41 63 72 6F 46 6F 72 6D 20 36 20 30 20 52 0A 2F 56 65 72 73 69 6F 6E 20 2F 31 23 32 45 35 0A 3E 3E 0A 65 6E 64 6F 62 6A }
+        $stream_1 = { 3C 3C 0A 2F 46 69 6C 74 65 72 20 2F 46 6C 61 74 65 44 65 63 6F 64 65 0A 2F 4C 65 6E 67 74 68 20 33 30 35 0A 3E 3E }
+        $stream_2 = { 6F 62 6A 0A 3C 3C 0A 2F 46 69 6C 74 65 72 20 2F 46 6C 61 74 65 44 65 63 6F 64 65 0A 2F 4C 65 6E 67 74 68 20 33 32 34 0A 3E 3E 0A 73 74 72 65 61 6D }
+    condition:
+        $header at 0
+        and $obj_2
+        and $stream_1
+        and $stream_2
 }
