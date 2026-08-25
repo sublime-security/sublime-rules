@@ -9,27 +9,16 @@ source: |
   and length(body.current_thread.text) <= 20
   and (
     length(subject.base) <= 15
-    // tighter scoped tactics for display name variants
+    // tighter scoped tactics
     or (
       length(subject.base) <= 20
-      and sender.display_name is not null
-      and length(sender.display_name) >= 4
       and (
-        // full display name in subject
-        strings.icontains(subject.base, sender.display_name)
-
-        // or any 4+ letter word from display name appears in subject
-        or any(regex.extract(sender.display_name, '[A-Za-z]{4,}'),
-               strings.icontains(subject.base, .full_match)
-        )
-
-        // or first + last(-name)? that is not referenced anywhere
+        regex.icontains(subject.base, '(hello|hi)\s+this\s+is')
         or (
-          regex.match(subject.base, '^[A-Z][a-z]+ [A-Z][a-z]+(-[A-Z][a-z]+)?$')
-          and subject.base != sender.display_name
-          and not any(recipients.to, subject.base == .display_name)
-          and not any(recipients.cc, subject.base == .display_name)
-          and not any(recipients.bcc, subject.base == .display_name)
+          regex.icontains(subject.base, '(hello|hi)')
+          and any(recipients.to,
+                  strings.icontains(subject.base, .email.domain.sld)
+          )
         )
       )
     )
@@ -108,6 +97,7 @@ source: |
       )
     )
   )
+
 tags:
   - "Attack surface reduction"
   - pr_author_missingn0pe
