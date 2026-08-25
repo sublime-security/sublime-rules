@@ -4,21 +4,24 @@ type: "rule"
 severity: "medium"
 source: |
   type.inbound
+  and strings.icontains(sender.display_name, "mychart")
   and (
-    regex.icontains(sender.display_name, '^mychart\s\w+')
-    or strings.iends_with(sender.display_name, "from mychart")
-    or (
+    (
       strings.icontains(body.current_thread.text, "mychart")
-      and strings.icontains(body.current_thread.text,
-                            "feedback survey",
-                            "claim your reward"
+      and 2 of (
+        strings.icontains(body.current_thread.text, "claim your reward"),
+        strings.icontains(body.current_thread.text, "feedback survey"),
+        strings.icontains(body.current_thread.text, "invited to participate"),
+        strings.icontains(body.current_thread.text, "medicare kit"),
+        strings.icontains(body.current_thread.text, "member rewards"),
+        strings.icontains(body.current_thread.text, "member appreciation"),
+        strings.icontains(body.current_thread.text, "log in to mychart"),
+        regex.icontains(body.current_thread.text, '©\s*(?:\d+)\s*mychart')
       )
     )
+    or strings.icontains(subject.base, "medicare kit")
+    or network.whois(sender.email.domain).days_old < 365
   )
-  and not any(ml.nlu_classifier(body.current_thread.text).topics,
-              .name in ("Newsletters and Digests", "Out of Band Pivot")
-  )
-  and not strings.contains(subject.base, "Quarantine")
   // negate highly trusted sender domains unless they fail DMARC authentication
   and not (
     sender.email.domain.root_domain in $high_trust_sender_root_domains
