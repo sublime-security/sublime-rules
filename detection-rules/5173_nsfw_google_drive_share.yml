@@ -1,0 +1,40 @@
+name: "Brand impersonation: Romantic google drive share notification"
+description: "Detects freemail senders spoofing Google Drive sharing notifications by using drive in the display name, attaching calendar .ics files, and mimicking the standard Drive sharing email template with indication of an NSFW or romantic google share."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  // freemail sender impersonating Google Drive
+  and sender.email.domain.root_domain in $free_email_providers
+  and strings.icontains(sender.display_name, "drive")
+  // ICS calendar attachment unusual for real Google Drive share notifications
+  and any(attachments,
+          .file_type == "ics"
+          or .content_type in ("application/ics", "text/calendar")
+  )
+  // body matches Google Drive sharing notification template
+  and regex.icontains(body.current_thread.text,
+                      "shared a folder with you",
+                      'private\walbum\w+',
+                      "access may expire after the first view"
+  )
+  // credential theft intent confirmed by NLU
+  and any(ml.nlu_classifier(body.current_thread.text).intents,
+          .name == "cred_theft" and .confidence == "high"
+  ) 
+attack_types:
+  - "Credential Phishing"
+  - "ICS Phishing"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Free email provider"
+  - "Social engineering"
+detection_methods:
+  - "Sender analysis"
+  - "Content analysis"
+  - "File analysis"
+  - "Natural Language Understanding"
+id: "e5860df4-462b-5f24-8f89-0c17de9448df"
+og_id: "771a72d3-4672-5c03-b09f-4552d4a0ccdf"
+testing_pr: 5173
+testing_sha: 4d16a34668a9d6e1b77c2689871948775d60000d
