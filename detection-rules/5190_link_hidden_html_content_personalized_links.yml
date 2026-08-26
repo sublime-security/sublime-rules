@@ -1,0 +1,30 @@
+name: "Link: Hidden HTML content masking personalized credential-harvesting links"
+description: "Detects messages whose HTML body hides elements using off-screen or zero-size CSS (negative z-index, width/height:0) combined with a hidden <option> label, a technique used to smuggle content past text-based scanners while showing a different rendered message to the recipient. These messages also contain links with a username embedded in the URL alongside a '~V~' path marker, indicating personalized tracking parameters used to individualize the credential-harvesting page for each recipient. Observed lures include fake security alerts, transaction authorization failures, and storage/quota upgrade notices urging recipients to click through to a spoofed login page."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and (
+    regex.icontains(body.html.raw,
+                    'z-index:\s*-\d{3,}',
+                    'width:\s*0;\s*height:\s*0'
+    )
+    and regex.icontains(body.html.raw, '<option[^>]{0,300}\blabel=')
+  )
+  and any(body.current_thread.links,
+          .href_url.username != "" and strings.icontains(.href_url.path, '~V~')
+  )
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Evasion"
+  - "Social engineering"
+  - "Impersonation: Brand"
+detection_methods:
+  - "HTML analysis"
+  - "URL analysis"
+  - "Content analysis"
+id: "4fee928b-5965-50a4-8600-e6325471fff4"
+og_id: "9fa3b006-4ee3-5d7c-af60-af872f603bcd"
+testing_pr: 5190
+testing_sha: 5dafb23a1b662dadfd86264d8a39fce6873bf940
