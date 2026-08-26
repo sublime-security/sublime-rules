@@ -1,0 +1,44 @@
+name: "PR# 5187 - Impersonation: SAM/SBA federal registration"
+description: "Detects inbound messages impersonating SAM.gov or the Small Business Administration by matching sender display names against known spoofed naming patterns (e.g. sba-support, sam registration/renewal) or by identifying sam.gov references paired with an embedded 'renew entity' image lure. Legitimate senders from verified sba.gov, sam.gov, or other high-trust domains that pass DMARC authentication are excluded."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and (
+    regex.icontains(sender.display_name,
+                    '^sam(?:\.gov\b|\s(?:renew|compliance))',
+                    'final\ssam\.gov',
+                    '^sba[\s-]?(?:e[fd]|[\.,]gov)',
+                    '^sba[\s-](?:connect|invoice|admin|eidl)\b',
+                    '^sba[\s-]support[\s-]\w+'
+    )
+    or (
+      strings.icontains(body.current_thread.text, 'sam.gov')
+      and any(html.xpath(body.html, '//img/@src').nodes,
+              strings.icontains(.raw, 'sam%20renew%20entity')
+      )
+    )
+  )
+  and not (
+    sender.email.domain.root_domain in $high_trust_sender_root_domains
+    and coalesce(headers.auth_summary.dmarc.pass, false)
+  )
+attack_types:
+  - "Credential Phishing"
+  - "BEC/Fraud"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Social engineering"
+  - "Image as content"
+detection_methods:
+  - "Sender analysis"
+  - "Content analysis"
+  - "HTML analysis"
+  - "Header analysis"
+id: "9a9250f0-36be-52c8-a4da-4a3fb14ff2e4"
+tags:
+  - created_from_open_prs
+  - rule_status_modified
+  - pr_author_JFarina5
+references:
+  - https://github.com/sublime-security/sublime-rules/pull/5187
