@@ -1,0 +1,26 @@
+name: "Link: Email tracking subdomain recon"
+description: "Flags inbound messages that contain a link pointing to an 'emailtracking' subdomain of the sender's own root domain with no URL paths, likely used for reconnaissance."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and any(body.current_thread.links,
+          .href_url.domain.root_domain == sender.email.domain.root_domain
+          and .href_url.domain.subdomain == "emailtracking"
+          and length(.href_url.path) is null
+  )
+  and any(regex.extract(body.html.raw,
+                        "<a.*?>[\r\n]{0,2}[a-zA-Z0-9-'’%]*?[.,?!]?</a>\\s([0-9a-zA-Z-'’%]+[.,?!]?\\s[0-9a-zA-Z-'’%]+[.,?!'])"
+          ),
+          strings.ends_with(body.html.display_text, .groups[0])
+  )
+attack_types:
+  - "Reconnaissance"
+detection_methods:
+  - "URL analysis"
+  - "HTML analysis"
+  - "Content analysis"
+id: "6bae4614-cd52-551f-aee4-5576d37b6626"
+og_id: "4d440f43-c580-5d2c-8abf-e4de8f0416c9"
+testing_pr: 5202
+testing_sha: a139f7be0ff88084072158253c83a801ba3d52e4
