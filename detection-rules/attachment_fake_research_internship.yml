@@ -1,0 +1,55 @@
+name: "Attachment: Fake research internship offer"
+description: "Detects inbound, non-reply/forward emails referencing research, internship, or fellowship opportunities with weekly stipend language, accompanied by a PDF attachment whose OCR-extracted text confirms a research/internship role, cites a weekly dollar stipend, and directs recipients to respond via personal free-mail addresses, text message, or an alternate email—hallmarks of fraudulent job/internship scams designed to harvest personal information or payment."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and not (subject.is_reply or subject.is_forward)
+  and any([subject.base, body.current_thread.text],
+          strings.icontains(.,
+                            'research',
+                            'intern',
+                            'fellowship',
+                            'recruit',
+                            'placement',
+                            'opening',
+                            'opportunit',
+                            'stipend',
+                            'hiring',
+                            'per week',
+                            'weekly'
+          )
+  )
+  and any(filter(attachments, .file_type == "pdf"),
+          any(file.explode(.),
+              regex.icontains(.scan.ocr.raw,
+                              'research (?:intern|assistant|associate|support|role|position|study|fellow|participant)',
+                              '\binternship\b'
+              )
+              and regex.icontains(.scan.ocr.raw,
+                                  '\$\s?\d{2,4}\s*(?:/|per)\s*week',
+                                  '\$\s?\d{2,4}\s+weekly'
+              )
+              and regex.icontains(.scan.ocr.raw,
+                                  '@(?:g[a-z]{0,2}mail|hotmail|outlook|yahoo|aol|icloud|proton(?:mail)?|gmx|zoho|live|msn)\.',
+                                  'email (?:the )?(?:supervising |fellowship )?(?:professor|mentor)',
+                                  '(?:by|via|through) text',
+                                  'send (?:a |an )?text',
+                                  'text (?:you|me|us|back|the professor|the mentor)',
+                                  'reach out[^\n]{0,20}text',
+                                  'alternate email'
+              )
+          )
+  )
+attack_types:
+  - "BEC/Fraud"
+  - "Spam"
+tactics_and_techniques:
+  - "PDF"
+  - "Social engineering"
+  - "Out of band pivot"
+  - "Free email provider"
+detection_methods:
+  - "Optical Character Recognition"
+  - "Content analysis"
+  - "File analysis"
