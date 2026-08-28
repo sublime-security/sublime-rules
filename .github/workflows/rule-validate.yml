@@ -150,68 +150,166 @@ jobs:
           # Delete path to prevent interference with later steps (such as git add and commit)
           rm -r sublime-rules-main
 
+      - name: Determine files to validate
+        id: files_to_validate
+        if: github.event_name != 'issue_comment'
+        env:
+          RUN_ALL: ${{ steps.get_base_ref.outputs.run_all }}
+          BASE_REF: ${{ steps.get_base_ref.outputs.base_ref }}
+        run: |
+          if [[ "$RUN_ALL" == "true" ]]; then
+            ls -1 *-rules/*.yml insights/**/*.yml exclusions/*.yml > files_to_validate.txt
+          else
+            # Only validate files that actually changed vs. the base ref, so a PR doesn't get
+            # warnings/errors annotated on files it didn't touch.
+            git diff --name-only --diff-filter=d "$BASE_REF" HEAD -- '*-rules/*.yml' 'insights/**/*.yml' 'exclusions/*.yml' > files_to_validate.txt
+          fi
+
+          echo "Files to validate: $(wc -l < files_to_validate.txt)"
+          cat files_to_validate.txt
+
       - name: Validate Rules
         if: github.event_name != 'issue_comment'
         run: |
+          set -o pipefail
+
+          # Escaping per GitHub's workflow-command rules, so a rule's file name or the
+          # validator's error message can't inject extra annotation properties or commands.
+          gh_escape_data() {
+            local s="$1"
+            s="${s//%/%25}"
+            s="${s//$'\r'/%0D}"
+            s="${s//$'\n'/%0A}"
+            printf '%s' "$s"
+          }
+
+          gh_escape_property() {
+            local s
+            s="$(gh_escape_data "$1")"
+            s="${s//:/%3A}"
+            s="${s//,/%2C}"
+            printf '%s' "$s"
+          }
+
+          # Emits one GitHub annotation per diagnostic in a bulk_validate response.
+          # $1: response file. Remaining args: the files submitted in that response, in order
+          # (bulk_validate returns validation_responses in the same order as the request).
+          # Sets overall_failed=1 if any diagnostic has severity "error".
+          emit_diagnostics() {
+            local response_file="$1"
+            shift
+            local -a files=("$@")
+
+            while IFS= read -r diag_json; do
+              [[ -z "$diag_json" ]] && continue
+
+              idx=$(jq -r '.index' <<<"$diag_json")
+              file="${files[$idx]}"
+              severity=$(jq -r '.severity' <<<"$diag_json")
+              message=$(jq -r '.message' <<<"$diag_json")
+              line=$(( $(jq -r '.line' <<<"$diag_json") + 1 ))
+              col=$(( $(jq -r '.col' <<<"$diag_json") + 1 ))
+
+              gh_level="notice"
+              if [[ "$severity" == "error" ]]; then
+                gh_level="error"
+                overall_failed=1
+              elif [[ "$severity" == "warning" ]]; then
+                gh_level="warning"
+              fi
+
+              esc_file=$(gh_escape_property "$file")
+              esc_message=$(gh_escape_data "$message")
+              echo "::${gh_level} file=${esc_file},line=${line},col=${col}::${esc_message}"
+            done < <(jq -c '
+              .validation_responses
+              | to_entries[]
+              | .key as $i
+              | (.value.diagnostics // [])[]
+              | {index: $i, severity: .severity, message: .message,
+                 line: (.range.start.line // 0), col: (.range.start.column // 0)}
+            ' "$response_file")
+          }
+
+          # Builds a bulk_validate request body for the given files.
+          build_request() {
+            local out_file="$1"
+            shift
+            {
+              echo '{"rules_or_queries": ['
+              local first=1
+              for j in "$@"; do
+                [[ "$first" -eq 0 ]] && echo ","
+                first=0
+                if [[ "$j" == insights/* ]]; then
+                  yq -o=json eval 'del(.type) | .source = "length([\n\n" + .source + "\n]) >= 0"' "$j"
+                else
+                  yq -o=json eval 'del(.type)' "$j"
+                fi
+              done
+              echo ']}'
+            } > "$out_file"
+          }
+
           BATCH_SIZE=100
-          counter=0
-          batch_num=0
+          overall_failed=0
 
-          # Collect all files
-          all_files=($(ls -1 *-rules/*.yml insights/**/*.yml exclusions/*.yml))
+          mapfile -t all_files < files_to_validate.txt
           total_files=${#all_files[@]}
-
           echo "Total files to validate: $total_files"
 
-          # Start first batch
-          echo '{"rules_or_queries": [' > bulk_validate_request.json
+          i=0
+          batch_num=0
+          while [[ $i -lt $total_files ]]; do
+            batch_num=$((batch_num + 1))
+            batch_files=("${all_files[@]:$i:$BATCH_SIZE}")
+            i=$((i + BATCH_SIZE))
 
-          for i in "${!all_files[@]}"; do
-            f="${all_files[$i]}"
+            echo "Validating batch $batch_num (${#batch_files[@]} files):"
+            printf '  %s\n' "${batch_files[@]}"
 
-            # Determine if this is a rule or insight
-            if [[ "$f" == insights/* ]]; then
-              yq -o=json eval 'del(.type) | .source = "length([\n\n" + .source + "\n]) >= 0"' "$f" >> bulk_validate_request.json
-            else
-              yq -o=json eval 'del(.type)' "$f" >> bulk_validate_request.json
+            build_request bulk_validate_request.json "${batch_files[@]}"
+            http_code=$(curl -H "Content-Type: application/json" -X POST -d @bulk_validate_request.json -o response.txt -w "%{http_code}" --silent https://play.sublime.security/v1/rules/bulk_validate)
+            echo '' >> response.txt
+            cat response.txt
+
+            if [[ "$http_code" == "200" ]]; then
+              emit_diagnostics response.txt "${batch_files[@]}"
+              continue
             fi
 
-            counter=$((counter + 1))
-
-            # Check if we need to submit this batch
-            should_submit=false
-            if [[ $counter -eq $BATCH_SIZE ]]; then
-              should_submit=true
-            elif [[ $((i + 1)) -eq $total_files ]]; then
-              # Last file
-              should_submit=true
-            else
-              # Not submitting yet, add comma
-              echo "," >> bulk_validate_request.json
+            if [[ "$http_code" != "400" ]]; then
+              echo "Unexpected response $http_code for batch $batch_num"
+              exit 1
             fi
 
-            if [[ "$should_submit" == "true" ]]; then
-              # Close JSON and submit
-              echo "]}" >> bulk_validate_request.json
+            # bulk_validate returns one generic error for the whole batch when any single rule
+            # is invalid, with no indication of which file caused it. Resubmit this batch's
+            # files one at a time (still the same endpoint) so we can name the bad file.
+            echo "Batch $batch_num failed as a whole; retrying its files individually to identify the cause..."
+            for f in "${batch_files[@]}"; do
+              echo "Validating $f..."
+              build_request single_request.json "$f"
+              single_http_code=$(curl -H "Content-Type: application/json" -X POST -d @single_request.json -o single_response.txt -w "%{http_code}" --silent https://play.sublime.security/v1/rules/bulk_validate)
 
-              batch_num=$((batch_num + 1))
-              echo "Submitting batch $batch_num with $counter files..."
-
-              http_code=$(curl -H "Content-Type: application/json" -X POST -d @bulk_validate_request.json -o response.txt -w "%{http_code}" --silent https://play.sublime.security/v1/rules/bulk_validate)
-              echo '' >> response.txt
-              cat response.txt
-              if [[ "$http_code" != "200" ]]; then
-                echo "Unexpected response $http_code for batch $batch_num"
-                exit 1
+              if [[ "$single_http_code" == "200" ]]; then
+                emit_diagnostics single_response.txt "$f"
+              else
+                err_message=$(jq -r '.error.message // "unknown error"' single_response.txt)
+                esc_file=$(gh_escape_property "$f")
+                esc_message=$(gh_escape_data "$err_message")
+                echo "::error file=${esc_file}::${esc_message}"
+                overall_failed=1
               fi
-
-              # Reset for next batch if there are more files
-              if [[ $((i + 1)) -lt $total_files ]]; then
-                counter=0
-                echo '{"rules_or_queries": [' > bulk_validate_request.json
-              fi
-            fi
+            done
           done
+
+          rm -f single_request.json single_response.txt files_to_validate.txt
+
+          if [[ "$overall_failed" == "1" ]]; then
+            echo "Rule validation failed, see annotations above."
+            exit 1
+          fi
 
           echo "All batches submitted successfully!"
 
@@ -272,8 +370,10 @@ jobs:
         env:
           STEPS_GET_HEAD_REF_OUTPUTS_HEAD_REF: ${{ steps.get_head_ref.outputs.head_ref }}
         run: |
-          rm response.txt
-          rm bulk_validate_request.json
+          # -f: these are only written when at least one file was validated -- a PR that
+          # doesn't touch any rule files leaves them absent.
+          rm -f response.txt
+          rm -f bulk_validate_request.json
 
           if [ -z "$(git status --porcelain)" ]; then
             echo "No files changed, nothing to do"
