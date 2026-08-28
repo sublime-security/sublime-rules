@@ -222,10 +222,16 @@ jobs:
               esc_message=$(gh_escape_data "$message")
               echo "::${gh_level} file=${esc_file},line=${line},col=${col}::${esc_message}"
             done < <(jq -c '
+              # "This field may be null for MDM retrieval or backtests/hunts..." fires on most
+              # header lookups and is not actionable -- drop it so it does not drown out
+              # annotations worth acting on.
+              def is_noise: .message | startswith("This field may be null for MDM retrieval or backtests/hunts");
+
               .validation_responses
               | to_entries[]
               | .key as $i
               | (.value.diagnostics // [])[]
+              | select(is_noise | not)
               | {index: $i, severity: .severity, message: .message,
                  line: (.range.start.line // 0), col: (.range.start.column // 0)}
             ' "$response_file")
