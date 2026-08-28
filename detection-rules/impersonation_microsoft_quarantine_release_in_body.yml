@@ -5,28 +5,24 @@ severity: "high"
 source: |
   type.inbound
   and length(filter(attachments, .file_type not in $file_types_images)) == 0
+  and (
+    3 of (
+      strings.ilike(body.current_thread.text, "*review*"),
+      strings.ilike(body.current_thread.text, "*release*"),
+      strings.ilike(body.current_thread.text, "*quarantine*"),
+      strings.ilike(body.current_thread.text, "*messages*"),
+      strings.ilike(body.current_thread.text, "*blocked*"),
+      strings.ilike(body.current_thread.text, "*notification*"),
+      strings.ilike(body.current_thread.text, "*kindly*")
+    )
+  )
   and any(attachments,
-          any(file.explode(.),
-              (
-                // attachment is most likely only a logo 
-                (
-                  length(.scan.ocr.raw) < 15 or .scan.ocr.raw is null
-                )
-                and any(ml.logo_detect(..).brands,
-                        strings.starts_with(.name, "Microsoft")
-                )
-              )
+          any(ml.logo_detect(.).brands,
+              strings.starts_with(.name, "Microsoft")
           )
-          and (
-            3 of (
-              strings.ilike(body.current_thread.text, "*review*"),
-              strings.ilike(body.current_thread.text, "*release*"),
-              strings.ilike(body.current_thread.text, "*quarantine*"),
-              strings.ilike(body.current_thread.text, "*messages*"),
-              strings.ilike(body.current_thread.text, "*blocked*"),
-              strings.ilike(body.current_thread.text, "*notification*"),
-              strings.ilike(body.current_thread.text, "*kindly*")
-            )
+          and any(file.explode(.),
+                  // attachment is most likely only a logo
+                  length(.scan.ocr.raw) < 15 or .scan.ocr.raw is null
           )
   )
   and sender.email.domain.root_domain not in (

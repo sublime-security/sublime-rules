@@ -7,13 +7,13 @@ source: |
   
   // levenshtein distance (edit distance) between the SLD of the link and the sender domain is greater than 0 and less than or equal to 2.
   // This detects typosquatting or domains that are deceptively similar to the sender.
+  // exclude onmicrosoft.com
+  and not sender.email.domain.root_domain == "onmicrosoft.com"
   and any(body.links,
           length(.href_url.domain.sld) > 3
           and 0 < strings.levenshtein(.href_url.domain.sld,
                                       sender.email.domain.sld
           ) <= 2
-          // exclude onmicrosoft.com
-          and not sender.email.domain.root_domain == "onmicrosoft.com"
           and (
             // domains are not registered or registered within 90d
             // network.whois(.href_url.domain).found == false
@@ -23,15 +23,20 @@ source: |
           )
   )
   // the mesasge is intent is BEC or Cred Theft, or is talking about financial invoicing/banking language, or a request contains "kindly"
-  and any(ml.nlu_classifier(body.current_thread.text).intents,
-          .name in ("bec", "cred_theft")
-          or any(ml.nlu_classifier(body.current_thread.text).entities,
-                 .name == "financial"
-                 and (
-                   .text in ("invoice", "banking information")
-                   or .name == "request" and strings.icontains(.text, "kindly")
-                 )
-          )
+  and (
+    (
+      length(ml.nlu_classifier(body.current_thread.text).intents) > 0
+      and any(ml.nlu_classifier(body.current_thread.text).entities,
+              .name == "financial"
+              and (
+                .text in ("invoice", "banking information")
+                or .name == "request" and strings.icontains(.text, "kindly")
+              )
+      )
+    )
+    or any(ml.nlu_classifier(body.current_thread.text).intents,
+           .name in ("bec", "cred_theft")
+    )
   )
 tags:
  - "Attack surface reduction"
