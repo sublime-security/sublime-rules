@@ -1,0 +1,61 @@
+name: "Attachment: ICS calendar invite with financial lure and suspicious link"
+description: "Detects inbound emails containing ICS calendar attachments whose event descriptions reference credit notes, billing adjustments, or invoice reconciliation language, combined with body links pointing to URL shorteners, suspicious TLDs, newly registered domains, free file hosts, or self-service platforms that do not match the sender's domain. Excludes messages from high-trust sender domains that pass DMARC authentication."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and any(attachments,
+          (
+            .file_type == "ics"
+            or .file_extension == "ics"
+            or .content_type in ("application/ics", "text/calendar")
+          )
+          //
+          // This rule makes use of a beta feature and is subject to change without notice
+          // using the beta feature in custom rules is not suggested until it has been formally released
+          //
+          and any(beta.file.parse_ics(.).events,
+                  regex.icontains(.description,
+                                  'credit\s+note.{0,30}CN-[0-9]{8}',
+                                  '(?:review|issued?).{0,30}credit\s+note',
+                                  'credit.{0,20}(?:has\s+been\s+)?issued.{0,30}(?:invoice|billing|pricing\s+adjustment)',
+                                  '(?:billing|accounting)\s+(?:review|adjustment|reconciliation).{0,30}credit',
+                                  'investment\s+drawdown',
+                                  'reimbursement\s+statement',
+                                  'e-?document\s+reports?'
+                  )
+          )
+  )
+  and any(body.links,
+          .href_url.domain.root_domain != sender.email.domain.root_domain
+          and (
+            .href_url.domain.domain in $url_shorteners
+            or .href_url.domain.root_domain in $url_shorteners
+            or .href_url.domain.tld in $suspicious_tlds
+            or network.whois(.href_url.domain).days_old < 90
+            or .href_url.domain.root_domain in $free_file_hosts
+            or .href_url.domain.domain in $free_file_hosts
+            or .href_url.domain.root_domain in $self_service_creation_platform_domains
+            or .href_url.domain.domain in $self_service_creation_platform_domains
+          )
+  )
+  and not (
+    sender.email.domain.root_domain in $high_trust_sender_root_domains
+    and coalesce(headers.auth_summary.dmarc.pass, false)
+  )
+attack_types:
+  - "Credential Phishing"
+  - "BEC/Fraud"
+tactics_and_techniques:
+  - "Social engineering"
+  - "Evasion"
+detection_methods:
+  - "File analysis"
+  - "Content analysis"
+  - "URL analysis"
+  - "Whois"
+  - "Header analysis"
+id: "bc7e7735-5026-575a-ac78-da08a4cea141"
+og_id: "30cf1a7f-76d7-518a-bbd7-5308b87a1730"
+testing_pr: 5225
+testing_sha: 4783dcce79ac121f56480b478f3587f84d8feb67
