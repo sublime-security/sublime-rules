@@ -1,5 +1,5 @@
-name: "Spam: Newly registered domain with default GoDaddy name servers"
-description: "Detects inbound messages where the sender's domain was registered within the past year and uses exactly two name servers, both with subdomains starting with 'ns' under domaincontrol.com. This pattern reflects unconfigured, default GoDaddy DNS settings indicating abuse of GoDaddy's DNS infrastructure to rapidly stand up new domains"
+name: "Spam: Cold outreach from newly registered domain"
+description: "Detects inbound messages from domains registered less than 365 days ago using GoDaddy (domaincontrol.com) nameservers, where the message content is classified as B2B cold outreach by NLU analysis. The rule excludes legitimate reply threads and auto-replies, and only flags senders who are either unsolicited or have a history of malicious/spam activity without any benign messages."
 type: "rule"
 severity: "low"
 source: |
@@ -14,15 +14,48 @@ source: |
           and .root_domain == 'domaincontrol.com'
   )
   
+  // nlu logic
+  and any(ml.nlu_classifier(body.current_thread.text).topics,
+          .name in ('B2B Cold Outreach')
+  )
+  
+  // negate legitimate replies
+  and not (
+    (
+      length(headers.references) > 0
+      or (headers.in_reply_to is not null and headers.in_reply_to != "")
+    )
+    and (
+      (
+        (subject.is_forward or subject.is_auto_reply or subject.is_reply)
+        and length(body.previous_threads) >= 1
+      )
+      // auto replies may not always have a previous thread
+      or subject.is_auto_reply
+    )
+  )
+  
+  // sender profiles
+  and (
+    not profile.by_sender_email().solicited
+    or (
+      profile.by_sender_email().any_messages_malicious_or_spam
+      and not profile.by_sender_email().any_messages_benign
+    )
+  )
+  
+tags:
+  - "Attack surface reduction"
 attack_types:
   - "Spam"
 tactics_and_techniques:
-  - "Evasion"
   - "Social engineering"
 detection_methods:
   - "Whois"
+  - "Natural Language Understanding"
+  - "Header analysis"
   - "Sender analysis"
 id: "d1225b38-1d0f-55d3-9954-3a6277999dc7"
 og_id: "9645ef3c-27d2-5891-b77b-38c8f06a5964"
 testing_pr: 5082
-testing_sha: 854bcc0ae1174edcb30d01ff7d879b0fc7f9fe14
+testing_sha: be970878794ac12324bc80f4695bdb4c5cdd5d49
