@@ -16,25 +16,24 @@ source: |
     // only one link is present
     length(body.links) == 1
     // link is a generic subdomain landing page of sender root domain
-    and (
-      any(body.links,
-          .parser == "hyperlink"
-          and .href_url.domain.root_domain == sender.email.domain.root_domain
-          and .href_url.domain.subdomain is not null
-          and .href_url.domain.subdomain != "www"
-          and .href_url.path is null
-          // short display text hyperlink
-          and length(.display_text) < 20
-          // single word only
-          and not strings.icontains(.display_text, " ")
-      )
-  
-      // action link is always third word from the end
-      or any(regex.extract(body.html.raw,
-                           "<a.*?>[\r\n]{0,2}[a-zA-Z0-9-''%()]*?[.,?!]?</a>\\s([0-9a-zA-Z-''%]+[.,?!:]?\\s[0-9a-zA-Z-''%]+[.,?!']?)"
-             ),
-             strings.ends_with(body.html.display_text, .groups[0])
-      )
+    and any(body.links,
+            .parser == "hyperlink"
+            and .href_url.domain.root_domain == sender.email.domain.root_domain
+            and .href_url.domain.subdomain is not null
+            and .href_url.domain.subdomain != "www"
+            and .href_url.path is null
+            // short display text hyperlink
+            and length(.display_text) < 20
+            and (
+              // single word action link
+              not strings.icontains(.display_text, " ")
+              // action link is third word from the end of body
+              and any(regex.extract(body.html.raw,
+                                    "<a.*?>[\r\n]{0,2}[a-zA-Z0-9-''%()]*?[.,?!]?</a>\\s([0-9a-zA-Z-''%]+[.,?!:]?\\s[0-9a-zA-Z-''%]+[.,?!']?)"
+                      ),
+                      strings.ends_with(body.html.display_text, .groups[0])
+              )
+            )
     )
   )
   
@@ -52,4 +51,4 @@ detection_methods:
 id: "f684c25b-e454-513b-9259-778a1c411e0c"
 og_id: "f5024ab8-2d82-5bb0-bc71-c3494f7bea6c"
 testing_pr: 5171
-testing_sha: 5e4758faf6bfd8ffaf9b13e5317756d1a5bfe0de
+testing_sha: a583774160b0d4da42df6cce0e099d8491be01ce
