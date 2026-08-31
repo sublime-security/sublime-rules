@@ -1,0 +1,49 @@
+name: "Business outreach with freemail contact and pivot indicators"
+description: "Detects messages containing greetings and business-to-business cold outreach language that include freemail addresses in the body and show out-of-band pivot indicators from untrusted senders."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and length(body.current_thread.text) < 500
+  and (
+    strings.icontains(body.current_thread.text, "hi")
+    or strings.icontains(body.current_thread.text, "hello")
+    or strings.icontains(body.current_thread.text, "hey")
+    or strings.icontains(body.current_thread.text, "greeting")
+  )
+  // body contains an email address to a freemail provider
+  and (
+    regex.contains(body.current_thread.text,
+                   "[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}"
+    )
+    and any($free_email_providers, strings.icontains(body.current_thread.text, .))
+  )
+  and (
+    any(ml.nlu_classifier(body.current_thread.text).entities,
+        .name in ("greeting", "request")
+    )
+    and any(ml.nlu_classifier(body.current_thread.text).topics,
+            .name == "B2B Cold Outreach"
+    )
+    and any(ml.nlu_classifier(body.current_thread.text).topics,
+            .name == "Out of Band Pivot"
+    )
+  )
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and not (
+    sender.email.domain.root_domain in $high_trust_sender_root_domains
+    and coalesce(headers.auth_summary.dmarc.pass, false)
+  )
+
+attack_types:
+  - "BEC/Fraud"
+  - "Callback Phishing"
+tactics_and_techniques:
+  - "Out of band pivot"
+  - "Social engineering"
+  - "Free email provider"
+detection_methods:
+  - "Content analysis"
+  - "Header analysis"
+  - "Sender analysis"
+id: "f722345f-efe5-5872-9329-ffac1730ac72"
