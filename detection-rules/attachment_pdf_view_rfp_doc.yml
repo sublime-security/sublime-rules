@@ -1,0 +1,28 @@
+name: "Attachment: PDF with View RFP Document lure with external link"
+description: "Detects inbound emails containing a PDF attachment that references a 'VIEW RFP DOCUMENT' lure and embeds a URL pointing to a domain that differs from the sender's domain, a pattern consistent with document-based social engineering used to redirect recipients to attacker-controlled infrastructure."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and any(filter(attachments, .file_type == "pdf"),
+          any(file.explode(.),
+              any(.scan.strings.strings, . =~ 'VIEW RFP DOCUMENT')
+          )
+          and any(file.explode(.),
+                  length(filter(.scan.url.urls,
+                                .scheme != "mailto"
+                                and .domain.domain != sender.email.domain.domain
+                         )
+                  ) > 0
+          )
+  )
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "PDF"
+  - "Social engineering"
+detection_methods:
+  - "File analysis"
+  - "URL analysis"
+  - "Content analysis"
+id: "ad4bcc06-059d-5770-8b9b-b7560472d965"

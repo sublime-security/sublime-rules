@@ -1,0 +1,34 @@
+name: "Body: AI-generated invoice template artifacts"
+description: "Flags inbound messages where NLU classification of the thread text indicates medium or high confidence credential theft or BEC intent, and the message HTML contains comment artifacts characteristic of AI-generated invoice/billing templates (e.g. 'PDF icon', 'File row', 'Billing Table', 'CTA Button'). Messages from highly trusted sender domains are excluded unless they fail DMARC authentication."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and any(ml.nlu_classifier(body.current_thread.text).intents,
+          .name in ("cred_theft", "bec") and .confidence in ("medium", "high")
+  )
+  // templated ai-generated comments
+  and any(html.xpath(body.html, '//comment()').nodes,
+          regex.icontains(.raw,
+                          'PDF icon|File row|Status \+ Reference|Billing Table|Invoice Info|CTA Button'
+          )
+  )
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and not (
+    sender.email.domain.root_domain in $high_trust_sender_root_domains
+    and coalesce(headers.auth_summary.dmarc.pass, false)
+  )
+tags:
+ - "Attack surface reduction"
+attack_types:
+  - "Credential Phishing"
+  - "BEC/Fraud"
+tactics_and_techniques:
+  - "Social engineering"
+  - "Spoofing"
+detection_methods:
+  - "Natural Language Understanding"
+  - "HTML analysis"
+  - "Header analysis"
+  - "Sender analysis"
+id: "52b593a9-e051-5c80-85ac-ca9da0e215c9"
