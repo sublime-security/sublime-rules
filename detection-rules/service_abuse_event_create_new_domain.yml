@@ -1,0 +1,21 @@
+name: "Service abuse: EventCreate links to newly registered domains"
+description: "Flags inbound messages containing links to eventcreate.com where the final rendered page includes outbound links to domains registered within the last 30 days, indicating the use of a legitimate service to pivot traffic to freshly created phishing infrastructure."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and any(filter(body.current_thread.links,
+                 .href_url.domain.root_domain == 'eventcreate.com'
+          ),
+          any(ml.link_analysis(.).final_dom.links,
+              network.whois(.href_url.domain).days_old < 30
+          )
+  )
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Out of band pivot"
+detection_methods:
+  - "URL analysis"
+  - "Whois"
+  - "HTML analysis"
