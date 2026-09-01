@@ -1,0 +1,50 @@
+name: "Service abuse: Zoom Clips with suspicious reply to address or links"
+description: "Detects legitimate-looking Zoom 'Clips shared' notifications sent from Zoom's genuine no-reply infrastructure, where the underlying reply-to address or embedded links show signs of abuse. This includes reply-to domains that very recently created, links pointing to scheduling services like Cal.com, Calendly, or Vasta, or unsolicited reply-to senders — all indicating the legitimate clip-sharing feature is being leveraged to route victims to attacker-controlled contact points."
+type: "rule"
+severity: "low"
+source: |
+  type.inbound
+  // Legitimate zoom sending infrastructure
+  and sender.email.email == "no-reply@zoom.us"
+  // sharing a clip
+  and (
+    // as determiend by the subject
+    strings.starts_with(subject.base, 'Clips')
+    // or by a link
+    or any(body.links,
+           .href_url.domain.root_domain == "zoom.us"
+           and strings.istarts_with(.href_url.path, '/clips/share')
+    )
+  )
+  and (
+    // recently registered
+    network.whois(headers.reply_to[0].email.domain).days_old <= 90
+    // links it cal.com
+    or any(body.links,
+           .href_url.domain.root_domain in ('cal.com', 'calendly.com', 'vasta.me')
+           // the link domain is newer than 90 days
+           or network.whois(.href_url.domain).days_old < 90
+    )
+  
+    // the reply to address is not soliticed
+    //
+    // This rule makes use of a beta feature and is subject to change without notice
+    // using the beta feature in custom rules is not suggested until it has been formally released
+    //
+    or beta.profile.by_reply_to().solicited == false
+  )
+tags:
+  - "Attack surface reduction"
+attack_types:
+  - "Spam"
+tactics_and_techniques:
+  - "Social engineering"
+  - "Evasion"
+detection_methods:
+  - "Sender analysis"
+  - "Header analysis"
+  - "Whois"
+id: "6c0e2a8f-8893-55d9-9c13-198b6a99c0de"
+og_id: "a00900fd-1b91-568e-ab9b-bd33873af253"
+testing_pr: 5228
+testing_sha: f578d7bb8429291f80896109ece1c567e5197dcc
