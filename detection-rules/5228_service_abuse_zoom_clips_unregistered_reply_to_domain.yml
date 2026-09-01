@@ -1,4 +1,4 @@
-name: "Service abuse: Zoom Clips with suspicious reply to address or links"
+name: "Service abuse: Zoom Clips with suspicious reply-to address or links"
 description: "Detects legitimate-looking Zoom 'Clips shared' notifications sent from Zoom's genuine no-reply infrastructure, where the underlying reply-to address or embedded links show signs of abuse. This includes reply-to domains that very recently created, links pointing to scheduling services like Cal.com, Calendly, or Vasta, or unsolicited reply-to senders — all indicating the legitimate clip-sharing feature is being leveraged to route victims to attacker-controlled contact points."
 type: "rule"
 severity: "low"
@@ -17,8 +17,10 @@ source: |
     )
   )
   and (
+    // reply-to domain is not registered
+    network.whois(headers.reply_to[0].email.domain).found == false
     // recently registered
-    network.whois(headers.reply_to[0].email.domain).days_old <= 90
+    or network.whois(headers.reply_to[0].email.domain).days_old <= 90
     // links it cal.com
     or any(body.links,
            .href_url.domain.root_domain in ('cal.com', 'calendly.com', 'vasta.me')
@@ -47,4 +49,4 @@ detection_methods:
 id: "6c0e2a8f-8893-55d9-9c13-198b6a99c0de"
 og_id: "a00900fd-1b91-568e-ab9b-bd33873af253"
 testing_pr: 5228
-testing_sha: f578d7bb8429291f80896109ece1c567e5197dcc
+testing_sha: a2f1d8dd1bd159acdfbf8a2a1504a0c1fafc0c55
