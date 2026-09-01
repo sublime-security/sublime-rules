@@ -1,4 +1,4 @@
-name: "PR# 5228 - Service abuse: Zoom Clips with suspicious reply to address or links"
+name: "PR# 5228 - Service abuse: Zoom Clips with suspicious reply-to address or links"
 description: "Detects legitimate-looking Zoom 'Clips shared' notifications sent from Zoom's genuine no-reply infrastructure, where the underlying reply-to address or embedded links show signs of abuse. This includes reply-to domains that very recently created, links pointing to scheduling services like Cal.com, Calendly, or Vasta, or unsolicited reply-to senders — all indicating the legitimate clip-sharing feature is being leveraged to route victims to attacker-controlled contact points."
 type: "rule"
 severity: "low"
@@ -17,8 +17,10 @@ source: |
     )
   )
   and (
+    // reply-to domain is not registered
+    network.whois(headers.reply_to[0].email.domain).found == false
     // recently registered
-    network.whois(headers.reply_to[0].email.domain).days_old <= 90
+    or network.whois(headers.reply_to[0].email.domain).days_old <= 90
     // links it cal.com
     or any(body.links,
            .href_url.domain.root_domain in ('cal.com', 'calendly.com', 'vasta.me')
