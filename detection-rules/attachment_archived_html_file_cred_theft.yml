@@ -1,0 +1,28 @@
+name: "Attachment: Archived HTML file with credential theft link"
+description: "Detects inbound messages containing a gzip archive that, when extracted, contains an HTML file. Links embedded in the HTML are analyzed by rendering the destination page and classifying its text content, flagging cases where the natural language understanding model identifies credential theft intent with medium or high confidence."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and any(filter(attachments, .file_type == "gz"),
+          any(filter(file.explode(.), any(.flavors.yara, . == "html_file")),
+              any(html.xpath(strings.parse_html(.scan.strings.raw), '//a/@href').nodes,
+                  any(ml.nlu_classifier(ml.link_analysis(strings.parse_url(.raw)).final_dom.inner_text
+                      ).intents,
+                      .name == "cred_theft" and .confidence != "low"
+                  )
+              )
+          )
+  )
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "HTML smuggling"
+  - "Social engineering"
+detection_methods:
+  - "Archive analysis"
+  - "File analysis"
+  - "HTML analysis"
+  - "URL analysis"
+  - "Natural Language Understanding"
+  - "YARA"
