@@ -7,9 +7,34 @@ source: |
   // Legitimate zoom sending infrastructure
   and sender.email.email == "no-reply@zoom.us"
   // sharing a clip
-  and strings.starts_with(subject.base, 'Clips')
-  // reply-to domain is not registered
-  and (network.whois(headers.reply_to[0].email.domain).found == false)
+  and (
+    // as determiend by the subject
+    strings.starts_with(subject.base, 'Clips')
+    // or by a link
+    or any(body.links,
+           .href_url.domain.root_domain == "zoom.us"
+           and strings.istarts_with(.href_url.path, '/clips/share')
+    )
+  )
+  and (
+    // reply-to domain is not registered
+    network.whois(headers.reply_to[0].email.domain).found == false
+    // or recently registered
+    or network.whois(headers.reply_to[0].email.domain).days_old <= 90
+    // links it cal.com
+    or any(body.links,
+           .href_url.domain.root_domain in (
+             'cal.com',
+             'calendly.com',
+             'vasta.me'
+           )
+           // the link domain is newer than 90 days
+           or network.whois(.href_url.domain).days_old < 90
+    )
+  
+    // the reply to address is not soliticed
+    or beta.profile.by_reply_to().solicited == false
+  )
 tags:
   - "Attack surface reduction"
 attack_types:
