@@ -1,0 +1,42 @@
+name: "Impersonation: SAM/SBA federal registration"
+description: "Detects inbound messages impersonating SAM.gov or the Small Business Administration by matching sender display names against known spoofed naming patterns (e.g. sba-support, sam registration/renewal) or by identifying sam.gov references paired with an embedded 'renew entity' image lure. Legitimate senders from verified sba.gov, sam.gov, or other high-trust domains that pass DMARC authentication are excluded."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and (
+    regex.icontains(sender.display_name,
+                    '^sam(?:\.gov\b|\s(?:renew|compliance))',
+                    'final\ssam\.gov',
+                    '^sba[\s-]?(?:e[fd]|[\.,]gov)',
+                    '^sba[\s-](?:connect|invoice|admin|eidl|profile)\b',
+                    '^sba[\s-]support[\s-]\w+'
+    )
+    or (
+      strings.icontains(body.current_thread.text, 'sam.gov')
+      and any(html.xpath(body.html, '//img/@src').nodes,
+              strings.icontains(.raw, 'sam%20renew%20entity')
+              or regex.icontains(.raw, '[./]sam[a-z]{3,}\.com')
+      )
+    )
+  )
+  and not (
+    sender.email.domain.root_domain in $high_trust_sender_root_domains
+    and coalesce(headers.auth_summary.dmarc.pass, false)
+  )
+attack_types:
+  - "Credential Phishing"
+  - "BEC/Fraud"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Social engineering"
+  - "Image as content"
+detection_methods:
+  - "Sender analysis"
+  - "Content analysis"
+  - "HTML analysis"
+  - "Header analysis"
+id: "ebac4f98-abe4-573c-8c63-73bda983d4a4"
+og_id: "057ad471-4564-584c-a700-bba6e0c6eea9"
+testing_pr: 5239
+testing_sha: d18ac7f0123b987863f9de30950f99d98ca4551e
