@@ -1,5 +1,5 @@
-name: "Body: CSS clamp() font obfuscation with suspicious URL"
-description: "Detects inbound messages where the HTML body, or an embedded .eml attachment, contains CSS using the clamp() function with a negative or zero font-size/line-height value—a technique used to hide or obscure text from readers or automated scanners—combined with a link whose URL contains an IP address or an embedded username, both common indicators of an obfuscated or malicious destination."
+name: "Body: CSS clamp() font obfuscation"
+description: "Detects inbound messages where the HTML body (including HTML content within .eml attachments) uses CSS clamp() with a font-size or line-height minimum bound of zero or a negative value. This technique renders text invisible or unreadable to recipients while remaining present in the underlying markup, a method commonly used to hide malicious content or evade text-based detection engines."
 type: "rule"
 severity: "medium"
 source: |
@@ -9,17 +9,11 @@ source: |
       regex.icontains(body.html.raw,
                       '(?:font-size|line-height):\s*clamp\s*\(\s*(?:-\d+|0)(?:px|em|rem|pt)?,'
       )
-      and any(body.links,
-              .href_url.ip.ip is not null or .href_url.username is not null
-      )
     )
     or any(attachments,
            (.content_type == "message/rfc822" or .file_extension =~ "eml")
            and regex.icontains(file.parse_eml(.).body.html.raw,
                                '(?:font-size|line-height):\s*clamp\s*\(\s*(?:-\d+|0)(?:px|em|rem|pt)?,'
-           )
-           and any(file.parse_eml(.).body.links,
-                   .href_url.ip.ip is not null or .href_url.username is not null
            )
     )
   )
