@@ -1,0 +1,44 @@
+name: "Link: Gmail phishkit with suspicious recipient"
+description: "Detects inbound messages where the recipient field is suspicious: the sender and recipient email addresses match, the recipient domain is invalid, or there are no valid recipients across to/cc/bcc fields. The rule further inspects the final rendered DOM of contained links using aggressive link analysis, flagging cases where the page impersonates Gmail's login flow by referencing an encoded 'gmail.com' string alongside the specific '/gmail/js/start.js' script path, a known indicator of a Gmail credential phishing kit."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  // Suspicious recipient
+  and (
+    (
+      length(recipients.to) == 1
+      and (
+        sender.email.email == recipients.to[0].email.email
+        or recipients.to[0].email.domain.valid == false
+      )
+    )
+    or (
+      (
+        length(recipients.to) == 0
+        or all(recipients.to, .email.domain.valid == false)
+      )
+      and length(recipients.cc) == 0
+      and length(recipients.bcc) == 0
+    )
+  )
+  and 0 < length(body.current_thread.links) < 10
+  and any(body.current_thread.links,
+          strings.icontains(ml.link_analysis(., mode="aggressive").final_dom.raw,
+                            "aHR0cHM6Ly9nbWFpbC5jb20=" // https://gmail.com
+          )
+          and strings.icontains(ml.link_analysis(., mode="aggressive").final_dom.raw,
+                                "/gmail/js/start.js"
+          )
+  )
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Evasion"
+  - "Social engineering"
+detection_methods:
+  - "URL analysis"
+  - "HTML analysis"
+  - "Sender analysis"
+id: "39f3a5f3-e815-585d-bc31-9ca34c95f2c0"
