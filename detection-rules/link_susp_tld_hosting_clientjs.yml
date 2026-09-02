@@ -1,0 +1,39 @@
+name: "Link: Suspicious TLD hosting client.js with cf beacon"
+description: "Flags inbound messages with no visible recipients and a small number of body links, one of which resolves to a suspicious TLD and loads a self-hosted client.js file."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and (
+    length(recipients.to) == 0
+    or all(recipients.to, .display_name == "Undisclosed recipients")
+  )
+  and length(recipients.cc) == 0
+  and 0 < length(body.links) < 8
+  and sender.email.domain.tld not in $suspicious_tlds
+  and any(body.links,
+          not .display_text is null
+          and (ml.link_analysis(.).effective_url.domain.tld in $suspicious_tlds)
+          and (
+            any(ml.link_analysis(.).unique_urls_accessed,
+                // client.js hosted on the suspect domain
+                .domain.domain == ml.link_analysis(..).effective_url.domain.domain
+                and .path == "/client.js"
+            )
+          )
+          and (
+            any(ml.link_analysis(.).unique_urls_accessed,
+                .domain.domain == "static.cloudflareinsights.com"
+                and strings.contains(.path, "/beacon.min.js/")
+            )
+          )
+  )
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Social engineering"
+  - "Scripting"
+detection_methods:
+  - "URL analysis"
+  - "Content analysis"
+  - "Sender analysis"
