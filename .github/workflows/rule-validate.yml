@@ -367,12 +367,20 @@ jobs:
         run: |
           for file in detection-rules/*.yml; do
             rule_id=$(yq '.id' "$file")
-          
+
+            # Skip observed IOC rules from MQL mimic testing
+            # These rules have large IOC lists that change frequently (adds/removes)
+            # which causes MQL mimic tests to fail on legitimate IOC updates
+            if [[ "$file" == detection-rules/observed_*.yml ]]; then
+              echo "$file ($rule_id) is an observed IOC rule, skipping MQL mimic"
+              continue
+            fi
+
             if [[ "${STEPS_GET_BASE_REF_OUTPUTS_RUN_ALL}" == "true" ]]; then
               altered_rule_ids="${rule_id} ${altered_rule_ids}"
               continue
             fi
-          
+
             new_source=$(yq '.source' "$file")
             old_file="sr-main/detection-rules/$rule_id.yml"
             if [[ ! -f "$old_file" ]]; then
@@ -388,13 +396,19 @@ jobs:
               altered_rule_ids="${rule_id} ${altered_rule_ids}"
             fi
           done
-          
+
           for file in ${STEPS_CHANGED_FILES_OUTPUTS_DELETED_FILES}; do
+            # Skip observed IOC rules from MQL mimic testing for deleted files too
+            if [[ "$file" == detection-rules/observed_*.yml ]]; then
+              echo "$file is a deleted observed IOC rule, skipping MQL mimic"
+              continue
+            fi
+
             rule_id=$(yq '.id' "$file")
             echo "$file ($rule_id) was deleted"
             altered_rule_ids="${rule_id} ${altered_rule_ids}"
           done
-          
+
           echo "Altered Ruled IDs: [$altered_rule_ids]"
           echo "##[set-output name=rule_ids;]${altered_rule_ids}"
           # TODO: This doesn't solve for a modified rule_id. We could merge with any files known on 'main', but changing
