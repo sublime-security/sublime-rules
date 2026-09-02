@@ -1,0 +1,44 @@
+name: "Spam: Cold outreach from Hostinger-hosted newly registered domain"
+description: "Detects inbound messages from domains registered less than 365 days ago using Hostinger (dns-parking.com) nameservers, where the message content is classified as B2B cold outreach by NLU analysis. The rule excludes legitimate reply threads, and only flags senders who are either unsolicited or have a history of malicious/spam activity without any benign messages."
+type: "rule"
+severity: "low"
+source: |
+  type.inbound
+  // newly registered sender domain
+  and network.whois(sender.email.domain).days_old < 365
+  
+  // there are 2 name servers which have subdomains containing .ns
+  and length(network.whois(sender.email.domain).name_servers) == 2
+  and all(network.whois(sender.email.domain).name_servers,
+          strings.istarts_with(.subdomain, 'ns')
+          and .root_domain == 'dns-parking.com'
+  )
+  
+  // nlu logic
+  and any(ml.nlu_classifier(body.current_thread.text).topics,
+          .name == 'B2B Cold Outreach'
+  )
+  
+  // sender profiles
+  and (
+    not profile.by_sender_email().solicited
+    or (
+      profile.by_sender().any_messages_malicious_or_spam
+      and not profile.by_sender().any_messages_benign
+    )
+  )
+  
+tags:
+  - "Attack surface reduction"
+attack_types:
+  - "Spam"
+tactics_and_techniques:
+  - "Social engineering"
+detection_methods:
+  - "Whois"
+  - "Natural Language Understanding"
+  - "Sender analysis"
+id: "ce3958cb-9e2b-5b3b-89f5-d4392c6b6b40"
+og_id: "d88e2669-e2f6-5b25-8fc0-4132f03b3c48"
+testing_pr: 5247
+testing_sha: 19c9884a848979809e0305a5233cdfbdf463b9d0
