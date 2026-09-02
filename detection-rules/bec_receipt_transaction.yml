@@ -1,0 +1,40 @@
+name: "BEC: Fake transaction receipt summary"
+description: "Detects inbound messages that mimic ACH payment confirmations or transaction receipts, using HTML formatting like 'transaction receipt & summary' banners and receipt-style layouts to simulate legitimate payment advice notifications. These messages typically originate from compromised or spoofed third-party business accounts rather than known trusted senders, and are confirmed as financial communications by NLU classification. The rule excludes messages from highly trusted sender domains that pass DMARC authentication, focusing on fraudulent payment advice lures designed to trick recipients into believing a legitimate transaction has occurred."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  // html with receipt information
+  and (
+    regex.icontains(body.html.raw, 'transaction receipt &amp; summary')
+    and strings.icontains(body.current_thread.text,
+                          "ach payment confirmation",
+                          "amount",
+                          "status",
+                          "transaction receipt",
+                          "full receipt",
+                          "reference"
+    )
+  )
+  and any(ml.nlu_classifier(body.current_thread.text).topics,
+          .name in ("Financial Communications", "Request to View Invoice")
+          and .confidence != "low"
+  )
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and not (
+    sender.email.domain.root_domain in $high_trust_sender_root_domains
+    and coalesce(headers.auth_summary.dmarc.pass, false)
+  )
+attack_types:
+  - "BEC/Fraud"
+tactics_and_techniques:
+  - "Social engineering"
+  - "Spoofing"
+  - "Impersonation: Brand"
+detection_methods:
+  - "Content analysis"
+  - "HTML analysis"
+  - "Natural Language Understanding"
+  - "Header analysis"
+  - "Sender analysis"
+id: "738ec66e-b670-5aee-abec-eee71a3af079"
