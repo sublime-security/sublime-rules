@@ -1,0 +1,34 @@
+name: "Link: Fake Cloudflare verification landing page"
+description: "Detects inbound messages sent to undisclosed or empty recipient lists with no CC and a small number of embedded links, where at least one link resolves to a landing page with an empty href and loads the Cloudflare Insights beacon script."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and (
+    length(recipients.to) == 0
+    or all(recipients.to, .display_name == "Undisclosed recipients")
+  )
+  and length(recipients.cc) == 0
+  and 0 < length(body.links) < 8
+  and sender.email.domain.tld not in $suspicious_tlds
+  and any(body.links,
+          any(html.xpath(ml.link_analysis(.).final_dom, '//a').nodes,
+              .display_text == "Why am I seeing this page?"
+              and strings.contains(.raw, 'href="#"')
+          )
+          and (
+            any(ml.link_analysis(.).unique_urls_accessed,
+                .domain.domain == "static.cloudflareinsights.com"
+                and strings.contains(.path, "/beacon.min.js/")
+            )
+          )
+  )
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Social engineering"
+detection_methods:
+  - "URL analysis"
+  - "HTML analysis"
+  - "Header analysis"
+  - "Content analysis"
