@@ -1,0 +1,42 @@
+name: "Attachment: ICS Link With Valueless Base64 Query Parameter"
+description: "Detects inbound emails containing ICS calendar attachments where embedded event links include a randomized 8-character base64 query parameter with no assigned value. The rule excludes messages from high-trust sender domains that pass DMARC authentication."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and any(attachments,
+          (
+            .file_type == "ics"
+            or .file_extension == "ics"
+            or .content_type in ("application/ics", "text/calendar")
+          )
+          and any(beta.file.parse_ics(.).events,
+                  any(.links,
+                      regex.icontains(.href_url.query_params,
+                                      '^[A-Za-z0-9+/]{8}$'
+                      )
+                      and length(.href_url.query_params_decoded) == 1
+                      and all(flatten(values(.href_url.query_params_decoded)),
+                              . == ''
+                      )
+                  )
+          )
+  )
+  and not (
+    sender.email.domain.root_domain in $high_trust_sender_root_domains
+    and coalesce(headers.auth_summary.dmarc.pass, false)
+  )
+attack_types:
+  - "ICS Phishing"
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Evasion"
+  - "Social engineering"
+detection_methods:
+  - "File analysis"
+  - "URL analysis"
+  - "Header analysis"
+id: "21f0cd34-abfe-5398-9fd2-0b590efab2f3"
+og_id: "d5ce3bc3-9771-541c-a5e5-aedf94cc9e8f"
+testing_pr: 5263
+testing_sha: 7a1f365573f8b8b8ba2084dcae37a2800c190985
