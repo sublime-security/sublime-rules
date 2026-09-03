@@ -1,0 +1,30 @@
+name: "PR# 5270 - Attachment: PDF with bolded passcode"
+description: "Detects inbound emails carrying at least one PDF attachment where the HTML body contains a bolded phrase with a distinct RGB color value, and where the text references an upcoming 'code' or 'password'."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and length(filter(attachments, .file_type == "pdf")) >= 1
+  and any(html.xpath(body.html, '//div[span/b and span/following-sibling::span]').nodes,
+          length(distinct(regex.extract(.raw, 'rgb\(.*?\)'), .full_match)) == 2
+          and any(html.xpath(., './/span').nodes,
+                  regex.contains(.inner_text, 'following (code|password|pass):$')
+          )
+  )
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "PDF"
+  - "Evasion"
+  - "Social engineering"
+detection_methods:
+  - "HTML analysis"
+  - "Content analysis"
+  - "File analysis"
+id: "cd43aa36-c1b9-5aff-b657-7a201c0a88b6"
+tags:
+  - created_from_open_prs
+  - rule_status_added
+  - pr_author_keaton-sublime
+references:
+  - https://github.com/sublime-security/sublime-rules/pull/5270
