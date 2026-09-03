@@ -1,0 +1,43 @@
+name: "Spam: Cold outreach from PorkBun-hosted newly registered domain"
+description: "Detects inbound messages from domains registered less than 365 days ago using PorkBun (porkbun.com) nameservers, where the message content is classified as B2B cold outreach by NLU analysis. The rule only flags senders who are either unsolicited or have a history of malicious/spam activity without any benign messages."
+type: "rule"
+severity: "low"
+source: |
+  type.inbound
+  // newly registered sender domain
+  and network.whois(sender.email.domain).days_old < 365
+  
+  // there are 4 name servers which have subdomains containing .ns
+  and length(network.whois(sender.email.domain).name_servers) == 4
+  and all(network.whois(sender.email.domain).name_servers,
+          strings.iends_with(.subdomain, 'ns') and .root_domain == 'porkbun.com'
+  )
+  
+  // nlu topic
+  and any(ml.nlu_classifier(body.current_thread.text).topics,
+          .name == 'B2B Cold Outreach'
+  )
+  
+  // sender profiles
+  and (
+    not profile.by_sender_email().solicited
+    or (
+      profile.by_sender().any_messages_malicious_or_spam
+      and not profile.by_sender().any_messages_benign
+    )
+  )
+  
+tags:
+  - "Attack surface reduction"
+attack_types:
+  - "Spam"
+tactics_and_techniques:
+  - "Social engineering"
+detection_methods:
+  - "Whois"
+  - "Natural Language Understanding"
+  - "Sender analysis"
+id: "1094e686-eb60-5da6-ad4d-9b98ae508fab"
+og_id: "985ac6a6-1dfd-5330-9bda-36da0da45f27"
+testing_pr: 5269
+testing_sha: 5b072ecda03bae924ef10ce10d29b98e23dd0ee1
