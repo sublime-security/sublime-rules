@@ -4,17 +4,15 @@ type: "rule"
 severity: "high"
 source: |
   type.inbound
-  and any(filter(flatten(map(filter(attachments, .file_type == "gz"),
-                             file.explode(.)
-                         )
-                 ),
-                 any(.flavors.yara, . == "html_file")
-          ),
-          strings.icontains(.scan.strings.raw, "data:image")
-          and any(html.xpath(strings.parse_html(.scan.strings.raw),
-                             '//a[.//span[contains(@style,"border-radius")]]/@href'
-                  ).nodes,
-                  strings.parse_url(.raw).domain.valid
+  and any(filter(attachments, .file_type == "gz"),
+          any(file.explode(.),
+              any(.flavors.yara, . == "html_file")
+              and strings.icontains(.scan.strings.raw, "data:image")
+              and any(html.xpath(strings.parse_html(.scan.strings.raw),
+                                 '//a[.//span[contains(@style,"border-radius")]]/@href'
+                      ).nodes,
+                      strings.parse_url(.raw).domain.valid
+              )
           )
   )
 attack_types:
