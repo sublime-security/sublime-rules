@@ -1,0 +1,33 @@
+name: "PR# 5258 - Attachment: PDF with suspicious domain and globalsign link"
+description: "Detects PDF attachments containing exactly two unique linked domains, where one is globalsign.com and the other is a suspicious domain absent from the Tranco 10k list with a high-risk top-level domain."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and any(filter(attachments, .file_type == "pdf"),
+          any(file.explode(.),
+              length(distinct(.scan.pdf.urls, .domain.root_domain)) == 2
+              and any(distinct(.scan.pdf.urls, .domain.root_domain),
+                      .domain.root_domain == "globalsign.com"
+              )
+              and any(distinct(.scan.pdf.urls, .domain.root_domain),
+                      not .domain.root_domain in $tranco_10k
+                      and .domain.tld in $suspicious_tlds
+              )
+          )
+  )
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "PDF"
+  - "Social engineering"
+detection_methods:
+  - "File analysis"
+  - "URL analysis"
+id: "3aaeda53-1c6c-50cc-a772-0549548e21f1"
+tags:
+  - created_from_open_prs
+  - rule_status_added
+  - pr_author_keaton-sublime
+references:
+  - https://github.com/sublime-security/sublime-rules/pull/5258
