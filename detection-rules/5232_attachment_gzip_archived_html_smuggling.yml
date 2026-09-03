@@ -1,20 +1,18 @@
-name: "Attachment: Gzip-archived HTML smuggling with image button link"
+name: "Attachment: Gzip-archived with nested HTML file containing image and button link"
 description: "Flags messages containing a gzip attachment that unpacks to an HTML file (identified via YARA), or messages whose body contains a base64-encoded image alongside an anchor tag styled as a rounded button, where the link's underlying domain resolves to a valid address. This pattern is commonly used to disguise phishing content and evade detection by embedding the malicious link within an image-styled button or compressed HTML payload."
 type: "rule"
 severity: "high"
 source: |
   type.inbound
-  and any(filter(flatten(map(filter(attachments, .file_type == "gz"),
-                             file.explode(.)
-                         )
-                 ),
-                 any(.flavors.yara, . == "html_file")
-          ),
-          strings.icontains(.scan.strings.raw, "data:image")
-          and any(html.xpath(strings.parse_html(.scan.strings.raw),
-                             '//a[.//span[contains(@style,"border-radius")]]/@href'
-                  ).nodes,
-                  strings.parse_url(.raw).domain.valid
+  and any(filter(attachments, .file_type == "gz"),
+          any(file.explode(.),
+              any(.flavors.yara, . == "html_file")
+              and strings.icontains(.scan.strings.raw, "data:image")
+              and any(html.xpath(strings.parse_html(.scan.strings.raw),
+                                 '//a[.//span[contains(@style,"border-radius")]]/@href'
+                      ).nodes,
+                      strings.parse_url(.raw).domain.valid
+              )
           )
   )
 attack_types:
@@ -32,4 +30,4 @@ detection_methods:
 id: "0002bfef-4b1c-530e-a81d-0d2adad6c558"
 og_id: "c9bd6835-abd4-5430-8a5f-c845e3b5b3f6"
 testing_pr: 5232
-testing_sha: 467315bd277e069d975db7236cccfed31f374f83
+testing_sha: 3e71ab9c86bddeb1ddc384e2b07b03f277c06870
