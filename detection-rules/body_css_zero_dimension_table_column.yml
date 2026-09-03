@@ -1,0 +1,23 @@
+name: "Body: CSS Hidden text via table-column"
+description: "Detects inbound messages containing elements styled with 'display: table-column' combined with a height or width of zero, effectively hiding the element from visual rendering. The rule flags cases where the hidden element contains more than 100 non-whitespace characters of inner text, a technique commonly used to conceal content from human recipients while still embedding it in the DOM to evade text-based or visual detection systems."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and any(html.xpath(body.html, '//*[contains(@style,"table-column")]').nodes,
+          regex.icontains(.raw, 'display\s*:\s*table-column')
+          and (
+            regex.icontains(.raw, '[;"\s]height\s*:\s*0')
+            or regex.icontains(.raw, '[;"\s]width\s*:\s*0')
+          )
+          and regex.icount(.inner_text, '\S') > 100
+  )
+attack_types:
+  - "Credential Phishing"
+  - "Spam"
+tactics_and_techniques:
+  - "Evasion"
+detection_methods:
+  - "HTML analysis"
+  - "Content analysis"
+id: "a2b8ef87-89d9-5ebb-9be4-9d4db8571e57"
