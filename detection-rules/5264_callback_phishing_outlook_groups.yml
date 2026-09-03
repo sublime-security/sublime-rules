@@ -1,0 +1,27 @@
+name: "PR# 5264 - Callback Scam: Outlook groups"
+description: "Detects inbound messages sent to Outlook group distribution lists (groups.outlook.com) where the body text is classified with high confidence as callback scam intent by an NLU model, while excluding cases where recipient lists are empty or entirely invalid."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and all(recipients.to, .email.domain.domain == "groups.outlook.com")
+  and any(ml.nlu_classifier(body.current_thread.text).intents,
+          .name == "callback_scam" and .confidence != "low"
+  )
+  and not (
+    length(recipients.to) == 0 or all(recipients.to, .email.domain.valid == false)
+  )
+attack_types:
+  - "Callback Phishing"
+tactics_and_techniques:
+  - "Social engineering"
+detection_methods:
+  - "Natural Language Understanding"
+  - "Header analysis"
+id: "5e4a0578-e793-58bf-9b02-c91d3ab6e716"
+tags:
+  - created_from_open_prs
+  - rule_status_modified
+  - pr_author_markmsublime
+references:
+  - https://github.com/sublime-security/sublime-rules/pull/5264
