@@ -1,0 +1,26 @@
+name: "BEC: Wealth management lure from newly registered domain"
+description: "Detects inbound messages sent from domains registered within the last 90 days that reference wealth management, estate planning, or offshore financial themes such as Luxembourg or licensed intermediaries. The rule combine these thematic keyword matches with an NLU classifier that flags advance fee or business email compromise intent, surfacing messages that closely resemble financial fraud or advance-fee scams."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and network.whois(sender.email.domain).days_old < 90
+  and 2 of (
+    strings.icontains(body.current_thread.text, "luxembourg"),
+    strings.icontains(body.current_thread.text, "wealth management"),
+    strings.icontains(body.current_thread.text, "estate planning"),
+    strings.icontains(body.current_thread.text, "full disclosure"),
+    strings.icontains(body.current_thread.text, "licensed intermediary")
+  )
+  and any(ml.nlu_classifier(body.current_thread.text).intents,
+          .name in ("advance_fee", "bec") and .confidence != "low"
+  )
+  
+attack_types:
+  - "BEC/Fraud"
+tactics_and_techniques:
+  - "Social engineering"
+detection_methods:
+  - "Whois"
+  - "Content analysis"
+  - "Natural Language Understanding"
