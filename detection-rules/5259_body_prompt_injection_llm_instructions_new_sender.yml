@@ -1,0 +1,54 @@
+name: "Prompt injection: Body instructions directed at an LLM from a new sender"
+description: "Detects messages whose plaintext body contains instructions directed at an LLM (prompt injection), sent from a sender with no established, benign relationship. Targets attacks that attempt to manipulate downstream AI assistants that process email on the recipient's behalf."
+type: "rule"
+severity: "high"
+source: |
+  //
+  // This rule makes use of a beta feature and is subject to change without notice.
+  // Using the beta feature in custom rules is not suggested until it has been formally released.
+  //
+  type.inbound
+  and beta.prompt_injection_detection(body.plain.raw).detection == "injection"
+  and profile.by_sender().prevalence in ("new", "outlier", "rare")
+  and not profile.by_sender().any_messages_benign
+
+  // Graymail exclusion (Fuzzy Attack Score)
+  and beta.fuzzy_attack_score().verdict != "graymail"
+
+  // TEMPORARY
+  and not (
+    headers.auth_summary.dmarc.pass
+    and (
+      sender.email.domain.root_domain in (
+        "linkedin.com",
+        "brighttalk.com",
+        "docusign.net",
+        "facebookmail.com",
+        "substack.com",
+        "glassdoor.com",
+        "divenewsletter.com"
+      )
+      or sender.email.domain.domain in (
+        "mail.beehiiv.com",
+        "mail.grammarly.com",
+        "rs.email.nextdoor.com",
+        "campaign.eventbrite.com",
+        "engage.canva.com",
+        "mail.zillow.com"
+      )
+    )
+  )
+attack_types:
+  - "Credential Phishing"
+  - "BEC/Fraud"
+tactics_and_techniques:
+  - "Social engineering"
+  - "Evasion"
+detection_methods:
+  - "Content analysis"
+  - "Natural Language Understanding"
+  - "Sender analysis"
+id: "130379c7-4f8b-5044-a216-f1ec4e6eee30"
+og_id: "eeba0baa-be61-55af-833b-9e2282119270"
+testing_pr: 5259
+testing_sha: 767bfd8106a31dc272150f944fe4a12e7ceaabc5
