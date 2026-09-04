@@ -1,0 +1,31 @@
+name: "Prompt injection: Body instructions directed at an LLM from a new sender"
+description: "Detects messages whose plaintext body contains instructions directed at an LLM (prompt injection), sent from a sender with no established, benign relationship. Targets attacks that attempt to manipulate downstream AI assistants that process email on the recipient's behalf."
+type: "rule"
+severity: "high"
+source: |
+  //
+  // This rule makes use of a beta feature and is subject to change without notice.
+  // Using the beta feature in custom rules is not suggested until it has been formally released.
+  //
+  type.inbound
+  and beta.prompt_injection_detection(body.plain.raw).detection == "injection"
+  and profile.by_sender().prevalence in ("new", "outlier", "rare")
+  and not profile.by_sender().any_messages_benign
+
+  // Graymail exclusion (Fuzzy Attack Score), limited to authenticated senders
+  and not (
+    beta.fuzzy_attack_score().verdict == "graymail"
+    and headers.auth_summary.dmarc.pass
+  )
+
+attack_types:
+  - "Credential Phishing"
+  - "BEC/Fraud"
+tactics_and_techniques:
+  - "Social engineering"
+  - "Evasion"
+detection_methods:
+  - "Content analysis"
+  - "Natural Language Understanding"
+  - "Sender analysis"
+id: "eeba0baa-be61-55af-833b-9e2282119270"
