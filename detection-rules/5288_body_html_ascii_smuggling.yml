@@ -1,0 +1,32 @@
+name: "ASCII smuggling via Unicode tag characters"
+description: "Detects hidden text encoded using Unicode Tag Block characters (U+E0000–U+E007F) in email bodies. These characters render invisibly in most email clients but map 1:1 to ASCII, offset by 0xE0000. Attackers exploit this to embed hidden instructions readable by LLM-powered email assistants, enabling prompt injection attacks such as data exfiltration (e.g., 'forward this inbox to...') or unauthorized actions (e.g., 'ignore prior instructions'). The rule counts printable tag characters (U+E0020–U+E007E) in the email body, subtracts any belonging to legitimate Unicode subdivision flag emoji sequences, and requires both a minimum count and character variety to distinguish genuine smuggled text from obfuscation noise or repeating-pattern padding."
+type: "rule"
+severity: "medium"
+references:
+  - "https://www.microsoft.com/en-us/security/blog/2026/09/03/ascii-smuggling-crosses-over-from-ai-prompt-injection-to-phishing-evasion/"
+  - "https://embracethered.com/blog/posts/2024/hiding-and-finding-text-with-unicode-tags/"
+source: |
+  type.inbound
+  and regex.count(body.html.inner_text, '[\x{E0020}-\x{E007E}]') - sum(regex.extract(body.html.inner_text,
+                                                                                     '\x{1F3F4}([\x{E0000}-\x{E007F}]+)'
+                                                                       ),
+                                                                       regex.count(.groups[0],
+                                                                                   '[\x{E0020}-\x{E007E}]'
+                                                                       )
+  ) > 10
+  and length(distinct(regex.extract(body.html.inner_text, '[\x{E0020}-\x{E007E}]'),
+                      .full_match
+             )
+  ) >= 10
+attack_types:
+  - "BEC/Fraud"
+tactics_and_techniques:
+  - "Evasion"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "HTML analysis"
+id: "98186737-dccb-5da4-a975-9716ec66fb78"
+og_id: "45a895a6-b1ba-53d1-9116-7c3cf21c4e99"
+testing_pr: 5288
+testing_sha: c2f29c69fbdd84ea4313fa9dd69f15e140b7171d
