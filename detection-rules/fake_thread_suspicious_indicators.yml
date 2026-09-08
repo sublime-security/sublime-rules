@@ -78,6 +78,16 @@ source: |
     any(ml.nlu_classifier(body.current_thread.text).intents,
         .name == "cred_theft" and .confidence in~ ("medium", "high")
     ),
+
+    // subject has multiple re: tags and suspicious indicators
+    (
+      regex.icontains(subject.subject, '\bre:\s+re:')
+      and (
+        regex.icontains(subject.base,
+                        '(?:action.{0,10}required|invest(?:ment|ing)?|enforcement|opportunit|urgent|verif|confirm|suspend|terminat)'
+        )
+      )
+    ),
   
     // commonly abused sender TLD
     strings.ilike(sender.email.domain.tld, "*.jp"),
@@ -148,6 +158,17 @@ source: |
     // body contains recipient SLD
     any(recipients.to,
         strings.icontains(body.current_thread.text, .email.domain.sld)
+    ),
+    (
+      // bec
+      any(ml.nlu_classifier(body.current_thread.text).intents,
+          .name == "bec" and .confidence != "low"
+      )
+      // previous thread contains matching domain but mismatch local part in current thread
+      and any(body.previous_threads,
+              .sender.email.domain.root_domain == recipients.to[0].email.domain.root_domain
+              and .sender.email.email != recipients.to[0].email.email
+      )
     )
   )
   

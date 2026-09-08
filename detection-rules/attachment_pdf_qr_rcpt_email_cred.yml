@@ -1,0 +1,47 @@
+name: "Attachment: PDF with QR code containing recipient-specific credential theft content"
+description: "Detects PDF attachments containing QR codes that include the recipient's email address (either plaintext or base64 encoded) combined with credential theft language detected through natural language processing. This technique personalizes the attack by incorporating the target's email into the QR code URL while using PDF content to establish credibility."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and any(filter(attachments, .file_type == "pdf"),
+          ( // the strings produced by the PDF scanner contains cred theft language
+            any(filter(file.explode(.), .depth == 1 and .file_name == "text"),
+                any(ml.nlu_classifier(.scan.strings.raw).intents,
+                    .name == "cred_theft"
+                )
+            )
+          )
+          // there is a QR code
+          and length(beta.scan_qr(.).items) > 0
+          // QR code contians the recipient email
+          and any(beta.scan_qr(.).items,
+                  .url.domain.valid
+                  and any(recipients.to,
+                          .email.domain.valid
+                          // QR code contains the email
+                          and (
+                            strings.icontains(..url.url, .email.email)
+                            // QR code contains the base64 endcoded email
+                            or any(strings.scan_base64(..url.url,
+                                                       format="url",
+                                                       ignore_padding=true
+                                   ),
+                                   strings.icontains(., ..email.email)
+                            )
+                          )
+                  )
+          )
+  )
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "PDF"
+  - "QR code"
+  - "Social engineering"
+detection_methods:
+  - "File analysis"
+  - "Natural Language Understanding"
+  - "QR code analysis"
+  - "Content analysis"
+id: "c8b85214-fe8e-52b0-868a-be0b040c5e60"

@@ -5,7 +5,7 @@ severity: "medium"
 source: |
   type.inbound
   and (
-    // TikTok Brand Detection 
+    // TikTok Brand Detection
     (
       // display name contains tiktok
       strings.ilike(strings.replace_confusables(sender.display_name), '*tiktok*')
@@ -19,8 +19,12 @@ source: |
                 .name == "TikTok" and .confidence == "high"
         )
       )
-      // hyphenated sender domain contains tiktok
-      or strings.iends_with(sender.email.domain.root_domain, "-tiktok.com")
+      // hyphenated sender domain contains a variation of tiktok
+      or strings.iends_with(sender.email.domain.root_domain,
+                            "-tiktok.com",
+                            "badgetiktok.com"
+      )
+      or strings.istarts_with(sender.email.domain.root_domain, "tiktokrequest")
     )
     // OR TikTok verification language
     or (
@@ -46,14 +50,16 @@ source: |
         )
         and .confidence in ("medium", "high")
     )
-    or any(ml.nlu_classifier(beta.ocr(file.message_screenshot()).text).topics,
-           .name in (
-             "Security and Authentication",
-             "Secure Message",
-             "Reminders and Notifications"
-           )
-           and .confidence in ("medium", "high")
-           and beta.ocr(file.message_screenshot()).text != ""
+    or (
+      beta.ocr(file.message_screenshot()).text != ""
+      and any(ml.nlu_classifier(beta.ocr(file.message_screenshot()).text).topics,
+              .name in (
+                "Security and Authentication",
+                "Secure Message",
+                "Reminders and Notifications"
+              )
+              and .confidence in ("medium", "high")
+      )
     )
     or any(ml.nlu_classifier(body.current_thread.text).intents,
            .name == "cred_theft" and .confidence == "high"
@@ -79,7 +85,7 @@ source: |
   )
   // negate iCloud Private Message Relay
   and not (
-    sender.email.domain.root_domain == "privaterelay.appleid.com"
+    sender.email.domain.domain == "privaterelay.appleid.com"
     or any(headers.hops, any(.fields, .name == "X-ICLOUD-HME"))
   )
   // negate highly trusted sender domains unless they fail DMARC authentication

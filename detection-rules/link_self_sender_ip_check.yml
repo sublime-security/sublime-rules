@@ -1,0 +1,29 @@
+name: "Link: Self-sender with IP geolocation check and suspicious link behavior"
+description: "Detects messages where the sender and recipient are the same address that access IP geolocation services (ipinfo.io) and exhibit suspicious behavior, such as randomization scripting or confirmed credential harvesting indicators."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  // self sender
+  and (
+    length(recipients.to) == 1
+    and recipients.to[0].email.email == sender.email.email
+  )
+  and 0 < length(body.current_thread.links) < 10
+  and any(filter(body.current_thread.links,
+                 .href_url.domain.root_domain != sender.email.domain.root_domain
+          ),
+          any(ml.link_analysis(.).unique_urls_accessed,
+              .url == 'https://ipinfo.io/json'
+          )
+  )
+  and not headers.return_path.domain.root_domain == "salesforce.com"
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Evasion"
+  - "Social engineering"
+detection_methods:
+  - "Sender analysis"
+  - "URL analysis"
+id: "fa708c3c-c40f-5b0d-b9c4-e9512fb32629"

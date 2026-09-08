@@ -1,0 +1,48 @@
+name: "Brand impersonation: Government / Tax Authority document lure"
+description: "Detects messages impersonating government and tax authorities (such as the IRS, SSA, Department of Treasury, and similar agencies) that contain suspicious document-related links. The rule identifies either download calls-to-action pointing to low-reputation or free subdomain hosts, or phishing-kit URLs that embed the impersonated organization's name in the path. Credential theft intent is confirmed via NLP analysis, and trusted sender domains are only flagged when DMARC authentication fails."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  // impersonates a named government / tax / benefits authority in the sender display name
+  and regex.icontains(strings.replace_confusables(sender.display_name),
+                      'internal revenue|\bIRS\b|social security|\bSSA\b|medicaid|medicare|department of (?:health|revenue|treasur|state|labor|justice|homeland)|ministry of finance|income tax (?:department|dept)|department of the treasury|u\.?s\.? treasury'
+  )
+  // a document lure link that is either a download cta to a low-rep host
+  and any(body.current_thread.links,
+          regex.icontains(.display_text,
+                          'download|response form|review document|official document|statement'
+          )
+          and (
+            .href_url.domain.root_domain not in $tranco_1m
+            or .href_url.domain.root_domain in $url_shorteners
+            or (
+              .href_url.domain.subdomain is not null
+              and .href_url.domain.subdomain != "www"
+              and .href_url.domain.root_domain in $free_subdomain_hosts
+            )
+          )
+  )
+  and any(ml.nlu_classifier(body.current_thread.text).intents,
+          .name == "cred_theft" and .confidence in ("medium", "high")
+  )
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and not (
+    sender.email.domain.root_domain in $high_trust_sender_root_domains
+    and coalesce(headers.auth_summary.dmarc.pass, false)
+  )
+  
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Free subdomain host"
+  - "Social engineering"
+  - "Lookalike domain"
+detection_methods:
+  - "Sender analysis"
+  - "URL analysis"
+  - "Natural Language Understanding"
+  - "Content analysis"
+  - "Threat intelligence"
+id: "9e322cf8-a80b-5c59-b07a-af58e2753502"

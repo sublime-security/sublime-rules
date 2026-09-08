@@ -1,0 +1,41 @@
+name: "Service abuse: Suspicious Datadog alert"
+description: "Message from alert@dtdg.co containing links to URL shorteners or self-service creation platforms."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and sender.email.email == "alert@dtdg.co"
+  and length(body.current_thread.text) < 1000
+  and (
+    (
+      any(filter(body.links,
+                 .parser == "hyperlink"
+                 and not any(.href_url.query_params_decoded["domain"],
+                             strings.parse_domain(.).root_domain == "datadoghq.com"
+                 )
+          ),
+          .href_url.domain.root_domain != "datadoghq.com"
+          and .href_url.domain.root_domain != "aka.ms"
+      )
+      and regex.icontains(body.current_thread.text,
+                          'quarantine|held for.{0,10}review|secure message|voice\s?mail'
+      )
+    )
+    or (
+      ml.nlu_classifier(body.current_thread.text).language == "english"
+      and any(ml.nlu_classifier(body.current_thread.text).topics,
+              .confidence == "high"
+              and .name == "Voicemail Call and Missed Call Notifications"
+      )
+    )
+  )
+attack_types:
+  - "Credential Phishing"
+  - "Malware/Ransomware"
+tactics_and_techniques:
+  - "Evasion"
+  - "Free subdomain host"
+detection_methods:
+  - "Sender analysis"
+  - "URL analysis"
+id: "0808411b-5765-5bef-ad52-5d55bd0f36dd"

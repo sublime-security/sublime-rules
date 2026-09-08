@@ -1,0 +1,55 @@
+name: "Link: BEC with newly registered domains and financial keywords"
+description: "Detects Business Email Compromise attacks containing links to newly registered domains (less than 60 days old) with invoice-related language and engaging action words. The message includes financial or payment terminology and prompts the recipient to take action through suspicious links. Uses natural language processing to identify credential theft or BEC intent while filtering out benign communications."
+type: "rule"
+severity: "medium"
+source: |
+    type.inbound
+    and 0 < length(body.current_thread.links) < 15
+    and any(body.current_thread.links,
+            network.whois(.href_url.domain).days_old < 60
+            and regex.icontains(.display_text,
+                                '(?:view|click|download|check|validate)'
+            )
+    )
+    and regex.icontains(subject.base,
+                        '\b(?:proposal|purchase|invoice|payment|wire|agreement|contract|settlement)\b'
+    )
+    and regex.icontains(body.current_thread.text,
+                        '\bwire\b',
+                        'payment',
+                        'invoice',
+                        '\bACH\b',
+                        'kindly',
+                        'document',
+                        'urgent',
+                        'confirm'
+    )
+    and (
+      any(ml.nlu_classifier(body.current_thread.text).intents,
+          .name in ("cred_theft", "bec") and .confidence != "low"
+      )
+      or any(ml.nlu_classifier(body.current_thread.text).tags,
+             .name in ("invoice", "payment")
+      )
+    )
+    // prevent benign emails
+    and not any(ml.nlu_classifier(body.current_thread.text).intents,
+                .name == "benign"
+    )
+    // negate highly trusted sender domains unless they fail DMARC authentication
+    and not (
+      sender.email.domain.root_domain in $high_trust_sender_root_domains
+      and coalesce(headers.auth_summary.dmarc.pass, false)
+    )
+
+attack_types:
+  - "BEC/Fraud"
+tactics_and_techniques:
+  - "Social engineering"
+  - "Evasion"
+  - "Spoofing"
+detection_methods:
+  - "Header analysis"
+  - "Sender analysis"
+  - "URL analysis"
+id: "fee020b6-4a01-5ed3-a924-b5aa4415d3e9"

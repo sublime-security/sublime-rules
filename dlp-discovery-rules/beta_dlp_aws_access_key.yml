@@ -1,0 +1,36 @@
+name: "beta.DLP: AWS Access Key"
+description: "Detects messages containing AWS access keys."
+type: "dlp"
+severity: "high"
+source: |
+  type.outbound
+  and (
+    any(beta.ml_extract_sensitive_information(body.current_thread.text).elements,
+      .type == "aws_access_key" and .confidence in ("medium", "high")
+    )
+    or any(beta.ml_extract_sensitive_information(subject.subject).elements,
+      .type == "aws_access_key" and .confidence in ("medium", "high")
+    )
+    or any(attachments,
+    any(file.explode(.),
+      (
+        any(beta.ml_extract_sensitive_information(.scan.strings.raw).elements,
+          .type == "aws_access_key" and .confidence in ("medium", "high")
+        )
+        or any(beta.ml_extract_sensitive_information(.scan.ocr.raw).elements,
+          .type == "aws_access_key" and .confidence in ("medium", "high")
+        )
+      )
+    )
+  )
+  )
+tags:
+  - "Credentials"
+attack_types:
+  - "DLP: Credential Exposure"
+detection_methods:
+  - "Content analysis"
+  - "Natural Language Understanding"
+  - "File analysis"
+  - "Optical Character Recognition"
+id: "a494b51c-4ddd-574b-99a3-5b45c6bf6076"

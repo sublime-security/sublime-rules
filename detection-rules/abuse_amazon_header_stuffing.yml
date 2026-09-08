@@ -1,0 +1,25 @@
+name: "Service abuse: Amazon invitation with suspected callback phishing"
+description: "Detects Amazon's no-reply address with a subject about invitation sending, containing phone numbers within HTML header elements. This pattern is commonly used to trick recipients into calling fraudulent customer service numbers."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and sender.email.email == 'no-reply@amazon.com'
+  and subject.base == 'Your invitation has been sent'
+  and any(html.xpath(body.html, "//h2[contains(@class, 'rio-header')]").nodes,
+          // phone number regex
+          regex.icontains(strings.replace_confusables(.display_text),
+                          '\+?(?:[ilo0-9]{1}.)?\(?[ilo0-9]{3}?\)?.[ilo0-9]{3}.?[ilo0-9]{4}',
+                          '\+?(?:[ilo0-9]{1,2})?\s?\(?\d{3}\)?[\s\.\-⋅]{0,5}[ilo0-9]{3}[\s\.\-⋅]{0,5}[ilo0-9]{4}'
+          )
+  )
+attack_types:
+  - "Callback Phishing"
+tactics_and_techniques:
+  - "Out of band pivot"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "HTML analysis"
+  - "Sender analysis"
+id: "f9eff808-2bc7-5ec0-90a0-bb27eacca323"

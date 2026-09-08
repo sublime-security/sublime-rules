@@ -6,69 +6,229 @@ default_actions: ["move_to_spam"]
 source: |
   type.inbound
   and (
+    // Path 1: Authentication failure
     // If authentication fails at all during a bomb, we always want to remediate
-    not headers.auth_summary.dmarc.pass
-    or not headers.auth_summary.spf.pass
-
-    // Otherwise, we need to check for content or other heuristics to identify messages
-    // that are noisy within the bomb. To prevent overreach, we ignore cases where this
-    // is already an established sender relationship.
+    not coalesce(headers.auth_summary.dmarc.pass, false)
+    or not coalesce(headers.auth_summary.spf.pass, false)
+  
+    // Paths 2–4 share basic guards: the sender is not from the org's own domain,
+    // there is no prior thread history, and it's not a legitimate reply chain.
     or (
-      (
-        // Looks like known spam, welcome, newsletters, etc
-        any(ml.nlu_classifier(body.current_thread.text).topics,
-            .name in (
-              "Advertising and Promotions",
-              "Bounce Back and Delivery Failure Notifications",
-              "Newsletters and Digests",
-              "Educational and Research",
-              "Entertainment and Sports",
-              "Health and Wellness",
-              "News and Current Events",
-              "Professional and Career Development",
-              "Political Mail",
-              "Out of Office and Automatic Replies",
-              "Sexually Explicit Messages",
-              "Social Media and Networking",
-            )
-        )
-
-        // Or it's already likely to be graymail
-        or ml.attack_score().verdict not in (
-          "likely_benign",
-          "unknown",
-          "suspicious"
-        )
-
-        // Undisclosed recipients
-        or (
-          length(recipients.bcc) > 0
-          or length(recipients.cc) > 0
-          or not any(recipients.to, .email.domain.valid)
-        )
-
-        // Potential fake thread
-        or (
-          regex.imatch(subject.subject,
-                       '(\[[^\]]+\]\s?){0,3}(re|fwd?|automat.*)\s?:.*'
-          ) == true
-          and (length(headers.references) == 0 or headers.in_reply_to is null) == true
-        )
-      )
-
-      // And the sender doesn't match any familiarity checks
-      and sender.email.domain.root_domain not in $high_trust_sender_root_domains
-      and sender.email.domain.root_domain not in $org_domains
-      and not profile.by_sender_email().solicited
-      and not profile.by_sender().any_messages_benign
-      and profile.by_sender().days_known < 3
+      sender.email.domain.root_domain not in $org_domains
       and length(body.previous_threads) == 0
-
       // Negate legitimate replies
       and not (
         (subject.is_forward or subject.is_reply)
         and length(headers.references) > 0
         and headers.in_reply_to is not null
+      )
+  
+      and (
+        // Path 2: Content heuristics + sender familiarity
+        // Matches messages that look like bomb noise (spam-like NLU topics, graymail
+        // verdicts, undisclosed recipients, fake threads, or generic sender local-parts)
+        // but only when the sender is unfamiliar — preventing overreach on established
+        // sender relationships.
+        (
+          (
+            // Looks like known spam, welcome, newsletters, etc
+            any(ml.nlu_classifier(body.current_thread.text).topics,
+                .name in (
+                  "Advertising and Promotions",
+                  "Bounce Back and Delivery Failure Notifications",
+                  "Newsletters and Digests",
+                  "Educational and Research",
+                  "Entertainment and Sports",
+                  "Health and Wellness",
+                  "News and Current Events",
+                  "Professional and Career Development",
+                  "Political Mail",
+                  "Out of Office and Automatic Replies",
+                  "Sexually Explicit Messages",
+                  "Social Media and Networking",
+                  "Customer Service and Support",
+                  "Security and Authentication",
+                )
+            )
+  
+            // Or it's already likely to be graymail
+            or ml.attack_score().verdict not in (
+              "likely_benign",
+              "unknown",
+              "suspicious"
+            )
+  
+            // Undisclosed recipients
+            or (
+              length(recipients.bcc) > 0
+              or length(recipients.cc) > 0
+              or not any(recipients.to, .email.domain.valid)
+            )
+  
+            // Potential fake thread
+            or (
+              regex.imatch(subject.subject,
+                           '(\[[^\]]+\]\s?){0,3}(re|fwd?|automat.*)\s?:.*'
+              ) == true
+              and (length(headers.references) == 0 or headers.in_reply_to is null) == true
+            )
+  
+            // common local-part of generic mailboxes used to send signup/confirmation emails
+            or sender.email.local_part in (
+              'noreply',
+              'no-reply',
+              'donotreply',
+              'no_reply',
+              'newsletter',
+              'contact',
+              'admin',
+              'support',
+              'info',
+              'validation',
+              'mailer',
+              'mail',
+              'bounce',
+              'notifications',
+              'notification'
+            )
+  
+            // regex patterns for local part used to send signup/confirmation emails
+            or regex.icontains(sender.email.local_part, '(?:subscri|no.reply)')
+            or regex.icontains(sender.display_name, '(?:subscri|no.reply)')
+          )
+  
+          // And the sender doesn't match any familiarity checks
+          and sender.email.domain.root_domain not in $high_trust_sender_root_domains
+          and not profile.by_sender_email().solicited
+          and not profile.by_sender_email().any_messages_benign
+          and profile.by_sender_email().days_known < 3
+        )
+  
+        // Path 3: Transactional signals
+        // Matches messages with high-specificity signup, account creation, password reset,
+        // or OTP patterns in the subject, body, or links. These signals are strong enough
+        // to identify bomb traffic without requiring sender familiarity checks.
+        or (
+          // signup subject patterns
+          regex.icontains(subject.base,
+                          "password.reset|reset.your.password|new.password|confirm|verif|activat",
+                          "bestätigen|bestätigung|anmeld|réinitialisation|cadastro|abonnement|register|registrat|inscript",
+                          "welcom|subscription|newsletter|otp|подтвер|aanmelding|confermi|conferma",
+                          "confirmação|confirmar|activa|bem-vindo",
+                          // Extended patterns from miss analysis
+                          "one.time.pass", // "Your One Time Password"
+                          "sign.?in.code|code.to.sign", // "Here's your code to sign in"
+                          "sorry.to.see.you", // "We're sorry to see you go"
+                          "unknown.account", // "Unknown Account"
+                          "subscri.request", // "Swann Communications UK subscribe request"
+                          "account.{0,20}request",
+                          "unsubscri", // English unsubscribe confirmations
+                          "sign.?up", // sign up / signup
+                          "reset.password", // "Reset Password (Unregistered User)"
+                          "new.account|account.invitation", // "New Account", "...  Store account invitation"
+                          "2fa|two.factor|authentication.code", // "iCounty - 2FA Authentication Code"
+                          "konfirm|langganan", // Indonesian confirm/subscribe
+                          "signing.up|signed.up", // "Thanks for signing up!"
+                          "login.code|access.code", // "Cloudflare Access login code for ..."
+                          "確認", // Japanese "confirm/verify" — reuters.com メールアドレスの確認
+                          "a (?:été|était) créé|compte.*créé", // French "has been created"
+                          "you.re on the list|you.re now on|you.re in", // retail newsletter enrollment — "You're on the list."
+                          "request.{0,20}account",
+                          "bestätigung", // German noun form — "Bestätigung deines Gutscheinkaufs"
+                          "se ha creado.*cuenta|tu cuenta.*cread", // Spanish — "¡Se ha creado tu cuenta!"
+          )
+          // transactional body keywords
+          or regex.icontains(body.current_thread.text,
+                             "verify your email|confirm your email|confirm your address",
+                             "verify your account|activate your account|complete your registration",
+                             "password reset|reset your password|reset password link|create.{0,10}password",
+                             "you.{0,10}requested.{0,30}account|account.{0,15}request",
+                             "account.{0,20}creat|creat.{0,20}account",
+                             "email.{0,20}already.{0,20}associated|already.{0,20}registered",
+                             "email is not.{0,20}registered|not.{0,20}found in our.{0,20}system",
+                             "we couldn.t find.{0,20}account|no account.{0,20}found",
+                             "this email.{0,20}not.{0,20}active|email address is not active",
+                             "one.time.pass|one time code|one-time code",
+                             "sign.{0,5}in code|verification code|auth.{0,15}code",
+                             "welcome to|thanks for (signing|registering|joining|subscribing)",
+                             "thank you for (signing|registering|joining|subscribing)",
+                             "you.ve been invited|you have been invited",
+                             "your (new |trial )?account",
+                             "in response to your request to create",
+                             "create your username and password",
+                             "request.*to create an account|request to create.{0,20}account",
+                             "magic login|magic link",
+                             "log in.*to.*application|log into.*application",
+                             "api key|your api key",
+                             "we received your request for",
+                             "subscribing to|thank you for subscribing",
+                             "bekräfta prenumeration|bestätigen sie ihre anmeldung",
+                             "username and password.{0,50}link",
+                             "please click.{0,30}(link|button|here).{0,30}(creat|verif|confirm|activat|account|login|log in)",
+                             "received the request to change the password",
+                             "your validation code|here is your.{0,15}code|validation code",
+                             "your request has been received",
+                             "sign up at this url",
+                             "thank you for requesting",
+                             "you.re on the list|you are on the list",
+                             "you have been (added|subscribed|enrolled|registered)",
+                             "temporary password",
+                             "do not have an account.{0,30}(register|portal|sign)",
+                             "konfirm|langganan|berlangganan",
+                             "your authentication code|authentication code is",
+                             "username request|credentials request",
+                             "potvrdenie|dokončit",
+                             "criar uma conta|nome de utilizador",
+                             "cliquez.{0,20}lien|finaliser.{0,20}enregistrement",
+                             "pendaftaran|daftar",
+                             "confirm your interest|confirm your willingness",
+                             "thank you for your request",
+                             "questions about this newsletter|contact.*newsletter",
+                             "your.*access code|cloudflare access code",
+                             '\d{5,8}.*expires after.{0,30}minutes',
+                             "someone has requested.*trial|requested.*trial.*your email",
+                             "thanks for (signing|signed).{0,5}up",
+                             "unable to find.{0,20}account|we were unable to find",
+                             "thanks for submitting your.{0,30}request",
+                             "thank you for your interest in our",
+                             "please send your prayer request",
+                             "créé un compte|votre compte.*créé|a été créé",
+                             "確認",
+                             '^\d{4,8}$', // bare OTP body — only digits
+                             "applying for an? account",
+                             "not associated with.{0,30}account",
+          )
+          // links that indicate account confirmation/signups/magic links/etc
+          or any(body.links,
+                 regex.icontains(.href_url.url,
+                                 '(?:verif|confirm|activat|validate|register|registrat|sign.?up|opt.?in|token|otp)'
+                 )
+                 or regex.icontains(.href_url.query_params,
+                                    '(?:verif|confirm|activat|validate|register|registrat|sign.?up|opt.?in|token|otp)'
+                 )
+                 or any(values(.href_url.query_params_decoded),
+                        any(., regex.icontains(., '(?:verif|confirm|activat|validate|register|registrat|sign.?up|opt.?in|token|otp)'))
+                 )
+          )
+        )
+  
+        // Path 4: WordPress / PHP framework mailer headers
+        // Strong signal of web form or CMS abuse — the mailer header itself identifies
+        // the message as automated output from a form submission system.
+        or (
+          sender.email.domain.root_domain == 'wordpress.com'
+          or (
+            headers.mailer is not null
+            and regex.icontains(headers.mailer,
+                  'phpmailer|wpmail|wp mail smtp|easywpsmtp|post.smtp|drupal|typo3|codeigniter|nette|activecampaign|symfony|laravel|zend|cakephp|yii|enginemailer|msgsend|sailthru|sympa'
+            )
+          )
+          or any(headers.hops, any(.fields,
+               .name =~ "Content-Type"
+               and strings.icontains(.value, 'boundary="_=_swift_')
+               and strings.iends_with(.value, '_=_"')
+          ))
+        )
       )
     )
   )

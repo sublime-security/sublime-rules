@@ -1,0 +1,42 @@
+name: "beta.DLP: Canada Driver's License"
+description: "Detects messages containing Canadian driver's license numbers."
+type: "dlp"
+severity: "high"
+attack_types:
+  - "DLP: Personal Data"
+tags:
+  - "Personal data"
+  - "PIPEDA"
+  - "Canada"
+source: |
+  //
+  // This rule makes use of a beta feature and is subject to change without notice
+  // using the beta feature in custom rules is not suggested until it has been formally released
+  //
+  type.outbound
+  and (
+    any(beta.ml_extract_sensitive_information(body.current_thread.text).elements,
+      .type == "ca_driver_license" and .confidence in ("medium", "high")
+    )
+    or any(beta.ml_extract_sensitive_information(subject.subject).elements,
+      .type == "ca_driver_license" and .confidence in ("medium", "high")
+    )
+    or any(attachments,
+      any(file.explode(.),
+        (
+          any(beta.ml_extract_sensitive_information(.scan.strings.raw).elements,
+            .type == "ca_driver_license" and .confidence in ("medium", "high")
+          )
+          or any(beta.ml_extract_sensitive_information(.scan.ocr.raw).elements,
+            .type == "ca_driver_license" and .confidence in ("medium", "high")
+          )
+        )
+      )
+    )
+  )
+detection_methods:
+  - "Content analysis"
+  - "Natural Language Understanding"
+  - "File analysis"
+  - "Optical Character Recognition"
+id: "10ca6e78-58e3-53d2-8193-8bdf4a9f6fbe"

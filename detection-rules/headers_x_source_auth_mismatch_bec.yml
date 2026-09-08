@@ -1,0 +1,36 @@
+name: "Headers: X-Source-Auth mismatch with mismatched reply-to domain"
+description: "Detects messages where the X-Source-Auth header value doesn't match the sender's email address and the reply-to domain differs from the sender's domain, indicating potential sender spoofing or impersonation."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  // X-Source-Auth doesn't match sender
+  and any(headers.hops,
+          any(.fields,
+              .name == 'X-Source-Auth'
+              and .value != sender.email.email
+              and strings.parse_email(.value).email is not null
+          )
+  )
+  // mismatched sender (from) and Reply-to
+  and length(headers.reply_to) > 0
+  and all(headers.reply_to,
+          .email.domain.root_domain != sender.email.domain.root_domain
+  )
+  and length(ml.nlu_classifier(body.current_thread.text).intents) > 0
+  and not any(ml.nlu_classifier(body.current_thread.text).intents,
+              .name == 'benign' and .confidence != 'low'
+  )
+tags:
+ - "Attack surface reduction"
+attack_types:
+  - "BEC/Fraud"
+tactics_and_techniques:
+  - "Social engineering"
+  - "Spoofing"
+detection_methods:
+  - "Content analysis"
+  - "Header analysis"
+  - "Natural Language Understanding"
+  - "Sender analysis"
+id: "f56e8b29-30a4-51bc-a71f-244f10bf7452"

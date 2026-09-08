@@ -1,0 +1,41 @@
+name: "beta.DLP: Australia Bank Account"
+description: "Detects messages containing Australian bank account numbers."
+type: "dlp"
+severity: "high"
+attack_types:
+  - "DLP: Financial Data"
+tags:
+  - "Financial data"
+  - "AU Privacy Act"
+source: |
+  //
+  // This rule makes use of a beta feature and is subject to change without notice
+  // using the beta feature in custom rules is not suggested until it has been formally released
+  //
+  type.outbound
+  and (
+    any(beta.ml_extract_sensitive_information(body.current_thread.text).elements,
+      .type == "au_bank_account" and .confidence in ("medium", "high")
+    )
+    or any(beta.ml_extract_sensitive_information(subject.subject).elements,
+      .type == "au_bank_account" and .confidence in ("medium", "high")
+    )
+    or any(attachments,
+      any(file.explode(.),
+        (
+          any(beta.ml_extract_sensitive_information(.scan.strings.raw).elements,
+            .type == "au_bank_account" and .confidence in ("medium", "high")
+          )
+          or any(beta.ml_extract_sensitive_information(.scan.ocr.raw).elements,
+            .type == "au_bank_account" and .confidence in ("medium", "high")
+          )
+        )
+      )
+    )
+  )
+detection_methods:
+  - "Content analysis"
+  - "Natural Language Understanding"
+  - "File analysis"
+  - "Optical Character Recognition"
+id: "8fcc2c89-3575-5d4a-828d-8cd63e63e252"

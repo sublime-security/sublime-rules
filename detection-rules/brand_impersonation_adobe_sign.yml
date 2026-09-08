@@ -4,19 +4,39 @@ type: "rule"
 severity: "high"
 source: |
   type.inbound
-  and length(filter(attachments, .file_type == "pdf")) == 0
   and (
-    regex.icontains(body.html.raw,
-                    'alt="Adobe(?: Acrobat)? Sign"',
-                    "adobe-sign-logo.{0,20}.png",
-                    'alt="Powered by Adobe Acrobat Sign"'
+    (
+      length(filter(attachments, .file_type == "pdf")) == 0
+      and (
+        regex.icontains(body.html.raw,
+                        'alt="Adobe(?: Acrobat)? Sign"',
+                        "adobe-sign-logo.{0,20}.png",
+                        'alt="Powered by Adobe Acrobat Sign"'
+        )
+        or any(html.xpath(body.html, "//img/@src").nodes,
+               strings.parse_url(.raw).domain.root_domain == "adobesign.com"
+               and (
+                 strings.istarts_with(strings.parse_url(.raw).path,
+                                      "/cobrand_logo/"
+                 )
+                 or strings.icontains(strings.parse_url(.raw).path,
+                                      "checkmarkCircle"
+                 )
+               )
+        )
+      )
     )
-    or any(html.xpath(body.html, "//img/@src").nodes,
-           strings.parse_url(.raw).domain.root_domain == "adobesign.com"
-           and (
-             strings.istarts_with(strings.parse_url(.raw).path, "/cobrand_logo/")
-             or strings.icontains(strings.parse_url(.raw).path, "checkmarkCircle")
-           )
+    or (
+      any(attachments,
+          .file_type == "pdf"
+          and any(file.explode(.),
+                  any(.scan.url.urls,
+                      regex.icontains(.url,
+                                      '(?:ad0be.{0,5}s[1i]gn|ad[0o]be.{0,5}s1gn)'
+                      )
+                  )
+          )
+      )
     )
   )
   and not (

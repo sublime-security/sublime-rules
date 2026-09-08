@@ -5,10 +5,24 @@ severity: "medium"
 source: |
   type.inbound
   // no previous threads
-  and length(body.previous_threads) == 0
+  and (
+    length(body.previous_threads) == 0
+    // If there is a previous thread, it is unrelated to current thread
+    or any(body.previous_threads, .sender.email.email != mailbox.email.email)
+  )
   
-  // few links
-  and 0 < length(body.current_thread.links) < 10
+  // few links that aren't "social" links
+  and 0 < length(filter(body.current_thread.links,
+                        .href_url.domain.root_domain not in (
+                          'x.com',
+                          'facebook.com',
+                          'twitter.com',
+                          'instagram.com',
+                          'youtube.com',
+                          'linkedin.com'
+                        )
+                 )
+  ) < 10
   
   // undisclosed recipients or all recipients cc'd
   and (
@@ -30,12 +44,12 @@ source: |
             .href_url.domain.root_domain in $free_file_hosts
             or .href_url.domain.root_domain in $free_subdomain_hosts
           )
-          and .href_url.domain.subdomain is not null
           and .visible
           and not (
             .href_url.domain.root_domain == "googleusercontent.com"
             and strings.istarts_with(.href_url.path, "/mail-sig")
           )
+          and not .href_url.domain.domain in $tenant_domains
   )
   
   // negate listmailers & benign threads
@@ -45,6 +59,13 @@ source: |
            .name == "benign" and .confidence == "high"
     )
   )
+  and not (
+    (
+      sender.email.domain.root_domain in ("twilio.com", "zendesk.com")
+      or headers.return_path.domain.root_domain in ("twilio.com", "zendesk.com")
+    )
+    and coalesce(headers.auth_summary.dmarc.pass, false)
+  )
   
   // unsolicited and passing auth, or failing/missing dmarc
   and (
@@ -52,9 +73,9 @@ source: |
       coalesce(headers.auth_summary.dmarc.pass, false)
       and not profile.by_sender().solicited
     )
+    or profile.by_sender_email().days_since.last_inbound > 365
     or (not coalesce(headers.auth_summary.dmarc.pass, false))
   )
-  
 
 attack_types:
   - "Credential Phishing"

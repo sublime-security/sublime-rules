@@ -1,0 +1,36 @@
+name: "beta.DLP: Basic Auth Header"
+description: "Detects messages containing basic authentication headers."
+type: "dlp"
+severity: "high"
+source: |
+  type.outbound
+  and (
+    any(beta.ml_extract_sensitive_information(body.current_thread.text).elements,
+      .type == "http_authorization_header" and .confidence in ("medium", "high")
+    )
+    or any(beta.ml_extract_sensitive_information(subject.subject).elements,
+      .type == "http_authorization_header" and .confidence in ("medium", "high")
+    )
+    or any(attachments,
+    any(file.explode(.),
+      (
+        any(beta.ml_extract_sensitive_information(.scan.strings.raw).elements,
+          .type == "http_authorization_header" and .confidence in ("medium", "high")
+        )
+        or any(beta.ml_extract_sensitive_information(.scan.ocr.raw).elements,
+          .type == "http_authorization_header" and .confidence in ("medium", "high")
+        )
+      )
+    )
+  )
+  )
+tags:
+  - "Credentials"
+attack_types:
+  - "DLP: Credential Exposure"
+detection_methods:
+  - "Content analysis"
+  - "Natural Language Understanding"
+  - "File analysis"
+  - "Optical Character Recognition"
+id: "2fa95560-bfc1-5008-bffd-42c93a432af3"

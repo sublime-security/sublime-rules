@@ -12,8 +12,17 @@ source: |
                 and any(.scan.strings.strings, strings.icontains(., "/Encrypt"))
               )
           )
-          // Encrypted PDFs do not have child nodes with any data
-          and all(filter(file.explode(.), .depth > 0), .size == 0)
+          and (
+            // Encrypted PDFs do not have child nodes with any data
+            all(filter(file.explode(.), .depth > 0), .size == 0)
+            // if we cracked the password, it will have child objects
+            or (
+              any(file.explode(.), 'pdf_encryption_dict' in .flavors.yara)
+              and any(file.explode(.),
+                      .scan.encrypted_pdf.cracked_password is not null
+              )
+            )
+          )
   )
   and (
     any(ml.nlu_classifier(body.current_thread.text).intents,
@@ -22,24 +31,26 @@ source: |
     or any(ml.nlu_classifier(beta.ocr(file.message_screenshot()).text).intents,
            .name == "cred_theft" and .confidence in ("medium", "high")
     )
+    or regex.icontains(body.current_thread.text,
+                       'PDF\s*(?:Access|Preview|Unlock|Decrypt|pass(?:code|word))',
+                       '(Access|Preview|Unlock|Decrypt|Pass)\s*(?:word|code)\s*(?:\S+\s+){0,3}PDF\s*is?\s*:',
+                       'Th(?:is|e)\s+(?:file|document|pdf)\s+is\s+(?:pin|password)[-\s]?\s*protected[[:punct:]]\s*The\s+p(?:in|assword)\s+is\s*:?',
+                       '(?:Access|Preview|Unlock|Decrypt)\s+(?:\S+\s+){0,3}(?:PDF|statement)(?:\S+\s+){0,3}(?:pass(?:word|code)|\s*with\s+\S+)',
+                       'The\s+(?:file|document|pdf|attachment)\s+(?:pass(?:code|word)|access\s*code)\s+is\s*'
+    )
     or (
       (
-        regex.icontains(body.current_thread.text,
-                        'PDF\s*(?:Access|Preview|Unlock|Decrypt)\s*(?:Pass)?code',
-                        '(Access|Preview|Unlock|Decrypt|Pass)\s*(?:word|code)\s*to?\s*PDF\s*is?\s*:'
-        )
-        or (
-          (
-            length(body.current_thread.text) <= 10
-            or (body.current_thread.text is null)
-          )
-          and any(body.previous_threads,
-                  regex.icontains(.text,
-                                  'PDF\s*(?:Access|Preview|Unlock|Decrypt)\s*(?:Pass)?code',
-                                  '(Access|Preview|Unlock|Decrypt|Pass)\s*(?:word|code)\s*to?\s*PDF\s*is?\s*:'
-                  )
-          )
-        )
+        length(body.current_thread.text) <= 10
+        or (body.current_thread.text is null)
+      )
+      and any(body.previous_threads,
+              regex.icontains(.text,
+                              'PDF\s*(?:Access|Preview|Unlock|Decrypt|pass(?:code|word))',
+                              '(Access|Preview|Unlock|Decrypt|Pass)\s*(?:word|code)\s*(?:\S+\s+){0,3}PDF\s*is?\s*:',
+                              'Th(?:is|e)\s+(?:file|document|pdf)\s+is\s+(?:pin|password)[-\s]?\s*protected[[:punct:]]\s*The\s+p(?:in|assword)\s+is\s*:?',
+                              '(?:Access|Preview|Unlock|Decrypt)\s+(?:\S+\s+){0,3}(?:PDF|statement)(?:\S+\s+){0,3}(?:pass(?:word|code)|\s*with\s+\S+)',
+                              'The\s+(?:file|document|pdf|attachment)\s+(?:pass(?:code|word)|access\s*code)\s+is\s*'
+              )
       )
     )
   )

@@ -1,0 +1,25 @@
+name: "Open redirect: Mailtrack Korea"
+description: "Detects messages containing links to mailtrack.ksd.or.kr tracking service that redirect to external domains, potentially bypassing security controls through the legitimate Korean mail tracking infrastructure."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and any(body.links,
+          .href_url.domain.domain == "mailtrack.ksd.or.kr"
+          and .href_url.path == "/TMS/tracking"
+          and "url" in~ keys(.href_url.query_params_decoded)
+          and not any(regex.iextract(.href_url.query_params,
+                                     'url=([^&]+)(?:\&|\/|$)'
+                      ),
+                      strings.parse_url(.groups[0]).domain.root_domain == ..href_url.domain.root_domain
+          )
+  )
+attack_types:
+  - "Credential Phishing"
+  - "BEC/Fraud"
+tactics_and_techniques:
+  - "Open redirect"
+  - "Evasion"
+detection_methods:
+  - "URL analysis"
+id: "73210da5-12ca-5ebf-9135-edb5022ed6cb"

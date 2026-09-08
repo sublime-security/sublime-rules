@@ -1,0 +1,38 @@
+name: "Open redirect: Hakumonkai.org"
+description: "Detects inbound messages containing links or attachments with URLs that utilize the hakumonkai.org domain's redirect functionality (/fukkou/ref.php) to redirect users to external domains through the 'url' parameter."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and (
+    any(body.links,
+        (
+          .href_url.domain.root_domain == "hakumonkai.org"
+          and .href_url.path == "/fukkou/ref.php"
+          and any(.href_url.query_params_decoded["url"],
+                  strings.parse_url(.).domain.valid
+          )
+        )
+    )
+    or any(filter(attachments, .file_type == "pdf"),
+           any(file.explode(.),
+               any(.scan.url.urls,
+                   (
+                     .domain.root_domain == "hakumonkai.org"
+                     and .path == "/fukkou/ref.php"
+                     and any(.query_params_decoded["url"],
+                             strings.parse_url(.).domain.valid
+                     )
+                   )
+               )
+           )
+    )
+  )
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Open redirect"
+detection_methods:
+  - "URL analysis"
+  - "File analysis"
+id: "c63379a9-6068-503e-9faa-9f0f310cb9ee"

@@ -1,0 +1,32 @@
+name: "Link: URL shortener chaining to workers.dev redirect"
+description: "Detects inbound messages containing shortened links that ultimately redirect to or embed content hosted on workers.dev, a Cloudflare Workers subdomain frequently abused to host credential phishing or malicious redirect infrastructure. Observed lures include fake business inquiry notifications, advertising account verification alerts, and order/checkout confirmation messages designed to entice recipients into clicking the shortened link. This chaining technique obscures the final malicious destination behind a trusted URL shortener before landing on abused cloud infrastructure."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and any(body.links,
+          .href_url.domain.domain in $url_shorteners
+          and (
+            any(ml.link_analysis(.).final_dom.links,
+                .href_url.domain.root_domain == "workers.dev"
+            )
+  
+            // or the thing just redirects to workers.dev directly
+            or any(ml.link_analysis(.).redirect_history,
+                   .domain.root_domain == "workers.dev"
+            )
+          )
+  )
+tags:
+  - "Attack surface reduction"
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Open redirect"
+  - "Free subdomain host"
+  - "Social engineering"
+  - "Evasion"
+detection_methods:
+  - "URL analysis"
+  - "Threat intelligence"
+id: "6d8aca1f-d235-5afa-9b7e-fbe4475f6201"

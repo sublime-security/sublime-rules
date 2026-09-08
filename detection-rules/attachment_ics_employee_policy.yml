@@ -1,0 +1,32 @@
+name: "Attachment: ICS with employee policy review lure"
+description: "Detects ICS calendar attachments containing references to 'policy review' and 'secure access' terminology, which may be used in social engineering attacks to prompt users to take action under the guise of compliance or security requirements."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and any(filter(attachments,
+                 .file_type in~ ('ics')
+                 or .content_type in ("text/calendar", "application/ics")
+          ),
+          any(file.explode(.),
+              .depth == 0
+              and any(.scan.strings.strings,
+                      strings.icontains(., 'policy review')
+              )
+              and any(.scan.strings.strings,
+                      strings.icontains(., 'secure access')
+              )
+          )
+  )
+
+attack_types:
+  - "Credential Phishing"
+  - "BEC/Fraud"
+tactics_and_techniques:
+  - "Evasion"
+  - "ICS Phishing"
+  - "Social engineering"
+detection_methods:
+  - "File analysis"
+  - "Content analysis"
+id: "4eaf2ef3-1e65-5553-90dd-9d8507092d64"

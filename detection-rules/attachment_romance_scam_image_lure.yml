@@ -1,0 +1,46 @@
+name: "Attachment: Romance scam with image lure and advance-fee or suspicious link indicators"
+description: "Detects inbound messages that are not replies, forwards, or mailing list communications, and contain image attachments (JPG or PNG) alongside body text classified as romantic or sexually explicit in nature. The messages either include links to known redirector or free hosting domains (such as geno.link or sites.google.com), or exhibit advance-fee fraud intent while routing replies to a free email provider despite originating from a corporate-looking sender domain. Senders observed span spoofed government and business addresses as well as free webmail accounts, with subject lines using romantic or personal connection lures."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and not subject.is_reply
+  and not subject.is_forward
+  and not any(headers.hops,
+              any(.fields,
+                  strings.ilike(.name, "List-Id")
+                  or strings.ilike(.name, "List-Unsubscribe")
+              )
+  )
+  and any(attachments, .file_type in ("jpg", "png"))
+  and any(ml.nlu_classifier(body.current_thread.text).topics,
+          .name in ("Romance", "Sexually Explicit Messages")
+          and .confidence != 'low'
+  )
+  and (
+    any(body.links, .href_url.domain.domain in ("geno.link", "sites.google.com"))
+    or (
+      any(headers.reply_to, .email.domain.root_domain in $free_email_providers)
+      and sender.email.domain.root_domain not in $free_email_providers
+      and any(ml.nlu_classifier(body.current_thread.text).intents,
+              .name == "advance_fee" and .confidence != 'low'
+      )
+    )
+  )
+attack_types:
+  - "BEC/Fraud"
+  - "Spam"
+tactics_and_techniques:
+  - "Social engineering"
+  - "Image as content"
+  - "Free email provider"
+  - "Free file host"
+  - "Out of band pivot"
+detection_methods:
+  - "Natural Language Understanding"
+  - "Header analysis"
+  - "Sender analysis"
+  - "Content analysis"
+  - "URL analysis"
+  - "File analysis"
+id: "e1ce7a70-7528-5b3e-ad61-0721757ae390"

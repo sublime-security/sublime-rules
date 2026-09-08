@@ -1,0 +1,50 @@
+name: "Link: Obfuscation via userinfo with suspicious indicators"
+description: "Detects URLs that use the @ symbol to hide suspicious domains or URL shorteners within the link structure, excluding legitimate email addresses and malformed mailto/telto links."
+type: "rule"
+severity: "low"
+source: |
+  type.inbound
+  and any(body.links,
+          // this checks for a likely domain in the
+          .href_url.username is not null
+          and strings.contains(.href_url.username, '.')
+          // and coalesce(strings.parse_domain(.href_url.username).valid, false)
+          and .href_url.password is null
+          and (
+            .href_url.domain.domain in $url_shorteners
+            or .href_url.domain.root_domain in $url_shorteners
+            or .href_url.domain.domain in $free_file_hosts
+            or .href_url.domain.root_domain in $free_file_hosts
+            or .href_url.domain.domain in $free_subdomain_hosts
+            or .href_url.domain.root_domain in $free_subdomain_hosts
+            or .href_url.domain.domain in $self_service_creation_platform_domains
+            or .href_url.domain.root_domain in $self_service_creation_platform_domains
+            or .href_url.domain.tld in $suspicious_tlds
+          )
+          and not (
+            coalesce(strings.parse_email(.href_url.url).domain.valid, false)
+            and .parser == "hyperlink"
+          )
+          // we dont want to match on malformed mailto or telto links
+          and not .href_url.scheme in ('mailto', "tel")
+          and not regex.icontains(.href_url.username, '^(?:mail|tel)\s*to=')
+          and not coalesce(regex.icontains(.href_url.query_params,
+                                           '\bunsubscribe\b'
+                           ),
+                           false
+          )
+  
+          // we dont want utm urls
+          and not regex.icontains(.href_url.url,
+                                  'utm_(?:source|medium|term|campaign)='
+          )
+  )
+attack_types:
+  - "Credential Phishing"
+  - "Malware/Ransomware"
+tactics_and_techniques:
+  - "Evasion"
+detection_methods:
+  - "URL analysis"
+  - "Content analysis"
+id: "9f9aefd1-4474-5a91-833b-d6bc00ee0b59"
