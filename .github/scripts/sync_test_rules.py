@@ -84,6 +84,60 @@ if not os.path.exists(OUTPUT_FOLDER):
     os.makedirs(OUTPUT_FOLDER)
 
 
+# TEMPORARY: bulk-sync every DLP discovery rule for live testing.
+# This bypasses the normal per-PR flow entirely (no PR, no bulk cap, no CI gate)
+# since it is not tied to any pull request. Remove this block, the call to it
+# in handle_pr_rules(), and the matching testing_pr == 0 exemption in
+# .github/workflows/clear-old-test-rules.yml once the DLP live test is done.
+DLP_BULK_SYNC_FOLDER = 'dlp-discovery-rules'
+
+
+def handle_dlp_bulk_sync(rest_session):
+    """
+    Copy every rule in dlp-discovery-rules/ straight to the test-rules output
+    folder, bypassing the normal PR-based flow.
+
+    Args:
+        rest_session: GitHub REST API session for file contents
+
+    Returns:
+        set: Filenames written to OUTPUT_FOLDER
+    """
+    print(f"Bulk-syncing DLP discovery rules from '{DLP_BULK_SYNC_FOLDER}/'...")
+
+    url = f'https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/contents/{DLP_BULK_SYNC_FOLDER}'
+    response = rest_session.get(url, params={'ref': 'main'})
+    response.raise_for_status()
+
+    synced_files = set()
+    for entry in response.json():
+        if entry['type'] != 'file' or not entry['name'].endswith('.yml'):
+            continue
+
+        content = get_file_contents(
+            rest_session, REPO_OWNER, REPO_NAME,
+            entry['path'], 'main'
+        )
+
+        target_save_filename = f"bulk_dlp_{entry['name']}"
+        modified_content, original_id = add_id_to_yaml(content, target_save_filename)
+
+        if original_id:
+            modified_content = modified_content.rstrip()
+            modified_content += f'\nog_id: "{original_id}"'
+
+        # testing_pr: 0 marks this as a bulk sync, not tied to a real PR.
+        # clear-old-test-rules.yml exempts testing_pr == 0 from its cleanup.
+        modified_content = modified_content.rstrip()
+        modified_content += "\ntesting_pr: 0"
+
+        save_file(OUTPUT_FOLDER, target_save_filename, modified_content)
+        synced_files.add(target_save_filename)
+        print(f"\t[DLP bulk sync] Saved: {target_save_filename}")
+
+    return synced_files
+
+
 def handle_pr_rules(graphql_session, rest_session):
     """
     Process open PRs to sync rules to test-rules branch.
@@ -353,6 +407,9 @@ def handle_pr_rules(graphql_session, rest_session):
                 if pr.has_label(label):
                     print(f"\tPR #{pr_number} no longer matches skip texts for '{label}'. Removing...")
                     remove_label(rest_session, REPO_OWNER, REPO_NAME, pr_number, label)
+
+    # TEMPORARY: bulk-sync all DLP discovery rules for live testing (see note above).
+    new_files |= handle_dlp_bulk_sync(rest_session)
 
     # Clean up files no longer in open PRs
     clean_output_folder(OUTPUT_FOLDER, new_files)
