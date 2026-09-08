@@ -10,14 +10,12 @@ source: |
             or .file_extension == "ics"
             or .content_type in ("application/ics", "text/calendar")
           )
-          //
-          // This rule makes use of a beta feature and is subject to change without notice
-          // using the beta feature in custom rules is not suggested until it has been formally released
-          //
           and any(beta.file.parse_ics(.).events,
                   // voicemail key words
-                  regex.icontains(.description,
-                                  'new voice\s?mail|voice\s?mail.{0,20}(?:notification|received|awaits|ready|logged)|listen\s+to\s+(?:your\s+)?voice\s?mail|you\s+(?:have|received)\s+a\s+new\s+voice|voice\s+message.{0,20}(?:notification|from your inbox|in your)'
+                  any([.summary, .description],
+                      regex.icontains(.,
+                                      'new voice\s?mail|voice\s?mail.{0,20}(?:notification|received|awaits|ready|logged)|listen\s+to\s+(?:your\s+)?voice\s?mail|you\s+(?:have|received)\s+a\s+new\s+voice|voice\s+message.{0,20}(?:notification|from your inbox|in your)'
+                      )
                   )
                   // sus link
                   and any(.links,
@@ -29,6 +27,22 @@ source: |
                           or .href_url.domain.domain in $url_shorteners
                           or .href_url.domain.root_domain in $url_shorteners
                           or network.whois(.href_url.domain).days_old < 90
+                          or strings.icontains(.display_url.url, "voicemail")
+                          or strings.icontains(.display_text, "voicemail")
+                          // minimal js landing page
+                          or (
+                            length(ml.link_analysis(.).unique_urls_accessed) == 3
+                            and all(ml.link_analysis(.).unique_urls_accessed,
+                                    .url == ..href_url.url
+                                    or (
+                                      strings.starts_with(.url, ..href_url.url)
+                                      and strings.ends_with(.url, '.js')
+                                    )
+                                    or .url == strings.concat(..href_url.url,
+                                                              'favicon.png'
+                                    )
+                            )
+                          )
                   )
           )
   )
