@@ -5,7 +5,10 @@ severity: "medium"
 source: |
   type.inbound
   and any(body.current_thread.links,
-          .display_text == "Join with Google Meet"
+          .display_text in (
+            "Join with Google Meet",
+            "Reply or Join with Google Meet"
+          )
           and not strings.contains(.href_url.domain.domain, "meet.google.com")
   )
   and (
@@ -13,12 +16,15 @@ source: |
     any(html.xpath(body.html, '//img[@alt="[Optional Logo]"]').nodes,
         .raw is not null
     )
+    or any(html.xpath(body.html, '//img[@alt="Google Meet"]').nodes,
+           .raw is not null
+    )
     // OR find the green button
     or any(html.xpath(body.html, '//a[contains(@style, "rgb(52,168,83)")]').nodes,
            .display_text == "Join with Google Meet"
     )
   )
-  // finding the "Guests"/"Join by phone" tables NOT being present in the message is a good way to filter out the legit messages. 
+  // finding the "Guests"/"Join by phone" tables NOT being present in the message is a good way to filter out the legit messages.
   and length(html.xpath(body.html,
                         '//table/tbody/tr/td/h2[contains(@style, "color:rgb(60,64,67)")]'
              ).nodes

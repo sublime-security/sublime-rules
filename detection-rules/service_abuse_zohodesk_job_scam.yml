@@ -1,0 +1,27 @@
+name: "Service abuse: Zohodesk reply-to mismatch with job scam indicators"
+description: "Detects inbound messages sent from Zohodesk infrastructure where the reply-to address points to a domain outside of Zohodesk, combined with natural language signals indicating job scam content. This technique abuses legitimate Zohodesk services to add credibility while redirecting responses to an external actor-controlled address."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and sender.email.domain.root_domain == "zohodesk.com"
+  and any(headers.reply_to, .email.domain.root_domain != "zohodesk.com")
+  and (
+    any(ml.nlu_classifier(body.current_thread.text).intents,
+        .name == "job_scam" and .confidence != "low"
+    )
+    // nlu fallback where we don't get job scam
+    or strings.icontains(body.current_thread.text, "talent acquisition")
+  )
+attack_types:
+  - "BEC/Fraud"
+  - "Spam"
+tactics_and_techniques:
+  - "Social engineering"
+  - "Out of band pivot"
+  - "Spoofing"
+detection_methods:
+  - "Header analysis"
+  - "Sender analysis"
+  - "Natural Language Understanding"
+id: "af2ab304-7f1e-5284-936d-f04ae91370f7"

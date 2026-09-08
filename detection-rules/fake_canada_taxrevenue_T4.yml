@@ -4,30 +4,43 @@ type: "rule"
 severity: "medium"
 source: |
   type.inbound
+  and (
+    // cred theft
+    any(ml.nlu_classifier(body.current_thread.text).intents,
+        .name == "cred_theft" and .confidence != 'low'
+    )
+    // contains a link not to the domain "canda.ca"
+    or any(body.current_thread.links,
+           .href_url.domain.root_domain not in ('canada.ca')
+    )
+    // contains any attachment that isn't an image
+    or any(attachments, .file_type not in $file_types_images)
+  )
+
   // sender claims to be CRA
   and (
-    strings.icontains(sender.display_name, 'canada revenue agency')
-    or strings.icontains(sender.display_name, 'agence du revenu du canada')
+    strings.icontains(sender.display_name,
+                      'canada revenue agency',
+                      'agence du revenu du canada'
+    )
     or (
-      // cra display name and cra reference in subject
       regex.icontains(sender.display_name, '\bcra\b')
-      and regex.icontains(subject.base,
-                          '(?:T4|cra|tax|canada revenue|revenu du canada)'
+      // limit it to samples that mention CRA by name in the body
+      and regex.icontains(body.current_thread.text,
+                          '(?:canada revenue|revenu du canada)'
       )
     )
   )
-  // nlu cred theft
-  and any(ml.nlu_classifier(body.current_thread.text).intents,
-          .name == "cred_theft" and .confidence != 'low'
-  )
+
+  // not a high trust or cra-arc.gc.ca
   and not (
     (
       // negate highly trusted sender domains
       sender.email.domain.root_domain in $high_trust_sender_root_domains
-      // negate legit senders from merck
+      // negate legit senders from legitimate cra
       or sender.email.domain.root_domain == "cra-arc.gc.ca"
     )
-    // enforce auth
+    // enforce authentication
     and coalesce(headers.auth_summary.dmarc.pass, false)
   )
 attack_types:

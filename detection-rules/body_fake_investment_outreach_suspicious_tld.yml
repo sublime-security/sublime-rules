@@ -1,15 +1,44 @@
 name: "BEC/Fraud: Fake investment outreach from suspicious TLD"
 description: |
-  Detects fake investment solicitation emails using "Investment into {company}"
-  subject lines from suspicious TLDs. This campaign targets businesses with
-  templated cold outreach purporting to represent family offices or private
-  equity firms, using disposable domains with DGA-like characteristics.
+  Detects unsolicited investment/funding outreach emails from suspicious TLDs.
+  Targets mass-mailed spam campaigns offering business funding, capital allocation,
+  and family office outreach.
 type: "rule"
 severity: "medium"
 source: |
   type.inbound
-  and strings.istarts_with(subject.base, 'investment into')
-  and sender.email.domain.tld in $suspicious_tlds
+  // subject contains investment language
+  and (
+    strings.istarts_with(subject.base, 'financing for', 'investment into')
+    or strings.icontains(subject.base, "family office")
+  )
+  
+  // financial body content
+  and (
+    any(ml.nlu_classifier(body.current_thread.text).topics,
+        .name == "Financial Communications" and .confidence != "low"
+    )
+    or (
+      any(ml.nlu_classifier(body.current_thread.text).topics,
+          .name == "B2B Cold Outreach" and .confidence != "low"
+      )
+      and regex.icontains(body.current_thread.text,
+                          'funding',
+                          'capital',
+                          '\d{3}k',
+                          'rates from \d+%',
+                          'funded in \d+',
+                          'family office'
+      )
+    )
+  )
+  
+  // suspicious sender
+  and (
+    sender.email.domain.tld in $suspicious_tlds
+    or sender.email.domain.tld == "info"
+  )
+
 tags:
  - "Attack surface reduction"
 attack_types:
@@ -20,4 +49,5 @@ detection_methods:
   - "Header analysis"
   - "Sender analysis"
   - "Content analysis"
+  - "Natural Language Understanding"
 id: "5d4c4a15-661c-5fd1-9d5f-1c72c8230be8"

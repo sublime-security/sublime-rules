@@ -7,6 +7,29 @@ source: |
   and (
     strings.ilike(sender.display_name, '*dotloop*')
     or strings.ilike(sender.email.domain.domain, '*dotloop*')
+    or (
+      // dotloop logo
+      any(html.xpath(body.html, '//img').nodes,
+          strings.icontains(.inner_text, 'dotloop')
+      )
+      and strings.contains(strings.replace_confusables(body.current_thread.text),
+                           '(888)-DOTLOOP'
+      )
+      and 3 of (
+        strings.contains(strings.replace_confusables(body.current_thread.text),
+                         'DOTLOOP',
+        ),
+        strings.contains(strings.replace_confusables(body.current_thread.text),
+                         '1301 Second Avenue',
+        ),
+        strings.contains(strings.replace_confusables(body.current_thread.text),
+                         'Floor 36',
+        ),
+        strings.contains(strings.replace_confusables(body.current_thread.text),
+                         'Seattle, WA 98101'
+        )
+      )
+    )
   )
   and sender.email.domain.root_domain not in~ ('dotloop.com', 'showingtime.com')
   and (
@@ -17,7 +40,7 @@ source: |
     or profile.by_sender().any_messages_malicious_or_spam
   )
   and not profile.by_sender().any_messages_benign
-  
+
   // negate highly trusted sender domains unless they fail DMARC authentication
   and (
     (

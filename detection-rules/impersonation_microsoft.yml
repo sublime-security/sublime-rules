@@ -27,7 +27,8 @@ source: |
       and strings.ilike(body.current_thread.text, "*microsoft*")
     )
     or regex.icontains(body.current_thread.text,
-                       ".*reach you.{0,20}Microsoft Teams"
+                       ".*reach you.{0,20}Microsoft Teams",
+                       "microsoft account\n2fa"
     )
     or strings.icontains(body.current_thread.text, "microsoft account team")
     or strings.ilike(sender.display_name, '*new activity in Teams*')
@@ -51,6 +52,14 @@ source: |
     )
     or regex.icontains(sender.display_name,
                        "[MḾṀṂⱮМḿṁṃᵯⱮ𝐌𝑀][iíìîïīĭĩįıɪɨᵢⁱ𝐢𝑖][rŕŗřȑȓɾᵣⁿʳ𝐫𝑟][cćĉċčçƈȼ𝐜𝑐][oóòôõöøōŏőɵₒᵒº𝐨𝑜][sśŝšșşʂᵴˢˢ𝐬𝑠][oóòôõöøōŏőɵₒᵒº𝐨𝑜][fḟƒᵮᶠ𝐟𝑓][tťțţᵵₜᵗᵗ𝐭𝑡]" // [sic]
+    )
+    or any(attachments,
+           .file_extension == "pdf"
+           and beta.parse_exif(.).page_count == 1
+           and any(ml.logo_detect(.).brands, .name == "Microsoft")
+           and any(file.explode(.),
+                   regex.icontains(.scan.ocr.raw, '[©@]\s*(?:\d+)?\s*Microsoft')
+           )
     )
   )
   and not (
@@ -108,24 +117,33 @@ source: |
   // negate other legitimate MS notifications
   and not (
     length(body.links) > 0
-    and all(body.links,
+    and (
+      (
+        all(body.links,
             .href_url.domain.root_domain in (
               "aka.ms",
               "microsoftonline.com",
               "microsoft.com"
             )
             or .href_url.domain.tld == "microsoft"
+        )
+        and headers.auth_summary.dmarc.pass
+      )
+  
+      // microsoft b2b applications invitations - no auth checks
+      or (
+        sender.email.local_part == "invites"
+        and sender.email.domain.root_domain == "onmicrosoft.com"
+        // infra validated message id
+        and strings.icontains(headers.message_id, "pepf")
+      )
     )
-    and headers.auth_summary.dmarc.pass
   )
   
   // negate highly trusted sender domains unless they fail DMARC authentication
-  and (
-    (
-      sender.email.domain.root_domain in $high_trust_sender_root_domains
-      and not headers.auth_summary.dmarc.pass
-    )
-    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  and not (
+    sender.email.domain.root_domain in $high_trust_sender_root_domains
+    and coalesce(headers.auth_summary.dmarc.pass, false)
   )
   // not a newsletter or advertisement
   and not (

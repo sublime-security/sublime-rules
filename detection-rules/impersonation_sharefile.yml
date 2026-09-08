@@ -7,7 +7,7 @@ source: |
   and (
     0 < length(body.links) < 100
     or 0 < length(filter(attachments, .file_type in $file_types_images)) <= 5
-    or length(filter(attachments, .file_type == "pdf")) == 1
+    or length(distinct(filter(attachments, .file_type == "pdf"), .md5)) == 1
   )
   and (
     strings.icontains(sender.display_name, 'ShareFile')
@@ -36,27 +36,25 @@ source: |
       0 < length(attachments) <= 5
       and (
         all(attachments, .file_type in $file_types_images)
-        or (length(filter(attachments, .file_type == "pdf")) == 1)
+        or length(distinct(filter(attachments, .file_type == "pdf"), .md5)) == 1
       )
-      and any(attachments,
-              any(file.explode(.),
-                  strings.icontains(.scan.ocr.raw, 'ShareFile Attachments')
-                  or strings.icontains(.scan.ocr.raw,
-                                       'Click here to change how often ShareFile sends emails'
-                  )
-                  or strings.icontains(.scan.ocr.raw,
-                                       'uses ShareFile to share documents securely'
-                  )
-                  or strings.icontains(.scan.ocr.raw,
-                                       'ShareFile is a tool for sending, receiving, and organizing your business files online'
-                  )
-                  or strings.icontains(.scan.ocr.raw,
-                                       'Powered By Citrix ShareFile'
-                  )
-                  or regex.icontains(body.current_thread.text,
-                                     '© 20\d\d ShareFile'
-                  )
-              )
+      and (
+        any(attachments,
+            any(file.explode(.),
+                strings.icontains(.scan.ocr.raw, 'ShareFile Attachments')
+                or strings.icontains(.scan.ocr.raw,
+                                     'Click here to change how often ShareFile sends emails'
+                )
+                or strings.icontains(.scan.ocr.raw,
+                                     'uses ShareFile to share documents securely'
+                )
+                or strings.icontains(.scan.ocr.raw,
+                                     'ShareFile is a tool for sending, receiving, and organizing your business files online'
+                )
+                or strings.icontains(.scan.ocr.raw, 'Powered By Citrix ShareFile')
+            )
+        )
+        or regex.icontains(body.current_thread.text, '© 20\d\d ShareFile')
       )
     )
   )
