@@ -1,0 +1,48 @@
+name: "PR# 5301 - Link: Trac-link URL with JWT encoding"
+description: "Detects messages containing links to trac-link.com, in either the body or PDF attachments, with JWT encoded url paths."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and (
+    // body links
+    any(body.links,
+        .href_url.domain.root_domain == "trac-link.com"
+        // JWT encoding present x.x.x
+        and regex.icontains(.href_url.path,
+                            '[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]'
+        )
+    )
+  
+    // attachment links
+    or any(attachments,
+           (.file_extension == "pdf" or .file_type == "pdf")
+           and any(file.explode(.),
+                   any(.scan.pdf.urls,
+                       .domain.root_domain == "trac-link.com"
+                       // JWT encoding present x.x.x
+                       and regex.icontains(.path,
+                                           '[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]'
+                       )
+                   )
+           )
+    )
+  )
+
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Open redirect"
+  - "Evasion"
+  - "PDF"
+detection_methods:
+  - "URL analysis"
+  - "File analysis"
+  - "Content analysis"
+id: "6e3b3d9c-4765-521d-8b66-ee4cb810b3b5"
+tags:
+  - created_from_open_prs
+  - rule_status_added
+  - pr_author_missingn0pe
+references:
+  - https://github.com/sublime-security/sublime-rules/pull/5301
