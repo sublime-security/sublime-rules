@@ -1,0 +1,67 @@
+name: "PR# 5302 - Attachment: ICS calendar invite with photo/file share lure"
+description: "Detects calendar invites sent as .ics attachments from free email providers (Outlook, Hotmail, etc.) that mimic a 'shared a photo/file with you' notification. The rule parses the ICS payload to inspect the actual event description rendered by calendar clients, rather than the email body, looking for file-sharing language flagged by NLU classification or regex matching. It further confirms suspicious intent by checking for an outlook.com 'groups' self-invite organizer or links that route through Google redirectors instead of legitimate Google Drive domains. Highly trusted sender domains are excluded unless they fail DMARC authentication."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and sender.email.domain.root_domain in $free_email_providers
+  and any(attachments,
+          (
+            .file_type == "ics"
+            or .file_extension == "ics"
+            or .content_type in ("application/ics", "text/calendar")
+          )
+          //
+          // this rule makes use of a beta feature and is subject to change without notice
+          // parse the ICS and read the payload the calendar client renders, not the
+          // (obfuscatable / image-rendered) html body
+          //
+          and any(beta.file.parse_ics(.).events,
+                  // calendar invite contains file sharing language in the description of the invite
+                  // just-in-case addition of a regex match on stuff like "shared a folder"
+                  (
+                    any(ml.nlu_classifier(.description).topics,
+                        .name == 'File Sharing and Cloud Services'
+                    )
+                    or regex.icontains(.description,
+                                       "shared (?:a|an) (?:folder|photo|album|picture|image|file|doc) with you"
+                    )
+                  )
+                  // outlook "groups" self-invite (organizer is a long-numeric groups.outlook.com mailbox)
+                  // or the "View photo" cta routes through a google redirector (share.google / search.app)
+                  // rather than drive.google.com
+                  and (
+                    .organizer.email.domain.domain == "groups.outlook.com"
+                    or any(.links,
+                           .href_url.domain.tld == "google"
+                           or .href_url.domain.root_domain == "search.app"
+                    )
+                  )
+          )
+  )
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and not (
+    sender.email.domain.root_domain in $high_trust_sender_root_domains
+    and coalesce(headers.auth_summary.dmarc.pass, false)
+  )
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Free email provider"
+  - "Social engineering"
+  - "Open redirect"
+  - "Image as content"
+detection_methods:
+  - "File analysis"
+  - "Natural Language Understanding"
+  - "Content analysis"
+  - "URL analysis"
+  - "Sender analysis"
+  - "Header analysis"
+id: "d5ad78ff-9b88-5100-8d9c-b72f2092d37b"
+tags:
+  - created_from_open_prs
+  - rule_status_added
+  - pr_author_IndiaAce
+references:
+  - https://github.com/sublime-security/sublime-rules/pull/5302
