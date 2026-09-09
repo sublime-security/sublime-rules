@@ -197,7 +197,7 @@ rule pdf_eof_md5_hash
 
     strings:
         $header   = { 25 50 44 46 2D }
-        $eof_hash = /%%EOF\s{1,4}%[0-9a-f]{32}\s{0,2}$/
+        $eof_hash = /%%EOF\s{0,4}%[0-9a-f]{32}\s{0,4}$/
 
     condition:
         $header at 0
