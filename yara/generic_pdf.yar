@@ -188,6 +188,22 @@ rule SAI_Global_ISO9001_Logo_PDF_Fuzzy
         )
 }
 
+rule pdf_eof_md5_hash
+{
+    meta:
+        author      = "brandon murphy"
+        date        = "2026-09-09"
+        description = "PDF with a 32-char hex hash appended as a PDF comment after %%EOF and at the end of the file"
+
+    strings:
+        $header   = { 25 50 44 46 2D }
+        $eof_hash = /%%EOF\s{1,4}%[0-9a-f]{32}\s{0,2}$/
+
+    condition:
+        $header at 0
+        and $eof_hash in (filesize - 50..filesize)
+}
+
 rule pdf_jsfck_ratio {
     meta:
         author      = "kyle eaton"
