@@ -1,0 +1,41 @@
+name: "Link: Trac-link URL with JWT encoding"
+description: "Detects messages containing links to trac-link.com, in either the body or PDF attachments, with JWT encoded url paths."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and (
+    // body links
+    any(body.links,
+        .href_url.domain.root_domain == "trac-link.com"
+        // JWT encoding present x.x.x
+        and regex.icontains(.href_url.path,
+                            '[A-Za-z0-9_-].[A-Za-z0-9_-].[A-Za-z0-9_-]'
+        )
+    )
+  
+    // attachment links
+    or any(attachments,
+           (.file_extension == "pdf" or .file_type == "pdf")
+           and any(file.explode(.),
+                   any(.scan.pdf.urls,
+                       .domain.root_domain == "trac-link.com"
+                       // JWT encoding present x.x.x
+                       and regex.icontains(.path,
+                                           '[A-Za-z0-9_-].[A-Za-z0-9_-].[A-Za-z0-9_-]'
+                       )
+                   )
+           )
+    )
+  )
+
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Open redirect"
+  - "Evasion"
+  - "PDF"
+detection_methods:
+  - "URL analysis"
+  - "File analysis"
+  - "Content analysis"
