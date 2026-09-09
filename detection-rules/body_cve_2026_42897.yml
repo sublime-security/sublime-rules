@@ -1,0 +1,37 @@
+name: "Body: CVE-2026-42897 Exchange OWA stored XSS"
+description: "Detects messages exploiting CVE-2026-42897, a stored XSS vulnerability in on-premises Exchange Outlook Web Access (OWA). The exploit embeds Base64-encoded JavaScript payload fragments after URL fragment identifiers (#) within data URI image src attributes, with a malformed img tag onload/onerror handler that reassembles and executes the fragments via eval(atob(...)). Detection covers both the delivery technique (img tags with event handlers combined with base64 data after # fragments) and implant content (OWAReaper-specific function names and API calls decoded from base64 within img tag src attributes). Simply opening the message in OWA's reading pane can trigger execution."
+type: "rule"
+severity: "critical"
+references:
+  - "https://www.resecurity.com/blog/article/inside-owareaper-how-cve-2026-42897-enables-persistent-exchange-mailbox-compromise"
+  - "https://www.proofpoint.com/us/blog/threat-insight/cleaning-out-inboxes-ta488-comes-outlook-another-half-click-exploit"
+source: |
+  type.inbound
+  and any(html.xpath(body.html, '//img[contains(@src,"data:image")]').nodes,
+          (
+            regex.icontains(.raw, '#[A-Za-z0-9+/=]{20,}')
+            and regex.icontains(.raw, 'on(?:load|error)')
+            and strings.icontains(.raw, 'eval(', 'atob(', 'Function(')
+          )
+          or (
+            any(strings.scan_base64(.raw),
+                strings.icontains(.,
+                                  'owaRequest',
+                                  'GetClientAccessToken',
+                                  'owa_offline_db',
+                                  'PageDataPayload',
+                                  'UpdateFolder'
+                )
+            )
+          )
+  )
+attack_types:
+  - "Malware/Ransomware"
+tactics_and_techniques:
+  - "Evasion"
+  - "Exploit"
+  - "Scripting"
+detection_methods:
+  - "Content analysis"
+  - "HTML analysis"
+id: "e58b744f-fabe-530f-9e1a-3030d622dac7"
