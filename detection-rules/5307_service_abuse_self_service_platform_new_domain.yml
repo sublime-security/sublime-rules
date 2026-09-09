@@ -1,0 +1,29 @@
+name: "PR# 5307 - Service abuse: Self-service platform redirecting to newly registered suspicious domain"
+description: "Detects inbound emails containing links to self-service creation platforms that ultimately redirect to newly registered domains (less than 30 days old) using suspicious top-level domains, indicating potential abuse of legitimate services to mask malicious redirect chains."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and any(body.current_thread.links,
+          .href_url.domain.root_domain in $self_service_creation_platform_domains
+          and any(ml.link_analysis(.).final_dom.links,
+                  network.whois(.href_url.domain).days_old < 30
+                  and .href_url.domain.tld in $suspicious_tlds
+          )
+  ) 
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Out of band pivot"
+  - "Evasion"
+detection_methods:
+  - "URL analysis"
+  - "Whois"
+  - "HTML analysis"
+id: "3d4cc0ad-489c-561b-b37f-8419eea4ff1b"
+tags:
+  - created_from_open_prs
+  - rule_status_added
+  - pr_author_D-Bolton
+references:
+  - https://github.com/sublime-security/sublime-rules/pull/5307
