@@ -1,0 +1,59 @@
+name: "Brand impersonation: Kroger"
+description: "Detects inbound messages that impersonate Kroger through a spoofed display name or local part while referencing loyalty program terms such as boost membership, renewal, verification, or points balance in the body or a rendered screenshot. Legitimate messages from verified Kroger domains or high trust senders that pass DMARC, as well as newsletters/digests, are excluded to reduce false positives."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and (
+    strings.icontains(sender.display_name, 'kroger')
+    or regex.icontains(sender.email.local_part, '^kroger\b')
+  )
+  //
+  // This rule makes use of a beta feature and is subject to change without notice
+  // using the beta feature in custom rules is not suggested until it has been formally released
+  //
+  and any([body.current_thread.text, beta.ocr(file.message_screenshot()).text],
+          strings.icontains(., 'kroger')
+          and strings.icontains(.,
+                                'boost membership',
+                                'renewal',
+                                'verification',
+                                'customer number:',
+                                'brief online survey',
+                                'points balance',
+                                'fuel savings',
+                                'expir',
+                                'loyalty member'
+          )
+  )
+  and not any(ml.nlu_classifier(body.current_thread.text).topics,
+              .name in ("Newsletters and Digests")
+  )
+  and not (
+    (
+      sender.email.domain.root_domain in (
+        "kroger.com",
+        "krogermail.com",
+        "thekrogerco.com"
+      )
+      or sender.email.domain.root_domain in $high_trust_sender_root_domains
+    )
+    and coalesce(headers.auth_summary.dmarc.pass, false)
+  )
+attack_types:
+  - "Credential Phishing"
+  - "BEC/Fraud"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Social engineering"
+  - "Image as content"
+detection_methods:
+  - "Sender analysis"
+  - "Content analysis"
+  - "Optical Character Recognition"
+  - "Natural Language Understanding"
+  - "Header analysis"
+id: "50e63ba3-bd31-5c34-a436-83c23898f5ce"
+og_id: "23c90d6e-11bf-51a6-b34d-6de360f6f294"
+testing_pr: 5319
+testing_sha: b15929d92b64fca8aa15e348ebe25934b075d0de
