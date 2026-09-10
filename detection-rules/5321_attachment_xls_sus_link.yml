@@ -1,0 +1,49 @@
+name: "PR# 5321 - Attachment: Excel file with hyperlinks to suspicious domains"
+description: "Flags inbound emails that show signs of business email compromise or credential theft intent—either through NLU classification or language like 'your review'/'please review'—and include an Excel attachment. The attachment is exploded and its exiftool metadata inspected for embedded hyperlinks, which are then parsed and checked against lists of free subdomain hosts, free file hosts, suspicious TLDs, and URL shorteners."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and (
+    any(ml.nlu_classifier(body.current_thread.text).intents,
+        .name in ('bec', 'cred_theft') and .confidence != 'low'
+    )
+    or strings.icontains(body.current_thread.text, 'your review', 'please review')
+  )
+  and any(attachments,
+          (.file_extension in~ ("xls"))
+          and any(file.explode(.),
+                  any(.scan.exiftool.fields,
+                      .key == "Hyperlinks"
+                      and any(strings.parse_json(.value),
+                              (
+                                strings.parse_url(.).domain.domain in $free_subdomain_hosts
+                                or strings.parse_url(.).domain.root_domain in $free_file_hosts
+                                or strings.parse_url(.).domain.tld in $suspicious_tlds
+                                or strings.parse_url(.).domain.root_domain in $url_shorteners
+                                or strings.parse_url(.).domain.domain in $url_shorteners
+                              )
+                      )
+                  )
+          )
+  )
+attack_types:
+  - "BEC/Fraud"
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Free file host"
+  - "Free subdomain host"
+  - "Social engineering"
+detection_methods:
+  - "Natural Language Understanding"
+  - "Content analysis"
+  - "Exif analysis"
+  - "File analysis"
+  - "URL analysis"
+id: "2d126f6d-15f4-5844-9c10-8fcb7489f887"
+tags:
+  - created_from_open_prs
+  - rule_status_added
+  - pr_author_D-Bolton
+references:
+  - https://github.com/sublime-security/sublime-rules/pull/5321
