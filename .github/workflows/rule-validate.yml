@@ -191,6 +191,37 @@ jobs:
             printf '%s' "$s"
           }
 
+          # Locates a rule's MQL `source` scalar within its YAML file. Prints
+          # "<first_source_line> <indent>": the 1-indexed file line holding source line 0, and
+          # the number of characters in the file that precede each line of source. Fails if the
+          # file has no top-level source key.
+          # The key is located by text because yq's `line` operator is off by one on files that
+          # open with a comment.
+          source_anchor() {
+            local file="$1" key key_line key_text content rest value ws
+            local block_re='^source:[[:space:]]*[|>]'
+
+            key=$(grep -n -m1 '^source:' "$file") || return 1
+            key_line="${key%%:*}"
+            key_text="${key#*:}"
+
+            if [[ "$key_text" =~ $block_re ]]; then
+              # Block scalar: source starts on the next line, and every line is indented by the
+              # same amount, which the block's first non-blank line establishes.
+              key_line=$((key_line + 1))
+              while IFS= read -r content; do
+                [[ -n "${content//[[:space:]]/}" ]] && break
+              done < <(tail -n "+${key_line}" "$file")
+              ws="${content%%[![:space:]]*}"
+              printf '%s %s' "$key_line" "${#ws}"
+            else
+              # Inline scalar: source is the remainder of the key line.
+              rest="${key_text#source:}"
+              value="${rest#"${rest%%[![:space:]]*}"}"
+              printf '%s %s' "$key_line" "$((${#key_text} - ${#value}))"
+            fi
+          }
+
           # Emits one GitHub annotation per diagnostic in a bulk_validate response.
           # $1: response file. Remaining args: the files submitted in that response, in order
           # (bulk_validate returns validation_responses in the same order as the request).
@@ -207,8 +238,29 @@ jobs:
               file="${files[$idx]}"
               severity=$(jq -r '.severity' <<<"$diag_json")
               message=$(jq -r '.message' <<<"$diag_json")
-              line=$(( $(jq -r '.line' <<<"$diag_json") + 1 ))
-              col=$(( $(jq -r '.col' <<<"$diag_json") + 1 ))
+              src_line=$(jq -r '.line' <<<"$diag_json")
+              src_col=$(jq -r '.col' <<<"$diag_json")
+
+              if [[ "$file" == insights/* ]]; then
+                # build_request wraps insight sources in "length([\n\n" + source, which pushes
+                # every line of source down by two.
+                src_line=$((src_line - 2))
+                if (( src_line < 0 )); then
+                  src_line=0
+                fi
+              fi
+
+              # Diagnostic positions are 0-indexed and relative to the rule's `source` scalar,
+              # not to the YAML file, so shift them onto the file's own coordinates. Without
+              # this the annotation lands on whatever happens to be at that line of the file.
+              if anchor=$(source_anchor "$file"); then
+                read -r first_line indent <<<"$anchor"
+                line=$((first_line + src_line))
+                col=$((indent + src_col + 1))
+              else
+                line=1
+                col=1
+              fi
 
               gh_level="notice"
               if [[ "$severity" == "error" ]]; then
