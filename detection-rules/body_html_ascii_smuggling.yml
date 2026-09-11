@@ -7,17 +7,45 @@ references:
   - "https://embracethered.com/blog/posts/2024/hiding-and-finding-text-with-unicode-tags/"
 source: |
   type.inbound
-  and regex.count(body.html.inner_text, '[\x{E0020}-\x{E007E}]') - sum(regex.extract(body.html.inner_text,
+  and (
+    (
+      regex.count(body.html.inner_text, '[\x{E0020}-\x{E007E}]') - sum(regex.extract(body.html.inner_text,
                                                                                      '\x{1F3F4}([\x{E0000}-\x{E007F}]+)'
                                                                        ),
                                                                        regex.count(.groups[0],
                                                                                    '[\x{E0020}-\x{E007E}]'
                                                                        )
-  ) > 10
-  and length(distinct(regex.extract(body.html.inner_text, '[\x{E0020}-\x{E007E}]'),
-                      .full_match
-             )
-  ) >= 10
+      ) > 10
+      and length(distinct(regex.extract(body.html.inner_text,
+                                        '[\x{E0020}-\x{E007E}]'
+                          ),
+                          .full_match
+                 )
+      ) >= 10
+    )
+    or any(filter(attachments,
+                  .file_type == "ics"
+                  or (
+                    .file_extension == "ics"
+                    or .content_type in ("application/ics", "text/calendar")
+                  )
+           ),
+           regex.count(file.parse_text(.).text, '[\x{E0020}-\x{E007E}]') - sum(regex.extract(file.parse_text(.
+                                                                                             ).text,
+                                                                                             '\x{1F3F4}([\x{E0000}-\x{E007F}]+)'
+                                                                               ),
+                                                                               regex.count(.groups[0],
+                                                                                           '[\x{E0020}-\x{E007E}]'
+                                                                               )
+           ) > 10
+           and length(distinct(regex.extract(file.parse_text(.).text,
+                                             '[\x{E0020}-\x{E007E}]'
+                               ),
+                               .full_match
+                      )
+           ) >= 10
+    )
+  )
 attack_types:
   - "BEC/Fraud"
 tactics_and_techniques:
