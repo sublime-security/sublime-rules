@@ -1,0 +1,59 @@
+name: "Link: Undocumented share.google link shortener"
+description: "Detects inbound messages that abuse Google's undocumented share.google URL shortener as an open redirect, either directly in message body links or embedded within email attachments and ICS calendar invites. These links carry a 'q' query parameter used to redirect recipients to attacker-controlled destinations while masquerading as a trusted Google domain. Observed lures include fake photo-sharing notifications, dating/adult content teasers, and generic 'message received' hooks designed to entice clicks."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and (
+    // within body.links
+    any(body.links,
+        .href_url.domain.root_domain == "google.com"
+        and strings.istarts_with(.href_url.path, '/share.google')
+        and 'q' in keys(.href_url.query_params_decoded)
+    )
+    // within attachments
+    or any(attachments,
+           // file explode for non ICS
+           (
+             not (
+               .file_type == "ics"
+               or .file_extension == "ics"
+               or .content_type in ("application/ics", "text/calendar")
+             )
+             and any(file.explode(.),
+                     any(.scan.url.urls,
+                         .domain.root_domain == "google.com"
+                         and strings.istarts_with(.path, '/share.google')
+                         and 'q' in keys(.query_params_decoded)
+                     )
+             )
+           )
+           // use parse_ics for ics eents
+           or (
+             (
+               .file_type == "ics"
+               or .file_extension == "ics"
+               or .content_type in ("application/ics", "text/calendar")
+             )
+             and any(beta.file.parse_ics(.).events,
+                     any(.links,
+                         .href_url.domain.root_domain == "google.com"
+                         and strings.istarts_with(.href_url.path, '/share.google')
+                         and 'q' in keys(.href_url.query_params_decoded)
+                     )
+             )
+           )
+    )
+  )
+
+attack_types:
+  - "Spam"
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Open redirect"
+  - "Social engineering"
+detection_methods:
+  - "URL analysis"
+  - "Content analysis"
+  - "File analysis"
+id: "e29cd002-1624-5ff7-b05f-386ae5e4d115"
