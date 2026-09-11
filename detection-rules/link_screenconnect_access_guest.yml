@@ -5,20 +5,15 @@ severity: "high"
 source: |
   type.inbound
   // at least one link to screenconnect
-  and length(filter(body.links,
-                    .href_url.domain.root_domain == "screenconnect.com"
-                    // exclude tenant_domains (if the customer users screenconnect and has their own subdomain)
-                    and .href_url.domain.domain not in $tenant_domains
-             )
-  ) > 0
-  // all the screenconnect links include an msi/exe with Guesst Access
-  and all(filter(body.links, .href_url.domain.root_domain == "screenconnect.com"),
+  and any(body.links,
           strings.iends_with(.href_url.path, '.msi', '.exe')
           // https://docs.connectwise.com/ScreenConnect_Documentation/Developers/Integration_guide
           // e = SessionType. Support, Meet, or Access
           and strings.icontains(.href_url.query_params, "e=Access")
           // y = ProcessType (host vs guest)
           and strings.icontains(.href_url.query_params, "y=Guest")
+          // exclude tenant_domains (if the customer users screenconnect and has their own subdomain)
+          and .href_url.domain.domain not in $tenant_domains
   )
 attack_types:
   - "Malware/Ransomware"
