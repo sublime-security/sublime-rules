@@ -5,8 +5,8 @@ severity: "medium"
 source: |
   type.inbound
   and (
-    strings.icontains(sender.display_name, 'kroger')
-    or regex.icontains(sender.email.local_part, '^kroger\b')
+    regex.icontains(sender.display_name, 'kroger\b')
+    or strings.icontains(sender.email.local_part, 'kroger')
   )
   //
   // This rule makes use of a beta feature and is subject to change without notice
@@ -14,30 +14,36 @@ source: |
   //
   and any([body.current_thread.text, beta.ocr(file.message_screenshot()).text],
           strings.icontains(., 'kroger')
-          and strings.icontains(.,
-                                'boost membership',
-                                'renewal',
-                                'verification',
-                                'customer number:',
-                                'brief online survey',
-                                'points balance',
-                                'fuel savings',
-                                'expir',
-                                'loyalty member'
+          and (
+            strings.icontains(.,
+                              'boost membership',
+                              'renewal',
+                              'verification',
+                              'customer number',
+                              'brief online survey',
+                              'points balance',
+                              'fuel savings',
+                              'loyalty member',
+                              'start survey',
+                              'special member offer',
+                              'loyalty program'
+            )
+            or regex.icontains(., 'shopping\s?cart reward')
           )
   )
   and not any(ml.nlu_classifier(body.current_thread.text).topics,
               .name in ("Newsletters and Digests")
   )
   and not (
-    (
-      sender.email.domain.root_domain in (
-        "kroger.com",
-        "krogermail.com",
-        "thekrogerco.com"
-      )
-      or sender.email.domain.root_domain in $high_trust_sender_root_domains
+    sender.email.domain.root_domain in (
+      "kroger.com",
+      "krogermail.com",
+      "thekrogerco.com"
     )
+    and coalesce(headers.auth_summary.dmarc.pass, false)
+  )
+  and not (
+    sender.email.domain.root_domain in $high_trust_sender_root_domains
     and coalesce(headers.auth_summary.dmarc.pass, false)
   )
 attack_types:
@@ -56,4 +62,4 @@ detection_methods:
 id: "50e63ba3-bd31-5c34-a436-83c23898f5ce"
 og_id: "23c90d6e-11bf-51a6-b34d-6de360f6f294"
 testing_pr: 5319
-testing_sha: b15929d92b64fca8aa15e348ebe25934b075d0de
+testing_sha: 2fd5034d899f24f318aa852904cc2aceac438a1e
