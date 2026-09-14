@@ -6,25 +6,13 @@ source: |
   type.inbound
   and (
     // body links
-    any(body.links,
-        .href_url.domain.root_domain == "trac-link.com"
-        // JWT encoding present x.x.x
-        and regex.icontains(.href_url.path,
-                            '[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]'
-        )
-    )
+    any(body.links, .href_url.domain.root_domain == "trac-link.com")
   
     // attachment links
     or any(attachments,
            (.file_extension == "pdf" or .file_type == "pdf")
            and any(file.explode(.),
-                   any(.scan.pdf.urls,
-                       .domain.root_domain == "trac-link.com"
-                       // JWT encoding present x.x.x
-                       and regex.icontains(.path,
-                                           '[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]'
-                       )
-                   )
+                   any(.scan.pdf.urls, .domain.root_domain == "trac-link.com")
            )
     )
   )
@@ -35,7 +23,13 @@ source: |
     and (subject.is_forward or subject.is_reply)
     and length(body.previous_threads) >= 1
   )
-
+  
+  // negate legitimate replies
+  and not (
+    (length(headers.references) > 0 or headers.in_reply_to is not null)
+    and (subject.is_forward or subject.is_reply)
+    and length(body.previous_threads) >= 1
+  )
 attack_types:
   - "Credential Phishing"
 tactics_and_techniques:
