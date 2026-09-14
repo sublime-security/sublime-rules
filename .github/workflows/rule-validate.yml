@@ -191,6 +191,55 @@ jobs:
             printf '%s' "$s"
           }
 
+          # Returns a file-shaped MQL source: every non-source line is blank, while source lines
+          # retain their original indentation and line numbers. This lets the validator report
+          # positions in the same coordinate system as the checked-out rule file.
+          mask_non_mql() {
+            local file="$1"
+            awk '
+              BEGIN { in_source = 0; source_indent = -1 }
+
+              # Block scalars contain the MQL on following lines. Use the first non-blank line
+              # to find the indentation YAML removes when it decodes the scalar.
+              /^source:[[:space:]]*[|>][-+]?[[:space:]]*(#.*)?$/ {
+                in_source = 1
+                source_indent = -1
+                print ""
+                next
+              }
+
+              in_source {
+                if ($0 ~ /^[[:space:]]*$/) {
+                  print
+                  next
+                }
+
+                match($0, /^[[:space:]]*/)
+                if (source_indent < 0) {
+                  source_indent = RLENGTH
+                }
+                if (RLENGTH >= source_indent) {
+                  print
+                  next
+                }
+                in_source = 0
+              }
+
+              # Inline scalars keep the value at its original column. The source key itself is
+              # masked because it is YAML, not MQL.
+              /^source:/ {
+                rest = $0
+                sub(/^source:/, "", rest)
+                match(rest, /^[[:space:]]*/)
+                value = substr(rest, RLENGTH + 1)
+                printf "%*s%s\n", 7 + RLENGTH, "", value
+                next
+              }
+
+              { print "" }
+            ' "$file"
+          }
+
           # Emits one GitHub annotation per diagnostic in a bulk_validate response.
           # $1: response file. Remaining args: the files submitted in that response, in order
           # (bulk_validate returns validation_responses in the same order as the request).
@@ -241,17 +290,20 @@ jobs:
           build_request() {
             local out_file="$1"
             shift
+            local masked_source
             {
               echo '{"rules_or_queries": ['
               local first=1
               for j in "$@"; do
                 [[ "$first" -eq 0 ]] && echo ","
                 first=0
+                masked_source="$(mask_non_mql "$j")"
                 if [[ "$j" == insights/* ]]; then
-                  yq -o=json eval 'del(.type) | .source = "length([\n\n" + .source + "\n]) >= 0"' "$j"
-                else
-                  yq -o=json eval 'del(.type)' "$j"
+                  # The wrapper adds two lines before the source. Drop the first two masked
+                  # lines so source diagnostics still line up with the original file.
+                  masked_source="$(printf 'length([\n\n%s\n]) >= 0' "$(printf '%s' "$masked_source" | tail -n +3)")"
                 fi
+                yq -o=json eval 'del(.type)' "$j" | jq --arg source "$masked_source" '.source = $source'
               done
               echo ']}'
             } > "$out_file"
