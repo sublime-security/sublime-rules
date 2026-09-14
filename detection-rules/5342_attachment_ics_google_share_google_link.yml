@@ -1,0 +1,41 @@
+name: "PR# 5342 - Attachment: ICS calendar invite with Google share.google URL shortener in google.<tld>/share.google path form"
+description: "Detects inbound messages with ICS calendar invites containing links in the form google.<tld>/share.google?q=<code>, which inherits google.<tld> domain reputation to mask an attacker-controlled destination. This google.<tld>/share.google?q= path form is undocumented: Google publishes the share.google shortener feature, but not this on-Google-domain form or its 'q' parameter."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and any(attachments,
+          (
+            .file_type == "ics"
+            or .file_extension == "ics"
+            or .content_type in ("application/ics", "text/calendar")
+          )
+          //
+          // This rule makes use of a beta feature and is subject to change without notice
+          // using the beta feature in custom rules is not suggested until it has been formally released
+          //
+          and any(beta.file.parse_ics(.).events,
+                  any(.links,
+                      .href_url.domain.sld == "google"
+                      and strings.istarts_with(.href_url.path, '/share.google')
+                      and 'q' in keys(.href_url.query_params_decoded)
+                  )
+          )
+  )
+attack_types:
+  - "Spam"
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Open redirect"
+  - "Social engineering"
+detection_methods:
+  - "URL analysis"
+  - "Content analysis"
+  - "File analysis"
+id: "e757fbed-0a7a-53b4-8dab-559ffc1ca22d"
+tags:
+  - created_from_open_prs
+  - rule_status_added
+  - pr_author_zoomequipd
+references:
+  - https://github.com/sublime-security/sublime-rules/pull/5342
