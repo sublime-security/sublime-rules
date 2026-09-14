@@ -1,0 +1,45 @@
+name: "PR# 5301 - Link: Abused Trac-link URL"
+description: "Detects messages containing links to trac-link.com, in either the body or PDF attachments, that are not traversing Easymail's service. This has been observed in malicious/spam campaigns."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and (
+    // body links
+    (
+      any(body.current_thread.links,
+          .href_url.domain.root_domain == "trac-link.com"
+          and strings.istarts_with(.href_url.path, '/api/mail-track/link/')
+      )
+      // negate legitimate service traversal
+      and not strings.icontains(body.html.raw,
+                                'https://storage.googleapis.com/easymails'
+      )
+    )
+  
+    // attachment links
+    or any(attachments,
+           (.file_extension == "pdf" or .file_type == "pdf")
+           and any(file.explode(.),
+                   any(.scan.pdf.urls, .domain.root_domain == "trac-link.com")
+           )
+    )
+  )
+
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Open redirect"
+  - "Evasion"
+  - "PDF"
+detection_methods:
+  - "URL analysis"
+  - "File analysis"
+  - "Content analysis"
+id: "d44e4b65-2821-5678-9e81-b7cf3df38d20"
+tags:
+  - created_from_open_prs
+  - rule_status_added
+  - pr_author_missingn0pe
+references:
+  - https://github.com/sublime-security/sublime-rules/pull/5301
