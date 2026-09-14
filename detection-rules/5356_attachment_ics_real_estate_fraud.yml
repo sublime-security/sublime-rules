@@ -1,0 +1,55 @@
+name: "Attachment: ICS calendar file with real estate fraud link"
+description: "Detects calendar files (.ics files) whose parsed event content references real estate transaction documents such as closing disclosures, settlement statements, or 1099-S forms."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and any(attachments,
+          (
+            .file_type == "ics"
+            or .file_extension == "ics"
+            or .content_type in ("application/ics", "text/calendar")
+          )
+          //
+          // This rule makes use of a beta feature and is subject to change without notice
+          // using the beta feature in custom rules is not suggested until it has been formally released
+          //
+          and any(beta.file.parse_ics(.).events,
+                  (
+                    regex.icontains(strings.concat(.description, " ", .summary),
+                                    'file attached',
+                                    '\brefer\b',
+                                    '\brespon(?:d|se)\b',
+                                    '\breview\b'
+                    )
+                    or any(.links, regex.icontains(.display_text, 'view'))
+                  )
+                  and (
+                    strings.icontains(strings.concat(.description, " ", .summary),
+                                      "1099-s",
+                                      "draw settlement"
+                    )
+                    or (
+                      regex.icontains(strings.concat(.description, " ", .summary),
+                                      '(?:attached|buyer/seller|new|preliminary).closing disclosure',
+                                      'settlement.(?:&|and.)?(?:report|statement)'
+                      )
+                      and length(body.current_thread.text) < 2000
+                    )
+                  )
+          )
+  )
+
+attack_types:
+  - "BEC/Fraud"
+tactics_and_techniques:
+  - "Social engineering"
+  - "Evasion"
+detection_methods:
+  - "File analysis"
+  - "Content analysis"
+  - "URL analysis"
+id: "fbaccee5-4046-557d-a0b2-703593578ac9"
+og_id: "1ff7696f-2e6d-5967-a46c-abf00d7d67a9"
+testing_pr: 5356
+testing_sha: d96b461edc860e4e50af14c3b8fd2f44038f2a0a
