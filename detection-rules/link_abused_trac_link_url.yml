@@ -1,5 +1,5 @@
-name: "Link: Trac-link URL with JWT encoding"
-description: "Detects messages containing links to trac-link.com, in either the body or PDF attachments, with JWT encoded url paths."
+name: "Link: Abused Trac-link URL"
+description: "Detects messages containing links to trac-link.com, in either the body or PDF attachments, that are not traversing Easymail's service. This has been observed in malicious/spam campaigns."
 type: "rule"
 severity: "medium"
 source: |
@@ -7,10 +7,11 @@ source: |
   and (
     // body links
     (
-      any(body.links,
+      any(body.current_thread.links,
           .href_url.domain.root_domain == "trac-link.com"
           and strings.istarts_with(.href_url.path, '/api/mail-track/link/')
       )
+      // negate legitimate service traversal
       and not strings.icontains(body.html.raw,
                                 'https://storage.googleapis.com/easymails'
       )
@@ -24,20 +25,7 @@ source: |
            )
     )
   )
-  
-  // negate legitimate replies
-  and not (
-    (length(headers.references) > 0 or headers.in_reply_to is not null)
-    and (subject.is_forward or subject.is_reply)
-    and length(body.previous_threads) >= 1
-  )
-  
-  // negate legitimate replies
-  and not (
-    (length(headers.references) > 0 or headers.in_reply_to is not null)
-    and (subject.is_forward or subject.is_reply)
-    and length(body.previous_threads) >= 1
-  )
+
 attack_types:
   - "Credential Phishing"
 tactics_and_techniques:
