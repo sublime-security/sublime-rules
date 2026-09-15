@@ -1,4 +1,4 @@
-name: "Attachment: QR code link with base64-encoded recipient address"
+name: "Attachment: QR code link with encoded recipient address"
 description: "Detects when an image or macro attachment contains QR codes that, when scanned, lead to URLs containing the recipient's email address. This tactic is used to uniquely track or target specific recipients and serve tailored credential phishing pages."
 type: "rule"
 severity: "high"
@@ -20,11 +20,14 @@ source: |
           and any(file.explode(.),
                   any(recipients.to,
                       .email.domain.valid
-                      and any(beta.scan_base64(..scan.qr.url.url,
-                                               format="url",
-                                               ignore_padding=true
-                              ),
-                              strings.icontains(., ..email.email)
+                      and (
+                        any(strings.scan_base64(..scan.qr.url.url,
+                                                format="url",
+                                                ignore_padding=true
+                            ),
+                            strings.icontains(., ..email.email)
+                        )
+                        or strings.decode_hex(..scan.qr.url.fragment) == .email.email
                       )
                   )
           )
