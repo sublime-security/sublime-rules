@@ -1,0 +1,80 @@
+name: "Body: HTML @import tag-splitting XSS — RoundPress/ZimReaper webmail exploit delivery"
+description: |
+  Detects emails containing the @import tag-splitting obfuscation technique used by
+  Russian threat actors TA458 (Operation RoundPress/SpyPress) and TA488 (Void Blizzard/ZimReaper)
+  to deliver cross-site scripting exploits against self-hosted webmail platforms including
+  Zimbra, Roundcube, mDaemon, SOGo, and Kerio.
+
+  The technique fragments HTML tags with CSS @import directives to bypass webmail
+  HTML sanitizers. The sanitizer strips @import sequences; the browser reassembles
+  the remaining characters into valid executable markup. Opening the email in a
+  vulnerable webmail client is sufficient to trigger execution — no link click or
+  attachment required (half-click exploit).
+
+  Active campaigns targeting Ukrainian government entities, US nuclear installations,
+  and NATO member governments were disclosed jointly by Proofpoint, NSA, and FBI
+  on July 23, 2026.
+type: "rule"
+severity: "critical"
+source: |
+  type.inbound
+  and length(attachments) == 0
+  and (
+    // ZimReaper JavaScript payload ID markers (TA488)
+    // present in HTML body as script element ID or base64-encoded variant
+    strings.icontains(body.html.raw,
+                      'zmb_pl_v3_',
+                      'zmb_pl_v',
+                      'ID0gInptYl9wbF',
+                      'A9ICJ6bWJfcGxf',
+                      'gPSAiem1iX3BsX',
+                      'em1iX3BsX',
+                      'ptYl9wbF',
+                      '6bWJfcGxf'
+    )
+  
+    // @import tag-splitting inside HTML tag — word characters before @import
+    // e.g. <scr@import XYZ;ipt> or onlo@import ABC;ad=
+    // legitimate CSS @import always uses url() or quotes — excluded by negation below
+    or regex.icontains(body.html.raw, '<[a-zA-Z]+@import[^;]{0,80};')
+    or regex.icontains(body.html.raw, ' on[a-zA-Z]+@import[^;]{0,60};')
+  
+    // svg onload eval(atob()) — reconstructed payload after sanitizer bypass
+    or regex.icontains(body.html.raw,
+                       'svg[^>]{0,200}onload[^=]{0,10}=.{0,30}eval\s*\(\s*atob\s*\('
+    )
+  
+    // display:none concealing svg payload — TA488 documented technique
+    or (
+      strings.icontains(body.html.raw, 'display:none')
+      and regex.icontains(body.html.raw, '<svg[^>]{0,200}onload')
+    )
+  )
+  
+  // negate legitimate CSS @import — always uses url() or quoted path
+  and not regex.icontains(body.html.raw, '@import\s*(url\s*\(|["\x27])')
+  
+  // negate highly trusted sender domains unless they fail DMARC
+  and not (
+    sender.email.domain.root_domain in $high_trust_sender_root_domains
+    and coalesce(headers.auth_summary.dmarc.pass, false)
+  )
+attack_types:
+  - "Malware/Ransomware"
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Evasion"
+  - "Exploit"
+  - "HTML smuggling"
+  - "Scripting"
+detection_methods:
+  - "Content analysis"
+  - "HTML analysis"
+  - "Header analysis"
+references:
+  - "https://www.proofpoint.com/us/blog/threat-insight/ta488-targets-zimbra-mailservers-half-click-exploits"
+  - "https://www.proofpoint.com/us/blog/threat-insight/ta458-roundpress-exploits"
+  - "https://media.defense.gov/2026/Jul/22/2003965244/-1/-1/1/CSA_RUSSIA_PHISHING_TARGET_ZIMBRA.PDF"
+  - "https://nvd.nist.gov/vuln/detail/CVE-2025-66376"
+  - "https://yanaivanov.com/analysis/roundpress_analysis.html"
+id: "a30fb73e-a5ff-5499-bd8c-2b47f785c182"
