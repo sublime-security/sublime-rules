@@ -41,11 +41,15 @@ source: |
     and any(attachments,
             (.file_extension == "pdf" or .file_type == "pdf")
             and any(file.explode(.),
+                    // .producer
                     strings.ilike(.scan.exiftool.producer,
                                   "*Google Docs Renderer*",
                                   "*Skia/PDF*",
                                   "*Neevia Document Converter*"
                     )
+                    // producer does not contain any words
+                    or regex.imatch(.scan.exiftool.producer, "^[^a-zA-Z]+$")
+                    // .creator
                     or strings.istarts_with(.scan.exiftool.creator, "wkhtmltopdf")
             )
     )
@@ -71,7 +75,8 @@ source: |
                             or ml.link_analysis(.).credphish.contains_captcha
                             or ml.link_analysis(.).credphish.disposition == "phishing"
                             or strings.icontains(ml.link_analysis(.).final_dom.display_text,
-                                                 "I'm Human"
+                                                 "I'm Human",
+                                                 "security check"
                             )
                         )
                       )
@@ -109,6 +114,7 @@ source: |
       )
     )
   )
+
 attack_types:
   - "Credential Phishing"
   - "Extortion"
