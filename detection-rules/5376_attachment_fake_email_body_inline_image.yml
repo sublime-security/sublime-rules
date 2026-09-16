@@ -1,0 +1,43 @@
+name: "Attachment: Fake email body embedded in inline image"
+description: "Catches messages with almost no visible body text and a single link, where an inline image doubles as both the message body and the link destination. The image is OCR'd and the extracted text is run through an NLU classifier to confirm credential-theft intent, matching lures such as fake voicemail transcripts, document-sharing notifications, and workflow addendum requests. Highly trusted sender domains that pass DMARC are excluded to reduce false positives."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and regex.icount(coalesce(body.current_thread.text, ""), '[a-z0-9]') < 10
+  and length(body.current_thread.links) == 1
+  and any(filter(attachments,
+                 .content_disposition == "inline"
+                 and .file_type in $file_types_images
+          )
+          // the image is the body and the image is also the link
+          ,
+          any(html.xpath(body.html, '//a[not(text())]//img/@src').nodes,
+              strings.iends_with(.raw, ..content_id)
+          )
+          and beta.ocr(.).success
+          and any(ml.nlu_classifier(beta.ocr(.).text).intents,
+                  .name == "cred_theft"
+          )
+  )
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and not (
+    sender.email.domain.root_domain in $high_trust_sender_root_domains
+    and coalesce(headers.auth_summary.dmarc.pass, false)
+  )
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Image as content"
+  - "Social engineering"
+  - "Evasion"
+detection_methods:
+  - "Optical Character Recognition"
+  - "Natural Language Understanding"
+  - "HTML analysis"
+  - "Header analysis"
+  - "Sender analysis"
+id: "3564631a-b2b2-5cb4-828b-9687ef091ce4"
+og_id: "c2195370-692d-5287-b28a-fa8fa2c2cdc8"
+testing_pr: 5376
+testing_sha: 3109cdb61b6089a9949a7cc63202c8adb5841859
