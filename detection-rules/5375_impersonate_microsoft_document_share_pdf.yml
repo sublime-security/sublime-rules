@@ -1,0 +1,36 @@
+name: "Brand impersonation: Microsoft 365 document-share PDF"
+description: "Detects inbound messages carrying a PDF attachment whose rendered pages are actually an image mimicking a Microsoft 365 'document shared with you' notification. The lure is personalized by naming the PDF after the recipient's own organization domain and referencing that same domain within the fake notification text, lending false legitimacy to the file. OCR is used to extract and evaluate the embedded image text for these matching indicators, flagging attempts that combine brand spoofing with organization-specific tailoring to drive the recipient to open or interact with the document."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and any(filter(attachments, .file_extension == "pdf"),
+          any(file.explode(.),
+              // pdf image renders a fake microsoft 365 document-share notification
+              strings.icontains(.scan.ocr.raw, "shared a document with you")
+              and strings.icontains(.scan.ocr.raw, "Microsoft 365")
+              // the recipient's org is both the filename and the claimed sharer
+              and any(recipients.to,
+                      .email.domain.valid
+                      and strings.icontains(..scan.ocr.raw, .email.domain.sld)
+                      and strings.istarts_with(...file_name, .email.domain.sld)
+                      // + 4 == .pdf
+                      and length(...file_name) == length(.email.domain.sld) + 4
+              )
+          )
+  )
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "PDF"
+  - "Image as content"
+  - "Social engineering"
+detection_methods:
+  - "Optical Character Recognition"
+  - "File analysis"
+  - "Content analysis"
+id: "492064da-09e5-54dd-80d5-2ce26bea57d7"
+og_id: "98ad4839-2964-5508-bd2d-8312f67baea6"
+testing_pr: 5375
+testing_sha: fbe8fcc231413882b7f9a1a07fc89e49a0a39c92
