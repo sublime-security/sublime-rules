@@ -1,0 +1,66 @@
+name: "DLP: High volume sensitive data matches"
+description: "Flags outbound messages where more than 500 distinct values of a single sensitive data type (e.g., PII, financial, or credential data) are identified with medium or high confidence, either within extracted text from attachments or in the message body of the current thread. This indicates potential bulk exposure or exfiltration of sensitive information."
+type: "dlp"
+severity: "high"
+attack_types:
+  - "DLP: Personal Data"
+  - "DLP: Financial Data"
+tags:
+  - "Personal Data"
+  - "Financial Data"
+source: |
+  type.outbound
+  // Over 500 DLP matches across all attachments extracted text
+  and any(distinct(flatten(map(attachments,
+                  // Get the list of types of DLP matches present
+                      map(file.explode(.),
+                          map(beta.ml_extract_sensitive_information(.scan.strings.raw).elements,
+                              .type
+                          )
+                      )
+                  )
+              )
+          ),
+          // Count distinct values for each type
+          length(distinct(flatten(map(attachments,
+                          map(file.explode(.),
+                              // Only count matches that are medium or high confidence
+                              filter(beta.ml_extract_sensitive_information(.scan.strings.raw).elements,
+                                  (.type == ....
+                                  and .confidence in ("medium", "high")
+                                  // If you wish to exclude any categories, e.g., ip_address, do it here
+                                  )
+                              )
+                          )
+                      )
+                  ),
+                  .text
+              )
+          ) >= 500 // check for 500 or more distinct values of the same type of DLP entity in attachments
+  )
+  // OR over 500 DLP matches in the message body current thread text
+  or (
+      // Get the type of DLP matches present in the message body text
+      any(distinct(map(
+                  beta.ml_extract_sensitive_information(body.current_thread.text).elements,
+                  .type
+              )
+          ),
+          // Count distinct values for each type
+          length(distinct(map(
+                      // Only count matches that are medium or high confidence
+                      filter(
+                          beta.ml_extract_sensitive_information(body.current_thread.text).elements,
+                          (.type == ..
+                          and .confidence in ("medium", "high")
+                          // If you wish to exclude any categories, e.g., ip_address, do it here
+                          )
+                      ), .text
+                  )
+              )
+          ) >= 500 // check for 500 or more distinct values of the same type of DLP entity in body
+      )
+  )
+detection_methods:
+  - "Content analysis"
+  - "File analysis"
