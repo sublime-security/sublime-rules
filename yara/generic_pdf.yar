@@ -687,3 +687,35 @@ rule pdf_w9_signatures {
 		uint32be(0) == 0x25504446
 		and all of them
 }
+
+rule pdf_msft_lure_signature {
+	meta:
+		author      = "kyle eaton"
+		date        = "2026-09-16"
+		description = "matching a signature observed in a microsoft themed cred phish pdf"
+	strings:
+		$sig_grey      = { 2F 49 6D 61 67 65 0A 2F 57 69 64 74 68 20 35 32 38 0A 2F 48 65 69 67 68 74 20 31 37 39 0A 2F 43 6F 6C 6F 72 53 70 61 63 65 20 2F 44 65 76 69 63 65 47 72 61 79 0A }
+		$sig_rbg       = { 2F 49 6D 61 67 65 0A 2F 57 69 64 74 68 20 35 32 38 0A 2F 48 65 69 67 68 74 20 31 37 39 0A 2F 43 6F 6C 6F 72 53 70 61 63 65 20 2F 44 65 76 69 63 65 52 47 42 }
+		$read_more_rgb = { 2F 49 6D 61 67 65 0A 2F 57 69 64 74 68 20 34 32 30 0A 2F 48 65 69 67 68 74 20 35 31 0A 2F 43 6F 6C 6F 72 53 70 61 63 65 20 2F 44 65 76 69 63 65 52 47 42 0A }
+		$underline_rgb = { 2F 57 69 64 74 68 20 34 33 30 0A 2F 48 65 69 67 68 74 20 38 0A 2F 43 6F 6C 6F 72 53 70 61 63 65 20 2F 44 65 76 69 63 65 52 47 42 0A }
+	condition:
+		uint32be(0) == 0x25504446
+		and any of them
+}
+
+rule pdf_blurred_cred_phish_lure {
+	meta:
+		author      = "kyle eaton"
+		date        = "2026-09-16"
+		description = "matching a blurred lure in a cred phish pdf"
+	strings:
+		$blurred_1_size     = { 2F 48 65 69 67 68 74 20 38 32 31 0D 0A 2F 57 69 64 74 68 20 36 36 35 0D 0A }
+		$blurred_1_stream_a = { FC BF FE 6B 6A 6A 6A 6A 6A 6A 6A 6A 6A 6A 6A 6A 6A 6A 6A }
+		$blurred_1_stream_b = { 6A 6A 6A 6A EA 5C F4 B7 A9 57 55 A7 9E 7A 53 53 }
+		$button_1_size      = { 2F 48 65 69 67 68 74 20 34 38 0D 0A 2F 57 69 64 74 68 20 32 31 32 0D 0A }
+		$button_1_stream    = { E2 E0 0C E3 07 71 43 60 20 48 80 00 01 C2 A2 F3 }
+		$id                 = "<E854E2C5C4EBF4F5474ABB546A53B342>"
+	condition:
+		uint32be(0) == 0x25504446
+		and any of them
+}
