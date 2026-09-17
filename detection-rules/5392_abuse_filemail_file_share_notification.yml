@@ -1,0 +1,36 @@
+name: "PR# 5392 - Service abuse: Filemail file-sharing notifications"
+description: "Detects legitimate Filemail notification emails abused to deliver file-sharing links, where the reply-to address uses a mismatched domain with a randomized alphanumeric local part, or the notification body references financial lures such as invoices, quotations, purchase orders, or remittance statements. This pattern indicates the free file-sharing service is being leveraged to distribute malicious payloads while evading detection through a trusted sending infrastructure."
+type: "rule"
+severity: "low"
+source: |
+  type.inbound
+  and sender.email.email == "no-reply@filemail.com"
+  and (
+    any(headers.reply_to,
+        .email.domain.root_domain != "filemail.com"
+        and regex.imatch(.email.local_part, '[a-z]{3,}\d{3,6}')
+    )
+    or any(html.xpath(body.html, '//td[span[normalize-space(text())="Subject:"]]').nodes,
+           regex.icontains(.display_text,
+                           '\b(?:invoice|invoices|estimate|estimates|remittance|statement|statements|purchase order|proforma|billing|payment|receipt|quotation|ach|wire transfer)\b'
+           )
+    )
+  )
+attack_types:
+  - "Malware/Ransomware"
+  - "BEC/Fraud"
+tactics_and_techniques:
+  - "Free file host"
+  - "Social engineering"
+  - "Spoofing"
+detection_methods:
+  - "Header analysis"
+  - "HTML analysis"
+  - "Content analysis"
+id: "9a55f2d1-a58e-51e3-9397-715cb0eb6b35"
+tags:
+  - created_from_open_prs
+  - rule_status_added
+  - pr_author_IndiaAce
+references:
+  - https://github.com/sublime-security/sublime-rules/pull/5392
