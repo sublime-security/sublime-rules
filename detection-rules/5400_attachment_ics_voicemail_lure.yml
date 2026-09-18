@@ -1,0 +1,84 @@
+name: "PR# 5400 - Attachment: ICS voicemail lure with suspicious link"
+description: "Detects inbound emails containing an ICS calendar attachment whose event description mimics a voicemail notification (e.g., 'new voicemail', 'listen to your voicemail') and includes a link pointing to a free file hosting service, self-service creation platform, URL shortener, suspicious TLD, or a domain registered within the last 90 days. Excludes messages from high-trust sender domains that pass DMARC authentication."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and any(attachments,
+          (
+            .file_type == "ics"
+            or .file_extension == "ics"
+            or .content_type in ("application/ics", "text/calendar")
+          )
+          and any(beta.file.parse_ics(.).events,
+                  // voicemail key words
+                  any([.summary, .description],
+                      regex.icontains(.,
+                                      '(?:voice\s*mail|voice\s*message|audio\s*message).{0,20}(?:notification|recording|arriv|receiv|waiting|await|pending|available|unheard|ready|logged|in\s+your|from\s+your\s+inbox)|(?:new|pending|unheard|missed|confidential)\s+(?:voice\s*mail|voice\s*message|audio\s*message)|you\s+(?:have|received)\s+a(?:\s+new\s+voice|.{0,30}voice\s*(?:mail|message))|listen\s+to\s+(?:your\s+)?voice\s*mail|listen\s+(?:to\s+)?(?:the|this|your)\s+message|message\s+to\s+listen|wireless\s*caller|audio\s*file|check\s+(?:your\s+)?voice\s*mail|(?:google\s+)?voice\s*mail\s+(?:google\s+voice|google)|google\s+voice\s*mail|voice\s*(?:mail|message)\s+[0-9]{1,2}:[0-9]{2}|duration:\s*[0-9]{1,2}:[0-9]{2}\s*sec'
+                      )
+                  )
+                  // sus link
+                  and any(.links,
+                          .href_url.domain.root_domain in $free_file_hosts
+                          or .href_url.domain.domain in $free_file_hosts
+                          or .href_url.domain.root_domain in $self_service_creation_platform_domains
+                          or .href_url.domain.domain in $self_service_creation_platform_domains
+                          or .href_url.domain.tld in $suspicious_tlds
+                          or .href_url.domain.domain in $url_shorteners
+                          or .href_url.domain.root_domain in $url_shorteners
+                          or network.whois(.href_url.domain).days_old < 90
+                          or strings.icontains(.display_url.url, "voicemail")
+                          or strings.icontains(.display_text, "voicemail", "wav")
+                          // minimal js landing page
+                          or length(filter(ml.link_analysis(., mode="aggressive").unique_urls_accessed,
+                                           .url == ..href_url.url
+                                           or (
+                                             strings.starts_with(.url,
+                                                                 ..href_url.url
+                                             )
+                                             and regex.icontains(.url,
+                                                                 '[a-z]{3,}\.[0-9a-f]{20}\.js'
+                                             )
+                                           )
+                                           or .url == strings.concat(..href_url.url,
+                                                                     'favicon.png'
+                                           )
+                                    )
+                          ) == 3
+                          or any(html.xpath(ml.link_analysis(., mode="aggressive").final_dom,
+                                            "//script"
+                                 ).nodes,
+                                 regex.icontains(.raw,
+                                                 'setTimeout[\s\S]{0,100}window\.location\.href[\s\S]{0,100},\s*3000'
+                                 )
+                          )
+                          or ml.link_analysis(.).effective_url.domain.root_domain in (
+                            'workers.dev'
+                          )
+                  )
+          )
+  )
+  and not (
+    sender.email.domain.root_domain in $high_trust_sender_root_domains
+    and coalesce(headers.auth_summary.dmarc.pass, false)
+  )
+attack_types:
+  - "ICS Phishing"
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Social engineering"
+  - "Free file host"
+  - "Evasion"
+detection_methods:
+  - "File analysis"
+  - "Content analysis"
+  - "URL analysis"
+  - "Whois"
+  - "Header analysis"
+id: "76027145-c127-5357-8a6d-4c944529f14e"
+tags:
+  - created_from_open_prs
+  - rule_status_modified
+  - pr_author_D-Bolton
+references:
+  - https://github.com/sublime-security/sublime-rules/pull/5400
