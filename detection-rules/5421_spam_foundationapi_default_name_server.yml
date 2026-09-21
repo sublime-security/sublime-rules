@@ -1,0 +1,32 @@
+name: "PR# 5421 - Spam: Cold outreach from FoundationAPI-hosted domain"
+description: "Detects inbound messages from domains using FoundationAPI default name-servers, where the message content is classified as B2B cold outreach by NLU analysis."
+type: "rule"
+severity: "low"
+source: |
+  type.inbound
+  // there are 2 name-servers which have subdomains containing .dns
+  and length(network.whois(sender.email.domain).name_servers) == 2
+  and all(network.whois(sender.email.domain).name_servers,
+          strings.istarts_with(.subdomain, 'dns')
+          and .root_domain == 'foundationapi.com'
+  )
+  
+  // nlu logic
+  and any(ml.nlu_classifier(body.current_thread.text).topics,
+          .name == 'B2B Cold Outreach'
+  )
+tags:
+  - "Attack surface reduction"
+  - pr_author_missingn0pe
+  - created_from_open_prs
+  - rule_status_added
+attack_types:
+  - "Spam"
+tactics_and_techniques:
+  - "Social engineering"
+detection_methods:
+  - "Whois"
+  - "Natural Language Understanding"
+id: "07b7e89b-288c-565a-a12c-b79a4cc39cfb"
+references:
+  - https://github.com/sublime-security/sublime-rules/pull/5421
