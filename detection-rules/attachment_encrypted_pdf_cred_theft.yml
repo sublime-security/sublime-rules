@@ -12,8 +12,17 @@ source: |
                 and any(.scan.strings.strings, strings.icontains(., "/Encrypt"))
               )
           )
-          // Encrypted PDFs do not have child nodes with any data
-          and all(filter(file.explode(.), .depth > 0), .size == 0)
+          and (
+            // Encrypted PDFs do not have child nodes with any data
+            all(filter(file.explode(.), .depth > 0), .size == 0)
+            // if we cracked the password, it will have child objects
+            or (
+              any(file.explode(.), 'pdf_encryption_dict' in .flavors.yara)
+              and any(file.explode(.),
+                      .scan.encrypted_pdf.cracked_password is not null
+              )
+            )
+          )
   )
   and (
     any(ml.nlu_classifier(body.current_thread.text).intents,

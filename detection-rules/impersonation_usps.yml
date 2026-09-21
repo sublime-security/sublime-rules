@@ -26,7 +26,8 @@ source: |
                       '*delivery address*',
                       "*parcel allocation*",
                       "*claim your parcel*",
-                      "*delivery details*"
+                      "*delivery details*",
+                      "start*survey"
         )
     ),
     strings.ilike(body.current_thread.text,
@@ -39,7 +40,8 @@ source: |
                   '*sorry tolet*',
                   '*Due to an incorrect*',
                   '*remain undeliverable*',
-                  "*service updates*"
+                  "*service updates*",
+                  "*exclusive survey reward*"
     ),
     // impersonal greeting
     any(ml.nlu_classifier(body.current_thread.text).entities,
@@ -69,7 +71,8 @@ source: |
           strings.icontains(.display_url.domain.root_domain, 'usps')
           and .mismatched
       )
-    )
+    ),
+    any(body.links, .href_url.domain.domain in $free_file_hosts)
   )
   and (
     sender.email.domain.root_domain not in (
@@ -87,11 +90,14 @@ source: |
     )
   )
   // negate newsletters
-  and not (
-    length(filter(body.links, .visible == true)) > 20
-    or any(ml.nlu_classifier(body.html.display_text).topics,
-           .name == "Newsletters and Digests"
+  and (
+    not (
+      length(filter(body.links, .visible == true)) > 20
+      or any(ml.nlu_classifier(body.html.display_text).topics,
+             .name == "Newsletters and Digests"
+      )
     )
+    or length(body.links) > length(body.current_thread.links) + 20
   )
   // not all links to usps.com
   and not all(body.links, .href_url.domain.root_domain == "usps.com")
