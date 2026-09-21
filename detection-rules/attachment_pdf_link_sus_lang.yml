@@ -7,7 +7,22 @@ source: |
   and length(filter(attachments, .file_type == "pdf")) >= 1
   and any(attachments,
           .file_type == "pdf"
-          and beta.parse_exif(.).page_count == 1
+          and (
+            // a single page pdf
+            beta.parse_exif(.).page_count == 1
+            // in some cases the pdf might have an invalid xref table
+            // so we can instead use the number of pages in the pdf scanner
+            or (
+              beta.parse_exif(.).page_count == 0
+              and any(beta.parse_exif(.).fields,
+                      .key == "Warning" and .value == "Invalid xref table"
+              )
+              and length(filter(file.explode(.),
+                                strings.istarts_with(.file_name, 'pdf_2_png_')
+                         )
+              ) == 1
+            )
+          )
           and any(file.explode(.),
                   .depth == 0
                   // reduce fps by limiting the length to a single link

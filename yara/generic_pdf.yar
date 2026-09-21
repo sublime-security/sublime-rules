@@ -188,6 +188,22 @@ rule SAI_Global_ISO9001_Logo_PDF_Fuzzy
         )
 }
 
+rule pdf_eof_md5_hash
+{
+    meta:
+        author      = "brandon murphy"
+        date        = "2026-09-09"
+        description = "PDF with a 32-char hex hash appended as a PDF comment after %%EOF and at the end of the file"
+
+    strings:
+        $header   = { 25 50 44 46 2D }
+        $eof_hash = /%%EOF\s{0,4}%[0-9a-f]{32}\s{0,4}$/
+
+    condition:
+        $header at 0
+        and $eof_hash in (filesize - 50..filesize)
+}
+
 rule pdf_jsfck_ratio {
     meta:
         author      = "kyle eaton"
@@ -562,18 +578,144 @@ rule pdf_prompt_ack_secure_document_image_sizes {
 		$header at 0 and all of ($img*)
 }
 
-rule quickbooks_pdf_lures {
+rule quickbooks_pdf_payment_lure {
 	meta:
 		author      = "kyle eaton"
-		date        = "2026-08-10"
-		description = "matching 2 quickbook lures observed in malicious PDFs (error in payment processing and remittance)"
+		date        = "2026-08-12"
+		description = "matching a quickbook lure observed in malicious PDFs (error in payment processing)"
 	strings:
-		$header         = { 25 50 44 46 2D 31 2E }
+		$header         = { 25 50 44 46 2D }
 		$qb_logo        = { 2F 49 6D 61 67 65 0A 2F 57 69 64 74 68 20 33 31 30 0A 2F 48 65 69 67 68 74 20 31 33 36 0A 2F }
-		$optional_rect  = { 2F 53 75 62 74 79 70 65 20 2F 49 6D 61 67 65 0A 2F 57 69 64 74 68 20 31 32 30 30 0A 2F 48 65 69 67 68 74 20 31 30 30 }
-		$optional_image = { 2F 52 65 63 74 20 5B 33 36 20 37 30 35 2E 37 35 20 32 35 37 2E 32 35 20 37 36 35 2E 37 35 5D }
+		$optional_image = { 2F 53 75 62 74 79 70 65 20 2F 49 6D 61 67 65 0A 2F 57 69 64 74 68 20 31 32 30 30 0A 2F 48 65 69 67 68 74 20 31 30 30 }
 	condition:
 		$header at 0
 		and $qb_logo
 		and 1 of ($optional_*)
+}
+
+rule pdf_rfp_template_lure {
+	meta:
+		author      = "kyle eaton"
+		date        = "2026-08-11"
+		description = "Matches PDF with a templated RPF lure."
+	strings:
+		$header  = { 25 50 44 46 2D }
+		$title   = { 31 20 30 20 6F 62 6A 0A 3C 3C 2F 54 69 74 6C 65 20 28 52 65 71 75 65 73 74 20 66 6F 72 20 50 72 6F 70 6F 73 61 6C 20 }
+		$a_rect1 = "/Rect [90.75"
+		$a_rect2 = /\/Rect \[208\.5\s[\d.]+\s403\.5/
+		$b_rect  = /\/Rect \[218\.25\s[\d.]+\s393\.75/
+		$c_rect1 = /\/Rect \[213\.75\s[\d.]+\s398\.25/
+		$c_img   = { 2F 49 6D 61 67 65 0A 2F 57 69 64 74 68 20 32 36 33 38 0A 2F 48 65 69 67 68 74 20 33 34 34 38 }
+		$d_rect  = { 2F 52 65 63 74 20 5B 31 30 38 20 }
+	condition:
+		$header at 0
+		and $title
+		and (
+			all of ($a_*)
+			or all of ($c_*)
+			or $b_rect
+			or $d_rect
+		)
+}
+
+rule pdf_templated_lure_blue_white {
+	meta:
+		author      = "kyle eaton"
+		date        = "2026-08-11"
+		description = "Matching a specific templated PDF lure (mainly blue and white) with a specfic rect value and page size"
+	strings:
+		$header = { 25 50 44 46 2D }
+		$rect_1 = { 5B 31 32 37 2E 35 20 31 32 38 2E 36 36 39 39 38 33 20 33 31 38 2E 37 35 20 31 36 33 2E 31 36 39 39 38 33 5D }
+		$mb     = { 2F 4D 65 64 69 61 42 6F 78 20 5B 30 20 30 20 34 34 35 2E 39 32 20 36 33 31 2E 39 32 5D }
+	condition:
+		$header at 0
+		and $rect_1
+		and $mb   
+}
+
+rule pdf_blue_confidential_fax_lure {
+	meta:
+		author      = "kyle eaton"
+		date        = "2026-08-12"
+		description = "matching PDFs with a blue 'confidential fax' lure, based on specific overlaps"
+	strings:
+		$header = { 25 50 44 46 2D }
+		$rect   = { 2F 52 65 63 74 20 5B 32 37 39 20 33 39 39 2E 37 35 20 35 31 33 20 34 34 30 2E 32 35 5D }
+	condition:
+		$header at 0
+		and $rect
+}
+
+rule pdf_doubloon_dredger_template_1 {
+    meta:
+        author      = "kyle eaton"
+        date        = "2026-08-21"
+        description = "PDF matching known DOUBLOON DREDGER template"
+    strings:
+        $header   = { 25 50 44 46 2D }
+        $obj_2    = { 32 20 30 20 6F 62 6A 0A 3C 3C 0A 2F 54 79 70 65 20 2F 43 61 74 61 6C 6F 67 0A 2F 50 61 67 65 73 20 34 20 30 20 52 0A 2F 56 69 65 77 65 72 50 72 65 66 65 72 65 6E 63 65 73 20 35 20 30 20 52 0A 2F 41 63 72 6F 46 6F 72 6D 20 36 20 30 20 52 0A 2F 56 65 72 73 69 6F 6E 20 2F 31 23 32 45 35 0A 3E 3E 0A 65 6E 64 6F 62 6A }
+        $stream_1 = { 3C 3C 0A 2F 46 69 6C 74 65 72 20 2F 46 6C 61 74 65 44 65 63 6F 64 65 0A 2F 4C 65 6E 67 74 68 20 33 30 35 0A 3E 3E }
+        $stream_2 = { 6F 62 6A 0A 3C 3C 0A 2F 46 69 6C 74 65 72 20 2F 46 6C 61 74 65 44 65 63 6F 64 65 0A 2F 4C 65 6E 67 74 68 20 33 32 34 0A 3E 3E 0A 73 74 72 65 61 6D }
+    condition:
+        $header at 0
+        and $obj_2
+        and $stream_1
+        and $stream_2
+}
+
+rule pdf_rfp_bw_lure {
+	meta:
+		author      = "kyle eaton"
+		date        = "2026-09-01"
+		description = "matching a black and white RPF lure. Specifically some of the generation artifacts in the images."
+	strings:
+		$jpg_01  = { ff c0 00 0b 08 0d 78 0a 4e 01 01 11 00 ff c4 00 19 00 01 00 03 01 01 00 00 00 00 00 00 00 00 00 00 00 00 02 03 04 01 07 ff c4 00 19 10 01 00 03 01 01 00 00 00 00 00 00 00 00 00 00 00 00 01 02 12 11 03 ff da 00 08 01 01 00 00 3f 00 f3 f0 [23000] 25 0e ba 3a 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 03 83 8e 4a 32 84 a1 2a ec aa ca 6e a2 ea }
+		$img_obj = { 3C 3C 2F 54 79 70 65 20 2F 58 4F 62 6A 65 63 74 0A 2F 53 75 62 74 79 70 65 20 2F 49 6D 61 67 65 0A 2F 57 69 64 74 68 20 32 36 33 38 0A 2F 48 65 69 67 68 74 20 33 34 34 38 0A 2F 43 6F 6C 6F 72 53 70 61 63 65 20 2F 44 65 76 69 63 65 47 72 61 79 0A 2F 42 69 74 73 50 65 72 43 6F 6D 70 6F 6E 65 6E 74 20 38 0A 2F 46 69 6C 74 65 72 20 2F 44 43 54 44 65 63 6F 64 65 0A 2F 43 6F 6C 6F 72 54 72 61 6E 73 66 6F 72 6D 20 30 0A 2F 4C 65 6E 67 74 68 20 36 39 35 30 32 3E 3E }
+	condition:
+		uint32be(0) == 0x25504446
+		and @img_obj < @jpg_01
+}
+
+rule pdf_w9_signatures {
+	meta:
+		author      = "kyle eaton"
+		date        = "2026-09-16"
+		description = "matching PDFs with signatures observed in fake w9 documents"
+	strings:
+		$noel_docusign = { FF DA 00 0C 03 01 00 02 11 03 11 00 3F 00 FE FC 39 E7 DF AF 3D 78 C7 3E BC 60 73 DB 8A 00 51 96 3D F2 3A 73 D3 D7 1E 9F E7 DE 80 FE BF AF EB F2 17 63 72 31 C1 EA 33 D7 EB C7 3D 07 5D DD 3F 0A 00 5D AF D7 9C FA E7 D7 A8 FC 70 3B F6 EF 40 09 B1 B0 47 63 C9 19 18 3E E7 B5 00 27 3B C2 E4 EF }
+	condition:
+		uint32be(0) == 0x25504446
+		and all of them
+}
+
+rule pdf_msft_lure_signature {
+	meta:
+		author      = "kyle eaton"
+		date        = "2026-09-16"
+		description = "matching a signature observed in a microsoft themed cred phish pdf"
+	strings:
+		$sig_grey      = { 2F 49 6D 61 67 65 0A 2F 57 69 64 74 68 20 35 32 38 0A 2F 48 65 69 67 68 74 20 31 37 39 0A 2F 43 6F 6C 6F 72 53 70 61 63 65 20 2F 44 65 76 69 63 65 47 72 61 79 0A }
+		$sig_rbg       = { 2F 49 6D 61 67 65 0A 2F 57 69 64 74 68 20 35 32 38 0A 2F 48 65 69 67 68 74 20 31 37 39 0A 2F 43 6F 6C 6F 72 53 70 61 63 65 20 2F 44 65 76 69 63 65 52 47 42 }
+		$read_more_rgb = { 2F 49 6D 61 67 65 0A 2F 57 69 64 74 68 20 34 32 30 0A 2F 48 65 69 67 68 74 20 35 31 0A 2F 43 6F 6C 6F 72 53 70 61 63 65 20 2F 44 65 76 69 63 65 52 47 42 0A }
+		$underline_rgb = { 2F 57 69 64 74 68 20 34 33 30 0A 2F 48 65 69 67 68 74 20 38 0A 2F 43 6F 6C 6F 72 53 70 61 63 65 20 2F 44 65 76 69 63 65 52 47 42 0A }
+	condition:
+		uint32be(0) == 0x25504446
+		and any of them
+}
+
+rule pdf_blurred_cred_phish_lure {
+	meta:
+		author      = "kyle eaton"
+		date        = "2026-09-16"
+		description = "matching a blurred lure in a cred phish pdf"
+	strings:
+		$blurred_1_size     = { 2F 48 65 69 67 68 74 20 38 32 31 0D 0A 2F 57 69 64 74 68 20 36 36 35 0D 0A }
+		$blurred_1_stream_a = { FC BF FE 6B 6A 6A 6A 6A 6A 6A 6A 6A 6A 6A 6A 6A 6A 6A 6A }
+		$blurred_1_stream_b = { 6A 6A 6A 6A EA 5C F4 B7 A9 57 55 A7 9E 7A 53 53 }
+		$button_1_size      = { 2F 48 65 69 67 68 74 20 34 38 0D 0A 2F 57 69 64 74 68 20 32 31 32 0D 0A }
+		$button_1_stream    = { E2 E0 0C E3 07 71 43 60 20 48 80 00 01 C2 A2 F3 }
+		$id                 = "<E854E2C5C4EBF4F5474ABB546A53B342>"
+	condition:
+		uint32be(0) == 0x25504446
+		and any of them
 }

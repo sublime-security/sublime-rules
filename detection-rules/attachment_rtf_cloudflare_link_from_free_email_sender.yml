@@ -1,0 +1,25 @@
+name: "Attachment: RTF with link to free-hosted Cloudflare Pages"
+description: "Detects inbound emails that contain an RTF attachment. The rule extracts embedded content from the RTF file and inspects any URLs found within it, following redirects and analyzing the final destination page's links. It flags cases where those links point to domains hosted on the free Cloudflare Pages service (pages.dev), a common tactic used to host malicious or deceptive content while evading detection."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and any(filter(attachments, .file_type == 'rtf'),
+          any(file.explode(.),
+              any(.scan.url.urls,
+                  any(ml.link_analysis(.).final_dom.links,
+                      .href_url.domain.root_domain in ('pages.dev')
+                  )
+              )
+          )
+  )
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Free subdomain host"
+detection_methods:
+  - "File analysis"
+  - "URL analysis"
+  - "HTML analysis"
+  - "Sender analysis"
+id: "017a97cc-4a5c-5475-8fa2-5e89a491c36c"

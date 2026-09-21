@@ -1,0 +1,54 @@
+name: "Attachment: ICS invite meeting lure"
+description: "Detects inbound messages carrying an .ics calendar attachment that impersonate meeting invites, referencing dial-in details such as PIN resets, local numbers, or conference IDs. These messages include a tracked link redirecting through the sender's own domain (e.g. /ls/click) and use generic, template-style subject lines like 'Management Progress Meeting' or 'Project Closeout Report', often appended with a machine-generated timestamp. The sending domains are typically unrelated or compromised businesses rather than legitimate meeting platforms, and the pattern is consistent with a phishing kit automating fake meeting invitations to harvest clicks or credentials."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and any(attachments,
+          (
+            .file_type == "ics"
+            or .file_extension == "ics"
+            or .content_type in ("application/ics", "text/calendar")
+          )
+  )
+  and 2 of (
+    strings.icontains(body.current_thread.text, 'join the meeting now'),
+    strings.icontains(body.current_thread.text, 'reset dial-in pin'),
+    strings.icontains(body.current_thread.text, 'find a local number'),
+    strings.icontains(body.current_thread.text, 'phone conference id')
+  )
+  and any(body.current_thread.links,
+          .href_url.domain.root_domain == sender.email.domain.root_domain
+          and strings.istarts_with(.href_url.path, "/ls/click")
+  )
+  and 2 of (
+    strings.icontains(subject.subject, 'project implementing agreement kick-off'),
+    strings.icontains(subject.subject, 'management progress meeting'),
+    strings.icontains(subject.subject, 'finance committee meeting'),
+    strings.icontains(subject.subject, 'project closeout report'),
+    strings.icontains(subject.subject, '(and new time)'),
+    // kit personalizes with the target org name: "Discussion w/ <Company>:"
+    (
+      regex.icontains(subject.subject, 'discussion w/ .{1,40}:')
+      or 
+      // machine-appended timestamp
+      regex.icontains(subject.subject,
+                      '(?:\d{1,2}:\d{2}:\d{2}|\d{1,2}:\d{2}\s*(?:am|pm))\s*$'
+      )
+    )
+  )
+attack_types:
+  - "ICS Phishing"
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Social engineering"
+  - "Impersonation: Brand"
+  - "Spoofing"
+  - "Open redirect"
+detection_methods:
+  - "Content analysis"
+  - "URL analysis"
+  - "Header analysis"
+  - "Sender analysis"
+  - "File analysis"
+id: "1173b7a9-de2e-567a-ab5a-0765710017f6"

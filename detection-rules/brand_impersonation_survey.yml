@@ -9,10 +9,25 @@ source: |
         .name == "cred_theft" and .confidence == "high"
     )
     or any(ml.nlu_classifier(body.current_thread.text).entities,
-           .name == "org" and .text == 'AAA'
+           .name == "org"
+           and .text in (
+             "AAA",
+             "Medicare Kit",
+             "Blackstone Griddle",
+             "Oral-B",
+             "United Healthcare"
+           )
     )
     or any(ml.nlu_classifier(body.current_thread.text).entities,
-           .name == "request" and strings.icontains(.text, 'Claim Your Free Kit')
+           .name == "sender"
+           and (
+             strings.icontains(.text, "sam's club", "kobalt", "ace hardware")
+             or regex.icontains(.text, "lowe\'s.{0,10}reward")
+           )
+    )
+    or any(ml.nlu_classifier(body.current_thread.text).entities,
+           .name == "request"
+           and regex.icontains(.text, 'claim\s+your\s+(?:free|medical)?\s+kit')
     )
     or length(filter(ml.nlu_classifier(body.current_thread.text).entities,
                      .name == "financial"
@@ -26,13 +41,14 @@ source: |
   and any(ml.nlu_classifier(body.current_thread.text).entities,
           .name in ("request", "org") and strings.icontains(.text, "survey")
   )
+  and not (
+    sender.email.domain.root_domain in ("barracudanetworks.com")
+    and coalesce(headers.auth_summary.dmarc.pass, false)
+  )
   // and the sender is not from high trust sender root domains
-  and (
-    (
-      sender.email.domain.root_domain in $high_trust_sender_root_domains
-      and not headers.auth_summary.dmarc.pass
-    )
-    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  and not (
+    sender.email.domain.root_domain in $high_trust_sender_root_domains
+    and coalesce(headers.auth_summary.dmarc.pass, false)
   )
 attack_types:
   - "Credential Phishing"
