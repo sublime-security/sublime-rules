@@ -30,20 +30,21 @@ source: |
                           or strings.icontains(.display_url.url, "voicemail")
                           or strings.icontains(.display_text, "voicemail", "wav")
                           // minimal js landing page
-                          or (
-                            length(ml.link_analysis(., mode="aggressive").unique_urls_accessed
-                            ) == 3
-                            and all(ml.link_analysis(., mode="aggressive").unique_urls_accessed,
-                                    .url == ..href_url.url
-                                    or (
-                                      strings.starts_with(.url, ..href_url.url)
-                                      and strings.ends_with(.url, '.js')
+                          or length(filter(ml.link_analysis(., mode="aggressive").unique_urls_accessed,
+                                           .url == ..href_url.url
+                                           or (
+                                             strings.starts_with(.url,
+                                                                 ..href_url.url
+                                             )
+                                             and regex.icontains(.url,
+                                                                 '[a-z]{3,}\.[0-9a-f]{20}\.js'
+                                             )
+                                           )
+                                           or .url == strings.concat(..href_url.url,
+                                                                     'favicon.png'
+                                           )
                                     )
-                                    or .url == strings.concat(..href_url.url,
-                                                              'favicon.png'
-                                    )
-                            )
-                          )
+                          ) == 3
                           or any(html.xpath(ml.link_analysis(., mode="aggressive").final_dom,
                                             "//script"
                                  ).nodes,
