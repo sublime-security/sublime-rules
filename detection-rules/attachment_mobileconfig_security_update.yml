@@ -1,0 +1,24 @@
+name: "Attachment: Fake mobileconfig security update profile"
+description: "Detects .mobileconfig attachments that present themselves as an Apple 'Security Update' configuration profile but omit the PayloadContent section required for a legitimate profile. These crafted files are used as a lure to trick recipients into installing a bogus update, often paired with payment or account-themed subject lines and disposable or spoofed sender domains."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and any(attachments,
+          .file_extension == "mobileconfig"
+          and strings.icontains(file.parse_text(.).text,
+                                '<key>PayloadDisplayName</key><string>Security Update '
+          )
+          and not strings.icontains(file.parse_text(.).text, 'PayloadContent')
+  )
+  
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Social engineering"
+  - "Evasion"
+detection_methods:
+  - "File analysis"
+  - "Content analysis"
+  - "XML analysis"
