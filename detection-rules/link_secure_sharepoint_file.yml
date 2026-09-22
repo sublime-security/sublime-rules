@@ -3,55 +3,55 @@ description: "This ASR rule detects the use of secure SharePoint links which req
 type: "rule"
 severity: "low"
 source: |
-type.inbound
-// SharePoint email indicators
-and strings.like(body.current_thread.text,
-                 "*shared a file with you*",
-                 "*shared with you*",
-                 "*invited you to access a file*"
-)
-and strings.icontains(subject.subject, "shared")
-// the Sharepoint file has been "Protected"
-and any([body.plain.raw, body.current_thread.text],
-        strings.icontains(.,
-                          "This link only works for the direct recipients of this message"
-        )
-)
-and any(body.links,
-        (
-          .href_url.domain.root_domain in (
-            "mimecastprotect.com",
-            "mimecast.com"
-          )
-          and any(.href_url.query_params_decoded['domain'],
-                  strings.parse_domain(.).root_domain in ("sharepoint.com")
-          )
-        )
-)
-and (
-  // sender is uncommon
-  (
-    profile.by_sender_email().prevalence in ("new", "rare", "outlier")
-    and not profile.by_sender_email().solicited
+  type.inbound
+  // SharePoint email indicators
+  and strings.like(body.current_thread.text,
+                   "*shared a file with you*",
+                   "*shared with you*",
+                   "*invited you to access a file*"
   )
-  // reply-to logic when the sender is sharepointonline.com
-  or (
-    // or the reply-to address has never sent an email to the org
-    sender.email.domain.root_domain == "sharepointonline.com"
-    and (
-      beta.profile.by_reply_to().prevalence == "new"
-      // senders that send a bunch of messages quickly might not be "new"
-      or beta.profile.by_reply_to().days_known < 7
-      // replicate sender profile logic from above
-      or (
-        beta.profile.by_reply_to().prevalence in ("new", "rare", "outlier")
-        and not beta.profile.by_reply_to().solicited
+  and strings.icontains(subject.subject, "shared")
+  // the Sharepoint file has been "Protected"
+  and any([body.plain.raw, body.current_thread.text],
+          strings.icontains(.,
+                            "This link only works for the direct recipients of this message"
+          )
+  )
+  and any(body.links,
+          (
+            .href_url.domain.root_domain in (
+              "mimecastprotect.com",
+              "mimecast.com"
+            )
+            and any(.href_url.query_params_decoded['domain'],
+                    strings.parse_domain(.).root_domain in ("sharepoint.com")
+            )
+          )
+  )
+  and (
+    // sender is uncommon
+    (
+      profile.by_sender_email().prevalence in ("new", "rare", "outlier")
+      and not profile.by_sender_email().solicited
+    )
+    // reply-to logic when the sender is sharepointonline.com
+    or (
+      // or the reply-to address has never sent an email to the org
+      sender.email.domain.root_domain == "sharepointonline.com"
+      and (
+        beta.profile.by_reply_to().prevalence == "new"
+        // senders that send a bunch of messages quickly might not be "new"
+        or beta.profile.by_reply_to().days_known < 7
+        // replicate sender profile logic from above
+        or (
+          beta.profile.by_reply_to().prevalence in ("new", "rare", "outlier")
+          and not beta.profile.by_reply_to().solicited
+        )
       )
     )
+    // or the message contains suspect language
+    or strings.icontains(body.current_thread.text, 'kindly')
   )
-  // or the message contains suspect language
-  or strings.icontains(body.current_thread.text, 'kindly')
-)
 tags:
  - "Attack surface reduction"
 attack_types:
