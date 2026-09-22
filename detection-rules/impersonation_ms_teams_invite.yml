@@ -39,7 +39,23 @@ source: |
   // few links
   and length(distinct(body.links, .href_url.url)) < 10
   // short body
-  and length(body.current_thread.text) < 600
+  and (
+    length(body.current_thread.text) < 600
+    // account for NLU disclaimer in length
+    or any(map(filter(ml.nlu_classifier(body.current_thread.text).entities,
+                      .name == "disclaimer"
+               ),
+               .text
+           ),
+           (length(body.current_thread.text) - length(.)) < 600
+    )
+    // NLU only tags the first english disclaimer, so pick up repeat disclaimers or non-english disclaimers as well 
+    or any(regex.iextract(body.current_thread.text,
+                          '^(?P<disclaimer>.{100,}?)(?:confidentiality notice|nota di riservatezza)'
+           ),
+           length(.named_groups["disclaimer"]) < 600
+    )
+  )
   // no unsubscribe links
   // common in newsletters which link to a webinar style event
   and not any(body.links, strings.icontains(.display_text, "unsub"))
