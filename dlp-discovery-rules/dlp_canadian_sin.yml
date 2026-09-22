@@ -1,0 +1,37 @@
+name: "DLP: Canadian Social Insurance Number (SIN)"
+description: "Detects messages containing Canadian Social Insurance Numbers."
+type: "dlp"
+severity: "high"
+source: |
+  type.outbound
+  and (
+    any(beta.ml_extract_sensitive_information(body.current_thread.text).elements,
+        .type == "canadian_sin" and .confidence in ("medium", "high")
+    )
+    or any(beta.ml_extract_sensitive_information(subject.subject).elements,
+           .type == "canadian_sin" and .confidence in ("medium", "high")
+    )
+    or any(attachments,
+           any(file.explode(.),
+               (
+                 any(beta.ml_extract_sensitive_information(.scan.strings.raw).elements,
+                     .type == "canadian_sin" and .confidence in ("medium", "high")
+                 )
+                 or any(beta.ml_extract_sensitive_information(.scan.ocr.raw).elements,
+                        .type == "canadian_sin"
+                        and .confidence in ("medium", "high")
+                 )
+               )
+           )
+    )
+  )
+tags:
+  - "Personal Data"
+attack_types:
+  - "DLP: Personal Data"
+detection_methods:
+  - "Content analysis"
+  - "Natural Language Understanding"
+  - "File analysis"
+  - "Optical Character Recognition"
+id: "4ad2e5dc-a996-5085-a36f-bf64e8b9199d"
