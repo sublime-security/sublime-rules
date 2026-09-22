@@ -1,0 +1,47 @@
+name: "PR# 5433 - Attachment: ICS calendar invite with BEC intent"
+description: "Detects inbound messages containing the phrase '(Guest list is too large to display)' in the body alongside an ICS calendar attachment. The rule parses the ICS file and applies an NLU classifier to the event summary and description fields to identify business email compromise (BEC) intent. Messages from high-trust root domains that pass DMARC authentication are excluded from this detection."
+type: "rule"
+severity: "medium"
+source: |
+   type.inbound
+   and strings.contains(body.current_thread.text,
+                        '(Guest list is too large to display)'
+   )
+   and any(attachments,
+           (
+             .file_type == "ics"
+             or .file_extension == "ics"
+             or .content_type in ("application/ics", "text/calendar")
+           )
+           // This rule makes use of a beta feature and is subject to change without notice
+           // using the beta feature in custom rules is not suggested until it has been formally released
+           //
+           and any(beta.file.parse_ics(.).events,
+                   // bec intent on summary or description
+                   any([.summary, .description],
+                       any(ml.nlu_classifier(.).intents,
+                           .name == 'bec' and .confidence != 'low'
+                       )
+                   )
+           )
+   )
+   and not (
+     sender.email.domain.root_domain in $high_trust_sender_root_domains
+     and coalesce(headers.auth_summary.dmarc.pass, false)
+   )
+attack_types:
+  - "BEC/Fraud"
+tactics_and_techniques:
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Natural Language Understanding"
+  - "File analysis"
+  - "Header analysis"
+id: "dcc9e9d5-2fe0-52ad-9091-7b9c2e94c05d"
+tags:
+  - created_from_open_prs
+  - rule_status_added
+  - pr_author_markmsublime
+references:
+  - https://github.com/sublime-security/sublime-rules/pull/5433
