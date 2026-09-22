@@ -1,5 +1,5 @@
 name: "PR# 5247 - Spam: Cold outreach from Hostinger-hosted newly registered domain"
-description: "Detects inbound messages from domains registered less than 365 days ago using Hostinger (dns-parking.com) nameservers, where the message content is classified as B2B cold outreach by NLU analysis. The rule excludes legitimate reply threads, and only flags senders who are either unsolicited or have a history of malicious/spam activity without any benign messages."
+description: "Detects inbound messages from domains registered less than 365 days ago using Hostinger (dns-parking.com) name-servers, where the message content is classified as B2B cold outreach by NLU analysis. The rule excludes legitimate reply threads, and only flags senders who are either unsolicited or have a history of malicious/spam activity without any benign messages."
 type: "rule"
 severity: "low"
 source: |
@@ -7,7 +7,7 @@ source: |
   // newly registered sender domain
   and network.whois(sender.email.domain).days_old < 365
   
-  // there are 2 name servers which have subdomains containing .ns
+  // there are 2 name-servers which have subdomains containing .ns
   and length(network.whois(sender.email.domain).name_servers) == 2
   and all(network.whois(sender.email.domain).name_servers,
           strings.istarts_with(.subdomain, 'ns')
@@ -16,12 +16,27 @@ source: |
   
   // nlu logic
   and any(ml.nlu_classifier(body.current_thread.text).topics,
-          .name == 'B2B Cold Outreach'
+          .name == "B2B Cold Outreach"
+  )
+  
+  // negate legitimate replies unless all replies are self-replies
+  and not (
+    (
+      (length(headers.references) > 0 or headers.in_reply_to is not null)
+      and (
+        subject.is_forward
+        or subject.is_reply
+        // account for parsing
+        or strings.icontains(subject.subject, "ext:_re:")
+      )
+      and length(body.previous_threads) >= 1
+    )
+    and not all(body.previous_threads, .sender.email.email == sender.email.email)
   )
   
   // sender profiles
   and (
-    not profile.by_sender_email().solicited
+    not profile.by_sender().solicited
     or (
       profile.by_sender().any_messages_malicious_or_spam
       and not profile.by_sender().any_messages_benign
