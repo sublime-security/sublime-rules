@@ -1,0 +1,32 @@
+name: "Attachment: Mobileconfig profile with mismatched embedded email"
+description: "Detects inbound messages with a mobileconfig attachment containing an embedded email address whose domain differs from the sender's domain and does not match any known sender or recipient address. These crafted files are used as a lure to trick recipients into installing a bogus update, often paired with payment or account-themed subject lines and disposable or spoofed sender domains."
+type: "rule"
+severity: "medium"
+source: |
+    type.inbound
+    and any(attachments,
+            .file_extension == "mobileconfig"
+            and any(regex.iextract(file.parse_text(.).text,
+                                   '<string>\s*(?P<email>[^\s]+@[^\s]+)\s*[^\<]+\</string>'
+                    ),
+                    strings.parse_email(.named_groups["email"]).domain.root_domain != sender.email.domain.root_domain
+                    and strings.parse_email(.named_groups["email"]).email not in map(recipients.to,
+                                                                                     .email.email
+                    )
+                    and strings.parse_email(.named_groups["email"]).email not in $recipient_emails
+                    and strings.parse_email(.named_groups["email"]).email not in $sender_emails
+            )
+    )
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Evasion"
+  - "Social engineering"
+detection_methods:
+  - "File analysis"
+  - "Content analysis"
+  - "Sender analysis"
+id: "b0b38706-d693-52e6-a107-81862cf1faca"
+og_id: "6a2c49ee-1106-5edd-ba77-1e88b17278e0"
+testing_pr: 5436
+testing_sha: 2501ecebf889af12101c58d05351767c209d8359
