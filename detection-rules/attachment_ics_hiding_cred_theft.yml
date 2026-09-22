@@ -1,0 +1,45 @@
+name: "Attachment: ICS calendar invite hiding credential theft"
+description: "Flags inbound messages whose body contains the 'Guest list is too large to display' placeholder text alongside an ICS calendar attachment. The rule parses the ICS file's events and applies an NLU intent classifier to the summary and description fields, triggering when credential theft intent is detected. Messages from senders on the high-trust domain allowlist that also pass DMARC are excluded."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and strings.contains(body.current_thread.text,
+                       '(Guest list is too large to display)'
+  )
+  and any(attachments,
+          (
+            .file_type == "ics"
+            or .file_extension == "ics"
+            or .content_type in ("application/ics", "text/calendar")
+          )
+          // This rule makes use of a beta feature and is subject to change without notice
+          // using the beta feature in custom rules is not suggested until it has been formally released
+          //
+          and any(beta.file.parse_ics(.).events,
+                  // cred theft intent on summary or description
+                  any([.summary, .description],
+                      any(ml.nlu_classifier(.).intents,
+                          .name == 'cred_theft'
+                          and .confidence != 'low'
+                      )
+                  )
+          )
+  )
+  and not (
+    sender.email.domain.root_domain in $high_trust_sender_root_domains
+    and coalesce(headers.auth_summary.dmarc.pass, false)
+  )
+  
+attack_types:
+  - "Credential Phishing"
+  - "ICS Phishing"
+tactics_and_techniques:
+  - "Social engineering"
+  - "Evasion"
+detection_methods:
+  - "File analysis"
+  - "Content analysis"
+  - "Natural Language Understanding"
+  - "Header analysis"
+  - "Sender analysis"
