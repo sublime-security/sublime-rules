@@ -16,12 +16,27 @@ source: |
   
   // nlu logic
   and any(ml.nlu_classifier(body.current_thread.text).topics,
-          .name == 'B2B Cold Outreach'
+          .name == "B2B Cold Outreach"
+  )
+  
+  // negate legitimate replies unless all replies are self-replies
+  and not (
+    (
+      (length(headers.references) > 0 or headers.in_reply_to is not null)
+      and (
+        subject.is_forward
+        or subject.is_reply
+        // account for parsing
+        or strings.icontains(subject.subject, "ext:_re:")
+      )
+      and length(body.previous_threads) >= 1
+    )
+    and not all(body.previous_threads, .sender.email.email == sender.email.email)
   )
   
   // sender profiles
   and (
-    not profile.by_sender_email().solicited
+    not profile.by_sender().solicited
     or (
       profile.by_sender().any_messages_malicious_or_spam
       and not profile.by_sender().any_messages_benign
@@ -41,4 +56,4 @@ detection_methods:
 id: "ce3958cb-9e2b-5b3b-89f5-d4392c6b6b40"
 og_id: "d88e2669-e2f6-5b25-8fc0-4132f03b3c48"
 testing_pr: 5247
-testing_sha: 19c9884a848979809e0305a5233cdfbdf463b9d0
+testing_sha: 3254b42ef6a6a516cbe90c860ad4660702eb83da
