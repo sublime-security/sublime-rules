@@ -1,0 +1,43 @@
+name: "Link: Large guest list with suspicious link"
+description: "Detects inbound messages containing a large guest list alongside a suspicious link"
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and strings.contains(body.current_thread.text,
+                       '(Guest list is too large to display)'
+  )
+  and any(body.current_thread.links,
+          (
+            .href_url.path == '/'
+            and regex.imatch(.href_url.query_params, '[A-Za-z0-9+/]{8}')
+            and length(.href_url.query_params_decoded) == 1
+            and all(flatten(values(.href_url.query_params_decoded)), . == '')
+          )
+          or any(ml.link_analysis(.).final_dom.links,
+                 .href_url.path == '/'
+                 and regex.imatch(.href_url.query_params, '[A-Za-z0-9+/]{8}')
+                 and length(.href_url.query_params_decoded) == 1
+                 and all(flatten(values(.href_url.query_params_decoded)), . == '')
+          )
+          or ml.link_analysis(., mode="aggressive").effective_url.domain.root_domain in (
+            'workers.dev'
+          )
+          or length(filter(.href_url.rewrite.encoders,
+                           . != 'google_open_redirect'
+                    )
+          ) > length(distinct(filter(.href_url.rewrite.encoders,
+                                     . != 'google_open_redirect'
+                              )
+                     )
+          )
+  )
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Evasion"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "URL analysis"
+id: "f2e73678-90c5-530e-a70c-8e043e18400d"
