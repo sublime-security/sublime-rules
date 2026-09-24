@@ -1,0 +1,50 @@
+name: "Attachment: Oversized guest-list calendar invite with voicemail lure"
+description: "Detects inbound messages containing calendar (.ics) attachments that exploit Google Calendar's 'Guest list is too large to display' behavior to mass-invite large numbers of unrelated recipients, hiding the true scope of the send. The attached ICS event content is run through NLU topic classification and matches voicemail call or missed call notifications, a common pretext used to lure recipients."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and strings.contains(body.current_thread.text,
+                       '(Guest list is too large to display)',
+                       '(Gästeliste zu groß zum Anzeigen)'
+  )
+  and any(attachments,
+          (
+            .file_type == "ics"
+            or .file_extension == "ics"
+            or .content_type in ("application/ics", "text/calendar")
+          )
+          //
+          // This rule makes use of a beta feature and is subject to change without notice
+          // using the beta feature in custom rules is not suggested until it has been formally released
+          //
+          and any(beta.file.parse_ics(.).events,
+                  // voicemail key words
+                  any([.summary, .description],
+                      any(ml.nlu_classifier(.).topics,
+                          .name == 'Voicemail Call and Missed Call Notifications'
+                          and .confidence != 'low'
+                      )
+                  )
+          )
+  )
+  and not (
+    sender.email.domain.root_domain in $high_trust_sender_root_domains
+    and coalesce(headers.auth_summary.dmarc.pass, false)
+  )
+attack_types:
+  - "ICS Phishing"
+  - "BEC/Fraud"
+tactics_and_techniques:
+  - "Social engineering"
+  - "Impersonation: Brand"
+detection_methods:
+  - "File analysis"
+  - "Content analysis"
+  - "Natural Language Understanding"
+  - "Sender analysis"
+  - "Header analysis"
+id: "a0d51e90-f43d-5d6e-b504-02f0794a021a"
+og_id: "b2bb7bed-1aed-50d3-8969-c62b7f472e9c"
+testing_pr: 5459
+testing_sha: 204046e7c644c4b601f0c140c918c291658d295c
