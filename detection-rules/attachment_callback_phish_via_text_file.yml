@@ -18,9 +18,13 @@ source: |
               )
     ) == length(body.links)
   )
-  and (body.current_thread.text is null or length(body.current_thread.text) < 50 or any(ml.nlu_classifier(body.current_thread.text).entities,
-         .name == 'disclaimer' and .text == body.current_thread.text
-  ))
+  and (
+    body.current_thread.text is null
+    or length(body.current_thread.text) < 50
+    or any(ml.nlu_classifier(body.current_thread.text).entities,
+           .name == 'disclaimer' and .text == body.current_thread.text
+    )
+  )
   and 0 < length(attachments) < 4
   and any(attachments,
           (
@@ -29,7 +33,7 @@ source: |
           )
           and any(file.explode(.),
                   (.depth == 0 or .flavors.mime == "text/plain")
-                  // 4 of the following strings are found        
+                  // 4 of the following strings are found
                   and 4 of (
                     // this section is synced with attachment_callback_phish_with_pdf.yml and body_callback_phishing_no_attachment.yml
                     strings.icontains(.scan.strings.raw, "purchase"),
@@ -68,13 +72,12 @@ source: |
   and profile.by_sender().prevalence != "common"
   and not profile.by_sender().solicited
   and not profile.by_sender().any_messages_benign
-
+  
   // negate highly trusted sender domains unless they fail DMARC authentication
   and not (
     sender.email.domain.root_domain in $high_trust_sender_root_domains
     and coalesce(headers.auth_summary.dmarc.pass, false)
   )
-
 attack_types:
   - "Callback Phishing"
 tactics_and_techniques:
