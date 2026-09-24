@@ -3,7 +3,7 @@ import yaml
 import uuid
 
 RULE_DIRS = ['detection-rules',
-             'dlp-discovery-rules']
+             'dlp-rules']
 
 
 def _uuid_from_string(string):

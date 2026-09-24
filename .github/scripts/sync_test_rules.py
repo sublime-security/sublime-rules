@@ -89,12 +89,12 @@ if not os.path.exists(OUTPUT_FOLDER):
 # since it is not tied to any pull request. Remove this block, the call to it
 # in handle_pr_rules(), and the matching testing_pr == 0 exemption in
 # .github/workflows/clear-old-test-rules.yml once the DLP live test is done.
-DLP_BULK_SYNC_FOLDER = 'dlp-discovery-rules'
+DLP_BULK_SYNC_FOLDER = 'dlp-rules'
 
 
 def handle_dlp_bulk_sync(rest_session):
     """
-    Copy every rule in dlp-discovery-rules/ straight to the test-rules output
+    Copy every rule in dlp-rules/ straight to the test-rules output
     folder, bypassing the normal PR-based flow.
 
     Args:
