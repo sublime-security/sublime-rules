@@ -1,0 +1,29 @@
+name: "Headers: SRS-rewritten return path with order confirmation lure"
+description: "Detects inbound messages using the Sender Rewriting Scheme (SRS) in the return path, where the underlying domain resolves to onmicrosoft.com but does not match a known organizational domain. This mismatch is combined with order-related content patterns, such as order ID references or greetings referencing order confirmations, indicating an attempt to disguise the true sending source while delivering a fraudulent order notification."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  // sender rewrite scheme in the return path
+  and headers.return_path.domain.root_domain == "onmicrosoft.com"
+  and headers.return_path.domain.domain not in $org_domains
+  and strings.icontains(headers.return_path.local_part, "+srs=")
+  and (
+    any([subject.subject, body.current_thread.text],
+        regex.contains(., 'ORDER-(?:ID|NO)\(')
+    )
+    or regex.icontains(body.current_thread.text,
+                       '\b(?:hello|hi|dear)\s+(?:order|confirmed)\b'
+    )
+  )
+attack_types:
+  - "Spam"
+  - "BEC/Fraud"
+tactics_and_techniques:
+  - "Spoofing"
+  - "Social engineering"
+  - "Evasion"
+detection_methods:
+  - "Header analysis"
+  - "Content analysis"
+  - "Sender analysis"
