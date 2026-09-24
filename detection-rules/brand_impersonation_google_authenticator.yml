@@ -1,0 +1,23 @@
+name: "Brand impersonation: Google Authenticator"
+description: "Detects inbound messages where the sender name claims to be Google Authenticator, but the sending domain is not associated with Google or Okta and fails DMARC authentication, indicating a likely impersonation of the two-factor authentication service."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and any(ml.nlu_classifier(body.current_thread.text).entities,
+          .name == "sender" and strings.icontains(.text, "Google Authenticator")
+  )
+  and not (
+    sender.email.domain.root_domain in ("google.com", "okta.com")
+    and coalesce(headers.auth_summary.dmarc.pass, false)
+  )
+attack_types:
+  - "Credential Phishing"
+  - "BEC/Fraud"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Spoofing"
+detection_methods:
+  - "Natural Language Understanding"
+  - "Header analysis"
+  - "Sender analysis"
