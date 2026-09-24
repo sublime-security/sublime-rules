@@ -1,0 +1,41 @@
+name: "Brand impersonation: SiteGround"
+description: "Detects inbound messages that impersonate SiteGround, identified via sender display name or NLU-extracted organization/sender entities, combined with credential theft language, domain suspension/expiration wording, or outstanding invoice references. Excludes legitimate messages from verified siteground.com senders that pass DMARC authentication."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and (
+    regex.icontains(sender.display_name, 'site\s?ground')
+    or any(ml.nlu_classifier(body.current_thread.text).entities,
+           .name in ("org", "sender") and strings.icontains(.text, 'siteground')
+    )
+  )
+  and (
+    any(ml.nlu_classifier(body.current_thread.text).intents,
+        .name == "cred_theft" and .confidence != "low"
+    )
+    or regex.icontains(body.current_thread.text,
+                       'domain.{0,40}(?:suspend|expir|no longer active|deactivat)'
+    )
+    or strings.icontains(body.current_thread.text, 'outstanding invoice')
+  )
+  and not (
+    sender.email.domain.root_domain == "siteground.com"
+    and coalesce(headers.auth_summary.dmarc.pass, false)
+  )
+attack_types:
+  - "Credential Phishing"
+  - "BEC/Fraud"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Social engineering"
+  - "Spoofing"
+detection_methods:
+  - "Natural Language Understanding"
+  - "Content analysis"
+  - "Sender analysis"
+  - "Header analysis"
+id: "155a2a64-ea53-5c7f-aac0-d79cbc56648b"
+og_id: "78e10ff0-4bd1-5192-85b5-2797d8553eef"
+testing_pr: 5455
+testing_sha: 9741a46668321d8eb1e4b7cc3489d02de965a99c
