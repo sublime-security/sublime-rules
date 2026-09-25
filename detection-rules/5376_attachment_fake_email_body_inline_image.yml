@@ -6,21 +6,24 @@ source: |
   type.inbound
   and regex.icount(coalesce(body.current_thread.text, ""), '[a-z0-9]') < 10
   and length(body.current_thread.links) == 1
-  and any(filter(attachments,
-                 .content_disposition == "inline"
-                 and .file_type in $file_types_images
-          )
-          // the image is the body and the image is also the link
-          ,
+  and length(filter(attachments,
+                    .content_disposition == "inline"
+                    and .file_type in $file_types_images
+             )
+  ) == 1
+  and any(attachments,
           any(html.xpath(body.html, '//a[not(text())]//img/@src').nodes,
               strings.iends_with(.raw, ..content_id)
           )
           and beta.ocr(.).success
+          and regex.icount(beta.ocr(.).text, '[a-zA-Z]{2,}') >= 20
           and any(ml.nlu_classifier(beta.ocr(.).text).intents,
                   .name == "cred_theft"
           )
   )
-  // negate highly trusted sender domains unless they fail DMARC authentication
+  and any(body.current_thread.links,
+          .href_url.domain.root_domain != sender.email.domain.root_domain
+  )
   and not (
     sender.email.domain.root_domain in $high_trust_sender_root_domains
     and coalesce(headers.auth_summary.dmarc.pass, false)
