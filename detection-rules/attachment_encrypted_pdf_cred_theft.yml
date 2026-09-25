@@ -31,11 +31,11 @@ source: |
     or any(ml.nlu_classifier(beta.ocr(file.message_screenshot()).text).intents,
            .name == "cred_theft" and .confidence in ("medium", "high")
     )
-    or regex.icontains(body.current_thread.text,
+    or regex.icontains(strings.replace_confusables(body.current_thread.text),
                        'PDF\s*(?:Access|Preview|Unlock|Decrypt|pass(?:code|word))',
                        '(Access|Preview|Unlock|Decrypt|Pass)\s*(?:word|code)\s*(?:\S+\s+){0,3}PDF\s*is?\s*:',
                        'Th(?:is|e)\s+(?:file|document|pdf)\s+is\s+(?:pin|password)[-\s]?\s*protected[[:punct:]]\s*The\s+p(?:in|assword)\s+is\s*:?',
-                       '(?:Access|Preview|Unlock|Decrypt)\s+(?:\S+\s+){0,3}(?:PDF|statement)(?:\S+\s+){0,3}(?:pass(?:word|code)|\s*with\s+\S+)',
+                       '(?:Access|Preview|Unlock|Decrypt|open)\s+(?:\S+\s+){0,3}(?:PDF|statement)\s*(?:\S+\s+){0,3}(?:pass(?:word|code)|code:|\s*with\s+\S+)',
                        'The\s+(?:file|document|pdf|attachment)\s+(?:pass(?:code|word)|access\s*code)\s+is\s*'
     )
     or (
@@ -44,11 +44,11 @@ source: |
         or (body.current_thread.text is null)
       )
       and any(body.previous_threads,
-              regex.icontains(.text,
+              regex.icontains(strings.replace_confusables(.text),
                               'PDF\s*(?:Access|Preview|Unlock|Decrypt|pass(?:code|word))',
                               '(Access|Preview|Unlock|Decrypt|Pass)\s*(?:word|code)\s*(?:\S+\s+){0,3}PDF\s*is?\s*:',
                               'Th(?:is|e)\s+(?:file|document|pdf)\s+is\s+(?:pin|password)[-\s]?\s*protected[[:punct:]]\s*The\s+p(?:in|assword)\s+is\s*:?',
-                              '(?:Access|Preview|Unlock|Decrypt)\s+(?:\S+\s+){0,3}(?:PDF|statement)(?:\S+\s+){0,3}(?:pass(?:word|code)|\s*with\s+\S+)',
+                              '(?:Access|Preview|Unlock|Decrypt|open)\s+(?:\S+\s+){0,3}(?:PDF|statement)\s*(?:\S+\s+){0,3}(?:pass(?:word|code)|code:|\s*with\s+\S+)',
                               'The\s+(?:file|document|pdf|attachment)\s+(?:pass(?:code|word)|access\s*code)\s+is\s*'
               )
       )
@@ -81,12 +81,9 @@ source: |
     )
   )
   // negate highly trusted sender domains unless they fail DMARC authentication
-  and (
-    (
-      sender.email.domain.root_domain in $high_trust_sender_root_domains
-      and not headers.auth_summary.dmarc.pass
-    )
-    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  and not (
+    sender.email.domain.root_domain in $high_trust_sender_root_domains
+    and coalesce(headers.auth_summary.dmarc.pass, false)
   )
 attack_types:
   - "Credential Phishing"

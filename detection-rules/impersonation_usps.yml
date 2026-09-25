@@ -26,7 +26,8 @@ source: |
                       '*delivery address*',
                       "*parcel allocation*",
                       "*claim your parcel*",
-                      "*delivery details*"
+                      "*delivery details*",
+                      "start*survey"
         )
     ),
     strings.ilike(body.current_thread.text,
@@ -39,7 +40,8 @@ source: |
                   '*sorry tolet*',
                   '*Due to an incorrect*',
                   '*remain undeliverable*',
-                  "*service updates*"
+                  "*service updates*",
+                  "*exclusive survey reward*"
     ),
     // impersonal greeting
     any(ml.nlu_classifier(body.current_thread.text).entities,
@@ -69,7 +71,8 @@ source: |
           strings.icontains(.display_url.domain.root_domain, 'usps')
           and .mismatched
       )
-    )
+    ),
+    any(body.links, .href_url.domain.domain in $free_file_hosts)
   )
   and (
     sender.email.domain.root_domain not in (
@@ -105,12 +108,9 @@ source: |
     and (length(headers.references) > 0 or headers.in_reply_to is not null)
   )
   // negate highly trusted sender domains unless they fail DMARC authentication
-  and (
-    (
-      sender.email.domain.root_domain in $high_trust_sender_root_domains
-      and not headers.auth_summary.dmarc.pass
-    )
-    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  and not (
+    sender.email.domain.root_domain in $high_trust_sender_root_domains
+    and coalesce(headers.auth_summary.dmarc.pass, false)
   )
   and not any(body.links,
               regex.icontains(.display_text, 'Track (?:Your Order|Shipment)')

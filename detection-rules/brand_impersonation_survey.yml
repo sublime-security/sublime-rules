@@ -9,7 +9,25 @@ source: |
         .name == "cred_theft" and .confidence == "high"
     )
     or any(ml.nlu_classifier(body.current_thread.text).entities,
-           .name == "org" and .text in ('AAA', 'Medicare Kit')
+           .name == "org"
+           and (
+             .text in ("AAA")
+             or strings.icontains(.text,
+                                  'colgate',
+                                  'medicare kit',
+                                  'blackstone griddle',
+                                  'oral-b',
+                                  'united healthcare',
+                                  'dewalt tower tool box'
+             )
+           )
+    )
+    or any(ml.nlu_classifier(body.current_thread.text).entities,
+           .name == "sender"
+           and (
+             strings.icontains(.text, "sam's club", "kobalt", "ace hardware")
+             or regex.icontains(.text, "lowe\'s.{0,10}reward")
+           )
     )
     or any(ml.nlu_classifier(body.current_thread.text).entities,
            .name == "request"
@@ -25,15 +43,17 @@ source: |
           .name == "Advertising and Promotions" and .confidence != "low"
   )
   and any(ml.nlu_classifier(body.current_thread.text).entities,
-          .name in ("request", "org") and strings.icontains(.text, "survey")
+          .name in ("request", "org")
+          and strings.icontains(.text, "survey", "share\nyour feedback")
+  )
+  and not (
+    sender.email.domain.root_domain in ("barracudanetworks.com")
+    and coalesce(headers.auth_summary.dmarc.pass, false)
   )
   // and the sender is not from high trust sender root domains
-  and (
-    (
-      sender.email.domain.root_domain in $high_trust_sender_root_domains
-      and not headers.auth_summary.dmarc.pass
-    )
-    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  and not (
+    sender.email.domain.root_domain in $high_trust_sender_root_domains
+    and coalesce(headers.auth_summary.dmarc.pass, false)
   )
 attack_types:
   - "Credential Phishing"

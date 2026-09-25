@@ -27,6 +27,8 @@ source: |
                                 strings.icontains(., ..email.email)
                             )
                           )
+                          // QR code contains the hex encoded email address in fragment
+                          or strings.decode_hex(..scan.qr.url.fragment) == .email.email
                         )
                     )
                     and .scan.qr.url.domain.root_domain not in $org_domains
@@ -67,12 +69,9 @@ source: |
   )
   
   // negate highly trusted sender domains unless they fail DMARC authentication
-  and (
-    (
-      sender.email.domain.root_domain in $high_trust_sender_root_domains
-      and not headers.auth_summary.dmarc.pass
-    )
-    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  and not (
+    sender.email.domain.root_domain in $high_trust_sender_root_domains
+    and coalesce(headers.auth_summary.dmarc.pass, false)
   )
 attack_types:
   - "Credential Phishing"

@@ -1,4 +1,4 @@
-name: "Attachment: ICS Link With Valueless Base64 Query Parameter"
+name: "Attachment: ICS link with valueless base64 query parameter"
 description: "Detects inbound emails containing ICS calendar attachments where embedded event links include a randomized 8-character base64 query parameter with no assigned value. The rule excludes messages from high-trust sender domains that pass DMARC authentication."
 type: "rule"
 severity: "medium"
@@ -27,16 +27,31 @@ source: |
                         )
                       )
                       or (
-                        ml.link_analysis(.).effective_url.path == '/'
-                        and regex.imatch(ml.link_analysis(.).effective_url.query_params,
+                        ml.link_analysis(., mode="aggressive").effective_url.path == '/'
+                        and regex.imatch(ml.link_analysis(., mode="aggressive").effective_url.query_params,
                                          '[A-Za-z0-9+/]{8}'
                         )
-                        and length(ml.link_analysis(.).effective_url.query_params_decoded
+                        and length(ml.link_analysis(., mode="aggressive").effective_url.query_params_decoded
                         ) == 1
-                        and all(flatten(values(ml.link_analysis(.).effective_url.query_params_decoded
+                        and all(flatten(values(ml.link_analysis(.,
+                                                                mode="aggressive"
+                                               ).effective_url.query_params_decoded
                                         )
                                 ),
                                 . == ''
+                        )
+                      )
+                      or (
+                        any(ml.link_analysis(., mode="aggressive").final_dom.links,
+                            .href_url.path == '/'
+                            and regex.imatch(.href_url.query_params,
+                                             '[A-Za-z0-9+/]{8}'
+                            )
+                            and length(.href_url.query_params_decoded) == 1
+                            and all(flatten(values(.href_url.query_params_decoded)
+                                    ),
+                                    . == ''
+                            )
                         )
                       )
                   )

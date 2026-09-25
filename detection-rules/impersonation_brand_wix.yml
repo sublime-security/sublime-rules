@@ -6,7 +6,9 @@ source: |
   type.inbound
   and (
     (
-      regex.icontains(sender.display_name, '^WIX\b')
+      regex.imatch(strings.replace_confusables(sender.display_name),
+                   'w[i1|]x\b.*'
+      )
       or strings.ilike(sender.email.domain.domain, 'WIX')
     )
     or (
@@ -25,7 +27,10 @@ source: |
     )
     or (
       any(ml.nlu_classifier(body.current_thread.text).entities,
-          .name in ("sender", "org") and regex.icontains(.text, '^wix\b')
+          .name in ("sender", "org")
+          and (
+            regex.imatch(.text, 'wix\b.*') or strings.icontains(.text, 'wix team')
+          )
       )
       and any(ml.nlu_classifier(body.current_thread.text).intents,
               .name == "cred_theft" and .confidence != "low"
@@ -53,12 +58,9 @@ source: |
   )
   and not profile.by_sender().solicited
   // negate highly trusted sender domains unless they fail DMARC authentication
-  and (
-    (
-      sender.email.domain.root_domain in $high_trust_sender_root_domains
-      and not headers.auth_summary.dmarc.pass
-    )
-    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  and not (
+    sender.email.domain.root_domain in $high_trust_sender_root_domains
+    and coalesce(headers.auth_summary.dmarc.pass, false)
   )
 
 attack_types:
