@@ -1,0 +1,38 @@
+name: "Attachment: Suspicious use of Unicode tag characters in ICS File"
+description: "Unicode Tag Block characters (U+E0000–U+E007F) render invisibly in mail clients but map 1:1 to ASCII at a 0xE0000 offset. Attackers use them two ways: to smuggle hidden instructions that LLM-powered email assistants will read and act on, and to interleave invisible characters through visible text to defeat content matching. This rule flags either use in the subject, body, or a calendar attachment, discounting the England, Scotland, and Wales subdivision flag emoji, which are legitimately built from tag characters."
+type: "rule"
+severity: "medium"
+references:
+  - "https://www.microsoft.com/en-us/security/blog/2026/09/03/ascii-smuggling-crosses-over-from-ai-prompt-injection-to-phishing-evasion/"
+  - "https://embracethered.com/blog/posts/2024/hiding-and-finding-text-with-unicode-tags/"
+source: |
+  type.inbound
+  any(filter(attachments,
+                  .file_type == "ics"
+                  or (
+                    .file_extension == "ics"
+                    or .content_type in ("application/ics", "text/calendar")
+                  )
+           ),
+           regex.count(file.parse_text(.).text,
+                       '[\x{E0020}-\x{E007E}]'
+           ) - (
+             5 * regex.count(file.parse_text(.).text,
+                             '\x{1F3F4}\x{E0067}\x{E0062}(?:\x{E0065}\x{E006E}\x{E0067}|\x{E0073}\x{E0063}\x{E0074}|\x{E0077}\x{E006C}\x{E0073})\x{E007F}'
+                 )
+           ) > 10
+    )
+  )
+tags:
+ - "Attack surface reduction"
+attack_types:
+  - "BEC/Fraud"
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Evasion"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "HTML analysis"
+  - "Header analysis"
+id: "45a895a6-b1ba-53d1-9116-7c3cf21c4e99"
