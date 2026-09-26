@@ -1,0 +1,64 @@
+name: "Link: Monday hosted link with suspicious content"
+description: "Detects inbound messages containing monday.com hosted links with suspicious content such as secure messages, e-signing, or file sharing."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  // monday.com hosted link is present
+  and any(body.current_thread.links,
+          .href_url.scheme == "https"
+          and .href_url.domain.root_domain == "monday.com"
+          and .href_url.domain.subdomain in ("forms", "trackingservice", "view")
+  )
+  
+  // suspicious indicators
+  and (
+    any(ml.nlu_classifier(body.current_thread.text).topics,
+        .name == "Secure Message" and .confidence == "high"
+    )
+    or any(ml.nlu_classifier(body.current_thread.text).topics,
+           .name == "E-Signature" and .confidence == "high"
+    )
+  
+    // file share nlu with cred theft indicators
+    or (
+      any(ml.nlu_classifier(body.current_thread.text).topics,
+          .name == "File Sharing and Cloud Services" and .confidence == "high"
+      )
+      and any(ml.nlu_classifier(body.current_thread.text).intents,
+              .name == "cred_theft" and .confidence == "high"
+      )
+    )
+  )
+  
+  // benign forms are typically used for feedback
+  and not (
+    (
+      strings.icontains(body.current_thread.text,
+                        "feedback",
+                        "quote",
+                        "request",
+                        "submit",
+                        "support"
+      )
+      or regex.icontains(body.current_thread.text, '\bform\b')
+    )
+    and not strings.icontains(body.current_thread.text, "docusign")
+  )
+  
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and not (
+    sender.email.domain.root_domain in $high_trust_sender_root_domains
+    and coalesce(headers.auth_summary.dmarc.pass, false)
+  )
+  
+attack_types:
+  - "Credential Phishing"
+  - "BEC/Fraud"
+tactics_and_techniques:
+  - "Social engineering"
+detection_methods:
+  - "Natural Language Understanding"
+  - "URL analysis"
+  - "Header analysis"
+id: "fd83724d-714b-5192-94a7-9fa560a31291"
