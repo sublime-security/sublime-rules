@@ -1,0 +1,31 @@
+name: "Attachment: PDF Link With Valueless Base64 Query Parameter"
+description: "Detects PDF attachments containing embedded URLs whose query strings are base64-like tokens that decode to a single, empty-valued parameter."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and any(attachments,
+          (.file_type == "pdf" or .file_extension == "pdf")
+          and any(file.explode(.),
+                  any(.scan.pdf.urls,
+                      .path == '/'
+                      and regex.imatch(.query_params, '[A-Za-z0-9+/]{8}')
+                      and length(.query_params_decoded) == 1
+                      and all(flatten(values(.query_params_decoded)), . == '')
+                  )
+          )
+          and any(file.explode(.),
+                  any(ml.nlu_classifier(.scan.strings.raw).intents,
+                      .name in ('bec', 'cred_theft') and .confidence != 'low'
+                  )
+          )
+  )
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "PDF"
+  - "Evasion"
+detection_methods:
+  - "File analysis"
+  - "URL analysis"
+id: "21ddda2f-d95e-54d2-a844-35c003df6bd5"
