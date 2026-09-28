@@ -711,12 +711,11 @@ rule pdf_msft_lure_signature {
 	meta:
 		author      = "kyle eaton"
 		date        = "2026-09-16"
+		update		= "2026-09-28"
 		description = "matching a signature observed in a microsoft themed cred phish pdf"
 	strings:
-		$sig_grey      = { 2F 49 6D 61 67 65 0A 2F 57 69 64 74 68 20 35 32 38 0A 2F 48 65 69 67 68 74 20 31 37 39 0A 2F 43 6F 6C 6F 72 53 70 61 63 65 20 2F 44 65 76 69 63 65 47 72 61 79 0A }
-		$sig_rbg       = { 2F 49 6D 61 67 65 0A 2F 57 69 64 74 68 20 35 32 38 0A 2F 48 65 69 67 68 74 20 31 37 39 0A 2F 43 6F 6C 6F 72 53 70 61 63 65 20 2F 44 65 76 69 63 65 52 47 42 }
-		$read_more_rgb = { 2F 49 6D 61 67 65 0A 2F 57 69 64 74 68 20 34 32 30 0A 2F 48 65 69 67 68 74 20 35 31 0A 2F 43 6F 6C 6F 72 53 70 61 63 65 20 2F 44 65 76 69 63 65 52 47 42 0A }
-		$underline_rgb = { 2F 57 69 64 74 68 20 34 33 30 0A 2F 48 65 69 67 68 74 20 38 0A 2F 43 6F 6C 6F 72 53 70 61 63 65 20 2F 44 65 76 69 63 65 52 47 42 0A }
+		$msft_logo = { 80 88 88 08 88 80 88 88 08 88 80 88 88 08 88 80 88 88 08 88 80 88 88 08 88 80 88 88 08 88 83 F2 0A 2A 8B 32 31 4D EA D3 89 DF 4B 6E AE 74 30 88 9A E0 D0 C6 91 A9 ED 0A 2E 31 DE 25 FB 52 4F 41 9F }
+		$signature = { FF DA 00 0C 03 01 00 02 11 03 11 00 3F 00 F9 FE 8A 28 A0 02 8A 28 A0 02 8A 28 A0 02 8A 28 A0 02 8A 28 A0 02 8A 2B 5F 4E F0 ED DD F2 2C D2 62 DA }
 	condition:
 		uint32be(0) == 0x25504446
 		and any of them
