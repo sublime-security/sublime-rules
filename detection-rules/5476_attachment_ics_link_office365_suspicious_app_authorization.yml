@@ -1,0 +1,58 @@
+name: "Attachment: ICS with Suspicious Office 365 app authorization (OAuth) link"
+description: "Detects inbound messages with ICS calendar invites containing a suspicious Office 365 app authorization (OAuth) link. The app may be compromised or was stood up for malicious purposes. Once the app has been authorized, the attacker will have read or write permissions to the user's Office 365 account."
+references:
+  - "https://info.phishlabs.com/blog/office-365-phishing-uses-malicious-app-persist-password-reset"
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and any(attachments,
+          (
+            .file_type == "ics"
+            or .file_extension == "ics"
+            or .content_type in ("application/ics", "text/calendar")
+          )
+          //
+          // This rule makes use of a beta feature and is subject to change without notice
+          // using the beta feature in custom rules is not suggested until it has been formally released
+          //
+          and any(beta.file.parse_ics(.).events,
+                  any(.links,
+                      .href_url.domain.domain == 'login.microsoftonline.com'
+                      and (
+                        strings.ilike(.href_url.query_params,
+                                      '*offline_access*',
+                                      '*.readwrite*',
+                                      '*.read*',
+                                      '*ctx=*',
+                                      '*prompt=none*'
+                        )
+                        or (
+                          strings.icontains(.href_url.path, '/common/reprocess')
+                          and strings.icontains(.href_url.query_params, 'ctx=')
+                          and strings.icontains(.href_url.query_params,
+                                                'sessionId='
+                          )
+                        )
+                      )
+                  )
+          )
+  )
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Evasion"
+  - "Social engineering"
+  - "ICS Phishing"
+detection_methods:
+  - "File analysis"
+  - "Content analysis"
+  - "URL analysis"
+related_detections:
+  - "link_office365_suspicious_app_authorization.yml"
+  - "attachment_link_office365_suspicious_app_authorization.yml"
+  - "attachment_eml_link_office365_suspicious_app_authorization.yml"
+id: "645d7b4d-dffa-5237-8d16-968927f07720"
+og_id: "6e9ab0a4-db49-533f-b6f3-7ba8d6d47348"
+testing_pr: 5476
+testing_sha: 3ea96ac514d0f11a59be77b6049b8de562dd51c3
