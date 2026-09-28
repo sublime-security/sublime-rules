@@ -1,0 +1,42 @@
+name: "PR# 5476 - Attachment: Suspicious Office 365 app authorization (OAuth) link"
+description: |
+  Message contains a suspicious Office 365 app authorization (OAuth) link. The app may be compromised or 
+  was stood up for malicious purposes. Once the app has been authorized, the attacker will have 
+  read or write permissions to the user's Office 365 account.
+references:
+  - "https://info.phishlabs.com/blog/office-365-phishing-uses-malicious-app-persist-password-reset"
+  - https://github.com/sublime-security/sublime-rules/pull/5476
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and any(filter(attachments, .file_type in ("pdf", "html", "docx", "pptx")),
+          any(file.explode(.),
+              any(.scan.url.urls,
+                  .domain.domain == 'login.microsoftonline.com'
+                  and (
+                    strings.ilike(.query_params,
+                                  '*offline_access*',
+                                  '*.readwrite*',
+                                  '*.read*',
+                                  '*ctx=*',
+                                  '*prompt=none*'
+                    )
+                    or (
+                      strings.icontains(.path, '/common/reprocess')
+                      and strings.icontains(.query_params, 'ctx=')
+                      and strings.icontains(.query_params, 'sessionId=')
+                    )
+                  )
+              )
+          )
+  )
+attack_types:
+  - "Credential Phishing"
+detection_methods:
+  - "URL analysis"
+id: "c9781c9d-bd61-52bc-8e98-26c6a080c4a3"
+tags:
+  - created_from_open_prs
+  - rule_status_added
+  - pr_author_zoomequipd
