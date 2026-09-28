@@ -3,33 +3,39 @@ description: "Detects inbound messages containing the phrase '(Guest list is too
 type: "rule"
 severity: "medium"
 source: |
-   type.inbound
-   and strings.contains(body.current_thread.text,
-                        '(Guest list is too large to display)',
-                        '(Gästeliste zu groß zum Anzeigen)'
-   )
-   and any(attachments,
-           (
-             .file_type == "ics"
-             or .file_extension == "ics"
-             or .content_type in ("application/ics", "text/calendar")
-           )
-           // This rule makes use of a beta feature and is subject to change without notice
-           // using the beta feature in custom rules is not suggested until it has been formally released
-           //
-           and any(beta.file.parse_ics(.).events,
-                   // bec intent on summary or description
-                   any([.summary, .description],
-                       any(ml.nlu_classifier(.).intents,
-                           .name == 'bec' and .confidence != 'low'
-                       )
-                   )
-           )
-   )
-   and not (
-     sender.email.domain.root_domain in $high_trust_sender_root_domains
-     and coalesce(headers.auth_summary.dmarc.pass, false)
-   )
+  type.inbound
+  and strings.contains(body.current_thread.text,
+                       '(Guest list is too large to display)',
+                       '(Gästeliste zu groß zum Anzeigen)',
+                       '(La liste des invités est trop longue pour être affichée)',
+                       '(La liste des invités est trop importante pour être affichée)',
+                       '(Список гостей слишком велик, невозможно отобразить его полностью)',
+                       '(Elenco invitati troppo lungo per la visualizzazione)',
+                       '(A lista de convidados é muito grande para ser exibida)',
+                       '(Gæstelisten er for lang til at blive vist)'
+  )
+  and any(attachments,
+          (
+            .file_type == "ics"
+            or .file_extension == "ics"
+            or .content_type in ("application/ics", "text/calendar")
+          )
+          // This rule makes use of a beta feature and is subject to change without notice
+          // using the beta feature in custom rules is not suggested until it has been formally released
+          //
+          and any(beta.file.parse_ics(.).events,
+                  // bec intent on summary or description
+                  any([.summary, .description],
+                      any(ml.nlu_classifier(.).intents,
+                          .name == 'bec' and .confidence != 'low'
+                      )
+                  )
+          )
+  )
+  and not (
+    sender.email.domain.root_domain in $high_trust_sender_root_domains
+    and coalesce(headers.auth_summary.dmarc.pass, false)
+  )
 attack_types:
   - "BEC/Fraud"
 tactics_and_techniques:
