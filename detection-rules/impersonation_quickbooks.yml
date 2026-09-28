@@ -25,12 +25,28 @@ source: |
                 .name in ("cred_theft", "callback_scam")
         )
       )
+      or (
+        any(attachments,
+            length(filter(ml.nlu_classifier(beta.ocr(.).text).entities,
+                          strings.icontains(.text, "quickbooks")
+                   )
+            ) >= 2
+            and any(ml.nlu_classifier(beta.ocr(.).text).intents,
+                    .name in ("cred_theft", "callback_scam")
+            )
+        )
+      )
     )
     or strings.ilike(body.current_thread.text, "*invoice*")
   )
   and (
     any(ml.logo_detect(file.message_screenshot()).brands,
         .name == "Quickbooks" and .confidence in ("medium", "high")
+    )
+    or any(attachments,
+           any(ml.logo_detect(.).brands,
+               .name == "Quickbooks" and .confidence in ("medium", "high")
+           )
     )
     // contains the address and copyright
     or (
