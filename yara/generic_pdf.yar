@@ -715,6 +715,7 @@ rule pdf_msft_lure_signature {
 		description = "matching a signature observed in a microsoft themed cred phish pdf"
 	strings:
 		$msft_logo = { 80 88 88 08 88 80 88 88 08 88 80 88 88 08 88 80 88 88 08 88 80 88 88 08 88 80 88 88 08 88 83 F2 0A 2A 8B 32 31 4D EA D3 89 DF 4B 6E AE 74 30 88 9A E0 D0 C6 91 A9 ED 0A 2E 31 DE 25 FB 52 4F 41 9F }
+		$signature = { FF DA 00 0C 03 01 00 02 11 03 11 00 3F 00 F9 FE 8A 28 A0 02 8A 28 A0 02 8A 28 A0 02 8A 28 A0 02 8A 28 A0 02 8A 2B 5F 4E F0 ED DD F2 2C D2 62 DA }
 	condition:
 		uint32be(0) == 0x25504446
 		and any of them
