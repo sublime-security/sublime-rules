@@ -1,0 +1,56 @@
+name: "Attachment: ICS calendar file with legal language"
+description: "Detects calendar files (.ics files) whose parsed event details reference legal or court-related themes such as settlements, subpoenas, litigation documents, or formal demands."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and any(attachments,
+          (
+            .file_type == "ics"
+            or .file_extension == "ics"
+            or .content_type in ("application/ics", "text/calendar")
+          )
+          //
+          // This rule makes use of a beta feature and is subject to change without notice
+          // using the beta feature in custom rules is not suggested until it has been formally released
+          //
+          and any(beta.file.parse_ics(.).events,
+                  (
+                    any([.summary, .description],
+                        regex.icontains(.,
+                                        '(?:dear|hi|hello).(?:counsel|team),',
+                                        'file attached',
+                                        '\brefer\b',
+                                        '\brespon(?:d|se)\b',
+                                        '\breview\b'
+                        )
+                    )
+                    or any(.links, regex.icontains(.display_text, 'view'))
+                  )
+                  and any([.summary, .description],
+                          regex.icontains(.,
+                                          'case resolution material',
+                                          'court-related',
+                                          'court.(?:subpoena|summons)',
+                                          '(?:court case|litigation).(?:document|letter)',
+                                          'formal.(?:dispute|mediation|recovery)',
+                                          'proposed counteroffer',
+                                          'paga settlement',
+                                          'settlement.(?:&|and.)?(?:brief|document|finalization|material)',
+                                          "view court order"
+                          )
+                  )
+          )
+  )
+  
+attack_types:
+  - "ICS Phishing"
+  - "BEC/Fraud"
+tactics_and_techniques:
+  - "Social engineering"
+  - "Evasion"
+detection_methods:
+  - "File analysis"
+  - "Content analysis"
+  - "URL analysis"
+id: "3c770c55-d143-5e01-a479-4f11c69cfd7a"
