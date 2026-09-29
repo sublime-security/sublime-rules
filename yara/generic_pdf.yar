@@ -724,3 +724,15 @@ rule pdf_blurred_cred_phish_lure {
 		uint32be(0) == 0x25504446
 		and any of them
 }
+
+rule pdf_teal_web2pdf {
+	meta:
+		author      = "kyle eaton"
+		date        = "2026-09-22"
+		description = "matching PDFs with a teal sharepoint lure"
+	strings:
+		$rect = { 2F 52 65 63 74 20 5B 32 34 38 2E 32 35 20 35 38 33 2E 35 20 33 36 33 2E 37 35 20 36 30 38 2E 32 35 5D }
+	condition:
+		uint32be(0) == 0x25504446
+		and $rect
+}
