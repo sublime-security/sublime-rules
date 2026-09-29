@@ -736,3 +736,15 @@ rule pdf_teal_web2pdf {
 		uint32be(0) == 0x25504446
 		and $rect
 }
+
+rule pdf_quickbooks_toad_lure_blank_page {
+	meta:
+		author      = "kyle eaton"
+		date        = "2026-09-29"
+		description = "matching the blank page object used in specific quickbooks TOAD lure"
+	strings:
+		$empty_page = { 3C 3C 0A 2F 54 79 70 65 20 2F 50 61 67 65 0A 2F 52 65 73 6F 75 72 63 65 73 20 3C 3C 0A 3E 3E 0A 2F 4D 65 64 69 61 42 6F 78 20 5B 20 30 20 30 20 35 39 35 20 38 34 32 20 5D }
+	condition:
+		uint32be(0) == 0x25504446
+		and $empty_page
+}
