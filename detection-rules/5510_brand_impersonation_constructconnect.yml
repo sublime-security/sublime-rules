@@ -1,0 +1,37 @@
+name: "PR# 5510 - Brand impersonation: ConstructConnect"
+description: "Detects links impersonating the ConstructConnect platform. The rule identifies suspicious links from non-legitimate domains that load ConstructConnect logo assets, suggesting the sender is spoofing the platform to appear legitimate."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  // self sender or invaild recipent domain
+  and length(recipients.to) == 1
+  and (
+    sender.email.email == recipients.to[0].email.email
+    or recipients.to[0].email.domain.valid == false
+  )
+  and 0 < length(body.current_thread.links) < 10
+  and any(body.current_thread.links,
+          .href_url.domain.root_domain != 'constructconnect.com'
+          and any(ml.link_analysis(., mode="aggressive").unique_urls_accessed,
+                  .domain.root_domain == 'constructconnect.com'
+                  and strings.icontains(.path, 'logo', 'favicon.ico')
+          )
+  )
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Spoofing"
+  - "Social engineering"
+detection_methods:
+  - "Sender analysis"
+  - "URL analysis"
+  - "Content analysis"
+id: "35de9a34-fe93-5680-a83a-324579fd0ab4"
+tags:
+  - created_from_open_prs
+  - rule_status_added
+  - pr_author_D-Bolton
+references:
+  - https://github.com/sublime-security/sublime-rules/pull/5510
