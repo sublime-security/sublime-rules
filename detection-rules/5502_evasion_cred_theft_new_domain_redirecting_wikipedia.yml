@@ -1,0 +1,31 @@
+name: "PR# 5502 - Evasion: Credential phishing with newly registered domain redirecting to Wikipedia"
+description: "Flags inbound messages where natural language understanding detects credential theft intent in the message body, combined with a link pointing to a domain registered within the last 30 days that resolves to Wikipedia, indicating evasion of link analysis through a benign-looking redirect destination."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and any(ml.nlu_classifier(body.current_thread.text).intents,
+          .name == 'cred_theft' and .confidence != 'low'
+  )
+  and any(body.current_thread.links,
+          network.whois(.href_url.domain).days_old < 30
+          and ml.link_analysis(.).effective_url.url in (
+            'https://www.wikipedia.org/'
+          )
+  )
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Evasion"
+  - "Social engineering"
+detection_methods:
+  - "Natural Language Understanding"
+  - "URL analysis"
+  - "Whois"
+id: "d52f5c51-c493-50ee-90b4-5e5ff87fb13a"
+tags:
+  - created_from_open_prs
+  - rule_status_added
+  - pr_author_D-Bolton
+references:
+  - https://github.com/sublime-security/sublime-rules/pull/5502
