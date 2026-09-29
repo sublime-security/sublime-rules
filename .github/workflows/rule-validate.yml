@@ -269,25 +269,29 @@ jobs:
           build_request() {
             local out_file="$1"
             shift
-            local masked_source
+            local masked_source_file
+            local source_filter
             {
               echo '{"rules_or_queries": ['
               local first=1
               for j in "$@"; do
                 [[ "$first" -eq 0 ]] && echo ","
                 first=0
-                masked_source="$(mask_non_mql "$j")"
+                masked_source_file="$(mktemp)"
+                mask_non_mql "$j" > "$masked_source_file"
+                source_filter='.source = ($source | sub("\n+$"; ""))'
                 if [[ "$j" == insights/* ]]; then
                   # Replace the first masked line with the wrapper header so the MQL source
                   # remains at its original file coordinates. A source on the first file line
                   # cannot be wrapped without changing its coordinates.
-                  if [[ "${masked_source:0:1}" != $'\n' ]]; then
+                  if ! awk 'NR == 1 { found = 1; exit ($0 != "") } END { if (!found) exit 1 }' "$masked_source_file"; then
                     echo "Insight source must not start on the first file line: $j"
                     exit 1
                   fi
-                  masked_source="$(printf '%s\n' "$masked_source" | awk 'NR == 1 { print "length(["; next } { print } END { print "]) >= 0" }')"
+                  source_filter='.source = ("length([\n" + ($source | sub("\n+$"; "")) + "\n]) >= 0")'
                 fi
-                yq -o=json eval 'del(.type)' "$j" | jq --arg source "$masked_source" '.source = $source'
+                yq -o=json eval 'del(.type)' "$j" | jq --rawfile source "$masked_source_file" "$source_filter"
+                rm -f "$masked_source_file"
               done
               echo ']}'
             } > "$out_file"
