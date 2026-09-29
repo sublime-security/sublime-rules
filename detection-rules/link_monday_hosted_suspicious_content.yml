@@ -4,11 +4,21 @@ type: "rule"
 severity: "medium"
 source: |
   type.inbound
-  // monday.com hosted link is present
+  // exactly one unique monday.com URL scoped to subdomain hyperlink
   and any(body.current_thread.links,
-          .href_url.scheme == "https"
+          // monday service has been observed encoding mailto links as urls
+          .href_url.scheme != "mailto"
+          // ignore plain text links
+          and .parser != "plain"
           and .href_url.domain.root_domain == "monday.com"
-          and .href_url.domain.subdomain in ("forms", "trackingservice", "view")
+          and .href_url.domain.subdomain in ("forms", "view")
+          // negate benign form requests
+          and not regex.icontains(ml.link_analysis(., mode="aggressive").final_dom.raw,
+                                  '\bquestionnaire\b',
+                                  '\bquote\b',
+                                  '\brequest\b',
+                                  '\bwork order\b'
+          )
   )
   
   // suspicious indicators
@@ -31,25 +41,11 @@ source: |
     )
   )
   
-  // benign forms are typically used for feedback
+  // negate legitimate replies
   and not (
-    (
-      strings.icontains(body.current_thread.text,
-                        "feedback",
-                        "quote",
-                        "request",
-                        "submit",
-                        "support"
-      )
-      or regex.icontains(body.current_thread.text, '\bform\b')
-    )
-    and not strings.icontains(body.current_thread.text, "docusign")
-  )
-  
-  // negate highly trusted sender domains unless they fail DMARC authentication
-  and not (
-    sender.email.domain.root_domain in $high_trust_sender_root_domains
-    and coalesce(headers.auth_summary.dmarc.pass, false)
+    (length(headers.references) > 0 or headers.in_reply_to is not null)
+    and (subject.is_forward or subject.is_reply)
+    and length(body.previous_threads) >= 1
   )
   
 attack_types:
