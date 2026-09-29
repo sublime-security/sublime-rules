@@ -748,3 +748,15 @@ rule pdf_quickbooks_toad_lure_blank_page {
 		uint32be(0) == 0x25504446
 		and $empty_page
 }
+
+rule pdf_blue_fax_phish_lure {
+	meta:
+		author = "kyle eaton"
+		date   = "2026-09-29"
+		description = "matching rectangle values in a blue fax lure PDF document"
+	strings:
+		$rect = { 2F 52 65 63 74 20 5B 32 37 39 20 33 39 39 2E 37 35 }
+	condition:
+		uint32be(0) == 0x25504446
+		and $rect
+}
