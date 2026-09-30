@@ -1,0 +1,40 @@
+name: "Attachment: PDF document portal credential theft lure"
+description: "Detects inbound messages with an empty body that carry a PDF attachment referencing document portal or review invitation language alongside the recipient's own email address embedded in the file. The attachment content is further validated by an NLU classifier with high confidence for credential theft intent. Messages from highly trusted sender domains that pass DMARC authentication are excluded."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and (body.current_thread.text == '' or body.current_thread.text is null)
+  and any(filter(attachments, .file_type == "pdf"),
+          any(file.explode(.),
+              strings.icontains(.scan.strings.raw,
+                                "document portal",
+                                "invited to review",
+                                "confidential document"
+              )
+              // recipient's address inside attachment
+              and any(recipients.to,
+                      strings.icontains(..scan.strings.raw, .email.email)
+              )
+              and any(ml.nlu_classifier(.scan.strings.raw).intents,
+                      .name == "cred_theft" and .confidence == "high"
+              )
+          )
+  )
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and not (
+    sender.email.domain.root_domain in $high_trust_sender_root_domains
+    and coalesce(headers.auth_summary.dmarc.pass, false)
+  )
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "PDF"
+  - "Social engineering"
+detection_methods:
+  - "File analysis"
+  - "Content analysis"
+  - "Natural Language Understanding"
+  - "Header analysis"
+  - "Sender analysis"
+id: "7f5a60db-77e9-5cd6-988a-d8d56df66588"
