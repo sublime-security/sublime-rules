@@ -31,8 +31,8 @@ source: |
                           strings.icontains(.text, "quickbooks")
                    )
             ) >= 2
-            and any(ml.nlu_classifier(beta.ocr(.).text).intents,
-                    .name in ("cred_theft", "callback_scam")
+            and regex.icontains(beta.ocr(.).text,
+                                '\+?(?:[ilo0-9]{1,2})?\s?\(?\d{3}\)?[\s\.\-⋅]{0,5}[ilo0-9]{3}[\s\.\-⋅]{0,5}[ilo0-9]{4}'
             )
         )
       )
@@ -43,10 +43,15 @@ source: |
     any(ml.logo_detect(file.message_screenshot()).brands,
         .name == "Quickbooks" and .confidence in ("medium", "high")
     )
-    or any(attachments,
-           any(ml.logo_detect(.).brands,
-               .name == "Quickbooks" and .confidence in ("medium", "high")
-           )
+    or (
+      any(attachments,
+          any(ml.logo_detect(.).brands,
+              .name == "Quickbooks" and .confidence in ("medium", "high")
+          )
+          and any(ml.nlu_classifier(beta.ocr(.).text).intents,
+                  .name in ("cred_theft", "callback_scam")
+          )
+      )
     )
     // contains the address and copyright
     or (
@@ -244,4 +249,4 @@ detection_methods:
 id: "9a0c9384-268d-50f5-bc5e-967b8a243742"
 og_id: "4fd791d1-a053-5c2d-80dd-c6dcdc112a62"
 testing_pr: 5487
-testing_sha: 82027691d29f70bb369b82e4bf5eff6209a0ee14
+testing_sha: e08b1db12b60e0a5d4f88a3ebc18de6316d1f4ac
