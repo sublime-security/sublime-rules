@@ -1,0 +1,45 @@
+name: "Attachment: Excel file with hyperlinks to suspicious domains"
+description: "Flags inbound emails that show signs of business email compromise or credential theft intent—either through NLU classification or language like 'your review'/'please review'—and include an Excel attachment. The attachment is exploded and its exiftool metadata inspected for embedded hyperlinks, which are then parsed and checked against lists of free subdomain hosts, free file hosts, suspicious TLDs, and URL shorteners."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and (
+    any(ml.nlu_classifier(body.current_thread.text).intents,
+        .name in ('bec', 'cred_theft') and .confidence != 'low'
+    )
+    or strings.icontains(body.current_thread.text, 'your review', 'please review')
+  )
+  and any(attachments,
+          .file_extension in~ ("xls")
+          //
+          // This rule makes use of a beta feature and is subject to change without notice
+          // using the beta feature in custom rules is not suggested until it has been formally released
+          //
+          and any(beta.parse_exif(.).fields,
+                  .key == "Hyperlinks"
+                  and any(strings.parse_json(.value),
+                          (
+                            strings.parse_url(.).domain.domain in $free_subdomain_hosts
+                            or strings.parse_url(.).domain.root_domain in $free_file_hosts
+                            or strings.parse_url(.).domain.tld in $suspicious_tlds
+                            or strings.parse_url(.).domain.root_domain in $url_shorteners
+                            or strings.parse_url(.).domain.domain in $url_shorteners
+                          )
+                  )
+          )
+  )
+attack_types:
+  - "BEC/Fraud"
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Free file host"
+  - "Free subdomain host"
+  - "Social engineering"
+detection_methods:
+  - "Natural Language Understanding"
+  - "Content analysis"
+  - "Exif analysis"
+  - "File analysis"
+  - "URL analysis"
+id: "29377257-49c8-5df8-865c-d0b1eba3cad5"
