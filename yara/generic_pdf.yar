@@ -760,3 +760,17 @@ rule pdf_blue_fax_phish_lure {
 		uint32be(0) == 0x25504446
 		and $rect
 }
+
+rule pdf_generic_msft_compensation_lure {
+	meta:
+		author      = "kyle eaton"
+		date        = "2026-09-30"
+		description = "matching rectangle values in generic msft compensation lure"
+	strings:
+		$rect1 = "/Rect [45.7500000  573.500000"
+		$rect2 = "/Rect [134.250000  609.500000"
+		$rect3 = "/Rect [45.7500000  510.500000"
+	condition:
+		uint32be(0) == 0x25504446
+		and all of them
+}
