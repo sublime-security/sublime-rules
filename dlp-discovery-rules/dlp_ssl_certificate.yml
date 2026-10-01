@@ -1,16 +1,42 @@
-name: "DLP: SSL Certificate"
+name: "DLP: SSL/TLS Certificate"
 description: "Detects messages containing SSL/TLS certificates."
 type: "dlp"
-severity: "medium"
+severity: "high"
 source: |
   type.outbound
-  and any([body.current_thread.text, subject.subject],
-          regex.contains(., '-----BEGIN\s+CERTIFICATE-----')
+  and (
+    any(beta.ml_extract_sensitive_information(body.current_thread.text).elements,
+        .type == "pem_certificate" and .confidence in ("medium", "high")
+    )
+    or any(beta.ml_extract_sensitive_information(subject.subject).elements,
+           .type == "pem_certificate" and .confidence in ("medium", "high")
+    )
+    or any(attachments,
+           any(file.explode(.),
+               (
+                 any(beta.ml_extract_sensitive_information(.scan.strings.raw).elements,
+                     .type == "pem_certificate"
+                     and .confidence in ("medium", "high")
+                 )
+                 or any(beta.ml_extract_sensitive_information(.scan.ocr.raw).elements,
+                        .type == "pem_certificate"
+                        and .confidence in ("medium", "high")
+                 )
+               )
+           )
+    )
   )
-  and any([body.current_thread.text, subject.subject],
-          regex.contains(., '-----END\s+CERTIFICATE-----')
-  )
-
+tags:
+  - "Credentials"
+attack_types:
+  - "DLP: Credential Exposure"
+  - "DLP: Infrastructure"
+data_categories:
+  - "DLP: Credential Exposure"
+  - "DLP: Infrastructure"
 detection_methods:
   - "Content analysis"
-id: "9432a3c1-a364-583d-a5bf-2253b9707e91"
+  - "Natural Language Understanding"
+  - "File analysis"
+  - "Optical Character Recognition"
+id: "e0bc4ea4-ea91-5585-87c7-3830a5882d65"

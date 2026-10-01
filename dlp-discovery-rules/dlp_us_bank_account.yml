@@ -1,17 +1,42 @@
 name: "DLP: US Bank Account Number"
-description: "Detects messages containing US bank account numbers with ABA routing numbers."
+description: "Detects messages containing US bank account numbers."
 type: "dlp"
 severity: "medium"
 source: |
   type.outbound
-  and any([body.current_thread.text, subject.subject],
-          // ABA routing: 9 digits, Account: 8-17 digits
-          regex.contains(., '\b\d{9}\b.*\b\d{8,17}\b|\b\d{8,17}\b.*\b\d{9}\b')
+  and (
+    any(beta.ml_extract_sensitive_information(body.current_thread.text).elements,
+        .type == "us_bank_account" and .confidence in ("medium", "high")
+    )
+    or any(beta.ml_extract_sensitive_information(subject.subject).elements,
+           .type == "us_bank_account" and .confidence in ("medium", "high")
+    )
+    or any(attachments,
+           any(file.explode(.),
+               (
+                 any(beta.ml_extract_sensitive_information(.scan.strings.raw).elements,
+                     .type == "us_bank_account"
+                     and .confidence in ("medium", "high")
+                 )
+                 or any(beta.ml_extract_sensitive_information(.scan.ocr.raw).elements,
+                        .type == "us_bank_account"
+                        and .confidence in ("medium", "high")
+                 )
+               )
+           )
+    )
   )
-  and any([body.current_thread.text, subject.subject],
-          regex.icontains(., 'routing|ABA|bank\s+account|account\s+number')
-  )
-
+tags:
+  - "Financial Data"
+attack_types:
+  - "DLP: PCI"
+  - "DLP: Financial Data"
+data_categories:
+  - "DLP: PCI"
+  - "DLP: Financial Data"
 detection_methods:
   - "Content analysis"
-id: "b81d1c09-2caa-51d1-82ce-72cf504a2c9f"
+  - "Natural Language Understanding"
+  - "File analysis"
+  - "Optical Character Recognition"
+id: "b3db2bd1-c3b8-5954-8987-93757af5531b"

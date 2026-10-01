@@ -84,19 +84,25 @@ source: |
         )
         or (
           length(body.current_thread.text) < 500
-          and strings.ilike(body.current_thread.text,
-                            "*picture*",
-                            "*photo*",
-                            "*image*",
-                            "*sad news*",
-                            "*sad announcement*",
-                            "*sad update*",
-                            "*new pics*",
-                            "*back memories*",
-                            "*any memories*",
-                            "*old memories*",
-                            "*evoke memories*",
-                            "*bittersweet memories*"
+          and (
+            strings.ilike(body.current_thread.text,
+                          "*picture*",
+                          "*photo*",
+                          "*image*",
+                          "*sad news*",
+                          "*sad announcement*",
+                          "*sad update*",
+                          "*new pics*",
+                          "*back memories*",
+                          "*any memories*",
+                          "*old memories*",
+                          "*evoke memories*",
+                          "*bittersweet memories*",
+                          "*ring a bell*"
+            )
+            or regex.icontains(body.current_thread.text,
+                               '\bpics?\b.{0,40}https?://[a-z]+\.[a-z]+\.com'
+            )
           )
         )
       )
@@ -135,10 +141,10 @@ source: |
                           "*any memories*",
                           "*old memories*",
                           "*evoke memories*",
-                          "*bittersweet memories*"
+                          "*bittersweet memories*",
+                          "*ring a bell*"
         )
         and not strings.istarts_with(body.plain.raw, "[cid:image")
-        and strings.icontains(subject.subject, sender.display_name)
       )
       or (
         strings.icontains(subject.subject, sender.display_name)
@@ -195,12 +201,9 @@ source: |
     or length(headers.references) == 0
   )
   // negate highly trusted sender domains unless they fail DMARC authentication
-  and (
-    (
-      sender.email.domain.root_domain in $high_trust_sender_root_domains
-      and not headers.auth_summary.dmarc.pass
-    )
-    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  and not (
+    sender.email.domain.root_domain in $high_trust_sender_root_domains
+    and coalesce(headers.auth_summary.dmarc.pass, false)
   )
 attack_types:
   - "Spam"

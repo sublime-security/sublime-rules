@@ -1,18 +1,40 @@
-name: "DLP: US ICD-9-CM Code"
-description: "Detects messages containing ICD-9-CM diagnosis and procedure codes."
+name: "DLP: ICD-9 Code"
+description: "Detects messages containing ICD-9 medical diagnosis codes."
 type: "dlp"
-severity: "medium"
+severity: "high"
 source: |
   type.outbound
-  and any([body.current_thread.text, subject.subject],
-          // ICD-9 diagnosis: 3-5 chars, starts with digit or E/V
-          // ICD-9 procedure: 3-4 digits only
-          regex.contains(., '\b(?:[EVev]?\d{3}\.?\d{0,2}|\d{3,4})\b')
+  and (
+    any(beta.ml_extract_sensitive_information(body.current_thread.text).elements,
+        .type == "us_icd9" and .confidence in ("medium", "high")
+    )
+    or any(beta.ml_extract_sensitive_information(subject.subject).elements,
+           .type == "us_icd9" and .confidence in ("medium", "high")
+    )
+    or any(attachments,
+           any(file.explode(.),
+               (
+                 any(beta.ml_extract_sensitive_information(.scan.strings.raw).elements,
+                     .type == "us_icd9" and .confidence in ("medium", "high")
+                 )
+                 or any(beta.ml_extract_sensitive_information(.scan.ocr.raw).elements,
+                        .type == "us_icd9" and .confidence in ("medium", "high")
+                 )
+               )
+           )
+    )
   )
-  and any([body.current_thread.text, subject.subject],
-          regex.icontains(., 'ICD-?9|diagnosis\s+code|procedure\s+code')
-  )
-
+tags:
+  - "Healthcare Data"
+attack_types:
+  - "DLP: HIPAA"
+  - "DLP: Healthcare Data"
+data_categories:
+  - "DLP: HIPAA"
+  - "DLP: Healthcare Data"
 detection_methods:
   - "Content analysis"
-id: "e6e2af96-e87c-5228-938d-64a29466dc7a"
+  - "Natural Language Understanding"
+  - "File analysis"
+  - "Optical Character Recognition"
+id: "05c8a77c-ebc2-5caa-8b65-81598ca39e4a"

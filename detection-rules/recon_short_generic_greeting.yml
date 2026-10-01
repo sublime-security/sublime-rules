@@ -7,7 +7,22 @@ source: |
   type.inbound
   // detect generic greetings
   and length(body.current_thread.text) <= 20
-  and length(subject.base) <= 15
+  and (
+    length(subject.base) <= 15
+    // tighter scoped tactics
+    or (
+      length(subject.base) <= 20
+      and (
+        regex.icontains(subject.base, '(?:hello|hi) this is')
+        or (
+          regex.icontains(subject.base, 'hello|hi')
+          and any(recipients.to,
+                  strings.icontains(subject.base, .email.domain.sld)
+          )
+        )
+      )
+    )
+  )
   // exclude messages with previous thread context (forwards/replies)
   and length(body.previous_threads) == 0
   and (
@@ -82,6 +97,7 @@ source: |
       )
     )
   )
+  
 tags:
  - "Attack surface reduction"
 attack_types:

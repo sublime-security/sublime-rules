@@ -4,14 +4,43 @@ type: "dlp"
 severity: "high"
 source: |
   type.outbound
-  and any([body.current_thread.text, subject.subject],
-          // SSN: XXX-XX-XXXX format
-          regex.contains(., '\b\d{3}[\s\-]?\d{2}[\s\-]?\d{4}\b')
+  and (
+    any(beta.ml_extract_sensitive_information(body.current_thread.text).elements,
+        .type == "us_social_security_number" and .confidence in ("medium", "high")
+    )
+    or any(beta.ml_extract_sensitive_information(subject.subject).elements,
+           .type == "us_social_security_number"
+           and .confidence in ("medium", "high")
+    )
+    or any(attachments,
+           any(file.explode(.),
+               (
+                 any(beta.ml_extract_sensitive_information(.scan.strings.raw).elements,
+                     .type == "us_social_security_number"
+                     and .confidence in ("medium", "high")
+                 )
+                 or any(beta.ml_extract_sensitive_information(.scan.ocr.raw).elements,
+                        .type == "us_social_security_number"
+                        and .confidence in ("medium", "high")
+                 )
+               )
+           )
+    )
   )
-  and any([body.current_thread.text, subject.subject],
-          regex.icontains(., 'social\s+security|SSN')
-  )
-
+tags:
+  - "PII"
+  - "Personal Data"
+attack_types:
+  - "DLP: PII"
+  - "DLP: Personal Data"
+  - "DLP: HIPAA"
+data_categories:
+  - "DLP: PII"
+  - "DLP: Personal Data"
+  - "DLP: HIPAA"
 detection_methods:
   - "Content analysis"
-id: "5ed9e765-1827-5bec-9e04-77bad97ba4ba"
+  - "Natural Language Understanding"
+  - "File analysis"
+  - "Optical Character Recognition"
+id: "2f7fa043-2e54-5896-ad15-d4101b2a4849"

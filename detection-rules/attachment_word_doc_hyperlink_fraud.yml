@@ -1,0 +1,43 @@
+name: "Attachment: Word document with hyperlink and fraud language"
+description: "Detects inbound messages sent from free email providers with an empty subject line and body that carry a Word document (doc/docx) attachment. The attachment is inspected for embedded HYPERLINK field codes containing valid URLs, and its extracted text is passed through an NLU classifier to identify credential theft or advance fee fraud intent, indicating a socially engineered attack hidden inside the document."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and sender.email.domain.root_domain in $free_email_providers
+  and not (subject.is_reply or subject.is_forward)
+  and subject.base == ''
+  and body.current_thread.text == ''
+  and any(filter(attachments, .file_type in~ ("docx", "doc")),
+          any(file.explode(.),
+              any(html.xpath(strings.parse_html(.scan.strings.raw),
+                             "//*[contains(text(),'HYPERLINK')]"
+                  ).nodes,
+                  any(regex.extract(.raw, 'https?://[^"''<>&\s]+'),
+                      strings.parse_url(.full_match).domain.valid
+                  )
+              )
+          )
+          and any(file.explode(.),
+                  .file_name == "text"
+                  and any(ml.nlu_classifier(.scan.strings.raw).intents,
+                          .name in ("cred_theft", "advance_fee")
+                          and .confidence != 'low'
+                  )
+          )
+  )
+attack_types:
+  - "Credential Phishing"
+  - "BEC/Fraud"
+tactics_and_techniques:
+  - "Free email provider"
+  - "Social engineering"
+  - "Evasion"
+detection_methods:
+  - "File analysis"
+  - "XML analysis"
+  - "HTML analysis"
+  - "URL analysis"
+  - "Natural Language Understanding"
+  - "Sender analysis"
+id: "6dabe75d-5631-5d53-b215-4d45bf1c381f"

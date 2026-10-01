@@ -17,16 +17,22 @@ source: |
                        or strings.iends_with(.text, "sent from my ipad.")
                      )
                      and (
-                       any(ml.nlu_classifier(.text, subject=.subject.base).topics,
-                           (
-                             .name == "Financial Communications"
-                             or .name == "Request to View Invoice"
-                           )
+                       // any previous thread authored by the "VIP" has invoice/payment
+                       any(ml.nlu_classifier(.text, subject=.subject.base).tags,
+                           .name in ("invoice", "payment")
                            and .confidence != "low"
                        )
-                       or any(ml.nlu_classifier(.text, subject=.subject.base).tags,
-                              (.name == "invoice" or .name == "payment")
+                       or any(ml.nlu_classifier(.text, subject=.subject.base).topics,
+                              .name in (
+                                "Request to View Invoice",
+                                "Payment Information"
+                              )
                               and .confidence != "low"
+                       )
+  
+                       // if we don't get NLU but there is a W9 or Inv attached, we can assume it's invoice related
+                       or any(attachments,
+                              strings.istarts_with(.file_name, 'INV', "W-9", 'W9')
                        )
                      )
               ),

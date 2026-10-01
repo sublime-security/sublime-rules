@@ -4,19 +4,40 @@ type: "dlp"
 severity: "high"
 source: |
   type.outbound
-  and any([body.current_thread.text, subject.subject],
-          // US passport: 9 digits or 1 letter + 8 digits
-          regex.contains(., '\b(?:\d{9}|[A-Z]\d{8})\b')
-  )
-  and any([body.current_thread.text, subject.subject],
-          regex.icontains(., 'passport|travel\s+document')
-  )
   and (
-    strings.icontains(sender.email.domain.tld, "us")
-    or strings.icontains(body.current_thread.text, "united states")
-    or strings.icontains(body.current_thread.text, "USA")
+    any(beta.ml_extract_sensitive_information(body.current_thread.text).elements,
+        .type == "us_passport_number" and .confidence in ("medium", "high")
+    )
+    or any(beta.ml_extract_sensitive_information(subject.subject).elements,
+           .type == "us_passport_number" and .confidence in ("medium", "high")
+    )
+    or any(attachments,
+           any(file.explode(.),
+               (
+                 any(beta.ml_extract_sensitive_information(.scan.strings.raw).elements,
+                     .type == "us_passport_number"
+                     and .confidence in ("medium", "high")
+                 )
+                 or any(beta.ml_extract_sensitive_information(.scan.ocr.raw).elements,
+                        .type == "us_passport_number"
+                        and .confidence in ("medium", "high")
+                 )
+               )
+           )
+    )
   )
-
+tags:
+  - "PII"
+  - "Personal Data"
+attack_types:
+  - "DLP: PII"
+  - "DLP: Personal Data"
+data_categories:
+  - "DLP: PII"
+  - "DLP: Personal Data"
 detection_methods:
   - "Content analysis"
-id: "df291668-d22b-5402-8705-45d39119d425"
+  - "Natural Language Understanding"
+  - "File analysis"
+  - "Optical Character Recognition"
+id: "f0bef89b-471c-5e18-bb6d-b3d058ea612d"

@@ -4,14 +4,42 @@ type: "dlp"
 severity: "high"
 source: |
   type.outbound
-  and any([body.current_thread.text, subject.subject],
-          // ITIN: 9XX-XX-XXXX format (starts with 9)
-          regex.contains(., '\b9\d{2}[\s\-]?\d{2}[\s\-]?\d{4}\b')
+  and (
+    any(beta.ml_extract_sensitive_information(body.current_thread.text).elements,
+        .type == "us_individual_taxpayer_identification_number"
+        and .confidence in ("medium", "high")
+    )
+    or any(beta.ml_extract_sensitive_information(subject.subject).elements,
+           .type == "us_individual_taxpayer_identification_number"
+           and .confidence in ("medium", "high")
+    )
+    or any(attachments,
+           any(file.explode(.),
+               (
+                 any(beta.ml_extract_sensitive_information(.scan.strings.raw).elements,
+                     .type == "us_individual_taxpayer_identification_number"
+                     and .confidence in ("medium", "high")
+                 )
+                 or any(beta.ml_extract_sensitive_information(.scan.ocr.raw).elements,
+                        .type == "us_individual_taxpayer_identification_number"
+                        and .confidence in ("medium", "high")
+                 )
+               )
+           )
+    )
   )
-  and any([body.current_thread.text, subject.subject],
-          regex.icontains(., 'ITIN|individual\s+taxpayer|tax\s+ID')
-  )
-
+tags:
+  - "PII"
+  - "Personal Data"
+attack_types:
+  - "DLP: PII"
+  - "DLP: Personal Data"
+data_categories:
+  - "DLP: PII"
+  - "DLP: Personal Data"
 detection_methods:
   - "Content analysis"
-id: "259d44e5-b0ac-5846-9153-25d08d05ac38"
+  - "Natural Language Understanding"
+  - "File analysis"
+  - "Optical Character Recognition"
+id: "bca7cee0-2ee2-548d-b40f-16da1218d3a7"

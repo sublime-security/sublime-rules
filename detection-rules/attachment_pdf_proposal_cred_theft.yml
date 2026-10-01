@@ -23,16 +23,18 @@ source: |
           // contains exactly one link on the root pdf
           and any(file.explode(.),
                   .depth == 0
-                  and length(.scan.url.urls) == 1
-                  and all(.scan.url.urls,
-                          .domain.root_domain not in (
-                            'iso.org',
-                            'w3.org',
-                            'bfo.com', // pdf producer
-                            'camscanner.com', // pdf producer
-                          )
-                          and not strings.istarts_with(.url, 'mailto')
-                  )
+                  and length(filter(.scan.url.urls,
+                                    not strings.istarts_with(.url, 'mailto')
+                                    and not strings.istarts_with(.url, 'email:')
+                                    and .domain.root_domain != sender.email.domain.root_domain
+                                    and .domain.root_domain not in (
+                                      'iso.org',
+                                      'w3.org',
+                                      'bfo.com', // pdf producer
+                                      'camscanner.com', // pdf producer
+                                    )
+                             )
+                  ) == 1
           )
   )
   // negate highly trusted sender domains unless they fail DMARC authentication

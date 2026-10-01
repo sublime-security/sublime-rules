@@ -1,17 +1,43 @@
-name: "DLP: UK National Health Service Number"
+name: "DLP: NHS Number"
 description: "Detects messages containing UK NHS numbers."
 type: "dlp"
 severity: "high"
 source: |
   type.outbound
-  and any([body.current_thread.text, subject.subject],
-          // NHS number: 10 digits in XXX XXX XXXX format
-          regex.contains(., '\b\d{3}[\s]?\d{3}[\s]?\d{4}\b')
+  and (
+    any(beta.ml_extract_sensitive_information(body.current_thread.text).elements,
+        .type == "uk_nhs_number" and .confidence in ("medium", "high")
+    )
+    or any(beta.ml_extract_sensitive_information(subject.subject).elements,
+           .type == "uk_nhs_number" and .confidence in ("medium", "high")
+    )
+    or any(attachments,
+           any(file.explode(.),
+               (
+                 any(beta.ml_extract_sensitive_information(.scan.strings.raw).elements,
+                     .type == "uk_nhs_number"
+                     and .confidence in ("medium", "high")
+                 )
+                 or any(beta.ml_extract_sensitive_information(.scan.ocr.raw).elements,
+                        .type == "uk_nhs_number"
+                        and .confidence in ("medium", "high")
+                 )
+               )
+           )
+    )
   )
-  and any([body.current_thread.text, subject.subject],
-          regex.icontains(., 'NHS|national\s+health\s+service|health\s+number')
-  )
-
+tags:
+  - "Personal Data"
+  - "Healthcare Data"
+  - "UK GDPR"
+  - "UK"
+attack_types:
+  - "DLP: Personal Data"
+data_categories:
+  - "DLP: Personal Data"
 detection_methods:
   - "Content analysis"
-id: "dfddbcfe-16c0-56e9-8aa9-7cf75079c7df"
+  - "Natural Language Understanding"
+  - "File analysis"
+  - "Optical Character Recognition"
+id: "d074771e-e956-5a19-b7ba-a91bd841d8b7"

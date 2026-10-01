@@ -1,0 +1,26 @@
+name: "Open redirect: Generic link.html redirector abuse"
+description: "Detects messages that route recipients through a generic '/link.html' redirect path carrying an encoded destination in the URL fragment, then confirms via redirect-chain analysis that the link actually resolves to that embedded destination. This pattern is commonly abused in bulk spam and scam lures—such as fake storage-deletion warnings, loan offers, and discounted warranty plans—to disguise the true landing page behind a benign-looking tracking link."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and any(filter(body.links,
+                 strings.iends_with(.href_url.path, '/link.html')
+                 and .href_url.fragment is not null
+          ),
+          ml.link_analysis(.).submitted
+          and length(ml.link_analysis(.).redirect_history) > 1
+          and any(ml.link_analysis(.).redirect_history,
+                  strings.contains(.path, ..href_url.fragment)
+          )
+  )
+attack_types:
+  - "Spam"
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Open redirect"
+  - "Social engineering"
+detection_methods:
+  - "URL analysis"
+  - "Content analysis"
+id: "9b715c35-6c35-5a41-a1a0-bb26ee1ade78"

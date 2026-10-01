@@ -1,23 +1,42 @@
-name: "DLP: UK Passport Number"
+name: "DLP: UK Passport"
 description: "Detects messages containing UK passport numbers."
 type: "dlp"
 severity: "high"
 source: |
   type.outbound
-  and any([body.current_thread.text, subject.subject],
-          // UK passport: 9 digits or alphanumeric
-          regex.contains(., '\b\d{9}|[A-Z]{2}\d{7}\b')
-  )
-  and any([body.current_thread.text, subject.subject],
-          regex.icontains(., 'passport')
-  )
   and (
-    strings.icontains(sender.email.domain.tld, "uk")
-    or strings.icontains(sender.email.domain.tld, "gb")
-    or strings.icontains(body.current_thread.text, "united kingdom")
-    or strings.icontains(body.current_thread.text, "UK")
+    any(beta.ml_extract_sensitive_information(body.current_thread.text).elements,
+        .type == "uk_passport_number" and .confidence in ("medium", "high")
+    )
+    or any(beta.ml_extract_sensitive_information(subject.subject).elements,
+           .type == "uk_passport_number" and .confidence in ("medium", "high")
+    )
+    or any(attachments,
+           any(file.explode(.),
+               (
+                 any(beta.ml_extract_sensitive_information(.scan.strings.raw).elements,
+                     .type == "uk_passport_number"
+                     and .confidence in ("medium", "high")
+                 )
+                 or any(beta.ml_extract_sensitive_information(.scan.ocr.raw).elements,
+                        .type == "uk_passport_number"
+                        and .confidence in ("medium", "high")
+                 )
+               )
+           )
+    )
   )
-
+tags:
+  - "Personal Data"
+  - "UK GDPR"
+  - "UK"
+attack_types:
+  - "DLP: Personal Data"
+data_categories:
+  - "DLP: Personal Data"
 detection_methods:
   - "Content analysis"
-id: "f503ca57-f729-59d8-a55b-02d6f096185e"
+  - "Natural Language Understanding"
+  - "File analysis"
+  - "Optical Character Recognition"
+id: "382cf5cc-7d5f-5bf8-b9ef-66d10e42716f"
