@@ -10,13 +10,16 @@ source: |
                  // creator and producer of PDF seen in malicious content
                  and (
                    strings.starts_with(beta.parse_exif(.).creator, "wkhtmltopdf")
-                   or strings.starts_with(beta.parse_exif(.).producer, "Qt ")
+                   or strings.starts_with(beta.parse_exif(.).producer,
+                                          "Qt ",
+                                          "Skia"
+                   )
                  )
           ),
           any(filter(file.explode(.), .scan.ocr.raw is not null),
               // contains LinkedIn HQ address but not from LinkedIn
               (
-                strings.icontains(.scan.ocr.raw, "1000 W Maude Ave")
+                regex.icontains(.scan.ocr.raw, "1000 W(?:est)? Maude Ave")
                 and not strings.icontains(.scan.ocr.raw, "linkedin")
               )
           )
@@ -24,7 +27,6 @@ source: |
   and any(ml.nlu_classifier(body.current_thread.text).topics,
           .name == "Financial Communications" and .confidence != "low"
   )
-
 attack_types:
   - "BEC/Fraud"
 tactics_and_techniques:
