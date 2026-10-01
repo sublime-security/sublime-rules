@@ -774,3 +774,15 @@ rule pdf_generic_msft_compensation_lure {
 		uint32be(0) == 0x25504446
 		and all of them
 }
+
+rule pdf_msft_teams_planner_purple_lure {
+	meta:
+		author      = "kyle eaton"
+		date        = "2026-10-01"
+		description = "PDF with generic purple microsoft teams planner template"
+	strings:
+		$rect = { 2F 52 65 63 74 20 5B 32 33 37 20 20 35 35 39 2E 32 35 30 30 30 30 }
+	condition:
+		uint32be(0) == 0x25504446
+		and $rect
+}
