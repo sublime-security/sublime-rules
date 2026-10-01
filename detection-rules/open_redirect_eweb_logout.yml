@@ -4,23 +4,21 @@ type: "rule"
 severity: "medium"
 source: |
   type.inbound
-    and any(body.links,
-            strings.icontains(.href_url.path, '/eweb/')
-            and strings.iends_with(.href_url.path, 'logout.aspx')
-            and any(regex.iextract(.href_url.query_params,
-                                   'redirecturl=([^&]+)'
-                    ),
-                    strings.parse_url(.groups[0]).domain.valid
-                    // a legitimate logout returns to the same site; an off-site destination is the abuse
-                    and strings.parse_url(.groups[0]).domain.root_domain != ..href_url.domain.root_domain
-            )
-    )
+  and any(body.links,
+          strings.icontains(.href_url.path, '/eweb/')
+          and strings.iends_with(.href_url.path, 'logout.aspx')
+          and any(regex.iextract(.href_url.query_params, 'redirecturl=([^&]+)'),
+                  strings.parse_url(.groups[0]).domain.valid
+                  // a legitimate logout returns to the same site; an off-site destination is the abuse
+                  and strings.parse_url(.groups[0]).domain.root_domain != ..href_url.domain.root_domain
+          )
+  )
   
-    // negate highly trusted sender domains unless they fail DMARC authentication
-    and not (
-      sender.email.domain.root_domain in $high_trust_sender_root_domains
-      and coalesce(headers.auth_summary.dmarc.pass, false)
-    )
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and not (
+    sender.email.domain.root_domain in $high_trust_sender_root_domains
+    and coalesce(headers.auth_summary.dmarc.pass, false)
+  )
 attack_types:
   - "Credential Phishing"
 tactics_and_techniques:
@@ -28,3 +26,4 @@ tactics_and_techniques:
 detection_methods:
   - "URL analysis"
   - "Header analysis"
+id: "46f08e9f-6d85-52ef-8f33-857feaa493da"
