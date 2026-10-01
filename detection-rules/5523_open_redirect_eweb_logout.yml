@@ -1,0 +1,35 @@
+name: "PR# 5523 - Open redirect: EWeb logout redirect"
+description: "Detects inbound messages containing links to an '/eweb/' logout.aspx page whose redirecturl query parameter points to an off-site domain rather than back to the originating site, indicating abuse of a legitimate logout redirect mechanism. Messages from highly trusted sender domains are excluded unless they fail DMARC authentication."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and any(body.links,
+          strings.icontains(.href_url.path, '/eweb/')
+          and strings.iends_with(.href_url.path, 'logout.aspx')
+          and any(regex.iextract(.href_url.query_params, 'redirecturl=([^&]+)'),
+                  strings.parse_url(.groups[0]).domain.valid
+                  // a legitimate logout returns to the same site; an off-site destination is the abuse
+                  and strings.parse_url(.groups[0]).domain.root_domain != ..href_url.domain.root_domain
+          )
+  )
+  
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and not (
+    sender.email.domain.root_domain in $high_trust_sender_root_domains
+    and coalesce(headers.auth_summary.dmarc.pass, false)
+  )
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Open redirect"
+detection_methods:
+  - "URL analysis"
+  - "Header analysis"
+id: "bc175457-b926-5273-9cc3-7c209d127149"
+tags:
+  - created_from_open_prs
+  - rule_status_added
+  - pr_author_markmsublime
+references:
+  - https://github.com/sublime-security/sublime-rules/pull/5523
