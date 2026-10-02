@@ -786,3 +786,15 @@ rule pdf_msft_teams_planner_purple_lure {
 		uint32be(0) == 0x25504446
 		and $rect
 }
+
+rule pdf_w9_signature_bytes {
+	meta:
+		author = "kyle eaton"
+		date   = "2026-10-02"
+		description = "PDF matching stream bytes for a signature used in fake W9"
+	strings:
+		$stream = {78 9C ED 9D 09 5C 15 D5 F7 C0 9F 68 86 5B 96 9A}
+	condition:
+		uint32be(0) == 0x25504446
+		and $stream
+}
