@@ -1,0 +1,53 @@
+name: "Link: Suspicious Office 365 app authorization (OAuth) link"
+description: "Detects inbound messages with body links to a suspicious Office 365 app authorization (OAuth) request. The app may be compromised or was stood up for malicious purposes. Once the app has been authorized, the attacker will have read or write permissions to the user's Office 365 account."
+references:
+  - "https://info.phishlabs.com/blog/office-365-phishing-uses-malicious-app-persist-password-reset"
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and any([body.links, body.current_thread.links],
+          any(.,
+              (
+                .href_url.domain.domain in (
+                  'login.microsoftonline.com',
+                  'login.microsoft.com'
+                )
+                or strings.icontains(.href_url.query_params,
+                                     "login.microsoftonline.com",
+                                     'login.microsoft.com'
+                )
+              )
+              and (
+                strings.ilike(.href_url.query_params,
+                              '*offline_access*',
+                              '*.readwrite*',
+                              '*.read*',
+                              '*ctx=*',
+                              '*prompt=none*'
+                )
+                or (
+                  (
+                    strings.icontains(.href_url.path, '/common/reprocess')
+                    or strings.icontains(.href_url.query_params,
+                                         "/common/reprocess"
+                    )
+                  )
+                  and strings.icontains(.href_url.query_params, 'ctx=')
+                  and strings.icontains(.href_url.query_params, 'sessionId=')
+                )
+              )
+          )
+  )
+attack_types:
+  - "Credential Phishing"
+detection_methods:
+  - "URL analysis"
+related_detections:
+  - "attachment_link_office365_suspicious_app_authorization.yml"
+  - "attachment_ics_link_office365_suspicious_app_authorization.yml"
+  - "attachment_eml_link_office365_suspicious_app_authorization.yml"
+id: "af1e1d93-a45f-5fce-9ec4-a66300370d8c"
+og_id: "13a8c430-3e62-5c8f-86b5-3722599bead4"
+testing_pr: 5548
+testing_sha: 610a27044aac8efef22435b5a7357165183e1eb5
