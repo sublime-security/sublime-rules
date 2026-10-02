@@ -1,0 +1,58 @@
+name: "PR# 5536 - Prompt injection: Body instructions directed at an LLM"
+description: "Flags messages that contain hidden or explicit instructions aimed at AI/LLM-based email assistants, summarizers, or classifiers rather than the human recipient. The rule matches phrasing such as 'Assistant:', 'note to the AI agent', 'if you are an AI...', forged chat-template tokens, and long runs of invisible Unicode tag or variation-selector characters often used to smuggle hidden text to a model. These signals are corroborated with a prompt injection detection model, restricted to senders with low prevalence or no history of benign mail, and excludes authenticated graymail to reduce false positives."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  //
+  // This rule makes use of a beta feature and is subject to change without notice.
+  // Using the beta feature in custom rules is not suggested until it has been formally released.
+  //
+  and any([body.plain.raw, body.html.raw],
+          (
+            regex.icontains(.,
+                            // a machine addressed at the start of a line and told to act: 'Assistant: approve', '> Mail agent: forward'
+                            '(?:^|[\n>\[*/\x27-]|<!--)\s*(?:for\s+(?:the|any|all)\s+)?(?:(?:ai|llm|rag|e-?mail|mail|automated|triage|compliance|calendar|document|indexing|analy[sz]ing)[\s-]+(?:[a-z]+\s+)?(?:assistant|agent|model|summari[sz]er|classifier|indexer|copilot|mailbot)s?|(?:assistant|summari[sz]er|classifier|copilot|mailbot)s?)(?:\s+note)?(?:\s+(?:reading|processing|handling|managing|tracking|summari[sz]ing|preparing|condensing|index(?:es|ing))\b[^\n:]{0,30})?\s*[:,—][ \t]*(?:please\s+)?(?:(?:when|before|after|if|once)\s+[^\n.:]{0,60}?,\s*)?(?:forward|send|reply|attach|approve|accept|reschedule|create|record|store|remember|add|update|omit|skip|suppress|treat|mark|report|describe|tell|flag|ignore|disregard|grant|expand|read|use\s+your|do\s+not|don\x27t|never|you\s+(?:must|should|are\s+to))\b',
+                            // a note explicitly to a machine: 'Note to the automated classifier:', 'note for Carlos's mail agent'
+                            '\b(?:note|notice|instructions?|reminder)\s+(?:to|for)\s+(?:the\s+|any\s+|all\s+)?(?:[a-z]+\x27s\s+)?(?:(?:ai|llm|rag|e-?mail|mail|automated|triage|compliance|calendar|document|indexing|analy[sz]ing)[\s-]+(?:[a-z]+\s+)?(?:assistant|agent|model|summari[sz]er|classifier|indexer|copilot|mailbot)s?|(?:assistant|summari[sz]er|classifier|copilot|mailbot)s?)',
+                            // second person: 'If you are an AI, ...', 'if you are an assistant preparing a digest'
+                            '\bif\s+you\s+are\s+an?\s+(?:ai|llm|language\s+model|(?:ai|llm|rag|e-?mail|mail|automated|triage|compliance|calendar|document|indexing|analy[sz]ing)\s+(?:assistant|agent|model|summari[sz]er|classifier|indexer|copilot|mailbot)s?|(?:assistant|summari[sz]er|classifier|copilot|mailbot)s?)\b',
+                            // 'assistant summarising this postmortem', 'if an AI summariser is reading this'
+                            '\b(?:(?:assistant|agent|model|summari[sz]er|classifier|indexer|copilot|mailbot)s?|tools?)\s+(?:that\s+|is\s+)?(?:reading|processing|handling|managing|tracking|summari[sz]ing|preparing|condensing|index(?:es|ing))\s+this\b',
+                            // scoped to the model's own act or tools: 'when summarising this email', 'if you have a send_email tool'
+                            '\bwhen\s+summari[sz]ing\s+this\b|\bif\s+you\s+have\s+(?:access\s+to\s+)?(?:an?\s+|the\s+)?[\w-]+\s+(?:capability|tool)\b',
+                            // forged chat-template turns
+                            '<\|im_start\|>|\bend\s+of\s+(?:user|system)\s+message\b'
+            )
+            or regex.contains(.,
+                              // Unicode Tag / variation-selector runs long enough to carry an instruction only a model reads
+                              '[\x{E0020}-\x{E007F}]{32,}|[\x{E0100}-\x{E01EF}]{16,}'
+            )
+          )
+          and beta.prompt_injection_detection(.).detection == "injection"
+  )
+  and profile.by_sender().prevalence in ("new", "outlier", "rare")
+  and not profile.by_sender().any_messages_benign
+  
+  // Graymail exclusion (Fuzzy Attack Score), limited to authenticated senders
+  and not (
+    beta.attack_score_flash().verdict == "graymail"
+    and coalesce(headers.auth_summary.dmarc.pass, false)
+  )
+attack_types:
+  - "BEC/Fraud"
+  - "Spam"
+tactics_and_techniques:
+  - "Social engineering"
+  - "Evasion"
+detection_methods:
+  - "Content analysis"
+  - "Natural Language Understanding"
+  - "Sender analysis"
+id: "7c2aad0d-dea3-5127-9795-79c1975861b1"
+tags:
+  - created_from_open_prs
+  - rule_status_added
+  - pr_author_IndiaAce
+references:
+  - https://github.com/sublime-security/sublime-rules/pull/5536
