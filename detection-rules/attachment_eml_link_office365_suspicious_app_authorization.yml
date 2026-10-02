@@ -9,7 +9,16 @@ source: |
           and (
             // links in attached EML body
             any(file.parse_eml(.).body.links,
-                .href_url.domain.domain == 'login.microsoftonline.com'
+                (
+                  .href_url.domain.domain in (
+                    'login.microsoftonline.com',
+                    'login.microsoft.com'
+                  )
+                  or strings.icontains(.href_url.query_params,
+                                       "login.microsoftonline.com",
+                                       'login.microsoft.com'
+                  )
+                )
                 and (
                   strings.ilike(.href_url.query_params,
                                 '*offline_access*',
@@ -19,7 +28,12 @@ source: |
                                 '*prompt=none*'
                   )
                   or (
-                    strings.icontains(.href_url.path, '/common/reprocess')
+                    (
+                      strings.icontains(.href_url.path, '/common/reprocess')
+                      or strings.icontains(.href_url.query_params,
+                                           "/common/reprocess"
+                      )
+                    )
                     and strings.icontains(.href_url.query_params, 'ctx=')
                     and strings.icontains(.href_url.query_params, 'sessionId=')
                   )
@@ -27,11 +41,20 @@ source: |
             )
             // links in PDF and HTML attachments inside the EML
             or any(filter(file.parse_eml(.).attachments,
-                          .file_type in ("pdf", "html")
+                          .file_type in ("pdf", "html", "docx", "pptx")
                    ),
                    any(file.explode(.),
                        any(.scan.url.urls,
-                           .domain.domain == 'login.microsoftonline.com'
+                           (
+                             .domain.domain in (
+                               'login.microsoftonline.com',
+                               'login.microsoft.com'
+                             )
+                             or strings.icontains(.query_params,
+                                                  "login.microsoftonline.com",
+                                                  'login.microsoft.com'
+                             )
+                           )
                            and (
                              strings.ilike(.query_params,
                                            '*offline_access*',
@@ -61,7 +84,16 @@ source: |
                    //
                    any(beta.file.parse_ics(.).events,
                        any(.links,
-                           .href_url.domain.domain == 'login.microsoftonline.com'
+                           (
+                             .href_url.domain.domain in (
+                               'login.microsoftonline.com',
+                               'login.microsoft.com'
+                             )
+                             or strings.icontains(.href_url.query_params,
+                                                  "login.microsoftonline.com",
+                                                  'login.microsoft.com'
+                             )
+                           )
                            and (
                              strings.ilike(.href_url.query_params,
                                            '*offline_access*',
@@ -86,7 +118,7 @@ source: |
                    )
             )
           )
-  ) 
+  )
 attack_types:
   - "Credential Phishing"
 tactics_and_techniques:
