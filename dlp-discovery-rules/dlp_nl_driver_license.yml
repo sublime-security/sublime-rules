@@ -1,0 +1,47 @@
+name: "DLP: Netherlands Driver's License"
+description: "Detects messages containing Netherlands driver's license numbers."
+type: "dlp"
+severity: "high"
+attack_types:
+  - "DLP: Personal Data"
+tags:
+  - "Personal data"
+  - "GDPR"
+  - "EU"
+  - "Netherlands"
+source: |
+  //
+  // This rule makes use of a beta feature and is subject to change without notice
+  // using the beta feature in custom rules is not suggested until it has been formally released
+  //
+  // NOTE: This rule depends on the nl_driver_license recognizer in Hydra — do not ship until recognizer is merged
+  //
+  type.outbound
+  and (
+    any(beta.ml_extract_sensitive_information(body.current_thread.text).elements,
+        .type == "nl_driver_license" and .confidence in ("medium", "high")
+    )
+    or any(beta.ml_extract_sensitive_information(subject.subject).elements,
+           .type == "nl_driver_license" and .confidence in ("medium", "high")
+    )
+    or any(attachments,
+           any(file.explode(.),
+               (
+                 any(beta.ml_extract_sensitive_information(.scan.strings.raw).elements,
+                     .type == "nl_driver_license"
+                     and .confidence in ("medium", "high")
+                 )
+                 or any(beta.ml_extract_sensitive_information(.scan.ocr.raw).elements,
+                        .type == "nl_driver_license"
+                        and .confidence in ("medium", "high")
+                 )
+               )
+           )
+    )
+  )
+detection_methods:
+  - "Content analysis"
+  - "Natural Language Understanding"
+  - "File analysis"
+  - "Optical Character Recognition"
+id: "36e381c9-4531-5176-8ebe-d18ece75ad3d"
