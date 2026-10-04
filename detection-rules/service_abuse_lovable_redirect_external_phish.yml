@@ -1,0 +1,35 @@
+name: "Service abuse: Lovable-hosted redirect to external phishing page"
+description: "Detects inbound emails containing links to Lovable-hosted sites (lovable.app published sites or lovableproject.com preview/sandbox builds) whose rendered page contains links pointing to external domains or raw IP addresses, paired with lure text urging the recipient to view, open, access, or download documents, invoices, payments, voicemail, or similar sensitive items. This pattern indicates abuse of the Lovable platform to host an intermediary page that redirects victims to a separate credential phishing or malicious destination."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and any(filter(body.links,
+                 .href_url.domain.root_domain in (
+                   "lovable.app", // published sites
+                   "lovableproject.com" // preview/sandbox builds
+                 )
+          ),
+          any(filter(ml.link_analysis(.).final_dom.links,
+                     .href_url.ip.ip is not null
+                     or .href_url.domain.root_domain not in (
+                       "lovable.app",
+                       "lovable.dev",
+                       "lovableproject.com"
+                     )
+              ),
+              regex.icontains(.display_text,
+                              '(?s)^\s*(?:(?:view|open|access|download|review|go to|sign in)\b.{0,40}\b(?:documents?|files?|pdf|attachments?|messages?|voicemail|projects?|bids?|proposal|plans|receipt|statement|invoice|payment|billing|claim|package|invitation|agreement|contract|capital call)|listen\b)'
+              )
+          )
+  )
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Social engineering"
+  - "Open redirect"
+  - "Free subdomain host"
+detection_methods:
+  - "URL analysis"
+  - "HTML analysis"
+  - "Content analysis"
