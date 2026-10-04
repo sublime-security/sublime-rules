@@ -1,0 +1,61 @@
+name: "Link: Lovable page with an off-platform file or message button"
+description: |
+  Detects links to sites built on the Lovable AI app builder where a button leaving the platform
+  claims a file or message sits behind it ("Open File", "View Document", "Access secure document —
+  PDF", "Listen"). Actors use Lovable to generate throwaway decoy pages (fake ShareFile, DocuSign, bid
+  portals, closing packages, voicemails) in seconds. The decoy holds no payload itself, so link
+  analysis sees a clean page; its only job is to hand the victim to the real phishing page hosted
+  elsewhere (workers.dev, newly registered domains, sslip.io). Genuine Lovable sites (portfolios,
+  product demos, event pages, small business pages) point their off-platform buttons at a place (a
+  map, a dashboard, a channel) rather than promising a document.
+
+  No sender-trust exclusions: the observed carriers are compromised, DMARC-passing tenants. Not covered:
+  Lovable custom domains, Mimecast-rewritten links (the true host is only in the wrapper's query),
+  decoys with no anchor exit at all (JS-navigated captcha pages), buttons that name the lure without a
+  document ("View Litigation Matter"), and buttons that don't start with the verb ("Click here to view
+  document").
+references:
+  - "https://platform.sublime.security/messages/50e808097b498c6669813dc50309f97a57de6a642f827c62d77c745246d41332"
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+
+  // lovable-hosted pages... custom domains aren't covered
+  // body.links, not current_thread... decoys also arrive in calendar invites and forwards
+  and any(filter(body.links,
+                 .href_url.domain.root_domain in (
+                   "lovable.app", // published sites
+                   "lovableproject.com" // preview/sandbox builds
+                 )
+          ),
+          // a button off the platform... relative links and the "edit with lovable" badge (lovable.dev) don't count
+          // ip-literal links have no domain, so keep them by ip
+          any(filter(ml.link_analysis(.).final_dom.links,
+                     .href_url.ip.ip is not null
+                     or .href_url.domain.root_domain not in (
+                       "lovable.app",
+                       "lovable.dev",
+                       "lovableproject.com"
+                     )
+              ),
+              // ...claiming there's a file or message behind it
+              // legit buttons point at a place (a map, a dashboard, a channel)... a decoy promises a document
+              // nouns come from the button texts of 30 days of hits; 40 chars covers "access secure document — pdf"
+              // (?s)... button text can span lines
+              regex.icontains(.display_text,
+                              '(?s)^\s*(?:(?:view|open|access|download|review|go to|sign in)\b.{0,40}\b(?:documents?|files?|pdf|attachments?|messages?|voicemail|projects?|bids?|proposal|plans|receipt|statement|invoice|payment|billing|claim|package|invitation|agreement|contract|capital call)|listen\b)'
+              )
+          )
+  )
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Evasion"
+  - "Free subdomain host"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "HTML analysis"
+  - "URL analysis"
+id: "1eac03f0-d48e-5e58-8ced-6e5aa2d0e71b"
