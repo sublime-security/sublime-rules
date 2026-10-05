@@ -16,7 +16,7 @@ import sys
 RULE_DIRS = [
     'detection-rules',
     'discovery-rules',
-    'dlp-discovery-rules',
+    'dlp-rules',
     'insights',
 ]
 
