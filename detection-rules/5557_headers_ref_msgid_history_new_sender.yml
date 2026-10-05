@@ -1,0 +1,36 @@
+name: "PR# 5557 - Previous message in references sent from newly registered sender domain (<=10d)"
+description: "Flags inbound messages whose references headers link back to prior messages from a sender using the same domain, where that domain was registered within 10 days of the earlier message being sent. This rapid domain age combined with reply-chain references suggests the sender is leveraging a freshly created domain to build trust through message history. The rule also excludes senders with an established solicited relationship to reduce false positives."
+type: "rule"
+severity: "low"
+source: |
+  type.inbound
+  // covered by related detection
+  and not network.whois(sender.email.domain).days_old <= 10
+  and any(headers.references,
+          //
+          // This rule makes use of a beta feature and is subject to change without notice
+          // using the beta feature in custom rules is not suggested until it has been formally released
+          //
+          any(beta.message_id_history(.),
+              .sender_email.domain.domain == sender.email.domain.domain
+              // the age of the sender domain at the time of the previous message received
+              and (.received_at - network.whois(sender.email.domain).created_at) <= (
+                10 * 24h
+              )
+          )
+  )
+  // no outbound messages
+  and not profile.by_sender().solicited
+tags:
+  - "Attack surface reduction"
+  - pr_author_zoomequipd
+  - created_from_open_prs
+  - rule_status_added
+detection_methods:
+  - "Sender analysis"
+  - "Whois"
+related_detections:
+  - "sender_new_from_domain_first_time_sender.yml"
+id: "62c0e7b3-c336-5a69-b471-cd1c61578530"
+references:
+  - https://github.com/sublime-security/sublime-rules/pull/5557
