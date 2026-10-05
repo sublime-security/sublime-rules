@@ -824,3 +824,15 @@ rule pdf_w9_signatures_update {
 		uint32be(0) == 0x25504446
 		and any of them
 }
+
+rule pdf_ssa_lure {
+	meta:
+		author      = "kyle eaton"
+		date        = "2026-10-05"
+		description = "PDF matching stream bytes for a lure used in social security cred phish"
+	strings:
+		$stream = { FF 93 DF 58 A8 0D 39 26 E0 39 81 03 EF 7A C1 69 }
+	condition:
+		uint32be(0) == 0x25504446
+		and $stream
+}
