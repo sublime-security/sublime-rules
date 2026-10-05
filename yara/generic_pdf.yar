@@ -748,3 +748,79 @@ rule pdf_quickbooks_toad_lure_blank_page {
 		uint32be(0) == 0x25504446
 		and $empty_page
 }
+
+rule pdf_blue_fax_phish_lure {
+	meta:
+		author = "kyle eaton"
+		date   = "2026-09-29"
+		description = "matching rectangle values in a blue fax lure PDF document"
+	strings:
+		$rect = { 2F 52 65 63 74 20 5B 32 37 39 20 33 39 39 2E 37 35 }
+	condition:
+		uint32be(0) == 0x25504446
+		and $rect
+}
+
+rule pdf_generic_msft_compensation_lure {
+	meta:
+		author      = "kyle eaton"
+		date        = "2026-09-30"
+		description = "matching rectangle values in generic msft compensation lure"
+	strings:
+		$rect1 = "/Rect [45.7500000  573.500000"
+		$rect2 = "/Rect [134.250000  609.500000"
+		$rect3 = "/Rect [45.7500000  510.500000"
+	condition:
+		uint32be(0) == 0x25504446
+		and all of them
+}
+
+rule pdf_msft_teams_planner_purple_lure {
+	meta:
+		author      = "kyle eaton"
+		date        = "2026-10-01"
+		description = "PDF with generic purple microsoft teams planner template"
+	strings:
+		$rect = { 2F 52 65 63 74 20 5B 32 33 37 20 20 35 35 39 2E 32 35 30 30 30 30 }
+	condition:
+		uint32be(0) == 0x25504446
+		and $rect
+}
+
+rule pdf_w9_signature_bytes {
+	meta:
+		author = "kyle eaton"
+		date   = "2026-10-02"
+		description = "PDF matching stream bytes for a signature used in fake W9"
+	strings:
+		$stream = {78 9C ED 9D 09 5C 15 D5 F7 C0 9F 68 86 5B 96 9A}
+	condition:
+		uint32be(0) == 0x25504446
+		and $stream
+}
+
+rule pdf_fake_linkedIn_invoice_lure {
+	meta:
+		author      = "kyle eaton"
+		date        = "2026-10-02"
+		description = "matching lure bytes observed in fake linkedin invoice"
+	strings:
+		$linkedin_lure = { FF DD 00 04 00 1B FF DA 00 0C 03 01 00 02 11 03 11 00 3F 00 FA A6 8A 28 A0 02 8A 28 A0 02 8A 28 A0 02 8A 28 A0 02 8A 28 A0 02 8A 28 A0 02 8A 28 A0 02 8A 28 A0 02 8A 28 A0 02 8A 28 A0 02 8A 28 A0 02 8A 28 A0 02 8A 28 A0 02 8A 28 A0 02 8A 28 A0 02 8A 28 A0 02 8A 28 A0 02 8A 28 A0 02 8A 28 A0 08 89 0A B9 3C 01 5F 39 78 AF C7 DA 96 A7 78 F6 DA 54 AD 6F 6D 19 2A 0A 1D AC F8 3F 7B 23 90 0F 61 F9 FB 7B F6 B0 CC 9A 55 D3 A9 C1 10 B9 07 FE 02 6B E3 7C 1C 66 BD 9C A3 0F 09 B9 4E 6A F6 }
+	condition:
+		uint32be(0) == 0x25504446
+		and $linkedin_lure
+}
+
+rule pdf_w9_signatures_update {
+	meta:
+		author      = "kyle eaton"
+		date        = "2026-09-16"
+		update      = "2026-10-02"
+		description = "matching PDFs with signatures observed in fake w9 documents"
+	strings:
+		//$noel_docusign                      = { FF DA 00 0C 03 01 00 02 11 03 11 00 3F 00 FE FC 39 E7 DF AF 3D 78 C7 3E BC 60 73 DB 8A 00 51 96 3D F2 3A 73 D3 D7 1E 9F E7 DE 80 FE BF AF EB F2 17 63 72 31 C1 EA 33 D7 EB C7 3D 07 5D DD 3F 0A 00 5D AF D7 9C FA E7 D7 A8 FC 70 3B F6 EF 40 09 B1 B0 47 63 C9 19 18 3E E7 B5 00 27 3B C2 E4 EF }
+		$signature_from_linkedin_related_w9 = { FF DA 00 0C 03 01 00 02 11 03 11 00 3F 00 F9 52 80 0A 00 28 00 A0 02 80 0A 00 28 00 A0 02 80 0A 00 28 00 A0 02 80 0A 00 28 03 4E 2D 0B 52 96 DE }
+	condition:
+		uint32be(0) == 0x25504446
+		and any of them
+}
