@@ -1,0 +1,31 @@
+name: "Open redirect: Quickbase"
+description: "Detects inbound emails containing links to quickbase.com that use an API parameter alongside a redirect parameter (rdr=) pointing to a destination outside of quickbase.com, indicating potential abuse of Quickbase's redirect functionality to disguise malicious links. The rule excludes emails from quickbase.com or highly trusted sender domains that pass DMARC authentication."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and any(body.links,
+          .href_url.domain.root_domain == "quickbase.com"
+          and strings.icontains(.href_url.query_params, 'a=API_')
+          and strings.icontains(.href_url.query_params, 'rdr=')
+          // make sure it's not redirecting back to quickbase.com
+          and not regex.icontains(.href_url.query_params,
+                                  'rdr=(?:https?(?:%3a|:))?(?:%2f|\/)*[^&]*quickbase\.com(?:&|\/|$|%2f)'
+          )
+  )
+  and not (
+    sender.email.domain.root_domain == "quickbase.com"
+    and coalesce(headers.auth_summary.dmarc.pass, false)
+  )
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and not (
+    sender.email.domain.root_domain in $high_trust_sender_root_domains
+    and coalesce(headers.auth_summary.dmarc.pass, false)
+  )
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Open redirect"
+detection_methods:
+  - "URL analysis"
+  - "Header analysis"
