@@ -1,0 +1,28 @@
+name: "Link: Google Cloud Storage with prefixed base64 dash-record fragment"
+description: "Detects Google Cloud Storage links whose fragment holds a 30 character prefix, a click/unsubscribe marker, and a base64 encoded dash-separated tracking record. Observed in fake account suspension, health and warranty spam."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and any(body.links,
+          .href_url.domain.domain == "storage.googleapis.com"
+          and regex.match(.href_url.fragment[:31], '[A-Z0-9]{30}[ru]')
+          and regex.imatch(strings.decode_base64(.href_url.fragment[31:],
+                                                 ignore_padding=true
+                           ),
+                           '\d+-\d+-\d+-[a-z]-\d+-\d+-\d+-\d+-\d+-\d+-\d+-\d+-[a-z0-9]{9}-[0-9a-f]{8}'
+          )
+  )
+attack_types:
+  - "Credential Phishing"
+  - "Spam"
+tactics_and_techniques:
+  - "Free file host"
+  - "Social engineering"
+  - "Evasion"
+detection_methods:
+  - "URL analysis"
+id: "e78f0ba9-64a0-5431-871e-e78425b6ec0c"
+og_id: "083bd39c-2486-5cda-9037-9bf01e652a6d"
+testing_pr: 5569
+testing_sha: 56f6305e888ab6bb56a897409d0ba68e0ba5ca2a
