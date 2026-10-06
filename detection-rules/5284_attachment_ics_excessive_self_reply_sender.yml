@@ -1,16 +1,23 @@
 name: "PR# 5284 - Attachment: Calendar invite from excessive self-reply sender"
-description: "Detect messages where there are 2 or more previous threads, where all previous messages are self-replies from the same sender, a calendar invite attachment with no physical location or generic online-meeting location, and B2B Cold Outreach topic analysis. This pattern is observed as excessive unsolicited outreach with disruptive required intervention."
+description: "Detect messages where there are 2 or more previous threads, where all previous messages are self-replies from the same sender, and a calendar invite attachment with a generic online-meeting location. This pattern is observed as excessive unsolicited outreach with disruptive required intervention."
 type: "rule"
 severity: "low"
 source: |
   type.inbound
-  // previous threads are legitimate but are all self-replies
+  // previous threads are all self-replies
   and (
-    length(body.previous_threads) >= 2
-    and all(body.previous_threads, .sender.email.email == sender.email.email)
+    (
+      length(body.previous_threads) >= 2
+      and all(body.previous_threads, .sender.email.email == sender.email.email)
+    )
+    // negate forwarded messages
+    and not (
+      (length(headers.references) > 0 or headers.in_reply_to is not null)
+      and subject.is_forward
+    )
   )
   
-  // calendar invite present with no location or generic "online" location
+  // calendar invite present with generic "online location"
   and (
     length(attachments) > 0
     and all(attachments,
