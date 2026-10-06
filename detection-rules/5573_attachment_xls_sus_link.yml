@@ -1,0 +1,49 @@
+name: "Attachment: Excel file with hyperlinks to suspicious domains"
+description: "Flags inbound emails that show signs of business email compromise or credential theft intent—either through NLU classification or language like 'your review'/'please review'—and include an Excel attachment. The attachment is exploded and its exiftool metadata inspected for embedded hyperlinks, which are then parsed and checked against lists of free subdomain hosts, free file hosts, suspicious TLDs, and URL shorteners."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and (
+    any(ml.nlu_classifier(body.current_thread.text).intents,
+        .name in ('bec', 'cred_theft') and .confidence != 'low'
+    )
+    or strings.icontains(body.current_thread.text, 'your review', 'please review')
+  )
+  and any(attachments,
+          .file_extension in~ ("xls")
+          //
+          // This rule makes use of a beta feature and is subject to change without notice
+          // using the beta feature in custom rules is not suggested until it has been formally released
+          //
+          and any(beta.parse_exif(.).fields,
+                  .key == "Hyperlinks"
+                  and any(strings.parse_json(.value),
+                          (
+                            strings.parse_url(.).domain.domain in $free_subdomain_hosts
+                            or strings.parse_url(.).domain.root_domain in $free_file_hosts
+                            or strings.parse_url(.).domain.tld in $suspicious_tlds
+                            or strings.parse_url(.).domain.root_domain in $url_shorteners
+                            or strings.parse_url(.).domain.domain in $url_shorteners
+                            or strings.parse_url(.).domain.domain in $self_service_creation_platform_domains
+                          )
+                  )
+          )
+  )
+attack_types:
+  - "BEC/Fraud"
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Free file host"
+  - "Free subdomain host"
+  - "Social engineering"
+detection_methods:
+  - "Natural Language Understanding"
+  - "Content analysis"
+  - "Exif analysis"
+  - "File analysis"
+  - "URL analysis"
+id: "e7edd7cc-798c-5c98-80b8-e0781308dab4"
+og_id: "29377257-49c8-5df8-865c-d0b1eba3cad5"
+testing_pr: 5573
+testing_sha: 3071456b1a869e22b54ae6b783886d0b54c39c32
