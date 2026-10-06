@@ -1,0 +1,23 @@
+name: "Link: Google Cloud Storage with base64 go/sub-ID fragment"
+description: "This rule flags inbound messages containing links hosted on storage.googleapis.com whose URL fragment holds a base64-encoded tracking string matching a go=1/2&s1=&s2=&s3= pattern, typically used to differentiate click versus unsubscribe actions. The underlying messages tend to use prize, reward, or giveaway lures (e.g. free product offers or sweepstakes wins) to entice recipients into clicking, abusing Google's trusted storage domain to host and redirect through tracked links while evading detection."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and any(body.links,
+          .href_url.domain.domain == "storage.googleapis.com"
+          // base64 tracking query hidden in the fragment (go=1 click, go=2 unsubscribe)
+          and regex.imatch(strings.decode_base64(.href_url.fragment[1:], ignore_padding=true),
+                           'go=[12]&s1=\d+&s2=\d+&s3=[a-z]+'
+          )
+  )
+attack_types:
+  - "Spam"
+tactics_and_techniques:
+  - "Free file host"
+  - "Social engineering"
+  - "Encryption"
+  - "Evasion"
+detection_methods:
+  - "URL analysis"
+  - "Content analysis"
