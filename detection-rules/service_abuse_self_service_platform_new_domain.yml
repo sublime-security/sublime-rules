@@ -6,9 +6,21 @@ source: |
   type.inbound
   and any(body.current_thread.links,
           .href_url.domain.root_domain in $self_service_creation_platform_domains
-          and any(ml.link_analysis(.).final_dom.links,
-                  network.whois(.href_url.domain).days_old < 30
-                  and .href_url.domain.tld in $suspicious_tlds
+          and (
+            // anchors present in the rendered DOM
+            any(ml.link_analysis(.).final_dom.links,
+                network.whois(.href_url.domain).days_old < 30
+                and .href_url.domain.tld in $suspicious_tlds
+            )
+            // or links rendered client-side, which never become anchors in final_dom.links
+            or any(filter(regex.iextract(ml.link_analysis(.).final_dom.raw,
+                                         'https:[/\\]+(?P<host>[a-z0-9][a-z0-9.-]{2,60}\.[a-z]{2,12})'
+                          ),
+                          strings.parse_domain(.named_groups["host"]).tld in $suspicious_tlds
+                          and strings.parse_domain(.named_groups["host"]).root_domain not in $tranco_1m
+                   ),
+                   network.whois(strings.parse_domain(.named_groups["host"])).days_old < 30
+            )
           )
   )
 tags:
