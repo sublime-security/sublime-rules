@@ -1,0 +1,25 @@
+name: "Link: Google Cloud Storage with prefixed base64 dash-record fragment"
+description: "Detects messages containing links hosted on storage.googleapis.com where the URL fragment follows a distinctive structured pattern: a 30-character alphanumeric token followed by base64-encoded data matching a numeric/alphanumeric tracking format. This structure is characteristic of a phishing kit that abuses Google Cloud Storage to host and redirect through legitimate-looking links. Observed messages use social engineering lures claiming the recipient's account has been blocked or suspended and that photos or videos will be deleted unless action is taken, pressuring the user to click through to the storage-hosted link."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and any(body.links,
+          .href_url.domain.domain == "storage.googleapis.com"
+          and regex.match(.href_url.fragment[:31], '[A-Z0-9]{30}[ru]')
+          and regex.imatch(strings.decode_base64(.href_url.fragment[31:],
+                                                 ignore_padding=true
+                           ),
+                           '\d+-\d+-\d+-[a-z]-\d+-\d+-\d+-\d+-\d+-\d+-\d+-\d+-[a-z0-9]{9}-[0-9a-f]{8}'
+          )
+  )
+attack_types:
+  - "Credential Phishing"
+  - "Spam"
+tactics_and_techniques:
+  - "Free file host"
+  - "Social engineering"
+  - "Out of band pivot"
+detection_methods:
+  - "URL analysis"
+  - "Content analysis"
