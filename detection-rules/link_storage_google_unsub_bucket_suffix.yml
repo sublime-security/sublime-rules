@@ -1,0 +1,54 @@
+name: "Link: Google Cloud Storage with suffixed unsubscribe bucket"
+description: "Flags messages that embed two distinct storage.googleapis.com links whose bucket names share a common prefix but point to the same trailing file path, indicating the sender mirrored identical content across multiple buckets. This redundancy pattern is commonly seen in spam campaigns pushing lifestyle or health-related lures (e.g. 'morning routine' or recipe themed subject lines) that abuse Google Cloud Storage as a free, trusted hosting service to evade link-based filtering."
+type: "rule"
+severity: "medium"
+source: |
+    type.inbound
+    // two distinct paths
+    and length(distinct(map(filter(body.links,
+                                   .href_url.domain.domain == "storage.googleapis.com"
+                            ),
+                            .href_url.path
+                        )
+               )
+    ) == 2
+    // split each distinct path into bucket and trailer once
+    and any(map(distinct(filter(body.links,
+                                .href_url.domain.domain == "storage.googleapis.com"
+                         ),
+                         .href_url.path
+                ),
+                // return just the bucket/trailer for the path
+                regex.extract(.href_url.path,
+                              '^/(?P<bucket>[^/]+)/(?P<trailer>.+)$'
+                )[0]
+            ),
+            // loop the links that aren't the current .href_url.path (from the outer loop)
+            any(map(distinct(filter(body.links,
+                                    .href_url.domain.domain == "storage.googleapis.com"
+                                    and .href_url.path != ..full_match
+                             ),
+                             // return just the .href_url.path
+                             .href_url.path
+                    ),
+                    // create the bucket/trailer for the path
+                    regex.extract(.href_url.path,
+                                  '^/(?P<bucket>[^/]+)/(?P<trailer>.+)$'
+                    )[0]
+                ),
+                // this bucket is the outer bucket plus a suffix, serving the same trailer
+                strings.starts_with(.named_groups['bucket'],
+                                    ..named_groups['bucket']
+                )
+                and .named_groups['trailer'] == ..named_groups['trailer']
+            )
+    )
+  
+attack_types:
+  - "Spam"
+tactics_and_techniques:
+  - "Free file host"
+  - "Evasion"
+  - "Social engineering"
+detection_methods:
+  - "URL analysis"
