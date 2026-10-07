@@ -1,0 +1,48 @@
+name: "Brand impersonation: Aconex"
+description: "Detects messages impersonating Aconex that attempt to steal credentials, identified either through NLU classification of organization/sender entities combined with credential theft intent, or through keyword matching on terms like 'Support Central', 'Mail Number', 'Reference Number', and automated email disclaimers. Excludes messages from trusted Oracle/Aconex domains or other highly trusted sender domains that pass DMARC authentication."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and (
+    (
+      any(ml.nlu_classifier(body.current_thread.text).entities,
+          .name in ("org", "sender") and strings.icontains(.text, 'Aconex')
+      )
+      and any(ml.nlu_classifier(body.current_thread.text).intents,
+              .name == "cred_theft" and .confidence != "low"
+      )
+    )
+    or (
+      strings.icontains(body.current_thread.text, 'Aconex')
+      and 2 of (
+        strings.icontains(body.current_thread.text, 'Support Central'),
+        strings.icontains(body.current_thread.text,
+                          'This email is automatically generated'
+        ),
+        regex.icontains(body.current_thread.text, 'Mail Number'),
+        regex.icontains(body.current_thread.text, 'Reference Number')
+      )
+    )
+  )
+  and not (
+    sender.email.domain.root_domain in ("oracle.com", "aconex.com")
+    and coalesce(headers.auth_summary.dmarc.pass, false)
+  )
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and not (
+    sender.email.domain.root_domain in $high_trust_sender_root_domains
+    and coalesce(headers.auth_summary.dmarc.pass, false)
+  )
+  
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Social engineering"
+  - "Spoofing"
+detection_methods:
+  - "Natural Language Understanding"
+  - "Content analysis"
+  - "Header analysis"
+  - "Sender analysis"
