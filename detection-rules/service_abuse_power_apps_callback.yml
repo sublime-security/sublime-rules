@@ -4,7 +4,17 @@ type: "rule"
 severity: "medium"
 source: |
   type.inbound
-  and sender.email.email == "powerapps-noreply@microsoft.com"
+  and sender.email.email in (
+    "powerapps-noreply@microsoft.com",
+    "microsoft@powerapps.com"
+  )
+  // phone number regex required
+  and any([body.current_thread.text, subject.subject],
+          regex.icontains(.,
+                          '\+?([ilo0-9]{1}.)?\(?[ilo0-9]{3}?\)?.[ilo0-9]{3}.?[ilo0-9]{4}',
+                          '\+?([ilo0-9]{1,2})?\s?\(?\d{3}\)?[\s\.\-⋅]{0,5}[ilo0-9]{3}[\s\.\-⋅]{0,5}[ilo0-9]{4}'
+          )
+  )
   and (
     any(ml.nlu_classifier(body.current_thread.text).intents,
         .name == "callback_scam" and .confidence != "low"
@@ -33,16 +43,8 @@ source: |
           strings.ilike(body.current_thread.text, '*host key*')
         )
       )
-      // phone number regex
-      and any([body.current_thread.text, subject.subject],
-              regex.icontains(.,
-                              '\+?([ilo0-9]{1}.)?\(?[ilo0-9]{3}?\)?.[ilo0-9]{3}.?[ilo0-9]{4}',
-                              '\+?([ilo0-9]{1,2})?\s?\(?\d{3}\)?[\s\.\-⋅]{0,5}[ilo0-9]{3}[\s\.\-⋅]{0,5}[ilo0-9]{4}'
-              )
-      )
     )
   )
-
 attack_types:
   - "Callback Phishing"
 tactics_and_techniques:
