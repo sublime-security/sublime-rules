@@ -1,0 +1,50 @@
+name: "PR# 5589 - Link: Gmail confidential mode message with job scam subject"
+description: "Detects Gmail confidential mode messages where the sender-controlled subject, rendered as the message link text, or the sender address contains job scam or recruitment language."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and any(body.current_thread.links,
+          .href_url.domain.domain == "confidential-mail.google.com"
+          and strings.istarts_with(.href_url.path, "/msg/")
+  )
+  and (
+    // the sender-controlled subject is rendered as the link text
+    any(filter(body.current_thread.links,
+               .href_url.domain.domain == "confidential-mail.google.com"
+        ),
+        any(ml.nlu_classifier(.display_text).intents,
+            .name == "job_scam" and .confidence in ("medium", "high")
+        )
+        // compensation figures such as "$450K–$900K+"
+        or any(ml.nlu_classifier(.display_text).entities,
+               .name == "financial" and regex.contains(.text, '\d\s*[kKmM]\b')
+        )
+        // recruitment terms in the subject
+        or regex.icontains(.display_text,
+                           '\b(?:leader(?:ship)?|director|mandate|opportunit(?:y|ies)|executive.search|career|jobs?|role)\b'
+        )
+    )
+    // recruitment terms in the sender local part
+    or regex.icontains(sender.email.local_part,
+                       '(?:recruit|talent|staffing|executive.?s[ea]|career)'
+    )
+  )
+attack_types:
+  - "BEC/Fraud"
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Evasion"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Natural Language Understanding"
+  - "Sender analysis"
+  - "URL analysis"
+id: "dafd6cbb-e49c-5561-b65f-10547e0232c4"
+tags:
+  - created_from_open_prs
+  - rule_status_added
+  - pr_author_zoomequipd
+references:
+  - https://github.com/sublime-security/sublime-rules/pull/5589
