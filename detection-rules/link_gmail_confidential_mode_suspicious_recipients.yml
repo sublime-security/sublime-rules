@@ -1,0 +1,35 @@
+name: "Link: Gmail confidential mode message with suspicious recipient patterns"
+description: "Detects Gmail confidential mode messages where the sender is the only recipient or there are no valid recipients, a pattern used to deliver actor-controlled content that cannot be scanned."
+type: "rule"
+severity: "low"
+false_positives:
+  - "Some senders commonly send messages which match this behavior, sender exclusions should be used to avoid continued/repeat matching of benign messages"
+source: |
+  type.inbound
+  and any(body.current_thread.links,
+          .href_url.domain.domain == "confidential-mail.google.com"
+          and strings.istarts_with(.href_url.path, "/msg/")
+  )
+  and (
+    // self sender
+    (
+      length(recipients.to) == 1
+      and recipients.to[0].email.email == sender.email.email
+    )
+    // no valid recipients at all
+    or (
+      length(filter(recipients.to, .email.domain.valid)) == 0
+      and not length(filter(recipients.cc, .email.domain.valid)) == 1
+    )
+  )
+tags:
+  - "Attack surface reduction"
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Evasion"
+  - "Social engineering"
+detection_methods:
+  - "Header analysis"
+  - "Sender analysis"
+  - "URL analysis"
