@@ -28,11 +28,22 @@ source: |
     any(html.xpath(body.html, '//h2').nodes,
         // org vip
         any($org_vips, strings.icontains(..display_text, .display_name))
-        // org sld as the board name
-        and any($org_slds,
-                strings.icontains(..display_text,
-                                  strings.concat('invited you to their board ', .)
-                )
+        and (
+          // org sld as the board name
+          any($org_slds,
+              strings.icontains(..display_text,
+                                strings.concat('invited you to their board ', .)
+              )
+          )
+          // extract board owner email, check it's not a known org email
+          or any(regex.iextract(.display_text,
+                                '([a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,})'
+                 ),
+                 not (
+                   .full_match in $sender_emails
+                   or .full_match in $recipient_emails
+                 )
+          )
         )
     )
     // pattern of the first name ending in `From` after the org_vip display name
