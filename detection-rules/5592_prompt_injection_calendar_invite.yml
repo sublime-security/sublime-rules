@@ -1,0 +1,67 @@
+name: "Prompt injection: Instructions to an AI in a calendar invite"
+description: "Detects calendar invites whose summary or description addresses an AI (an assistant, a named model such as 'Gemini,', 'the user', 'previous instructions') where NLU finds a request and the prompt injection model agrees on the same field. Calendar assistants read the full event text. Restricted to senders with low prevalence and no benign history, and excludes graymail from senders passing DMARC."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  //
+  // This rule makes use of a beta feature and is subject to change without notice
+  // using the beta feature in custom rules is not suggested until it has been formally released
+  //
+  and any(filter(attachments,
+                 .content_type in ("text/calendar", "application/ics")
+                 or .file_extension =~ "ics"
+          ),
+          any(file.explode(.),
+              any(.scan.ics.calendars,
+                  any(.components,
+                      // calendar assistants read the full event text
+                      any([.summary, .description],
+                          // who the text addresses... broader than the body rules on purpose: a bare
+                          // assistant/llm/screener/summariser, a named model as a vocative ("Gemini,"),
+                          // "ai/language model", "the user", "previous/prior instructions"... ai newsletters
+                          // put these in bodies, but in pdf text and invites they hit 0 in 60 days once bare
+                          // ai/agent/model/gpt were dropped ("real estate agent", "Agentic AI" invites)
+                          regex.icontains(.,
+                                          '\b(?:assistant|llm|screener|summari[sz]er)s?\b|(?:^|[\n\[(>\x27\".:])\s*(?:hey\s+)?(?:chatgpt|gemini|copilot|claude)\s*[:,]|\b(?:ai|language)\s+models?\b|\bthe\s+user\b|\b(?:previous|prior)\s+instructions\b'
+                          )
+                          and any(ml.nlu_classifier(.).entities,
+                                  .name == "request"
+                          )
+                          and beta.prompt_injection_detection(.).detection == "injection"
+                          and beta.prompt_injection_detection(.).confidence in (
+                            "medium",
+                            "high"
+                          )
+                      )
+                  )
+              )
+          )
+  )
+  
+  // an injection arrives from outside the recipient's correspondence... the profile
+  // is unauthenticated, so a spoofed known correspondent is suppressed too
+  and profile.by_sender_email().prevalence in ("new", "outlier", "rare")
+  and not profile.by_sender_email().any_messages_benign
+  
+  // graymail from authenticated senders... AI-product newsletters and webinars
+  // coalesce the whole test... an unanalyzed flash verdict is null, and
+  // not (null and true) would block every match
+  and not coalesce(beta.attack_score_flash().verdict == "graymail"
+                   and headers.auth_summary.dmarc.pass,
+                   false
+  )
+attack_types:
+  - "BEC/Fraud"
+tactics_and_techniques:
+  - "Evasion"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "File analysis"
+  - "Natural Language Understanding"
+  - "Sender analysis"
+id: "6b7ce586-44f1-5e3b-94cc-c392dd606589"
+og_id: "1b4f35e1-91eb-5d6d-8b20-38aff537a1c1"
+testing_pr: 5592
+testing_sha: 41644c65a895c4842da95b75ed71ca411565a655
