@@ -667,19 +667,6 @@ rule pdf_rfp_bw_lure {
 	meta:
 		author      = "kyle eaton"
 		date        = "2026-09-01"
-		description = "matching a black and white RPF lure. Specifically some of the generation artifacts in the images."
-	strings:
-		$jpg_01  = { ff c0 00 0b 08 0d 78 0a 4e 01 01 11 00 ff c4 00 19 00 01 00 03 01 01 00 00 00 00 00 00 00 00 00 00 00 00 02 03 04 01 07 ff c4 00 19 10 01 00 03 01 01 00 00 00 00 00 00 00 00 00 00 00 00 01 02 12 11 03 ff da 00 08 01 01 00 00 3f 00 f3 f0 [23000] 25 0e ba 3a 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 03 83 8e 4a 32 84 a1 2a ec aa ca 6e a2 ea }
-		$img_obj = { 3C 3C 2F 54 79 70 65 20 2F 58 4F 62 6A 65 63 74 0A 2F 53 75 62 74 79 70 65 20 2F 49 6D 61 67 65 0A 2F 57 69 64 74 68 20 32 36 33 38 0A 2F 48 65 69 67 68 74 20 33 34 34 38 0A 2F 43 6F 6C 6F 72 53 70 61 63 65 20 2F 44 65 76 69 63 65 47 72 61 79 0A 2F 42 69 74 73 50 65 72 43 6F 6D 70 6F 6E 65 6E 74 20 38 0A 2F 46 69 6C 74 65 72 20 2F 44 43 54 44 65 63 6F 64 65 0A 2F 43 6F 6C 6F 72 54 72 61 6E 73 66 6F 72 6D 20 30 0A 2F 4C 65 6E 67 74 68 20 36 39 35 30 32 3E 3E }
-	condition:
-		uint32be(0) == 0x25504446
-		and @img_obj < @jpg_01
-}
-
-rule pdf_rfp_bw_lure_update {
-	meta:
-		author      = "kyle eaton"
-		date        = "2026-09-01"
 		updated     = "2026-09-22"
 		description = "matching a black and white RPF lure. Specifically some of the generation artifacts in the images."
 	strings:
@@ -711,12 +698,11 @@ rule pdf_msft_lure_signature {
 	meta:
 		author      = "kyle eaton"
 		date        = "2026-09-16"
+		update		= "2026-09-28"
 		description = "matching a signature observed in a microsoft themed cred phish pdf"
 	strings:
-		$sig_grey      = { 2F 49 6D 61 67 65 0A 2F 57 69 64 74 68 20 35 32 38 0A 2F 48 65 69 67 68 74 20 31 37 39 0A 2F 43 6F 6C 6F 72 53 70 61 63 65 20 2F 44 65 76 69 63 65 47 72 61 79 0A }
-		$sig_rbg       = { 2F 49 6D 61 67 65 0A 2F 57 69 64 74 68 20 35 32 38 0A 2F 48 65 69 67 68 74 20 31 37 39 0A 2F 43 6F 6C 6F 72 53 70 61 63 65 20 2F 44 65 76 69 63 65 52 47 42 }
-		$read_more_rgb = { 2F 49 6D 61 67 65 0A 2F 57 69 64 74 68 20 34 32 30 0A 2F 48 65 69 67 68 74 20 35 31 0A 2F 43 6F 6C 6F 72 53 70 61 63 65 20 2F 44 65 76 69 63 65 52 47 42 0A }
-		$underline_rgb = { 2F 57 69 64 74 68 20 34 33 30 0A 2F 48 65 69 67 68 74 20 38 0A 2F 43 6F 6C 6F 72 53 70 61 63 65 20 2F 44 65 76 69 63 65 52 47 42 0A }
+		$msft_logo = { 80 88 88 08 88 80 88 88 08 88 80 88 88 08 88 80 88 88 08 88 80 88 88 08 88 80 88 88 08 88 83 F2 0A 2A 8B 32 31 4D EA D3 89 DF 4B 6E AE 74 30 88 9A E0 D0 C6 91 A9 ED 0A 2E 31 DE 25 FB 52 4F 41 9F }
+		$signature = { FF DA 00 0C 03 01 00 02 11 03 11 00 3F 00 F9 FE 8A 28 A0 02 8A 28 A0 02 8A 28 A0 02 8A 28 A0 02 8A 28 A0 02 8A 2B 5F 4E F0 ED DD F2 2C D2 62 DA }
 	condition:
 		uint32be(0) == 0x25504446
 		and any of them
@@ -737,4 +723,153 @@ rule pdf_blurred_cred_phish_lure {
 	condition:
 		uint32be(0) == 0x25504446
 		and any of them
+}
+
+rule pdf_teal_web2pdf {
+	meta:
+		author      = "kyle eaton"
+		date        = "2026-09-22"
+		description = "matching PDFs with a teal sharepoint lure"
+	strings:
+		$rect = { 2F 52 65 63 74 20 5B 32 34 38 2E 32 35 20 35 38 33 2E 35 20 33 36 33 2E 37 35 20 36 30 38 2E 32 35 5D }
+	condition:
+		uint32be(0) == 0x25504446
+		and $rect
+}
+
+rule pdf_quickbooks_toad_lure_blank_page {
+	meta:
+		author      = "kyle eaton"
+		date        = "2026-09-29"
+		description = "matching the blank page object used in specific quickbooks TOAD lure"
+	strings:
+		$empty_page = { 3C 3C 0A 2F 54 79 70 65 20 2F 50 61 67 65 0A 2F 52 65 73 6F 75 72 63 65 73 20 3C 3C 0A 3E 3E 0A 2F 4D 65 64 69 61 42 6F 78 20 5B 20 30 20 30 20 35 39 35 20 38 34 32 20 5D }
+	condition:
+		uint32be(0) == 0x25504446
+		and $empty_page
+}
+
+rule pdf_blue_fax_phish_lure {
+	meta:
+		author = "kyle eaton"
+		date   = "2026-09-29"
+		description = "matching rectangle values in a blue fax lure PDF document"
+	strings:
+		$rect = { 2F 52 65 63 74 20 5B 32 37 39 20 33 39 39 2E 37 35 }
+	condition:
+		uint32be(0) == 0x25504446
+		and $rect
+}
+
+rule pdf_generic_msft_compensation_lure {
+	meta:
+		author      = "kyle eaton"
+		date        = "2026-09-30"
+		description = "matching rectangle values in generic msft compensation lure"
+	strings:
+		$rect1 = "/Rect [45.7500000  573.500000"
+		$rect2 = "/Rect [134.250000  609.500000"
+		$rect3 = "/Rect [45.7500000  510.500000"
+	condition:
+		uint32be(0) == 0x25504446
+		and all of them
+}
+
+rule pdf_msft_teams_planner_purple_lure {
+	meta:
+		author      = "kyle eaton"
+		date        = "2026-10-01"
+		description = "PDF with generic purple microsoft teams planner template"
+	strings:
+		$rect = { 2F 52 65 63 74 20 5B 32 33 37 20 20 35 35 39 2E 32 35 30 30 30 30 }
+	condition:
+		uint32be(0) == 0x25504446
+		and $rect
+}
+
+rule pdf_w9_signature_bytes {
+	meta:
+		author = "kyle eaton"
+		date   = "2026-10-02"
+		description = "PDF matching stream bytes for a signature used in fake W9"
+	strings:
+		$stream = {78 9C ED 9D 09 5C 15 D5 F7 C0 9F 68 86 5B 96 9A}
+	condition:
+		uint32be(0) == 0x25504446
+		and $stream
+}
+
+rule pdf_fake_linkedIn_invoice_lure {
+	meta:
+		author      = "kyle eaton"
+		date        = "2026-10-02"
+		description = "matching lure bytes observed in fake linkedin invoice"
+	strings:
+		$linkedin_lure = { FF DD 00 04 00 1B FF DA 00 0C 03 01 00 02 11 03 11 00 3F 00 FA A6 8A 28 A0 02 8A 28 A0 02 8A 28 A0 02 8A 28 A0 02 8A 28 A0 02 8A 28 A0 02 8A 28 A0 02 8A 28 A0 02 8A 28 A0 02 8A 28 A0 02 8A 28 A0 02 8A 28 A0 02 8A 28 A0 02 8A 28 A0 02 8A 28 A0 02 8A 28 A0 02 8A 28 A0 02 8A 28 A0 02 8A 28 A0 08 89 0A B9 3C 01 5F 39 78 AF C7 DA 96 A7 78 F6 DA 54 AD 6F 6D 19 2A 0A 1D AC F8 3F 7B 23 90 0F 61 F9 FB 7B F6 B0 CC 9A 55 D3 A9 C1 10 B9 07 FE 02 6B E3 7C 1C 66 BD 9C A3 0F 09 B9 4E 6A F6 }
+	condition:
+		uint32be(0) == 0x25504446
+		and $linkedin_lure
+}
+
+rule pdf_w9_signatures_update {
+	meta:
+		author      = "kyle eaton"
+		date        = "2026-09-16"
+		update      = "2026-10-02"
+		description = "matching PDFs with signatures observed in fake w9 documents"
+	strings:
+		//$noel_docusign                      = { FF DA 00 0C 03 01 00 02 11 03 11 00 3F 00 FE FC 39 E7 DF AF 3D 78 C7 3E BC 60 73 DB 8A 00 51 96 3D F2 3A 73 D3 D7 1E 9F E7 DE 80 FE BF AF EB F2 17 63 72 31 C1 EA 33 D7 EB C7 3D 07 5D DD 3F 0A 00 5D AF D7 9C FA E7 D7 A8 FC 70 3B F6 EF 40 09 B1 B0 47 63 C9 19 18 3E E7 B5 00 27 3B C2 E4 EF }
+		$signature_from_linkedin_related_w9 = { FF DA 00 0C 03 01 00 02 11 03 11 00 3F 00 F9 52 80 0A 00 28 00 A0 02 80 0A 00 28 00 A0 02 80 0A 00 28 00 A0 02 80 0A 00 28 03 4E 2D 0B 52 96 DE }
+	condition:
+		uint32be(0) == 0x25504446
+		and any of them
+}
+
+rule pdf_ssa_lure {
+	meta:
+		author      = "kyle eaton"
+		date        = "2026-10-05"
+		description = "PDF matching stream bytes for a lure used in social security cred phish"
+	strings:
+		$stream = { FF 93 DF 58 A8 0D 39 26 E0 39 81 03 EF 7A C1 69 }
+	condition:
+		uint32be(0) == 0x25504446
+		and $stream
+}
+
+rule pdf_fake_invoice_template {
+	meta:
+		author      = "kyle eaton"
+		date        = "2026-10-05"
+		description = "pdf matching a fake invoice template"
+	strings:
+		$content = { 2F 42 42 6F 78 20 5B 33 38 37 20 31 31 35 20 32 31 36 33 20 31 38 34 34 5D }
+	condition:
+		uint32be(0) == 0x25504446
+		and $content
+}
+
+rule pdf_ITA_signature_lure {
+	meta:
+		author      = "kyle eaton"
+		date        = "2026-10-06"
+		description = "pdf matching a fake US Dept of Commerce International Trade Administration lure"
+	strings:
+		$stream1 = { A2 32 AB FB F5 02 }
+		$stream2 = { 12 63 C5 D8 42 6C }
+	condition:
+		uint32be(0) == 0x25504446
+		and $stream1 and $stream2
+}
+
+rule pdf_red_adobe_lure {
+	meta:
+		author      = "kyle eaton"
+		date        = "2026-10-07"
+		description = "pdf rect value from red adobe lure"
+	strings:
+		$rect = { 2F 52 65 63 74 20 5B 31 38 36 20 31 38 38 2E 32 35 20 [5-6] 20 32 32 32 2E 37 35 5D }
+	condition:
+		uint32be(0) == 0x25504446
+		and $rect
 }
