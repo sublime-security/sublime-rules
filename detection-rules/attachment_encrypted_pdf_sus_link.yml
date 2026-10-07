@@ -1,0 +1,39 @@
+name: "Attachment: Encrypted PDF with credential phishing link"
+description: "Detects inbound emails containing an encrypted PDF attachment whose cracked password is shared within the email body, and that also includes a small number of embedded URLs flagged for credential theft risk based on newly registered domains or natural language understanding analysis of the link's rendered content."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and any(attachments,
+          any(file.explode(.),
+              .scan.encrypted_pdf.cracked_password is not null
+              and strings.icontains(body.current_thread.text,
+                                    .scan.encrypted_pdf.cracked_password
+              )
+          )
+          and any(file.explode(.),
+                  length(.scan.url.urls) <= 3
+                  and any(.scan.url.urls,
+                          network.whois(.domain).days_old < 90
+                          or any(ml.nlu_classifier(ml.link_analysis(.,
+                                                                    mode="aggressive"
+                                                   ).final_dom.display_text
+                                 ).intents,
+                                 .name == "cred_theft" and .confidence != "low"
+                          )
+                  )
+          )
+  )
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "PDF"
+  - "Encryption"
+  - "Evasion"
+  - "Social engineering"
+detection_methods:
+  - "File analysis"
+  - "Content analysis"
+  - "Whois"
+  - "URL analysis"
+  - "Natural Language Understanding"
