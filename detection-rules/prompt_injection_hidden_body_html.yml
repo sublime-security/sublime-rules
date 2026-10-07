@@ -1,0 +1,78 @@
+name: "Prompt injection: Hidden instructions to an AI in body HTML"
+description: "Detects instructions a human recipient never sees but an AI assistant reads: text in unrendered HTML elements or HTML comments that addresses an AI, where NLU finds a request and the prompt injection model agrees, or long runs of invisible Unicode tag or variation-selector characters. Excludes email preheaders. Restricted to senders with low prevalence and no benign history, and excludes graymail from senders passing DMARC."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  //
+  // This rule makes use of a beta feature and is subject to change without notice
+  // using the beta feature in custom rules is not suggested until it has been formally released
+  //
+  and (
+    // elements a mail client doesn't render... styles are lower-cased and stripped of
+    // spaces first, and opacity:0 with a transform is a reveal animation's start state,
+    // not concealment
+    // https://developer.mozilla.org/en-US/docs/Web/XML/XPath/Reference/Functions/translate
+    any(html.xpath(body.html, "//*[contains(concat(';', translate(@style, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ ', 'abcdefghijklmnopqrstuvwxyz'), ';'), ';display:none') or contains(concat(';', translate(@style, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ ', 'abcdefghijklmnopqrstuvwxyz'), ';'), ';visibility:hidden') or contains(concat(';', translate(@style, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ ', 'abcdefghijklmnopqrstuvwxyz'), ';'), ';font-size:0;') or contains(concat(';', translate(@style, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ ', 'abcdefghijklmnopqrstuvwxyz'), ';'), ';font-size:0px;') or (contains(concat(';', translate(@style, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ ', 'abcdefghijklmnopqrstuvwxyz'), ';'), ';opacity:0;') and not(contains(concat(';', translate(@style, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ ', 'abcdefghijklmnopqrstuvwxyz'), ';'), ';transform:'))) or @hidden]").nodes,
+        // not a preheader, which is hidden on purpose and padded with invisible filler...
+        // judged by the filler's share, so a few appended characters don't exempt a payload
+        not (
+          length(.inner_text) > 0
+          and regex.icount(.inner_text, '[\x{034F}\x{00AD}\x{200C}\x{2007}\x{FEFF}]') * 100 / length(.inner_text) >= 25
+        )
+        // addressed to a machine, not about one... machine nouns are assistant, agent, bot,
+        // llm, summariser, screener, classifier, mailbot, copilot (copilot never as a
+        // vocative... it's a product name that wraps onto its own line)
+        // shapes... a vocative opening a line or bracket ("Mail agent:", "> Assistant note:"),
+        // a bare "Assistant," at a line start, a note to one ("Note to the model"),
+        // "if you are an AI", "if you are an assistant processing...", a reader clause
+        // ("any assistant processing this"), or a forged <|im_start|> turn
+        // no product vocatives ("Hey Claude,") and no "the user"... ai marketing prints
+        // example prompts and legal boilerplate is full of "the user"
+        // the same list is in prompt_injection_body_addressed_to_ai.yml and
+        // prompt_injection_hidden_body_html.yml... both come from one generator
+        and regex.icontains(.inner_text, '(?:(?:^|\n)[ \t]*-?|[\[(>*\x27\"])[ \t]*(?:[\w-]+[ \t]+){0,3}(?:assistant|agent|bot|llm|summari[sz]er|screener|classifier|mailbot)[ \t]*(?:note[ \t]*)?[:—–]|(?:^|\n)[ \t]*[*>-]?[ \t]*(?:assistant|agent|bot|llm|summari[sz]er|screener|classifier|mailbot)s?[ \t]*,|\b(?:note|notice|instructions?|reminder|message)\s+(?:to|for)\s+(?:(?:the|any|all|your|this)\s+(?:[\w\x27\x{2019}-]+\s+){0,2}(?:(?:assistant|agent|bot|llm|summari[sz]er|screener|classifier|copilot|mailbot)|ai|models?)|(?:ai\s+)?(?:assistant|agent|bot|llm|summari[sz]er|screener|classifier|copilot|mailbot))s?\b|\bif\s+you\s+are\s+an?\s+(?:ai|llm|language\s+model)\b|\bif\s+you\s+are\s+an?\s+(?:[\w-]+\s+)?(?:assistant|agent|bot|llm|summari[sz]er|screener|classifier|copilot|mailbot)(?:[ \t]*[,:;.)—]|\s+(?:reading|processing|handling|summari[sz]ing|parsing|triaging|indexing|preparing|condensing|that|which|with\s+access)\b)|\b(?:(?:assistant|agent|bot|llm|summari[sz]er|screener|classifier|copilot|mailbot)|ai|model)s?\s+(?:that\s+is\s+|is\s+)?(?:reading|processing|handling|summari[sz]ing|parsing|triaging|indexing|preparing)\s+this\b|<\|im_start\|>')
+        and any(ml.nlu_classifier(.inner_text).entities, .name == "request")
+        and beta.prompt_injection_detection(.inner_text).detection == "injection"
+        and beta.prompt_injection_detection(.inner_text).confidence in ("medium", "high")
+    )
+    // html comments... 80+ chars is a sentence, not a template label like
+    // "Ask Otto - AI assistant CTA"... same addressee list, which may also open the comment
+    or any(html.xpath(body.html, "//comment()").nodes,
+           length(.raw) >= 80
+           and regex.icontains(.raw, '(?:(?:^|\n|<!--)[ \t]*-?|[\[(>*\x27\"])[ \t]*(?:[\w-]+[ \t]+){0,3}(?:assistant|agent|bot|llm|summari[sz]er|screener|classifier|mailbot)[ \t]*(?:note[ \t]*)?[:—–]|(?:^|\n|<!--)[ \t]*[*>-]?[ \t]*(?:assistant|agent|bot|llm|summari[sz]er|screener|classifier|mailbot)s?[ \t]*,|\b(?:note|notice|instructions?|reminder|message)\s+(?:to|for)\s+(?:(?:the|any|all|your|this)\s+(?:[\w\x27\x{2019}-]+\s+){0,2}(?:(?:assistant|agent|bot|llm|summari[sz]er|screener|classifier|copilot|mailbot)|ai|models?)|(?:ai\s+)?(?:assistant|agent|bot|llm|summari[sz]er|screener|classifier|copilot|mailbot))s?\b|\bif\s+you\s+are\s+an?\s+(?:ai|llm|language\s+model)\b|\bif\s+you\s+are\s+an?\s+(?:[\w-]+\s+)?(?:assistant|agent|bot|llm|summari[sz]er|screener|classifier|copilot|mailbot)(?:[ \t]*[,:;.)—]|\s+(?:reading|processing|handling|summari[sz]ing|parsing|triaging|indexing|preparing|condensing|that|which|with\s+access)\b)|\b(?:(?:assistant|agent|bot|llm|summari[sz]er|screener|classifier|copilot|mailbot)|ai|model)s?\s+(?:that\s+is\s+|is\s+)?(?:reading|processing|handling|summari[sz]ing|parsing|triaging|indexing|preparing)\s+this\b|<\|im_start\|>')
+           and any(ml.nlu_classifier(.raw).entities, .name == "request")
+           and beta.prompt_injection_detection(.raw).detection == "injection"
+           and beta.prompt_injection_detection(.raw).confidence in ("medium", "high")
+    )
+    // unicode tag and variation-selector runs long enough to carry an instruction... an
+    // rgi flag emoji uses 6 tag characters and a variation selector follows one base
+    // character, so neither runs this long in legit mail... neither model can read
+    // them, so the run is the signal
+    or any([subject.subject, body.plain.raw, body.html.raw],
+           regex.contains(., '[\x{E0020}-\x{E007F}]{32,}|[\x{E0100}-\x{E01EF}]{16,}')
+    )
+  )
+
+  // an injection arrives from outside the recipient's correspondence... the profile
+  // is unauthenticated, so a spoofed known correspondent is suppressed too
+  and profile.by_sender_email().prevalence in ("new", "outlier", "rare")
+  and not profile.by_sender_email().any_messages_benign
+
+  // graymail from authenticated senders... AI-product newsletters and webinars
+  // coalesce the whole test... an unanalyzed flash verdict is null, and
+  // not (null and true) would block every match
+  and not coalesce(beta.attack_score_flash().verdict == "graymail"
+                   and headers.auth_summary.dmarc.pass,
+                   false
+  )
+attack_types:
+  - "BEC/Fraud"
+tactics_and_techniques:
+  - "Evasion"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "HTML analysis"
+  - "Natural Language Understanding"
+  - "Sender analysis"
