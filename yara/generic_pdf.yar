@@ -836,3 +836,40 @@ rule pdf_ssa_lure {
 		uint32be(0) == 0x25504446
 		and $stream
 }
+
+rule pdf_fake_invoice_template {
+	meta:
+		author      = "kyle eaton"
+		date        = "2026-10-05"
+		description = "pdf matching a fake invoice template"
+	strings:
+		$content = { 2F 42 42 6F 78 20 5B 33 38 37 20 31 31 35 20 32 31 36 33 20 31 38 34 34 5D }
+	condition:
+		uint32be(0) == 0x25504446
+		and $content
+}
+
+rule pdf_ITA_signature_lure {
+	meta:
+		author      = "kyle eaton"
+		date        = "2026-10-06"
+		description = "pdf matching a fake US Dept of Commerce International Trade Administration lure"
+	strings:
+		$stream1 = { A2 32 AB FB F5 02 }
+		$stream2 = { 12 63 C5 D8 42 6C }
+	condition:
+		uint32be(0) == 0x25504446
+		and $stream1 and $stream2
+}
+
+rule pdf_red_adobe_lure {
+	meta:
+		author      = "kyle eaton"
+		date        = "2026-10-07"
+		description = "pdf rect value from red adobe lure"
+	strings:
+		$rect = { 2F 52 65 63 74 20 5B 31 38 36 20 31 38 38 2E 32 35 20 [5-6] 20 32 32 32 2E 37 35 5D }
+	condition:
+		uint32be(0) == 0x25504446
+		and $rect
+}
