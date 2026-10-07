@@ -1,0 +1,60 @@
+name: "Link: Self-addressed credential phishing with minimal JS landing page"
+description: "Flags single-recipient inbound messages where the sender address matches the recipient or the recipient domain is invalid, paired with suspicious body indicators such as credential theft or BEC language, file-sharing/shipping topics, a spoofed Google corporate address footer, PDF references, or newly registered link domains. Also requires at least one link pointing to a different root domain than the sender that resolves to a minimal JavaScript landing page pattern, a common evasion technique used to cloak phishing redirects."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+    // self sender or invalid recipent domain
+    and length(recipients.to) == 1
+    and (
+      sender.email.email == recipients.to[0].email.email
+      or recipients.to[0].email.domain.valid == false
+    )
+  // sus body text or new link domain
+    and (
+      any(ml.nlu_classifier(body.current_thread.text).intents,
+          .name in ('cred_theft', 'bec') and .confidence != 'low'
+      )
+      or any(ml.nlu_classifier(body.current_thread.text).topics,
+             .name in ('File Sharing and Cloud Services', 'Shipping and Package') and .confidence != 'low'
+      )
+      // Google address from footer
+      or 2 of (
+        strings.icontains(body.current_thread.text, 'Google LLC'),
+        strings.icontains(body.current_thread.text, '1600 Amphitheatre Parkway'),
+        strings.icontains(body.current_thread.text, 'Mountain View, CA 94043'),
+      )
+      or strings.icontains(body.current_thread.text, '.pdf')
+      or any(body.current_thread.links, network.whois(.href_url.domain).days_old < 30)
+    )
+    and any(body.current_thread.links,
+            .href_url.domain.root_domain != sender.email.domain.root_domain
+            // minimal js landing page
+            and length(filter(ml.link_analysis(., mode="aggressive").unique_urls_accessed,
+                              .url == ..href_url.url
+                              or (
+                                strings.starts_with(.url, ..href_url.url)
+                                and regex.icontains(.url,
+                                                    '[a-z]{3,}\.[0-9a-f]{20}\.js'
+                                )
+                              )
+                              or .url == strings.concat(..href_url.url,
+                                                        'favicon.png'
+                              )
+                       )
+            ) == 3
+    )
+attack_types:
+  - "Credential Phishing"
+  - "BEC/Fraud"
+tactics_and_techniques:
+  - "Spoofing"
+  - "Social engineering"
+  - "Evasion"
+  - "Impersonation: Brand"
+detection_methods:
+  - "Natural Language Understanding"
+  - "URL analysis"
+  - "Whois"
+  - "Content analysis"
+  - "Sender analysis"
