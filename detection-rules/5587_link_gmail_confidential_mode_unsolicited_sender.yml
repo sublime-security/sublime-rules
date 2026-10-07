@@ -1,0 +1,38 @@
+name: "PR# 5587 - Link: Gmail confidential mode message from new or unsolicited sender"
+description: "Detects Gmail confidential mode messages from first-time, unsolicited, or previously malicious senders. Message contents are only viewable after authentication and cannot be scanned."
+type: "rule"
+severity: "low"
+false_positives:
+  - "Legitimate first-time senders using Gmail confidential mode, sender exclusions should be used to avoid continued/repeat matching of benign messages"
+source: |
+  type.inbound
+  and any(body.links,
+          .href_url.domain.domain == "confidential-mail.google.com"
+          and strings.istarts_with(.href_url.path, "/msg/")
+  )
+  and (
+    (
+      profile.by_sender_email().prevalence in ("new", "outlier")
+      and not profile.by_sender_email().solicited
+    )
+    or (
+      profile.by_sender_email().any_messages_malicious_or_spam
+      and not profile.by_sender_email().any_messages_benign
+    )
+  )
+tags:
+  - "Attack surface reduction"
+  - pr_author_zoomequipd
+  - created_from_open_prs
+  - rule_status_added
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Evasion"
+  - "Social engineering"
+detection_methods:
+  - "Sender analysis"
+  - "URL analysis"
+id: "19c68b92-8893-575e-9ef8-b300cca2dce5"
+references:
+  - https://github.com/sublime-security/sublime-rules/pull/5587
