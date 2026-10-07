@@ -868,7 +868,7 @@ rule pdf_red_adobe_lure {
 		date        = "2026-10-07"
 		description = "pdf rect value from red adobe lure"
 	strings:
-		$rect = { 2F 52 65 63 74 20 5B 31 38 36 20 31 38 38 2E 32 35 20 [5] 20 32 32 32 2E 37 35 5D }
+		$rect = { 2F 52 65 63 74 20 5B 31 38 36 20 31 38 38 2E 32 35 20 [5-6] 20 32 32 32 2E 37 35 5D }
 	condition:
 		uint32be(0) == 0x25504446
 		and $rect
