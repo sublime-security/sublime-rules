@@ -1,0 +1,77 @@
+name: "Prompt injection: Instructions to an AI in a PDF attachment"
+description: "Detects PDF attachments whose text layer or embedded text files address an AI (an assistant, a named model, 'the user', 'previous instructions') where NLU finds a request and the prompt injection model agrees. Instructions in document metadata, which no reader sees, need only the addressee and the request. Restricted to senders with low prevalence and no benign history, and excludes graymail from senders passing DMARC."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  //
+  // This rule makes use of a beta feature and is subject to change without notice
+  // using the beta feature in custom rules is not suggested until it has been formally released
+  //
+  and any(filter(attachments, .file_type == "pdf" or .file_extension =~ "pdf"),
+          // the text layer and embedded text files... selected by type, not name, since
+          // the sender picks embedded file names... depth 1 skips the OCR of the rendered
+          // pages, where "physician assistant" on a healthcare form read as injection
+          any(filter(file.explode(.),
+                     .depth == 1 and .flavors.mime == "text/plain"
+              ),
+              // who the text addresses... broader than the body rules on purpose: a bare
+              // assistant/llm/screener/summariser, a named model as a vocative ("Gemini,"),
+              // "ai/language model", "the user", "previous/prior instructions"... ai newsletters
+              // put these in bodies, but in pdf text and invites they hit 0 in 60 days once bare
+              // ai/agent/model/gpt were dropped ("real estate agent", "Agentic AI" invites)
+              regex.icontains(.scan.strings.raw,
+                              '\b(?:assistant|llm|screener|summari[sz]er)s?\b|(?:^|[\n\[(>\x27\".:])\s*(?:hey\s+)?(?:chatgpt|gemini|copilot|claude)\s*[:,]|\b(?:ai|language)\s+models?\b|\bthe\s+user\b|\b(?:previous|prior)\s+instructions\b'
+              )
+              and any(ml.nlu_classifier(.scan.strings.raw).entities,
+                      .name == "request"
+              )
+              and beta.prompt_injection_detection(.scan.strings.raw).detection == "injection"
+              and beta.prompt_injection_detection(.scan.strings.raw).confidence in (
+                "medium",
+                "high"
+              )
+          )
+          // metadata no reader sees... read the raw literal because exiftool tokenises
+          // Keywords, and too short for the injection model, so addressee and request only
+          or any(file.explode(.)[0].scan.strings.strings,
+                 any(regex.iextract(.,
+                                    '/(?:Title|Subject|Keywords)\s*\((?P<v>(?:[^()\\]|\\.)*)\)'
+                     ),
+                     regex.icontains(.named_groups["v"],
+                                     '\b(?:assistant|llm|screener|summari[sz]er)s?\b|(?:^|[\n\[(>\x27\".:])\s*(?:hey\s+)?(?:chatgpt|gemini|copilot|claude)\s*[:,]|\b(?:ai|language)\s+models?\b|\bthe\s+user\b|\b(?:previous|prior)\s+instructions\b'
+                     )
+                     and any(ml.nlu_classifier(.named_groups["v"]).entities,
+                             .name == "request"
+                     )
+                 )
+          )
+  )
+  
+  // an injection arrives from outside the recipient's correspondence... the profile
+  // is unauthenticated, so a spoofed known correspondent is suppressed too
+  and profile.by_sender_email().prevalence in ("new", "outlier", "rare")
+  and not profile.by_sender_email().any_messages_benign
+  
+  // graymail from authenticated senders... AI-product newsletters and webinars
+  // coalesce the whole test... an unanalyzed flash verdict is null, and
+  // not (null and true) would block every match
+  and not coalesce(beta.attack_score_flash().verdict == "graymail"
+                   and headers.auth_summary.dmarc.pass,
+                   false
+  )
+attack_types:
+  - "BEC/Fraud"
+tactics_and_techniques:
+  - "Evasion"
+  - "PDF"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "File analysis"
+  - "Natural Language Understanding"
+  - "Sender analysis"
+id: "1db078bc-7e7d-5cf9-ac65-fff279c5ff97"
+og_id: "feea7a55-338a-55d2-b35e-afa6f44b1a38"
+testing_pr: 5592
+testing_sha: 41644c65a895c4842da95b75ed71ca411565a655
