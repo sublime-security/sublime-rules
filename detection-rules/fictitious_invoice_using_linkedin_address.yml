@@ -17,12 +17,13 @@ source: |
                  )
           ),
           any(filter(file.explode(.), .scan.ocr.raw is not null),
-              // contains LinkedIn HQ address but not from LinkedIn
-              (
-                regex.icontains(.scan.ocr.raw, "1000 W(?:est)? Maude Ave")
-                and not strings.icontains(.scan.ocr.raw, "linkedin")
-              )
+              regex.icontains(.scan.ocr.raw, '1000 W(?:est)?\.? Maude Ave')
           )
+  )
+  // not actually from LinkedIn
+  and not (
+    sender.email.domain.root_domain in~ ("linkedin.com", "licdn.com")
+    and coalesce(headers.auth_summary.dmarc.pass, false)
   )
   and any(ml.nlu_classifier(body.current_thread.text).topics,
           .name == "Financial Communications" and .confidence != "low"
