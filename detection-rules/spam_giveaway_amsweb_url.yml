@@ -1,0 +1,22 @@
+name: "Spam: Giveaway lure with amsweb.php redirect path"
+description: "Detects links to an '/amsweb.php' path on a domain outside the Tranco 1M, the first hop of a known affiliate redirect chain. Observed in giveaway and prize spam impersonating insurance, retail and roadside-assistance brands, sent from disposable sender domains predominantly on the .pro TLDwith homoglyph-substituted display names."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and any(body.links,
+          strings.icontains(.href_url.path, '/amsweb.php')
+          and .href_url.domain.root_domain not in $tranco_1m
+  )
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and not (
+    sender.email.domain.root_domain in $high_trust_sender_root_domains
+    and coalesce(headers.auth_summary.dmarc.pass, false)
+  )
+attack_types:
+  - "Spam"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Social engineering"
+detection_methods:
+  - "URL analysis"
