@@ -1,0 +1,45 @@
+name: "DLP: Sweden Personnummer / Tax ID"
+description: "Detects messages containing Swedish personal identity numbers (personnummer) or tax identification numbers."
+type: "dlp"
+severity: "high"
+attack_types:
+  - "DLP: Personal Data"
+data_categories:
+  - "DLP: Personal Data"
+tags:
+  - "Personal Data"
+  - "GDPR"
+  - "Sweden"
+  - "EU"
+source: |
+  type.outbound
+  and (
+    any(ml.extract_sensitive_information(body.current_thread.text).elements,
+        .type == "se_personal_identity_number"
+        and .confidence in ("medium", "high")
+    )
+    or any(ml.extract_sensitive_information(subject.subject).elements,
+           .type == "se_personal_identity_number"
+           and .confidence in ("medium", "high")
+    )
+    or any(attachments,
+           any(file.explode(.),
+               (
+                 any(ml.extract_sensitive_information(.scan.strings.raw).elements,
+                     .type == "se_personal_identity_number"
+                     and .confidence in ("medium", "high")
+                 )
+                 or any(ml.extract_sensitive_information(.scan.ocr.raw).elements,
+                        .type == "se_personal_identity_number"
+                        and .confidence in ("medium", "high")
+                 )
+               )
+           )
+    )
+  )
+detection_methods:
+  - "Content analysis"
+  - "Natural Language Understanding"
+  - "File analysis"
+  - "Optical Character Recognition"
+id: "cfb2f95a-e4ec-5c1e-9de0-775a62904e1b"
