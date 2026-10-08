@@ -1,0 +1,32 @@
+name: "Open redirect: Newslit.co"
+description: "Detects inbound messages containing links that abuse the newslit.co email redirect service, where the redirect destination (query parameter 'u') does not point back to newslit.co itself. Excludes messages from newslit.co or other highly trusted sender domains that pass DMARC authentication."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and any(body.links,
+          .href_url.domain.root_domain == "newslit.co"
+          and strings.istarts_with(.href_url.path, '/email/redirect/')
+          and length(.href_url.query_params_decoded["u"]) > 0
+          // make sure it's not redirecting back to newslit.co
+          and not any(.href_url.query_params_decoded["u"],
+                      strings.parse_url(.).domain.root_domain == "newslit.co"
+          )
+  )
+  and not (
+    sender.email.domain.root_domain == "newslit.co"
+    and coalesce(headers.auth_summary.dmarc.pass, false)
+  )
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and not (
+    sender.email.domain.root_domain in $high_trust_sender_root_domains
+    and coalesce(headers.auth_summary.dmarc.pass, false)
+  )
+attack_types:
+  - "Credential Phishing"
+  - "Spam"
+tactics_and_techniques:
+  - "Open redirect"
+detection_methods:
+  - "URL analysis"
+  - "Header analysis"
