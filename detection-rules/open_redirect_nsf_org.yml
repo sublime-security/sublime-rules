@@ -1,0 +1,31 @@
+name: "Open redirect: NSF.org"
+description: "Detects inbound messages containing links that abuse the NSF.org (National Sanitation Foundation) redirect functionality via info.nsf.org/Certified/Sustain/sus_pages.asp, where the ProgramURL query parameter points to a domain other than nsf.org. The rule excludes messages from nsf.org senders that pass DMARC authentication, as well as highly trusted sender domains that pass DMARC, to reduce false positives from legitimate NSF communications."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and any(body.links,
+          .href_url.domain.domain == "info.nsf.org"
+          and .href_url.path == "/Certified/Sustain/sus_pages.asp"
+          and length(.href_url.query_params_decoded["ProgramURL"]) > 0
+          // make sure it's not redirecting back to nsf.org
+          and not any(.href_url.query_params_decoded["ProgramURL"],
+                      strings.parse_url(.).domain.root_domain == "nsf.org"
+          )
+  )
+  and not (
+    sender.email.domain.root_domain == "nsf.org"
+    and coalesce(headers.auth_summary.dmarc.pass, false)
+  )
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and not (
+    sender.email.domain.root_domain in $high_trust_sender_root_domains
+    and coalesce(headers.auth_summary.dmarc.pass, false)
+  )
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Open redirect"
+detection_methods:
+  - "URL analysis"
+  - "Header analysis"
