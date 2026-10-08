@@ -1,0 +1,41 @@
+name: "DLP: Australia Driver's License"
+description: "Detects messages containing Australian driver's license numbers."
+type: "dlp"
+severity: "high"
+attack_types:
+  - "DLP: Personal Data"
+data_categories:
+  - "DLP: Personal Data"
+tags:
+  - "Personal Data"
+  - "Australia"
+source: |
+  type.outbound
+  and (
+    any(ml.extract_sensitive_information(body.current_thread.text).elements,
+        .type == "au_driver_license" and .confidence in ("medium", "high")
+    )
+    or any(ml.extract_sensitive_information(subject.subject).elements,
+           .type == "au_driver_license" and .confidence in ("medium", "high")
+    )
+    or any(attachments,
+           any(file.explode(.),
+               (
+                 any(ml.extract_sensitive_information(.scan.strings.raw).elements,
+                     .type == "au_driver_license"
+                     and .confidence in ("medium", "high")
+                 )
+                 or any(ml.extract_sensitive_information(.scan.ocr.raw).elements,
+                        .type == "au_driver_license"
+                        and .confidence in ("medium", "high")
+                 )
+               )
+           )
+    )
+  )
+detection_methods:
+  - "Content analysis"
+  - "Natural Language Understanding"
+  - "File analysis"
+  - "Optical Character Recognition"
+id: "79332437-a73f-591f-a98e-5b6daa45b76a"
