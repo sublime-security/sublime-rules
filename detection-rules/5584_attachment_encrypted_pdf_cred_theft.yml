@@ -36,7 +36,8 @@ source: |
                        '(Access|Preview|Unlock|Decrypt|Pass)\s*(?:word|code)\s*(?:\S+\s+){0,3}PDF\s*is?\s*:',
                        'Th(?:is|e)\s+(?:file|document|pdf)\s+is\s+(?:pin|password)[-\s]?\s*protected[[:punct:]]\s*The\s+p(?:in|assword)\s+is\s*:?',
                        '(?:Access|Preview|Unlock|Decrypt|open)\s+(?:\S+\s+){0,3}(?:PDF|statement)\s*(?:\S+\s+){0,3}(?:pass(?:word|code)|code:|\s*with\s+\S+)',
-                       'The\s+(?:file|document|pdf|attachment)\s+(?:pass(?:code|word)|access\s*code)\s+is\s*'
+                       'The\s+(?:file|document|pdf|attachment)\s+(?:pass(?:code|word)|access\s*code)\s+is\s*',
+                       '(?:pass(?:code|word)|pin|access\s*code)\s+to\s+(?:access|open|view)\s+(?:\S+\s+){0,3}is\s+\S*[0-9]\b'
     )
     or (
       (
@@ -49,32 +50,10 @@ source: |
                               '(Access|Preview|Unlock|Decrypt|Pass)\s*(?:word|code)\s*(?:\S+\s+){0,3}PDF\s*is?\s*:',
                               'Th(?:is|e)\s+(?:file|document|pdf)\s+is\s+(?:pin|password)[-\s]?\s*protected[[:punct:]]\s*The\s+p(?:in|assword)\s+is\s*:?',
                               '(?:Access|Preview|Unlock|Decrypt|open)\s+(?:\S+\s+){0,3}(?:PDF|statement)\s*(?:\S+\s+){0,3}(?:pass(?:word|code)|code:|\s*with\s+\S+)',
-                              'The\s+(?:file|document|pdf|attachment)\s+(?:pass(?:code|word)|access\s*code)\s+is\s*'
+                              'The\s+(?:file|document|pdf|attachment)\s+(?:pass(?:code|word)|access\s*code)\s+is\s*',
+                              '(?:pass(?:code|word)|pin|access\s*code)\s+to\s+(?:access|open|view)\s+(?:\S+\s+){0,3}is\s+\S*[0-9]\b'
               )
       )
-    )
-    or any(attachments,
-           (
-             any(file.explode(.),
-                 .scan.encrypted_pdf.cracked_password is not null
-                 and strings.icontains(body.current_thread.text,
-                                       .scan.encrypted_pdf.cracked_password
-                 )
-             )
-           )
-           and (
-             any(file.explode(.),
-                 length(.scan.url.urls) <= 3
-                 and any(.scan.url.urls,
-                         network.whois(.domain).days_old < 90
-                         or any([ml.link_analysis(., mode="aggressive")],
-                                any(ml.nlu_classifier(.final_dom.display_text).intents,
-                                    .name == "cred_theft" and .confidence != "low"
-                                )
-                         )
-                 )
-             )
-           )
     )
   )
   // not forwards/replies
