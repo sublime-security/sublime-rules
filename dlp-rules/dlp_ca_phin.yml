@@ -1,0 +1,43 @@
+name: "DLP: Canada PHIN"
+description: "Detects messages containing Canadian Personal Health Identification Numbers (PHIN)."
+type: "dlp"
+severity: "high"
+attack_types:
+  - "DLP: Healthcare Data"
+data_categories:
+  - "DLP: Healthcare Data"
+tags:
+  - "Healthcare Data"
+  - "PIPEDA"
+source: |
+  type.outbound
+  and (
+    any(ml.extract_sensitive_information(body.current_thread.text).elements,
+        .type == "ca_personal_health_identification_number"
+        and .confidence in ("medium", "high")
+    )
+    or any(ml.extract_sensitive_information(subject.subject).elements,
+           .type == "ca_personal_health_identification_number"
+           and .confidence in ("medium", "high")
+    )
+    or any(attachments,
+           any(file.explode(.),
+               (
+                 any(ml.extract_sensitive_information(.scan.strings.raw).elements,
+                     .type == "ca_personal_health_identification_number"
+                     and .confidence in ("medium", "high")
+                 )
+                 or any(ml.extract_sensitive_information(.scan.ocr.raw).elements,
+                        .type == "ca_personal_health_identification_number"
+                        and .confidence in ("medium", "high")
+                 )
+               )
+           )
+    )
+  )
+detection_methods:
+  - "Content analysis"
+  - "Natural Language Understanding"
+  - "File analysis"
+  - "Optical Character Recognition"
+id: "af984b32-15d0-5e83-9160-b46d803749cf"

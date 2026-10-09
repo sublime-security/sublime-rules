@@ -1,0 +1,73 @@
+name: "Link: Large guest list with suspicious link"
+description: "Detects inbound messages containing a large guest list alongside a suspicious link"
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and strings.contains(body.current_thread.text,
+                       '(Guest list is too large to display)',
+                       '(Gästeliste zu groß zum Anzeigen)',
+                       '(La liste des invités est trop longue pour être affichée)',
+                       '(La liste des invités est trop importante pour être affichée)',
+                       '(Список гостей слишком велик, невозможно отобразить его полностью)',
+                       '(Elenco invitati troppo lungo per la visualizzazione)',
+                       '(A lista de convidados é muito grande para ser exibida)',
+                       '(Gæstelisten er for lang til at blive vist)'
+  )
+  and any(body.current_thread.links,
+          (
+            .href_url.path == '/'
+            and regex.imatch(.href_url.query_params, '[A-Za-z0-9+/]{8}')
+            and length(.href_url.query_params_decoded) == 1
+            and all(flatten(values(.href_url.query_params_decoded)), . == '')
+          )
+          or any(ml.link_analysis(.).final_dom.links,
+                 .href_url.path == '/'
+                 and regex.imatch(.href_url.query_params, '[A-Za-z0-9+/]{8}')
+                 and length(.href_url.query_params_decoded) == 1
+                 and all(flatten(values(.href_url.query_params_decoded)), . == '')
+          )
+          or ml.link_analysis(., mode="aggressive").effective_url.domain.root_domain in (
+            'workers.dev'
+          )
+          or length(filter(.href_url.rewrite.encoders,
+                           . != 'google_open_redirect'
+                    )
+          ) > length(distinct(filter(.href_url.rewrite.encoders,
+                                     . != 'google_open_redirect'
+                              )
+                     )
+          )
+          or (
+            strings.contains(.display_url.url, 'drive.google.com')
+            and .mismatched == true
+          )
+          // minimal js landing page
+          or length(filter(ml.link_analysis(., mode="aggressive").unique_urls_accessed,
+                           .url == ..href_url.url
+                           or (
+                             strings.starts_with(.url, ..href_url.url)
+                             and regex.icontains(.url,
+                                                 '[a-z]{3,}\.[0-9a-f]{20}\.js'
+                             )
+                           )
+                           or .url == strings.concat(..href_url.url,
+                                                     'favicon.png'
+                           )
+                           or .url == strings.concat('https://',
+                                                     ..href_url.domain.domain,
+                                                     '/',
+                                                     'favicon.ico'
+                           )
+                    )
+          ) == 3
+  )
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Evasion"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "URL analysis"
+id: "f2e73678-90c5-530e-a70c-8e043e18400d"

@@ -1,0 +1,43 @@
+name: "DLP: Spain Driver's License"
+description: "Detects messages containing Spanish driver's license numbers. Field 5 of the Spanish driving licence carries the holder's DNI or NIE number."
+type: "dlp"
+severity: "high"
+attack_types:
+  - "DLP: Personal Data"
+data_categories:
+  - "DLP: Personal Data"
+tags:
+  - "Personal data"
+  - "GDPR"
+  - "EU"
+  - "Spain"
+source: |
+  type.outbound
+  and (
+    any(ml.extract_sensitive_information(body.current_thread.text).elements,
+        .type == "es_national_id" and .confidence in ("medium", "high")
+    )
+    or any(ml.extract_sensitive_information(subject.subject).elements,
+           .type == "es_national_id" and .confidence in ("medium", "high")
+    )
+    or any(attachments,
+           any(file.explode(.),
+               (
+                 any(ml.extract_sensitive_information(.scan.strings.raw).elements,
+                     .type == "es_national_id"
+                     and .confidence in ("medium", "high")
+                 )
+                 or any(ml.extract_sensitive_information(.scan.ocr.raw).elements,
+                        .type == "es_national_id"
+                        and .confidence in ("medium", "high")
+                 )
+               )
+           )
+    )
+  )
+detection_methods:
+  - "Content analysis"
+  - "Natural Language Understanding"
+  - "File analysis"
+  - "Optical Character Recognition"
+id: "45d03524-d26d-5f02-b2c8-20d7371e1d9a"
