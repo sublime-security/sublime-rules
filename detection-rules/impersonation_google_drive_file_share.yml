@@ -5,7 +5,7 @@ type: "rule"
 severity: "medium"
 source: |
   type.inbound
-
+  
   // Google Drive body content looks like this
   and (
     (
@@ -97,6 +97,7 @@ source: |
         or subject.subject is null
         or subject.subject == ""
         or regex.icontains(body.current_thread.text, '^g.o.o.g.l.e')
+        or strings.icontains(body.html.raw, "'Google Sans'")
       )
     )
     or any([
@@ -138,7 +139,7 @@ source: |
            strings.icontains(subject.subject, .)
     )
   )
-
+  
   // contains logic that impersonates Google
   and (
     any(ml.logo_detect(file.message_screenshot()).brands,
@@ -241,6 +242,10 @@ source: |
       and html.xpath(body.html, "//span[contains(@style, 'color')]").nodes[5].display_text == 'e'
       and html.xpath(body.html, "//span[contains(@style, 'color')]").nodes[6].display_text == 'Drive'
     )
+    or length(html.xpath(body.html,
+                         '//img[contains(@src, "ssl.gstatic.com/docs/doclist")]'
+              ).nodes
+    ) > 0
   )
   and not (
     // Google Sites has been observed abused
@@ -264,7 +269,7 @@ source: |
             .href_url.domain.root_domain == "google.com"
     )
   )
-
+  
   // negate highly trusted sender domains unless they fail DMARC authentication
   and not (
     sender.email.domain.root_domain in $high_trust_sender_root_domains
