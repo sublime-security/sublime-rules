@@ -861,3 +861,37 @@ rule pdf_ITA_signature_lure {
 		uint32be(0) == 0x25504446
 		and $stream1 and $stream2
 }
+
+rule pdf_red_adobe_lure {
+	meta:
+		author      = "kyle eaton"
+		date        = "2026-10-07"
+		description = "pdf rect value from red adobe lure"
+	strings:
+		$rect = { 2F 52 65 63 74 20 5B 31 38 36 20 31 38 38 2E 32 35 20 [5-6] 20 32 32 32 2E 37 35 5D }
+	condition:
+		uint32be(0) == 0x25504446
+		and $rect
+}
+
+rule pdf_blue_oneDrive_lure_structure {
+	meta:
+		author      = "kyle eaton"
+		date        = "2026-10-08"
+		description = "PDF with specific OneDrive lure, matching on templated structure in the document."
+	strings:
+		$ref_obj_3  = { 0A 2F 49 6E 66 6F 20 33 20 30 20 52 0A }
+		$num_obj_3  = /[^0-9]3 0 obj/
+		$ref_obj_4  = { 2F 50 61 67 65 73 20 34 20 30 20 52 }
+		$num_obj_4  = /[^0-9]4 0 obj/
+		$ref_obj_5  = { 2F 41 46 20 5B 35 20 30 20 52 5D }
+		$num_obj_5  = /[^0-9]5 0 obj/
+		$ref_obj_6  = { 2F 4E 61 6D 65 73 20 36 20 30 20 52 }
+		$num_obj_6  = /[^0-9]6 0 obj/
+		$ref_obj_23 = { 2F 46 20 32 33 20 30 20 52 }
+		$num_obj_23 = /[^0-9]23 0 obj/
+	condition:
+		uint32be(0) == 0x25504446
+		and all of ($ref_*)
+		and none of ($num_*)
+}
