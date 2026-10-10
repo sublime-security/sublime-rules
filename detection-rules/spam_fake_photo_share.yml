@@ -49,19 +49,25 @@ source: |
             length(body.html.display_text) < 500
             and length(body.current_thread.text) == 0
           )
-          and strings.ilike(body.html.display_text,
-                            "*picture*",
-                            "*photo*",
-                            "*image*",
-                            "*sad news*",
-                            "*sad announcement*",
-                            "*sad update*",
-                            "*new pics*",
-                            "*back memories*",
-                            "*any memories*",
-                            "*old memories*",
-                            "*evoke memories*",
-                            "*bittersweet memories*"
+          and (
+            strings.ilike(body.html.display_text,
+                          "*picture*",
+                          "*photo*",
+                          "*image*",
+                          "*sad news*",
+                          "*sad announcement*",
+                          "*sad update*",
+                          "*new pics*",
+                          "*back memories*",
+                          "*any memories*",
+                          "*old memories*",
+                          "*evoke memories*",
+                          "*bittersweet memories*",
+                          "*ring a bell*"
+            )
+            or regex.icontains(body.html.display_text,
+                               '[.!?]\W{0,3}[—–-]\s*[a-z]+'
+            )
           )
         )
         or (
@@ -78,7 +84,8 @@ source: |
                             "*any memories*",
                             "*old memories*",
                             "*evoke memories*",
-                            "*bittersweet memories*"
+                            "*bittersweet memories*",
+                            "*ring a bell*"
           )
           and not strings.icontains(body.plain.raw, "[cid:image")
         )
@@ -97,7 +104,10 @@ source: |
                           "*any memories*",
                           "*old memories*",
                           "*evoke memories*",
-                          "*bittersweet memories*"
+                          "*bittersweet memories*",
+                          "*ring a bell*",
+                          "*way earlier*",
+                          "*emailed it*"
             )
             or regex.icontains(body.current_thread.text,
                                '\bpics?\b.{0,40}https?://[a-z]+\.[a-z]+\.com'
@@ -109,26 +119,22 @@ source: |
         body.plain.raw is not null
         and body.html.display_text is null
         and (
-          length(body.current_thread.text) == 0
-          or (
-            length(body.current_thread.text) < 500
-            // fake forward indicator in the plain text body
-            and (
-              regex.contains(body.plain.raw,
-                             'On (Sunday|Monday|Tuesday|Wednesday|Thursday|Friday|Saturday).{0,50} wrote'
-              )
-              or strings.icontains(body.plain.raw, 'Original Message')
+          // fake forward indicator in the plain text body
+          (
+            regex.contains(body.plain.raw,
+                           'On (Sunday|Monday|Tuesday|Wednesday|Thursday|Friday|Saturday).{0,50} wrote'
             )
-            and not regex.contains(body.current_thread.text,
-                                   'On (Sunday|Monday|Tuesday|Wednesday|Thursday|Friday|Saturday).{0,50} wrote'
-            )
-            and not strings.icontains(body.current_thread.text,
-                                      'Original Message'
-            )
-            and not any(headers.hops, any(.fields, .name == "Resent-From"))
+            or strings.icontains(body.plain.raw, 'Original Message')
           )
+          and not regex.contains(body.current_thread.text,
+                                 'On (Sunday|Monday|Tuesday|Wednesday|Thursday|Friday|Saturday).{0,50} wrote'
+          )
+          and not strings.icontains(body.current_thread.text, 'Original Message')
+          and not any(headers.hops, any(.fields, .name == "Resent-From"))
         )
-        and strings.ilike(body.plain.raw,
+        and (
+          (
+            strings.ilike(body.plain.raw,
                           "*picture*",
                           "*photo*",
                           "*image*",
@@ -140,10 +146,13 @@ source: |
                           "*any memories*",
                           "*old memories*",
                           "*evoke memories*",
-                          "*bittersweet memories*"
+                          "*bittersweet memories*",
+                          "*ring a bell*"
+            )
+            and not strings.istarts_with(body.plain.raw, "[cid:image")
+          )
+          or regex.icontains(body.plain.raw, '[.!?]\W{0,3}[—–-]\s*[a-z]+')
         )
-        and not strings.istarts_with(body.plain.raw, "[cid:image")
-        and strings.icontains(subject.subject, sender.display_name)
       )
       or (
         strings.icontains(subject.subject, sender.display_name)
@@ -170,12 +179,12 @@ source: |
             )
             or (
               // random 5-6 character subdomain
-              regex.icontains(.href_url.domain.domain,
-                              '^[a-z]{5,6}\.[a-z]{5,}\.[a-z]+'
+              regex.imatch(.href_url.domain.domain,
+                           '[a-z]{5,6}\.[a-z]{5,}\.[a-z]+.*'
               )
               // subdomain contains 3+ consecutive consonants
-              and regex.icontains(.href_url.domain.domain,
-                                  '^[a-z]*[b-df-hj-np-tv-z]{3,}[a-z]*\.'
+              and regex.imatch(.href_url.domain.domain,
+                               '[a-z]*[b-df-hj-np-tv-z]{3,}[a-z]*\..*'
               )
               and network.whois(.href_url.domain).days_old < 365
             )
@@ -200,12 +209,9 @@ source: |
     or length(headers.references) == 0
   )
   // negate highly trusted sender domains unless they fail DMARC authentication
-  and (
-    (
-      sender.email.domain.root_domain in $high_trust_sender_root_domains
-      and not headers.auth_summary.dmarc.pass
-    )
-    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  and not (
+    sender.email.domain.root_domain in $high_trust_sender_root_domains
+    and coalesce(headers.auth_summary.dmarc.pass, false)
   )
 attack_types:
   - "Spam"

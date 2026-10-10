@@ -1,0 +1,41 @@
+name: "DLP: Slack Access Token"
+description: "Detects messages containing Slack access tokens."
+type: "dlp"
+severity: "high"
+attack_types:
+  - "DLP: Secrets & Credentials"
+data_categories:
+  - "DLP: Secrets & Credentials"
+tags:
+  - "Secrets"
+  - "Credentials"
+source: |
+  type.outbound
+  and (
+    any(ml.extract_sensitive_information(body.current_thread.text).elements,
+        .type == "slack_access_token" and .confidence in ("medium", "high")
+    )
+    or any(ml.extract_sensitive_information(subject.subject).elements,
+           .type == "slack_access_token" and .confidence in ("medium", "high")
+    )
+    or any(attachments,
+           any(file.explode(.),
+               (
+                 any(ml.extract_sensitive_information(.scan.strings.raw).elements,
+                     .type == "slack_access_token"
+                     and .confidence in ("medium", "high")
+                 )
+                 or any(ml.extract_sensitive_information(.scan.ocr.raw).elements,
+                        .type == "slack_access_token"
+                        and .confidence in ("medium", "high")
+                 )
+               )
+           )
+    )
+  )
+detection_methods:
+  - "Content analysis"
+  - "Natural Language Understanding"
+  - "File analysis"
+  - "Optical Character Recognition"
+id: "ba8abda3-39de-5fb7-a61b-8fbd8516bb3e"

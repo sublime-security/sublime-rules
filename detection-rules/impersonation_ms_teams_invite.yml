@@ -32,14 +32,40 @@ source: |
           and strings.icontains(., 'meeting')
       )
     )
+    or length(filter(ml.nlu_classifier(body.current_thread.text).entities,
+                     .name == "org"
+                     and strings.icontains(.text, "microsoft teams")
+              )
+    ) >= 2
   )
-  // not a reply
-  and length(headers.references) == 0
-  and headers.in_reply_to is null
-  // few links
-  and length(distinct(body.links, .href_url.url)) < 10
-  // short body
-  and length(body.current_thread.text) < 600
+  and (
+    (
+      // not a reply
+      length(headers.references) == 0
+      and headers.in_reply_to is null
+      // few links
+      and length(distinct(body.links, .href_url.url)) < 10
+      // short body
+      and (
+        length(body.current_thread.text) < 600
+        // account for NLU disclaimer in length
+        or any(map(filter(ml.nlu_classifier(body.current_thread.text).entities,
+                          .name == "disclaimer"
+                   ),
+                   .text
+               ),
+               (length(body.current_thread.text) - length(.)) < 600
+        )
+        // NLU only tags the first english disclaimer, so pick up repeat disclaimers or non-english disclaimers as well
+        or any(regex.iextract(body.current_thread.text,
+                              '^(?P<disclaimer>.{100,}?)(?:confidentiality notice|nota di riservatezza)'
+               ),
+               length(.named_groups["disclaimer"]) < 600
+        )
+      )
+    ) // or sender domain is new
+    or network.whois(sender.email.domain).days_old < 365
+  )
   // no unsubscribe links
   // common in newsletters which link to a webinar style event
   and not any(body.links, strings.icontains(.display_text, "unsub"))
@@ -98,12 +124,9 @@ source: |
   )
   
   // negate highly trusted sender domains unless they fail DMARC authentication
-  and (
-    (
-      sender.email.domain.root_domain in $high_trust_sender_root_domains
-      and not headers.auth_summary.dmarc.pass
-    )
-    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  and not (
+    sender.email.domain.root_domain in $high_trust_sender_root_domains
+    and coalesce(headers.auth_summary.dmarc.pass, false)
   )
 attack_types:
   - "Credential Phishing"

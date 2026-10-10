@@ -113,6 +113,15 @@ jobs:
           echo "##[set-output name=run_all;]$run_all"
           echo "##[set-output name=base_ref;]$base_ref"
 
+      - name: Reject rules in legacy DLP directory
+        run: |
+          legacy_files="$(git ls-tree -r --name-only HEAD -- dlp-discovery-rules/ | grep '^dlp-discovery-rules/' || true)"
+          if [[ -n "$legacy_files" ]]; then
+            echo "DLP rules must be added under dlp-rules/:"
+            echo "$legacy_files"
+            exit 1
+          fi
+
       - uses: actions/setup-python@42375524e23c412d93fb67b49958b491fce71c38  # v5.4.0
         with:
           python-version: '3.10'
@@ -145,7 +154,7 @@ jobs:
         if: github.event_name != 'issue_comment'
         run: |
           pip install -q requests pyyaml
-          python sublime-rules-main/.github/scripts/mql_format.py detection-rules/*.yml dlp-discovery-rules/*.yml insights/**/*.yml
+          python sublime-rules-main/.github/scripts/mql_format.py detection-rules/*.yml dlp-rules/*.yml insights/**/*.yml
 
           # Delete path to prevent interference with later steps (such as git add and commit)
           rm -r sublime-rules-main
@@ -189,6 +198,34 @@ jobs:
             s="${s//:/%3A}"
             s="${s//,/%2C}"
             printf '%s' "$s"
+          }
+
+          # Blank YAML metadata while preserving MQL's file line and column positions.
+          mask_non_mql() {
+            awk '
+              BEGIN { in_source = 0; source_indent = -1 }
+              /^source:[[:space:]]*[|>][-+]?[[:space:]]*(#.*)?$/ {
+                in_source = 1
+                source_indent = -1
+                print ""
+                next
+              }
+              in_source && /^[[:space:]]*$/ { print; next }
+              in_source {
+                match($0, /^[[:space:]]*/)
+                if (source_indent < 0) source_indent = RLENGTH
+                if (RLENGTH >= source_indent) { print; next }
+                in_source = 0
+              }
+              /^source:/ {
+                rest = $0
+                sub(/^source:/, "", rest)
+                match(rest, /^[[:space:]]*/)
+                printf "%*s%s\n", 7 + RLENGTH, "", substr(rest, RLENGTH + 1)
+                next
+              }
+              { print "" }
+            ' "$1"
           }
 
           # Emits one GitHub annotation per diagnostic in a bulk_validate response.
@@ -241,17 +278,30 @@ jobs:
           build_request() {
             local out_file="$1"
             shift
+            local masked_source_file
+            local source_filter
             {
               echo '{"rules_or_queries": ['
               local first=1
               for j in "$@"; do
                 [[ "$first" -eq 0 ]] && echo ","
                 first=0
+                masked_source_file="$(mktemp)"
+                mask_non_mql "$j" > "$masked_source_file"
+                source_filter='.source = ($source | sub("\n+$"; ""))'
                 if [[ "$j" == insights/* ]]; then
-                  yq -o=json eval 'del(.type) | .source = "length([\n\n" + .source + "\n]) >= 0"' "$j"
-                else
-                  yq -o=json eval 'del(.type)' "$j"
+                  # Replace the first masked line with the wrapper header so the MQL source
+                  # remains at its original file coordinates. A source on the first file line
+                  # cannot be wrapped without changing its coordinates.
+                  if ! awk 'NR == 1 { found = 1; exit ($0 != "") } END { if (!found) exit 1 }' "$masked_source_file"; then
+                    echo "Insight source must not start on the first file line: $j"
+                    exit 1
+                  fi
+                  source_filter='.source = ("length([\n" + ($source | sub("\n+$"; "")) + "\n]) >= 0")'
                 fi
+                # Temporary: the generic validator rejects this DLP-feed-only metadata.
+                yq -o=json eval 'del(.type, .data_categories)' "$j" | jq --rawfile source "$masked_source_file" "$source_filter"
+                rm -f "$masked_source_file"
               done
               echo ']}'
             } > "$out_file"
