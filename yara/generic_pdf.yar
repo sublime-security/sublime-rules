@@ -689,9 +689,10 @@ rule pdf_w9_signatures {
 		description = "matching PDFs with signatures observed in fake w9 documents"
 	strings:
 		$noel_docusign = { FF DA 00 0C 03 01 00 02 11 03 11 00 3F 00 FE FC 39 E7 DF AF 3D 78 C7 3E BC 60 73 DB 8A 00 51 96 3D F2 3A 73 D3 D7 1E 9F E7 DE 80 FE BF AF EB F2 17 63 72 31 C1 EA 33 D7 EB C7 3D 07 5D DD 3F 0A 00 5D AF D7 9C FA E7 D7 A8 FC 70 3B F6 EF 40 09 B1 B0 47 63 C9 19 18 3E E7 B5 00 27 3B C2 E4 EF }
+		$signature_from_linkedin_related_w9 = { FF DA 00 0C 03 01 00 02 11 03 11 00 3F 00 F9 52 80 0A 00 28 00 A0 02 80 0A 00 28 00 A0 02 80 0A 00 28 00 A0 02 80 0A 00 28 03 4E 2D 0B 52 96 DE }
 	condition:
 		uint32be(0) == 0x25504446
-		and all of them
+		and any of them
 }
 
 rule pdf_msft_lure_signature {
@@ -809,20 +810,6 @@ rule pdf_fake_linkedIn_invoice_lure {
 	condition:
 		uint32be(0) == 0x25504446
 		and $linkedin_lure
-}
-
-rule pdf_w9_signatures_update {
-	meta:
-		author      = "kyle eaton"
-		date        = "2026-09-16"
-		update      = "2026-10-02"
-		description = "matching PDFs with signatures observed in fake w9 documents"
-	strings:
-		//$noel_docusign                      = { FF DA 00 0C 03 01 00 02 11 03 11 00 3F 00 FE FC 39 E7 DF AF 3D 78 C7 3E BC 60 73 DB 8A 00 51 96 3D F2 3A 73 D3 D7 1E 9F E7 DE 80 FE BF AF EB F2 17 63 72 31 C1 EA 33 D7 EB C7 3D 07 5D DD 3F 0A 00 5D AF D7 9C FA E7 D7 A8 FC 70 3B F6 EF 40 09 B1 B0 47 63 C9 19 18 3E E7 B5 00 27 3B C2 E4 EF }
-		$signature_from_linkedin_related_w9 = { FF DA 00 0C 03 01 00 02 11 03 11 00 3F 00 F9 52 80 0A 00 28 00 A0 02 80 0A 00 28 00 A0 02 80 0A 00 28 00 A0 02 80 0A 00 28 03 4E 2D 0B 52 96 DE }
-	condition:
-		uint32be(0) == 0x25504446
-		and any of them
 }
 
 rule pdf_ssa_lure {
