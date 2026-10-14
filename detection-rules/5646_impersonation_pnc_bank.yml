@@ -1,0 +1,70 @@
+name: "Brand impersonation: PNC"
+description: "Impersonation of PNC Financial Services"
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and (
+    regex.icontains(sender.display_name, '\bPNC\b')
+    or strings.icontains(sender.email.local_part, "pnc")
+    or strings.ilike(sender.email.domain.domain, '*pnc*')
+    or regex.icontains(subject.subject, '\bPNC\b')
+    or any(ml.nlu_classifier(body.current_thread.text).entities,
+           .name == "org" and .text == "PNC"
+    )
+  )
+  and (
+    any(ml.logo_detect(file.message_screenshot()).brands,
+        .name == "PNC" and .confidence in ("medium", "high")
+    )
+    or any(body.links,
+           .href_url.domain.root_domain in~ ('pnc.com', 'pncbank.com')
+    )
+    or strings.icontains(body.current_thread.text, 'property of PNC')
+    or 2 of (
+      regex.icontains(body.current_thread.text, '\bPNC\b'),
+      regex.icontains(body.current_thread.text, '(?:249|300) Fifth Ave(?:nue)?'),
+      strings.icontains(body.current_thread.text, 'Pittsburgh, PA')
+    )
+  )
+  and not (
+    sender.email.domain.root_domain in ('pnc.com', 'pncbank.com')
+    and coalesce(headers.auth_summary.dmarc.pass, false)
+  )
+  and not (
+    sender.email.domain.tld == "pnc"
+    and coalesce(headers.auth_summary.dmarc.pass, false)
+  )
+  and (
+    profile.by_sender().prevalence in ("new", "outlier")
+    or (
+      profile.by_sender().any_messages_malicious_or_spam
+      and not profile.by_sender().any_messages_benign
+    )
+  )
+  // not forwards/replies
+  and not (
+    (length(headers.references) > 0 or headers.in_reply_to is not null)
+    and (subject.is_forward or subject.is_reply)
+    and length(body.previous_threads) >= 1
+  )
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and not (
+    sender.email.domain.root_domain in $high_trust_sender_root_domains
+    and coalesce(headers.auth_summary.dmarc.pass, false)
+  )
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Lookalike domain"
+  - "Social engineering"
+detection_methods:
+  - "Computer Vision"
+  - "Content analysis"
+  - "Header analysis"
+  - "Sender analysis"
+id: "87846c9d-90e0-5e6b-8f37-7e1712bbe898"
+og_id: "1b5ae4fb-da62-5e6b-a831-d727ce038cde"
+testing_pr: 5646
+testing_sha: c0623d183ab73c1bbc9d552fbafc7810057bde6a
