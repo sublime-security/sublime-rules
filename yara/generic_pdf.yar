@@ -882,3 +882,22 @@ rule pdf_blue_oneDrive_lure_structure {
 		and all of ($ref_*)
 		and none of ($num_*)
 }
+
+rule pdf_blue_oneDrive_lure_2 {
+	meta:
+		author      = "kyle eaton"
+		date        = "2026-10-14"
+		description = "PDF matching specific blue oneDrive lure"
+	strings:
+		$jpg_onedrive_1 = { 0A 28 A2 80 0A 28 A2 80 0A 28 A2 80 0A 2A D5 96 9F 3D E9 F9 00 54 1D 5C F4 AD 54 F0 FD B8 5F 9E }
+		$cid_font       = "/CIDFontType2"
+		$arialReg       = "ArialRegular"
+		$arialBold      = "ArialBold"
+	condition:
+		uint32be(0) == 0x25504446
+		and any of ($jpg*)
+		and (
+			#cid_font == 2
+			and $arialReg and $arialBold
+		)
+}
