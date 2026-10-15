@@ -1,0 +1,40 @@
+name: "DLP: IBAN Code"
+description: "Detects messages containing IBAN codes."
+type: "dlp"
+severity: "high"
+source: |
+  type.outbound
+  and (
+    any(ml.extract_sensitive_information(body.current_thread.text).elements,
+        .type == "iban" and .confidence in ("medium", "high")
+    )
+    or any(ml.extract_sensitive_information(subject.subject).elements,
+           .type == "iban" and .confidence in ("medium", "high")
+    )
+    or any(attachments,
+           any(file.explode(.),
+               (
+                 any(ml.extract_sensitive_information(.scan.strings.raw).elements,
+                     .type == "iban" and .confidence in ("medium", "high")
+                 )
+                 or any(ml.extract_sensitive_information(.scan.ocr.raw).elements,
+                        .type == "iban" and .confidence in ("medium", "high")
+                 )
+               )
+           )
+    )
+  )
+tags:
+  - "Financial Data"
+attack_types:
+  - "DLP: PCI"
+  - "DLP: Financial Data"
+data_categories:
+  - "DLP: PCI"
+  - "DLP: Financial Data"
+detection_methods:
+  - "Content analysis"
+  - "Natural Language Understanding"
+  - "File analysis"
+  - "Optical Character Recognition"
+id: "81f20b81-c08e-5f0c-92d9-bd0a9f1aa92e"

@@ -1,0 +1,41 @@
+name: "DLP: JSON Web Token (JWT)"
+description: "Detects messages containing JSON Web Tokens (JWT)."
+type: "dlp"
+severity: "high"
+attack_types:
+  - "DLP: Secrets & Credentials"
+data_categories:
+  - "DLP: Secrets & Credentials"
+tags:
+  - "Secrets"
+  - "Credentials"
+source: |
+  type.outbound
+  and (
+    any(ml.extract_sensitive_information(body.current_thread.text).elements,
+        .type == "json_web_token" and .confidence in ("medium", "high")
+    )
+    or any(ml.extract_sensitive_information(subject.subject).elements,
+           .type == "json_web_token" and .confidence in ("medium", "high")
+    )
+    or any(attachments,
+           any(file.explode(.),
+               (
+                 any(ml.extract_sensitive_information(.scan.strings.raw).elements,
+                     .type == "json_web_token"
+                     and .confidence in ("medium", "high")
+                 )
+                 or any(ml.extract_sensitive_information(.scan.ocr.raw).elements,
+                        .type == "json_web_token"
+                        and .confidence in ("medium", "high")
+                 )
+               )
+           )
+    )
+  )
+detection_methods:
+  - "Content analysis"
+  - "Natural Language Understanding"
+  - "File analysis"
+  - "Optical Character Recognition"
+id: "2d5c0017-a69a-549d-ac46-2f99be5775eb"

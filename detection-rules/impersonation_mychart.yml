@@ -9,6 +9,9 @@ source: |
     or any(ml.nlu_classifier(body.current_thread.text).entities,
            .name == "org" and strings.icontains(.text, 'mychart medicare kit')
     )
+    or any(html.xpath(body.html, '//title').nodes,
+           strings.icontains(.raw, 'mychart')
+    )
   )
   and (
     (
@@ -21,19 +24,30 @@ source: |
         strings.icontains(body.current_thread.text, "member rewards"),
         strings.icontains(body.current_thread.text, "member appreciation"),
         strings.icontains(body.current_thread.text, "log in to mychart"),
+        strings.icontains(body.current_thread.text, 'securesign'),
         regex.icontains(body.current_thread.text, '©\s*(?:\d+)\s*mychart')
       )
     )
     or strings.icontains(subject.base, "medicare kit")
-    or network.whois(sender.email.domain).days_old < 365
+    or strings.icontains(subject.base, "reward")
+    or strings.icontains(subject.base, "claim")
+    or regex.icontains(subject.base, '[a-f0-9]{32}\b')
+    // email is an image plus a link
+    or (
+      coalesce(length(body.html.display_text), 0) < 100
+      and length(html.xpath(body.html, '//a//img').nodes) > 0
+    )
   )
   and not (
     sender.email.domain.root_domain in (
       "epic-notification.com",
-      "myhealthconnect.org"
+      "moneytalksnews.com",
+      "myhealthconnect.org",
+      "optum.com"
     )
     and coalesce(headers.auth_summary.dmarc.pass, false)
   )
+  
   // negate highly trusted sender domains unless they fail DMARC authentication
   and not (
     sender.email.domain.root_domain in $high_trust_sender_root_domains
