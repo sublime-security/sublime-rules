@@ -1,11 +1,19 @@
 name: "PR# 5649 - Extortion: Tox messenger ID"
-description: "Flags inbound messages where NLU classification identifies extortion or credential theft intent with medium or high confidence, and the message body references the Tox or qTox messaging application alongside a 76-character hexadecimal string matching the Tox ID format. This pattern is commonly used in extortion scams where attackers direct victims to continue communication over Tox to evade detection."
+description: "Flags inbound messages where NLU classification identifies extortion or the body contains extortion keywords, and the message body references the Tox or qTox messaging application alongside a 76-character hexadecimal string matching the Tox ID format. This pattern is commonly used in extortion scams where attackers direct victims to continue communication over Tox to evade detection."
 type: "rule"
 severity: "medium"
 source: |
   type.inbound
-  and any(ml.nlu_classifier(body.current_thread.text).intents,
-          .name in ('extortion', 'cred_theft') and .confidence != 'low'
+  and (
+    any(ml.nlu_classifier(body.current_thread.text).intents,
+        .name == 'extortion' and .confidence != 'low'
+    )
+    // extortion keywords
+    or strings.icontains(body.current_thread.text,
+                         'exfiltrate',
+                         'breach',
+                         'encrypt'
+    )
   )
   and regex.icontains(body.current_thread.text, '\bq?tox\b')
   and regex.contains(body.current_thread.text, '[0-9a-fA-F]{76}')
