@@ -1,0 +1,55 @@
+name: "VIP impersonation: VIP name within a delimited subject with fake previous threads"
+description: "Detects inbound messages where a known VIP's display name appears in the subject line surrounded by quotation marks or forward-slash delimiters (e.g., /Name/, Name (in quotes), -//Name), and where prior thread history confirms the VIP either authored a previous message or is being actively impersonated by a mismatched sender. Observed lures include fabricated invoices, leadership recognition offers, and forwarded billing threads referencing real executives by name and company. The pattern spans multiple sender domains and spoofed invoice references, all anchored to VIP identity signals extracted from thread context."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and length(coalesce(body.plain.raw, body.html.display_text)) < 6000
+  and any([subject.base, strings.replace_confusables(subject.base)],
+          strings.icontains(., '"', '-#', '/')
+  )
+  and any([subject.base, strings.replace_confusables(subject.base)],
+          any(body.previous_threads,
+              any($org_vips,
+                  (
+                    strings.icontains(..., strings.concat('"', .display_name))
+                    or strings.icontains(..., strings.concat(.display_name, '"'))
+                    or strings.icontains(..., strings.concat('-#', .display_name))
+                    or strings.icontains(..., strings.concat('/', .display_name))
+                  )
+                  and (
+                    strings.icontains(..sender.display_name, .display_name)
+                    or (
+                      .email != ""
+                      and strings.icontains(..sender.email.email, .email)
+                    )
+                    or (
+                      strings.icontains(sender.display_name, .display_name)
+                      and sender.email.email != .email
+                    )
+                  )
+              )
+          )
+  )
+  and any(ml.nlu_classifier(body.current_thread.text).topics,
+          .name in (
+            "Financial Communications",
+            "Request to View Invoice",
+            "Payment Information"
+          )
+          and .confidence != "low"
+  )
+attack_types:
+  - "BEC/Fraud"
+tactics_and_techniques:
+  - "Impersonation: VIP"
+  - "Social engineering"
+  - "Spoofing"
+detection_methods:
+  - "Content analysis"
+  - "Sender analysis"
+  - "Header analysis"
+id: "7a540348-8467-5f04-adc4-54f4b4334453"
+og_id: "e1ebf4ff-69c3-5188-9999-195cb218933f"
+testing_pr: 5661
+testing_sha: 20df918ccd1b8bbe595732c462e25bdda91d922a
