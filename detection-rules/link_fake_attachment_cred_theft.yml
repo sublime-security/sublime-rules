@@ -1,0 +1,41 @@
+name: "Link: Fake attachment language hides credential phishing"
+description: "Detects inbound messages that spoof the recipient as the sender, contain no real attachments, but use language such as 'see attached' or 'view the attachment' to imply one exists. The only link in the message is disguised as the referenced attachment and redirects off the sender's domain to a page identified as credential phishing."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  // self sender
+  and (
+    length(recipients.to) == 1
+    and sender.email.email == recipients.to[0].email.email
+  )
+  // language suggests an attachment... but there isn't one
+  and length(attachments) == 0
+  and regex.icontains(body.current_thread.text,
+                      '\b(?:see|find|review|refer to|view|open|access|download)\b[^.\n]{0,40}(?:\battached|\b(?:the|an?|this|my|our)\s+attachments?)\b|\b(?:download|view)\s+attachments?\b'
+  )
+  
+  // the "attachment" is the only link... mailto and the outlook mobile signature (aka.ms) are client noise, drop them before counting
+  and length(distinct(filter(body.current_thread.links,
+                             .href_url.scheme != "mailto"
+                             and .href_url.domain.root_domain != "aka.ms"
+                      ),
+                      .href_url.url
+             )
+  ) == 1
+  
+  // and it leaves the sender's domain for a credential phishing page
+  and any(body.current_thread.links,
+          .href_url.domain.root_domain != sender.email.domain.root_domain
+          and ml.link_analysis(., mode="aggressive").credphish.disposition == "phishing"
+  )
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Social engineering"
+  - "Spoofing"
+detection_methods:
+  - "Content analysis"
+  - "URL analysis"
+  - "Sender analysis"
+id: "7b843260-e887-5693-96e6-7516b5e7aaa7"
