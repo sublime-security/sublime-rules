@@ -1,0 +1,60 @@
+name: "Impersonation: Securities and Exchange Commission (SEC)"
+description: "Detects inbound messages impersonating the U.S. Securities and Exchange Commission (SEC) through sender display names, body content, or NLU-detected sender entities referencing the SEC or sec.gov. Also flags messages containing SEC-related language paired with links to lookalike domains mimicking sec.gov. Excludes messages from highly trusted sender domains that pass DMARC authentication."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and (
+    regex.icontains(sender.display_name,
+                    '^sec\.gov\b',
+                    'sec\.gov[\s.]*client',
+                    '^sec[\s-]?(?:gov|compliance|enforcement|division)\b',
+                    'securities\s+and\s+exchange\s+commission'
+    )
+    or any(ml.nlu_classifier(body.current_thread.text).entities,
+           .name == "sender"
+           and strings.icontains(.text,
+                                 'securities and exchange commission',
+                                 'sec.gov'
+           )
+    )
+    or (
+      (
+        strings.icontains(body.current_thread.text,
+                          'sec.gov',
+                          'securities and exchange commission',
+                          'u.s. securities'
+        )
+        or strings.icontains(sender.display_name, 'sec.gov')
+      )
+      and any(body.links,
+              (
+                regex.icontains(.href_url.domain.domain, 'sec\.?gov')
+                and .href_url.domain.root_domain != "sec.gov"
+              )
+              or regex.icontains(.href_url.domain.subdomain, 'w{2,3}\.?secgov')
+      )
+    )
+  )
+  and not (
+    sender.email.domain.root_domain in $high_trust_sender_root_domains
+    and coalesce(headers.auth_summary.dmarc.pass, false)
+  )
+attack_types:
+  - "BEC/Fraud"
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Spoofing"
+  - "Lookalike domain"
+  - "Social engineering"
+detection_methods:
+  - "Sender analysis"
+  - "Content analysis"
+  - "URL analysis"
+  - "Natural Language Understanding"
+  - "Header analysis"
+id: "3ba2f159-bbf9-5c3e-8c0a-43896463e098"
+og_id: "30d812fa-4e54-519d-ad9d-86e060ed2192"
+testing_pr: 5666
+testing_sha: a6510ad45ff9544ea6ebfacface38e7daee96a12
