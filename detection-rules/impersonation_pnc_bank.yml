@@ -5,14 +5,35 @@ severity: "medium"
 source: |
   type.inbound
   and (
-    regex.icontains(sender.display_name, '\PNC\b')
-    or strings.ilike(sender.email.domain.domain, '*PNC*')
-    or strings.ilike(subject.subject, '*PNC*')
+    regex.icontains(sender.display_name, '\bPNC\b')
+    or strings.icontains(sender.email.local_part, "pnc")
+    or strings.ilike(sender.email.domain.domain, '*pnc*')
+    or regex.icontains(subject.subject, '\bPNC\b')
+    or any(ml.nlu_classifier(body.current_thread.text).entities,
+           .name == "org" and .text == "PNC"
+    )
   )
-  and sender.email.domain.root_domain not in~ ('pnc.com', 'pncbank.com')
-  and sender.email.domain.tld != "pnc"
-  and any(ml.logo_detect(file.message_screenshot()).brands,
-          .name == "PNC" and .confidence in ("medium", "high")
+  and (
+    any(ml.logo_detect(file.message_screenshot()).brands,
+        .name == "PNC" and .confidence in ("medium", "high")
+    )
+    or any(body.links,
+           .href_url.domain.root_domain in~ ('pnc.com', 'pncbank.com')
+    )
+    or strings.icontains(body.current_thread.text, 'property of PNC')
+    or 2 of (
+      regex.icontains(body.current_thread.text, '\bPNC\b'),
+      regex.icontains(body.current_thread.text, '(?:249|300) Fifth Ave(?:nue)?'),
+      strings.icontains(body.current_thread.text, 'Pittsburgh, PA')
+    )
+  )
+  and not (
+    sender.email.domain.root_domain in ('pnc.com', 'pncbank.com')
+    and coalesce(headers.auth_summary.dmarc.pass, false)
+  )
+  and not (
+    sender.email.domain.tld == "pnc"
+    and coalesce(headers.auth_summary.dmarc.pass, false)
   )
   and (
     profile.by_sender().prevalence in ("new", "outlier")
@@ -32,7 +53,6 @@ source: |
     sender.email.domain.root_domain in $high_trust_sender_root_domains
     and coalesce(headers.auth_summary.dmarc.pass, false)
   )
-  
 attack_types:
   - "Credential Phishing"
 tactics_and_techniques:
