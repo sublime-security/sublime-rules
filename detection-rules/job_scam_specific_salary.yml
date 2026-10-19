@@ -5,8 +5,7 @@ severity: "low"
 source: |
   type.inbound
   and (
-    (
-      // job scam in current thread
+    ( // job scam in current thread
       any(ml.nlu_classifier(body.current_thread.text).intents,
           .name in ("job_scam") and .confidence != "low"
       )
@@ -17,6 +16,7 @@ source: |
                           'weekly(?:\s+\w+){0,4}\s+\$\d{3}[^\d]'
       )
     )
+  
     // job scam in previous thread
     or any(body.previous_threads,
            any(ml.nlu_classifier(.text).intents,
@@ -41,23 +41,28 @@ source: |
                                   'week(?:\s+\w+){0,3}\s+\$\d{3,}',
                                   'weekly(?:\s+\w+){0,4}\s+\$\d{3}[^\d]'
                   )
-                  and regex.icontains(.scan.ocr.raw,
-                                      'fully remote',
-                                      'remote\b[\s-]*(?:work|position|role|job|employee|worker|assistant|opportunit)',
-                                      'remotely',
-                                      'work[\s-]?from[\s-]?home',
-                                      'equal opportunity employer',
-                                      'how to apply',
-                                      'submit (?:your )?application',
-                                      'remote\b[\s-]*(?:work|position|role|job|employee|worker|assistant|opportunit)',
-                                      'remotely',
-                                      'work[\s-]?from[\s-]?home',
-                                      'equal opportunity employer',
-                                      'how to apply',
-                                      'submit (?:your )?application',
-                                      'open to all (?:majors|backgrounds|students)',
-                                      'employment opportunity',
-                                      '\bhiring\b'
+                  and (
+                    regex.icontains(.scan.ocr.raw,
+                                    'fully remote',
+                                    'remote\b[\s-]*(?:work|position|role|job|employee|worker|assistant|opportunit)',
+                                    'remotely',
+                                    'work[\s-]?from[\s-]?home',
+                                    'equal opportunity employer',
+                                    'how to apply',
+                                    'submit (?:your )?application',
+                                    'remote\b[\s-]*(?:work|position|role|job|employee|worker|assistant|opportunit)',
+                                    'remotely',
+                                    'work[\s-]?from[\s-]?home',
+                                    'equal opportunity employer',
+                                    'how to apply',
+                                    'submit (?:your )?application',
+                                    'open to all (?:majors|backgrounds|students)',
+                                    'employment opportunity',
+                                    '\bhiring\b'
+                    )
+                    or any(ml.nlu_classifier(.scan.ocr.raw).intents,
+                           .name in ("job_scam") and .confidence != "low"
+                    )
                   )
                   and not regex.icontains(.scan.ocr.raw,
                                           'unemployment',
