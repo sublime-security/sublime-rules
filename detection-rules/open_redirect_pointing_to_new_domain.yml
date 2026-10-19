@@ -1,0 +1,26 @@
+name: "Open redirect: Recipient address embedded in redirect URL pointing to newly registered domain"
+description: "Detects inbound messages sent to a single recipient where the body contains a link that embeds the recipient's email address in a URL query parameter, and the resolved destination domain was registered less than 100 days ago. This pattern is consistent with personalized redirect links designed to evade detection while directing targets to newly established infrastructure."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and length(recipients.to) == 1
+  and any(body.current_thread.links,
+          strings.contains(.href_url.url, recipients.to[0].email.email)
+          and length(.href_url.query_params_decoded['url']) > 0
+          and any(.href_url.query_params_decoded['url'],
+                  strings.contains(strings.parse_url(.).url,
+                                   recipients.to[0].email.email
+                  )
+                  and network.whois(strings.parse_url(.).domain).days_old < 100
+          )
+  )
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Open redirect"
+  - "Social engineering"
+detection_methods:
+  - "URL analysis"
+  - "Whois"
+id: "861400d2-930a-5484-afa6-3dfa850dfec2"

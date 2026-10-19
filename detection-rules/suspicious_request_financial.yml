@@ -20,18 +20,22 @@ source: |
   )
   // specific financial language
   and (
-    regex.icontains(subject.subject,
-                    '\b(Aged|Age?ing) (Payables|Receivables|Report)',
-                    'reconcill?iation (report|statement).*(issued (settlement|advice)s?)|billing records?'
+    (
+      regex.icontains(subject.subject,
+                      '\b(Aged|Age?ing) (Payables|Receivables|Report)',
+                      'reconcill?iation (report|statement).*(issued (settlement|advice)s?)|billing records?'
+      )
+      or regex.imatch(subject.base, 'outstanding due invoices')
     )
     or (
       regex.icontains(body.current_thread.text,
-                      '\b(Aged|Age?ing) (Payables|Receivables|Report)',
-                      '(updated|recent) (\bAR\b|\b\AP\b|\bAR\b \& \bAP\b|accounts?) (Payables|Receivables|Reports)',
+                      '\b(Aged|Age?ing) (?:Collection|Payables|Receivables|Report)',
+                      '(latest|updated|recent) (\bAR\b|\b\AP\b|\bAR\b \& \bAP\b|accounts?) (?:Aging|Payables|Receivables|Reports)',
                       '(shared?|send|forward|provide).*remittance (advice|receipts?|statements?)'
       )
       or strings.icontains(body.current_thread.text,
-                           "copy of a current statement"
+                           "copy of a current statement",
+                           "unpaid and due invoices"
       )
       or (
         strings.icontains(body.current_thread.text, "please send all past due")
@@ -57,14 +61,22 @@ source: |
           sender.email.email in map(recipients.to, .email.email)
           or (length(recipients.to) == 0 or length(recipients.to) is null)
         )
-        // non-benign nlu intent 
+        // non-benign nlu intent
         or any(ml.nlu_classifier(body.current_thread.text).intents,
                .name != "benign"
         )
       )
     )
+    or (
+      any(ml.nlu_classifier(body.current_thread.text).intents,
+          .name == "cred_theft" and .confidence == "high"
+      )
+      and any(ml.nlu_classifier(body.current_thread.text).entities,
+              .name == "financial" and .text =~ "remittance"
+      )
+    )
   )
-  // negate resume related/job inquiry outreach 
+  // negate resume related/job inquiry outreach
   and not (
     any(ml.nlu_classifier(body.current_thread.text).topics,
         .name == "Professional and Career Development" and .confidence == "high"
@@ -73,12 +85,9 @@ source: |
             .name == "benign" and .confidence != "low"
     )
   )
-  and (
-    (
-      sender.email.domain.root_domain in $high_trust_sender_root_domains
-      and not headers.auth_summary.dmarc.pass
-    )
-    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  and not (
+    sender.email.domain.root_domain in $high_trust_sender_root_domains
+    and coalesce(headers.auth_summary.dmarc.pass, false)
   )
   and not profile.by_sender().any_messages_benign
 

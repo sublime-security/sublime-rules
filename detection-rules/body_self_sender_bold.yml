@@ -1,0 +1,35 @@
+name: "Self-impersonation: Sender matches recipient with bolded name and suspicious link"
+description: "Detects messages where the sender's email address matches the recipient's email address, with the sender's display name appearing in bold text and a suspicious 'Read the Message' link present in the body."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  // sender matches recipients
+  and (
+    length(recipients.to) == 1
+    and recipients.to[0].email.email == sender.email.email
+  )
+  // sender in current thread BOLD
+  and any(html.xpath(body.html, '//b').nodes,
+          .display_text == sender.display_name
+  )
+  // we want the dashed html element to contain a link, and that link to include part of the subject (the subject is the org)
+  and any(html.xpath(body.html,
+                     '//table//td[contains(@style, "border-style: dashed") and contains(@style, "border-width: 1pt")]//a[./b]'
+          ).nodes,
+          any(regex.extract(subject.base, '(?P<word>\w+)'),
+              any(..links,
+                  strings.icontains(.href_url.url, ..named_groups["word"])
+              )
+          )
+  )
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Evasion"
+  - "Social engineering"
+detection_methods:
+  - "Header analysis"
+  - "HTML analysis"
+  - "Sender analysis"
+id: "0129a805-2fe2-5a40-81bc-b3459085aa23"

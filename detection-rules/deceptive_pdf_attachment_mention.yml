@@ -4,12 +4,44 @@ type: "rule"
 severity: "low"
 source: |
   type.inbound
-  // pdf image
-  and strings.contains(body.html.raw,
-                       'https://ci3.googleusercontent.com/meips/ADKq_Naq6rm1GwC4XYZepCUQtEMnJ-r-HjyX_C5lBU7lpxQk1OIDV7vvQYvSJQWYmQCzG8moTgX3Wak625OtyHWRinVeUJs7K710JiIZ4JNXVpTmC8PJjV4K34GsBA=s0-d-e1-ft#https://res-1.cdn.office.net/assets/mail/file-icon/png/pdf_16x16.png'
+  and (
+    // pdf image
+    strings.contains(body.html.raw,
+                     'https://ci3.googleusercontent.com/meips/ADKq_Naq6rm1GwC4XYZepCUQtEMnJ-r-HjyX_C5lBU7lpxQk1OIDV7vvQYvSJQWYmQCzG8moTgX3Wak625OtyHWRinVeUJs7K710JiIZ4JNXVpTmC8PJjV4K34GsBA=s0-d-e1-ft#https://res-1.cdn.office.net/assets/mail/file-icon/png/pdf_16x16.png'
+    )
+    // or there is an small attached image, directly before the link ending in .pdf
+    or any(filter(attachments,
+                  .file_type in $file_types_images
+                  and strings.icontains(body.html.raw, .content_id)
+                  // use megapixels to get a rough idea of the actual size of the image
+                  and any(beta.parse_exif(.).fields,
+                          .key == "Megapixels"
+                          and strings.parse_float(.value) < 0.1
+                  )
+           ),
+           any(html.xpath(body.html,
+                          '//a[preceding-sibling::*[1][self::img or .//img] or parent::*/preceding-sibling::*[1][self::img or .//img]]'
+               ).nodes,
+               any(.links, strings.iends_with(.display_text, '.pdf'))
+               and any(html.xpath(.,
+                                  'preceding-sibling::*[1]/descendant-or-self::img | parent::*/preceding-sibling::*[1]/descendant-or-self::img'
+                       ).nodes,
+                       strings.icontains(.raw, ...content_id)
+               )
+           )
+    )
   )
   // mentions attachments but there are none or just images with no pdfs
-  and strings.starts_with(body.current_thread.text, 'Please see attached.')
+  and (
+    strings.starts_with(body.current_thread.text, 'Please see attached.')
+    or strings.icontains(body.current_thread.text, 'Please find attached')
+    // NLU
+    or any(ml.nlu_classifier(body.current_thread.text).entities,
+           .name == "request"
+           and strings.istarts_with(.text, 'please ')
+           and strings.icontains(.text, 'attached')
+    )
+  )
   and all(attachments, .file_type in $file_types_images)
   // self sender
   and (

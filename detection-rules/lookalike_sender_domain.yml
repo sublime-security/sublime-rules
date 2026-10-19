@@ -5,12 +5,11 @@ type: "rule"
 severity: "high"
 source: |
   type.inbound
+  and length(sender.email.domain.sld) > 3
+  and sender.email.domain.domain not in $org_domains
   and any($org_domains,
-          length(sender.email.domain.sld) > 3
-          
           // this rule can be duplicated in order to tune the threshold
-          and strings.ilevenshtein(sender.email.domain.domain, .) == 1
-          and sender.email.domain.domain not in $org_domains
+          strings.ilevenshtein(sender.email.domain.domain, .) == 1
   )
   and (
     (
@@ -24,12 +23,9 @@ source: |
   )
   
   // negate highly trusted sender domains unless they fail DMARC authentication
-  and (
-    (
-      sender.email.domain.root_domain in $high_trust_sender_root_domains
-      and not headers.auth_summary.dmarc.pass
-    )
-    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  and not (
+    sender.email.domain.root_domain in $high_trust_sender_root_domains
+    and coalesce(headers.auth_summary.dmarc.pass, false)
   )
   and not profile.by_sender_email().any_messages_benign
 attack_types:

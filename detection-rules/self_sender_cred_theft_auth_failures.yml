@@ -1,0 +1,34 @@
+name: "Headers: Self-sender using Microsoft CompAuth bypass with credential theft content"
+description: "Detects messages sent to self or invalid domains containing credential theft content that bypass Microsoft's CompAuth while failing both SPF and DMARC authentication checks."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  // self sender
+  and length(recipients.to) == 1
+  and length(recipients.cc) == 0
+  and length(recipients.bcc) == 0
+  and (
+    sender.email.email == recipients.to[0].email.email
+    or recipients.to[0].email.domain.valid == false
+  )
+  // cred theft
+  and any(ml.nlu_classifier(body.current_thread.text).intents,
+          .name == "cred_theft" and .confidence != "low"
+  )
+  // microsoft compauth pass, but spf and dmarc fail
+  and any(headers.hops, any(.fields, strings.icontains(.value, 'compauth=pass')))
+  and not coalesce(headers.auth_summary.dmarc.pass, false)
+  and not coalesce(headers.auth_summary.spf.pass, false)
+tags:
+  - "Attack surface reduction"
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Spoofing"
+  - "Evasion"
+detection_methods:
+  - "Natural Language Understanding"
+  - "Header analysis"
+  - "Sender analysis"
+id: "549c4e66-ec29-50f5-aff7-4a85fa7318da"

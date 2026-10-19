@@ -6,14 +6,41 @@ source: |
   type.inbound
   and (
     // matching proofpoint secure messaging
-    strings.contains(body.current_thread.text,
-                     "Secured by Proofpoint Encryption,"
+    (
+      strings.contains(body.current_thread.text,
+                       "Secured by Proofpoint Encryption,"
+      )
+      and not strings.iends_with(body.current_thread.text,
+                                 "Secured by Proofpoint Encryption, Copyright © 2009-2016 Proofpoint, Inc. All rights reserved."
+      )
     )
     or regex.icontains(body.current_thread.text,
                        ('Copyright © 2009-202\d Proofpoint, Inc.')
     )
+    or strings.icontains(body.html.raw, '<h1>Proofpoint |')
+    // body.html contains a suspicious title impersonating proofpoint
+    or (
+      any(html.xpath(body.html, '//title').nodes,
+          strings.icontains(.raw, "secure access")
+          and strings.icontains(.raw, 'Proofpoint')
+      )
+    )
+    // no links but has attachments which impersonate proofpoint
+    or any(attachments,
+           strings.icontains(file.parse_text(.).text, '<h1>Proofpoint |')
+           or any(html.xpath(file.parse_html(.), '//title').nodes,
+                  strings.icontains(.raw, "secure access")
+                  and strings.icontains(.raw, 'Proofpoint')
+           )
+    )
   )
-  and length(body.current_thread.links) >= 1
+  and (
+    // contains a link
+    length(body.current_thread.links) >= 1
+    // or an attachment (legit attachments negated in stanza below)
+    or length(attachments) > 0
+  )
+  
   // pfpt secure share uri
   and not (
     any(body.links,

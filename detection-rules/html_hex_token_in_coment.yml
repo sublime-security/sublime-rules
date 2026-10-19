@@ -1,0 +1,26 @@
+name: "Body HTML: Comment with 24-character hex token"
+description: "Detects messages containing HTML comments with exactly 24 hexadecimal characters, which may indicate tracking tokens, session identifiers, or other suspicious embedded data used for evasion or tracking purposes."
+type: "rule"
+severity: "low"
+source: |
+  type.inbound
+  and any(html.xpath(body.html, '//comment()').nodes,
+          regex.imatch(.raw, '<!--\s*[a-f0-9]{24}\s*-->')
+  )
+  and not (
+    sender.email.domain.root_domain in $high_trust_sender_root_domains
+    and coalesce(headers.auth_summary.dmarc.pass, false)
+  )
+  and any(ml.nlu_classifier(body.current_thread.text).intents,
+          .name in ("cred_theft", "bec") and .confidence != 'low'
+  )
+tags:
+ - "Attack surface reduction"
+attack_types:
+  - "Spam"
+tactics_and_techniques:
+  - "Evasion"
+detection_methods:
+  - "Content analysis"
+  - "HTML analysis"
+id: "2a5da530-3c80-5b05-83cd-ae092ef68a0d"

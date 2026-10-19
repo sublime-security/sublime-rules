@@ -56,13 +56,10 @@ source: |
           )
   )
   and (
-    not any(headers.hops,
-            .authentication_results.compauth.verdict is not null
-            and .authentication_results.compauth.verdict == "pass"
-            and sender.email.domain.domain in (
-              "microsoft.com",
-              "sharepointonline.com"
-            )
+    not sender.email.domain.domain in ("microsoft.com", "sharepointonline.com")
+    or not any(headers.hops,
+               .authentication_results.compauth.verdict is not null
+               and .authentication_results.compauth.verdict == "pass"
     )
   )
   
@@ -82,12 +79,7 @@ source: |
   // negate replies
   and (
     (
-      (
-        length(headers.references) > 0
-        or not any(headers.hops,
-                   any(.fields, strings.ilike(.name, "In-Reply-To"))
-        )
-      )
+      (length(headers.references) > 0 or headers.in_reply_to is null)
       and not (
         (
           strings.istarts_with(subject.subject, "RE:")
@@ -114,12 +106,9 @@ source: |
   )
   
   // negate highly trusted sender domains unless they fail DMARC authentication
-  and (
-    (
-      sender.email.domain.root_domain in $high_trust_sender_root_domains
-      and not headers.auth_summary.dmarc.pass
-    )
-    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  and not (
+    sender.email.domain.root_domain in $high_trust_sender_root_domains
+    and coalesce(headers.auth_summary.dmarc.pass, false)
   )
   and not profile.by_sender().any_messages_benign
 attack_types:

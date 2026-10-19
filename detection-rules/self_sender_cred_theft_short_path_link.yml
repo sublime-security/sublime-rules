@@ -1,0 +1,33 @@
+name: "Link: Single character path with credential theft body and self sender behavior or invalid recipient"
+description: "Message where the sender and recipient are the same or the recipient domain is invalid, contains a link with a single character path and no query parameters or fragments, and includes credential theft language."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  // self sender or invaild recipent domain
+  and length(recipients.to) == 1
+  and (
+    sender.email.email == recipients.to[0].email.email
+    or recipients.to[0].email.domain.valid == false
+  )
+  // path contains 1 character
+  and any(body.current_thread.links,
+          regex.imatch(.href_url.path, '\/[A-Za-z0-9]')
+          and .href_url.query_params is null
+          and .href_url.fragment is null
+          and .display_url.url is null
+  )
+  and any(ml.nlu_classifier(body.current_thread.text).intents,
+          .name == "cred_theft" and .confidence != "low"
+  )
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Evasion"
+  - "Social engineering"
+detection_methods:
+  - "Natural Language Understanding"
+  - "URL analysis"
+  - "Sender analysis"
+  - "Header analysis"
+id: "c97982e6-eaa2-53e3-ba8f-0dc4db55b936"

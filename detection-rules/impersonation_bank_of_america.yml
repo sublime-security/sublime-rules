@@ -18,15 +18,18 @@ source: |
     'bofa.com',
     'bofamerchantservices.com'
   )
-  and sender.email.email not in $recipient_emails
+  and (
+    sender.email.email not in $recipient_emails
+    or (
+      length(recipients.to) == 1
+      and sender.email.email == recipients.to[0].email.email
+    )
+  )
   
   // negate highly trusted sender domains unless they fail DMARC authentication
-  and (
-    (
-      sender.email.domain.root_domain in $high_trust_sender_root_domains
-      and not headers.auth_summary.dmarc.pass
-    )
-    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  and not (
+    sender.email.domain.root_domain in $high_trust_sender_root_domains
+    and coalesce(headers.auth_summary.dmarc.pass, false)
   )
 attack_types:
   - "Credential Phishing"

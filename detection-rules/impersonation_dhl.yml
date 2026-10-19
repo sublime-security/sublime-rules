@@ -21,7 +21,14 @@ source: |
       any(ml.nlu_classifier(body.current_thread.text).topics,
           .name == "Shipping and Package" and .confidence == "high"
       )
-      and strings.contains(body.current_thread.text, 'DHL ')
+      and (
+        strings.contains(body.current_thread.text, 'DHL ')
+        //
+        // This rule makes use of a beta feature and is subject to change without notice
+        // using the beta feature in custom rules is not suggested until it has been formally released
+        //
+        or strings.istarts_with(beta.ocr(file.message_screenshot()).text, 'DHL')
+      )
     )
   )
   and (
@@ -29,7 +36,7 @@ source: |
     or any(ml.nlu_classifier(body.current_thread.text).entities,
            .name == "org"
            and (
-             .text =~ "DHL" 
+             .text =~ "DHL"
              or .text =~ "DHL Express"
              or strings.istarts_with(.text, "DHL International")
            )
@@ -68,12 +75,7 @@ source: |
   )
   and (
     (
-      (
-        length(headers.references) > 0
-        or not any(headers.hops,
-                   any(.fields, strings.ilike(.name, "In-Reply-To"))
-        )
-      )
+      (length(headers.references) > 0 or headers.in_reply_to is null)
       and not (
         (
           strings.istarts_with(subject.subject, "RE:")
@@ -122,6 +124,10 @@ source: |
     'dhlgpi.com', // DHL Australia
     'dhlfreight-news.com'
   )
+  and not (
+    sender.email.domain.tld in ('dhl')
+    and coalesce(headers.auth_summary.dmarc.pass, false)
+  )
   and (
     profile.by_sender().prevalence in ("new", "outlier")
     or (
@@ -131,14 +137,10 @@ source: |
   )
   
   // negate highly trusted sender domains unless they fail DMARC authentication
-  and (
-    (
-      sender.email.domain.root_domain in $high_trust_sender_root_domains
-      and not headers.auth_summary.dmarc.pass
-    )
-    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  and not (
+    sender.email.domain.root_domain in $high_trust_sender_root_domains
+    and coalesce(headers.auth_summary.dmarc.pass, false)
   )
-
 attack_types:
   - "Credential Phishing"
 tactics_and_techniques:

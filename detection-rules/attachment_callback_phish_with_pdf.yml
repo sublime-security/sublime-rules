@@ -27,6 +27,22 @@ source: |
       and all(recipients.to, .email.domain.domain not in $org_domains)
     )
   )
+  
+  // negate ML matches to "Professional and Career Development" - tuning resume FPs
+  and not any(ml.nlu_classifier(coalesce(body.html.display_text, body.plain.raw)).topics,
+              .name == "Professional and Career Development"
+              and .confidence == "high"
+  )
+  and not any(attachments,
+              .file_type == 'pdf'
+              and any(file.explode(.),
+                      any(ml.nlu_classifier(.scan.ocr.raw).topics,
+                          .name == "Professional and Career Development"
+                          and .confidence == "high"
+                      )
+              )
+  )
+  
   // the attachment is a pdf with less than 3 pages, and at least 60 ocr chars
   and any(attachments,
           (
@@ -51,35 +67,15 @@ source: |
                       or .scan.exiftool.creator is null
                     )
             )
-            // negate ML matches to "Professional and Career Development" - tuning resume FPs
-            and not (
-              any(beta.ml_topic(coalesce(body.html.display_text, body.plain.raw)).topics,
-                  .name == "Professional and Career Development"
-                  and .confidence == "high"
-              )
-              or (
-                (
-                  any(attachments,
-                      .file_type == 'pdf'
-                      and any(file.explode(.),
-                              any(beta.ml_topic(.scan.ocr.raw).topics,
-                                  .name == "Professional and Career Development"
-                                  and .confidence == "high"
-                              )
-                      )
-                  )
-                )
-              )
-            )
             // check that any _single_ result in the file.explode matches these conditions
-            // a second file.explode is required because the OCR is generated at a different depth within 
+            // a second file.explode is required because the OCR is generated at a different depth within
             // the file.explode results
             and (
               any(file.explode(.),
                   length(.scan.ocr.raw) > 60
-                  // 4 of the following strings are found        
+                  // 4 of the following strings are found
                   and 4 of (
-                    // this section is synced with attachment_callback_phish_with_pdf.yml and body_callback_phishing_no_attachment.yml
+                    // this section is synced with other rules, see related_detections
                     strings.icontains(.scan.ocr.raw, "purchase"),
                     strings.icontains(.scan.ocr.raw, "payment"),
                     strings.icontains(.scan.ocr.raw, "transaction"),
@@ -108,7 +104,7 @@ source: |
                     ),
                   )
                   and (
-                    // this section is synced with attachment_callback_phish_with_img.yml and body_callback_phishing_no_attachment.yml
+                    // this section is synced with other rules, see related_detections
                     regex.icontains(.scan.ocr.raw,
                                     '(p.{0,3}a.{0,3}y.{0,3}p.{0,3}a.{0,3}l|ma?c.?fee|n[o0]rt[o0]n|geek.{0,5}squad|ebay|symantec|best buy|lifel[o0]c|secure anywhere|starz|utilities premium|pc security|at&t)'
                     )
@@ -126,7 +122,7 @@ source: |
                     )
                   )
               )
-              // this section is synced with attachment_callback_phish_with_img.yml and body_callback_phishing_no_attachment.yml
+              // this section is synced with other rules, see related_detections
               or any(ml.logo_detect(.).brands,
                      .name in (
                        "PayPal",
@@ -142,12 +138,7 @@ source: |
   )
   and (
     (
-      (
-        length(headers.references) > 0
-        or not any(headers.hops,
-                   any(.fields, strings.ilike(.name, "In-Reply-To"))
-        )
-      )
+      (length(headers.references) > 0 or headers.in_reply_to is null)
       and not (
         (
           strings.istarts_with(subject.subject, "RE:")
@@ -179,4 +170,14 @@ detection_methods:
   - "File analysis"
   - "Optical Character Recognition"
   - "Sender analysis"
+related_detections:
+  - "attachment_callback_phish_with_img.yml"
+  - "attachment_callback_phish_via_text_file.yml"
+  - "attachment_callback_phish_via_image_only_office_document.yml"
+  - "body_callback_phishing_no_attachment.yml"
+  - "callback_phishing_adobesign.yml"
+  - "callback_phishing_generic_esignature.yml"
+  - "callback_phishing_signable.yml"
+  - "callback_phishing_signfree.yml"
+  - "callback_phishing_xodosign.yml"
 id: "ac33f097-af20-554c-b29a-56f21be1b285"

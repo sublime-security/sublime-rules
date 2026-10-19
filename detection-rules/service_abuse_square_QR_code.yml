@@ -1,0 +1,37 @@
+name: "Service abuse: Square marketing with suspicious QR code"
+description: "Detects messages from Square's marketing domain containing QR codes that redirect to self-service creation platforms, file sharing services, or image hosting services."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and sender.email.domain.domain == "squaremktg.com"
+  and beta.scan_qr(file.message_screenshot()).found
+  //
+  // This rule makes use of a beta feature and is subject to change without notice
+  // using the beta feature in custom rules is not suggested until it has been formally released
+  //
+  and any(filter(beta.scan_qr(file.message_screenshot()).items,
+                 // ignore square's own free website hosting service
+                 .url.domain.root_domain != "square.site"
+          ),
+          (
+            .url.domain.root_domain in $self_service_creation_platform_domains
+            or .url.domain.domain in $self_service_creation_platform_domains
+          )
+          or (
+            .url.domain.root_domain in $free_file_hosts
+            or .url.domain.domain in $free_file_hosts
+          )
+  )
+
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "QR code"
+  - "Free file host"
+detection_methods:
+  - "Computer Vision"
+  - "QR code analysis"
+  - "Sender analysis"
+  - "URL analysis"
+id: "079c81ff-45f6-5460-8dc5-f00dcfcdd57a"

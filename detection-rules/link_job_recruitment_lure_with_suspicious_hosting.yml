@@ -1,0 +1,65 @@
+name: "Link: Job recruitment lure from unsolicited sender with suspicious hosting"
+description: "Message contains job recruitment language with links to suspicious hosting services including free file hosts, subdomain hosts, or URL shorteners from an unsolicited sender."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  // commonly observed abused senders
+  and sender.email.domain.root_domain in (
+    'hireology.com',
+    'appsheet.com',
+    'welcomekit.co',
+    'xero.com',
+    'workforce.com',
+    'eventbrite.com',
+    'tiscali.it',
+    'on24event.com',
+    'talexio.com',
+    'easy.jobs',
+    'suitzzedash.com',
+    'awsapps.com',
+    'beehiiv.com'
+  )
+  and regex.icontains(sender.display_name, 'careers|jobs')
+  and (
+    any(body.links,
+        (
+          // domain contains brand, but root domain is not legit brand domain
+          regex.icontains(.href_url.domain.domain,
+                          '(?:ferrari|tesla|vuitton|red[ -]?bull|nike|robert[ -]?half|adidas|coca[ -]?cola|instagram|spotify|reebok|marriott|starbucks|whatsapp|ledger|uber|ikea|canva|bbdo|mango)'
+          )
+          and not regex.icontains(.href_url.domain.root_domain,
+                                  '(?:spotify|instagram|ferarri|tesla|nike|adidas|louisvuitton|redbull|roberthalf|coca-cola|reebok|marriott|starbucks|whatsapp|ledger|uber|ikea|canva|bbdo|mango)\.com'
+          )
+        )
+        and not regex.icontains(.display_text, 'unsubscribe')
+    )
+    or (
+      regex.icontains(subject.base,
+                      '(?:ferrari|tesla|vuitton|red.?bull|nike|robert[ _-]?half|adidas|coca[ _-]?cola|instagram|spotify|reebok|marriott|starbucks|whatsapp|ray[ _-]ban|meta talent|executive talent|talent acquisition|ledger|\buber\b|\bikea\b|canva|bbdo|mango)'
+      )
+      or regex.icontains(sender.display_name,
+                         '(?:ferrari|tesla|vuitton|red.?bull|nike|robert[ _-]?half|adidas|coca[ _-]?cola|instagram|spotify|reebok|marriott|starbucks|whatsapp|ray[ _-]ban|meta talent|executive talent|talent acquisition|ledger|\buber\b|\bikea\b|canva|bbdo|mango)'
+      )
+      or regex.icontains(body.current_thread.text,
+                         '\b(?:ferrari|tesla|vuitton|red.?bull|nike|robert[ _-]?half|adidas|coca[ _-]?cola|spotify|reebok|marriott|starbucks|whatsapp|ray[ _-]ban|meta talent|executive talent|talent acquisition|ledger|uber|ikea|canva|bbdo|mango)\b'
+      )
+      or regex.icontains(sender.display_name,
+                         '^[a-z-]+\s*\|\s*(?:Careers|Recruitment|hiring talent|talent connect|talents recruitment$)'
+      )
+      or regex.icontains(sender.display_name, '\bIG\b.*(?:Recruitment|Strategy)')
+    )
+  )
+  and not regex.icontains(body.current_thread.text,
+                          '\b(?:facebook|copyright|llp|legal|vip|representative|case details|summit|training|conference|apartments|live\s*stream|masterclass|tickets|b2b networking|RSVP|discover more events|Marketing e Eventos|workshop|register here|vip|delivery date)\b'
+  )
+
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Social engineering" 
+detection_methods:
+  - "Content analysis"
+  - "Sender analysis"
+  - "URL analysis"
+id: "0d9ea49e-6393-51ee-97e8-e8efb8cebda0"

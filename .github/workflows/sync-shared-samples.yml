@@ -1,0 +1,165 @@
+name: Sync Shared Samples
+
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch:  # Allow manual triggering
+
+env:
+  PYTHON_VERSION: "3.13"
+
+jobs:
+  sync-shared-samples:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      checks: write
+      pull-requests: write
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+
+    - name: Set up Python
+      uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+
+    - name: Install dependencies
+      run: pip install requests
+
+    - name: Checkout scripts from main branch
+      uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      with:
+        ref: main
+        path: scripts-main
+
+    - name: Create and switch to shared-samples branch
+      run: |
+        git fetch --all
+        if git show-ref --quiet refs/remotes/origin/shared-samples; then
+          git checkout shared-samples
+          git pull origin shared-samples
+        else
+          git checkout -b shared-samples
+        fi
+
+    - name: Run the sync script
+      env:
+        GITHUB_TOKEN: ${{ github.token }}
+        SUBLIME_API_TOKEN: ${{ secrets.SUBLIME_API_TOKEN }}
+        # Enable bulk PR limits
+        SKIP_BULK_PRS: 'true'
+        MAX_RULES_PER_PR: '10'
+        # Enable all standard features
+        ADD_AUTHOR_TAG: 'true'
+        ADD_RULE_STATUS_TAG: 'true'
+        ADD_PR_REFERENCE: 'true'
+        CREATE_OPEN_PR_TAG: 'true'
+        # Enable rule deletion for closed PRs (immediate)
+        DELETE_RULES_FROM_CLOSED_PRS: 'true'
+        DELETE_RULES_FROM_CLOSED_PRS_DELAY: '0'
+        # Organization membership filtering
+        FILTER_BY_ORG_MEMBERSHIP: 'true'
+        ORG_NAME: 'sublime-security'
+        INCLUDE_PRS_WITH_COMMENT: 'true'
+        COMMENT_TRIGGER: '/update-shared-samples'
+      run: |
+        python scripts-main/.github/scripts/sync_shared_samples.py
+        rm -rf scripts-main
+
+    - name: Commit changes
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        git config --global user.name 'github-actions[bot]'
+        git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+
+        # First check if there are any changes
+        if [[ -z $(git status --porcelain detection-rules) ]]; then
+          echo "No changes to detection rules"
+          exit 0
+        fi
+
+        # Get list of modified files
+        FILES=$(git status --porcelain detection-rules | awk '{print $2}')
+
+        # Track stats for the summary
+        ADDED_COUNT=0
+        MODIFIED_COUNT=0
+        DELETED_COUNT=0
+        UPDATED_PRS=()
+
+        # Process each file individually
+        for FILE in $FILES; do
+          echo "Processing $FILE"
+          # Skip non-rule files
+          if [[ ! "$FILE" =~ .*\.yml$ ]]; then
+            continue
+          fi
+
+          BASENAME=$(basename "$FILE")
+
+          # Extract PR number from filename (format: PR_NUMBER_filename.yml)
+          PR_NUMBER=$(echo "$BASENAME" | grep -o "^[0-9]*")
+          UPDATED_PRS+=("$PR_NUMBER")
+
+          echo "Processing $BASENAME from $PR_NUMBER for inclusion"
+
+          # Handle removed files
+          if [[ ! -f "$FILE" ]]; then
+            echo "$BASENAME was deleted, commiting deletion."
+            DELETED_COUNT=$((DELETED_COUNT+1))
+            git add "$FILE"
+            git commit -m "[Shared Samples] [PR #${PR_NUMBER}] Delete detection rule"
+            continue
+          fi
+
+          # Ensure that new files are tracked (otherwise they won't show up in diff)
+          git add -N "$FILE"
+
+          # Check for changes
+          DIFF_OUTPUT=$(git diff HEAD -- "$FILE")
+
+          # Skip files with no changes at all
+          if [[ -z "$DIFF_OUTPUT" ]]; then
+            echo "\tSkipping $FILE: no changes"
+            continue
+          fi
+
+          # Determine status directly from git
+          GIT_STATUS=$(git status --porcelain "$FILE" | cut -c1-2 | tr -d ' ')
+          if [[ "$GIT_STATUS" == "A" ]]; then
+            ADDED_COUNT=$((ADDED_COUNT+1))
+            STATUS="added"
+          elif [[ "$GIT_STATUS" == "M" ]]; then
+            MODIFIED_COUNT=$((MODIFIED_COUNT+1))
+            STATUS="modified"
+          else
+            MODIFIED_COUNT=$((MODIFIED_COUNT+1))
+            STATUS="changed"
+          fi
+
+          # Extract rule name and commit
+          RULE_NAME=$(grep -m 1 "name:" "$FILE" | sed 's/name: //' | sed 's/^"//' | sed 's/"$//' | sed "s/^'//" | sed "s/'$//")
+
+          # Build commit message
+          COMMIT_MSG="[Shared Samples] [PR #${PR_NUMBER}] ${STATUS} rule: ${RULE_NAME}"
+
+          # Add file and commit
+          git add "$FILE"
+          git commit -m "$COMMIT_MSG"
+        done
+
+        # Get unique PR count
+        UNIQUE_PRS=$(printf '%s\n' "${UPDATED_PRS[@]}" | sort -u | wc -l)
+
+        # Create summary
+        echo "Shared Samples Sync Summary ($(date '+%Y-%m-%d %H:%M:%S'))"
+        echo "- PRs processed: ${UNIQUE_PRS}"
+        echo "- Rules added: ${ADDED_COUNT}"
+        echo "- Rules modified: ${MODIFIED_COUNT}"
+        echo "- Rules deleted: ${DELETED_COUNT}"
+
+        # Push changes
+        git push

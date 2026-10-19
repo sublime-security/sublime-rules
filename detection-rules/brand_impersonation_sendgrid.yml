@@ -13,6 +13,9 @@ source: |
       or strings.ilevenshtein(strings.replace_confusables(sender.display_name),
                               'sendgrid'
       ) <= 1
+      or regex.icontains(sender.display_name,
+                         's[\x{2063}\x{200B}]+e[\x{2063}\x{200B}]+n[\x{2063}\x{200B}]+d[\x{2063}\x{200B}]+g[\x{2063}\x{200B}]+r[\x{2063}\x{200B}]+i[\x{2063}\x{200B}]+d'
+      )
       or (
         strings.ilike(strings.replace_confusables(sender.email.local_part),
                       '*sendgrid*'
@@ -43,6 +46,12 @@ source: |
           or strings.ilike(strings.replace_confusables(subject.base), '*twilio*')
         )
       )
+    )
+    or strings.icontains(body.current_thread.text, "the sendgrid team")
+    or 2 of (
+      regex.icontains(body.current_thread.text, '(?:Twilio|SendGrid)'),
+      strings.icontains(body.current_thread.text, '1801 California St'),
+      strings.icontains(body.current_thread.text, 'Denver, CO 80202')
     )
     // SendGrid content from non-SendGrid marketing platforms
     or (
@@ -128,19 +137,18 @@ source: |
           "sendgrid.net",
           "twilio.com",
           "swoogo.com", // events planning software used by Twillio
-          "sendsafely.com" // secure delivery used by Twillio
+          "sendsafely.com", // secure delivery used by Twillio
+          "evolve.com", // same address as Twillio
+          "sendgridsolutions.com"
         )
       )
     )
     and headers.auth_summary.dmarc.pass
   )
-  // Exclude high trust domains with valid auth and solicited senders
-  and (
-    (
-      sender.email.domain.root_domain in $high_trust_sender_root_domains
-      and not headers.auth_summary.dmarc.pass
-    )
-    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and not (
+    sender.email.domain.root_domain in $high_trust_sender_root_domains
+    and coalesce(headers.auth_summary.dmarc.pass, false)
   )
   and not profile.by_sender().solicited
 attack_types:

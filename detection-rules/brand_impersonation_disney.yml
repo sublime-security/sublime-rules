@@ -26,7 +26,7 @@ source: |
   )
   and (
     (
-      any(beta.ml_topic(body.current_thread.text).topics,
+      any(ml.nlu_classifier(body.current_thread.text).topics,
           .name in (
             "Security and Authentication",
             "Secure Message",
@@ -34,22 +34,22 @@ source: |
           )
           and .confidence in ("medium", "high")
       )
-      and not any(beta.ml_topic(body.current_thread.text).topics,
+      and not any(ml.nlu_classifier(body.current_thread.text).topics,
                   .name in ("Newsletters and Digests", "Entertainment and Sports")
                   and .confidence in ("medium", "high")
       )
     )
     or (
-      any(beta.ml_topic(beta.ocr(file.message_screenshot()).text).topics,
-          .name in (
-            "Security and Authentication",
-            "Secure Message",
-            "Reminders and Notifications"
-          )
-          and .confidence in ("medium", "high")
-          and beta.ocr(file.message_screenshot()).text != ""
+      beta.ocr(file.message_screenshot()).text != ""
+      and any(ml.nlu_classifier(beta.ocr(file.message_screenshot()).text).topics,
+              .name in (
+                "Security and Authentication",
+                "Secure Message",
+                "Reminders and Notifications"
+              )
+              and .confidence in ("medium", "high")
       )
-      and not any(beta.ml_topic(beta.ocr(file.message_screenshot()).text).topics,
+      and not any(ml.nlu_classifier(beta.ocr(file.message_screenshot()).text).topics,
                   .name in ("Newsletters and Digests", "Entertainment and Sports")
                   and .confidence in ("medium", "high")
       )
@@ -115,18 +115,18 @@ source: |
         "hulumail.com",
         "canarytechnologies.com", // domain used by a disney resort - hotel mgmt software company
         "disneyvacationclub.com",
-        "twdc.com"
+        "twdc.com",
+        "disneyrewards.com",
+        "disneystore.com",
+        "disneyworld.com"
       )
       and headers.auth_summary.dmarc.pass
     )
   )
   // and the sender is not from high trust sender root domains
-  and (
-    (
-      sender.email.domain.root_domain in $high_trust_sender_root_domains
-      and not headers.auth_summary.dmarc.pass
-    )
-    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  and not (
+    sender.email.domain.root_domain in $high_trust_sender_root_domains
+    and coalesce(headers.auth_summary.dmarc.pass, false)
   )
   and (
     not profile.by_sender().solicited

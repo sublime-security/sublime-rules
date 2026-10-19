@@ -1,0 +1,40 @@
+name: "Link: Personal SharePoint with invalid recipients and credential theft language"
+description: "Detects messages with undisclosed or invalid recipients containing a single link to a personal SharePoint domain (with '-my' pattern) and high-confidence credential theft language in short message body."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  // undisclosed recipients or no recipients
+  and (
+    length(recipients.to) == 0
+    or (
+      all(recipients.to, .email.domain.valid == false)
+      and all(recipients.cc, .email.domain.valid == false)
+    )
+  )
+  // no previous threads
+  and length(body.previous_threads) == 0
+  // personal SharePoint domain pattern (firstname-my.sharepoint.com or similar)
+  and any(body.links,
+          .href_url.domain.root_domain == "sharepoint.com"
+          and strings.icontains(.href_url.domain.subdomain, "-my")
+  )
+  // high confidence credential theft intent from ML
+  and any(ml.nlu_classifier(body.current_thread.text).intents,
+          .name == "cred_theft" and .confidence in ("medium", "high")
+  )
+  // and message is relatively short and contains a single link
+  and (
+    length(body.current_thread.text) < 1500
+    and length(body.current_thread.links) == 1
+  )
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Header analysis"
+  - "Natural Language Understanding"
+  - "URL analysis"
+id: "79d5403d-dc0f-5696-bc6d-f891ed707755"

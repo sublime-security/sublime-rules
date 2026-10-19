@@ -1,0 +1,67 @@
+name: "Attachment: ICS calendar file with base64 encoded recipient address in URL parameters"
+description: "Detects inbound messages containing ICS calendar attachments where event links have multiple URL parameters, and the base64 decoded combination of those parameters matches the recipient's email address. This technique may be used to personalize malicious links or track specific targets."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and any(attachments,
+          (
+            .file_type == "ics"
+            or .file_extension == "ics"
+            or .content_type in ("application/ics", "text/calendar")
+          )
+          //
+          // This rule makes use of a beta feature and is subject to change without notice
+          // using the beta feature in custom rules is not suggested until it has been formally released
+          //
+          and any(beta.file.parse_ics(.).events,
+                  any(filter(.links, length(.href_url.query_params_decoded) > 1),
+                      any(strings.scan_base64(strings.concat(coalesce(flatten(values(.display_url.query_params_decoded
+                                                                              )
+                                                                      )[0],
+                                                                      ""
+                                                             ),
+                                                             coalesce(flatten(values(.display_url.query_params_decoded
+                                                                              )
+                                                                      )[1],
+                                                                      ""
+                                                             ),
+                                                             coalesce(flatten(values(.display_url.query_params_decoded
+                                                                              )
+                                                                      )[2],
+                                                                      ""
+                                                             ),
+                                                             coalesce(flatten(values(.display_url.query_params_decoded
+                                                                              )
+                                                                      )[3],
+                                                                      ""
+                                                             ),
+                                                             coalesce(flatten(values(.display_url.query_params_decoded
+                                                                              )
+                                                                      )[4],
+                                                                      ""
+                                                             ),
+                                                             coalesce(flatten(values(.display_url.query_params_decoded
+                                                                              )
+                                                                      )[5],
+                                                                      ""
+                                                             )
+                                              )
+                          ),
+                          . == recipients.to[0].email.email
+                      )
+                  )
+          )
+  ) 
+  
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Evasion"
+  - "Social engineering"
+  - "ICS Phishing"
+detection_methods:
+  - "File analysis"
+  - "URL analysis"
+  - "Content analysis"
+id: "472a6b15-7f3b-5daf-a968-3d138b70a2a5"

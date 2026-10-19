@@ -1,0 +1,24 @@
+name: "Adaptive Security phishing simulation"
+description: "Identifies phishing simulations sent by Adaptive and excludes the message from live analysis."
+type: "exclusion"
+source: |
+  type.inbound
+  and (
+    // smtp delivery
+    any(headers.ips,
+        ip.in_range(.,
+                    '204.220.178.8',
+                    '204.220.178.36',
+                    '204.220.178.57',
+                    '131.162.232.0/22'
+        )
+    )
+    // dmi delivery
+    or length(headers.hops) <= 1
+  )
+  // a single hop has the adaptive headers
+  and any(headers.hops,
+          all(['x-adaptive-bypass', 'x-adaptive-signature'],
+              . in~ map(..fields, .name)
+          )
+  )

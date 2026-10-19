@@ -1,4 +1,4 @@
-<a href="https://sublimesecurity.com"><img src="https://user-images.githubusercontent.com/11003450/115128085-5805da00-9fa9-11eb-8c7a-dc8b708053ee.png" width="75px" alt="Sublime Logo" /></a>
+<a href="https://sublimesecurity.com"><img src="https://github.com/user-attachments/assets/6195a83e-0b03-4c49-ba67-cda02a1e8378" width="75px" alt="Sublime Logo" /></a>
  
 Sublime Rules
 ==========

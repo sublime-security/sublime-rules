@@ -4,9 +4,9 @@ type: "rule"
 severity: "high"
 source: |
   type.inbound
+  and strings.contains(sender.email.local_part, ".")
   and any($org_vips,
-          strings.contains(sender.email.local_part, ".")
-          and strings.starts_with(.email, sender.email.local_part)
+          strings.starts_with(.email, sender.email.local_part)
           and (
             sender.email.email != .email
             or (
@@ -38,12 +38,9 @@ source: |
   )
   
   // negate highly trusted sender domains unless they fail DMARC authentication
-  and (
-    (
-      sender.email.domain.root_domain in $high_trust_sender_root_domains
-      and not headers.auth_summary.dmarc.pass
-    )
-    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  and not (
+    sender.email.domain.root_domain in $high_trust_sender_root_domains
+    and coalesce(headers.auth_summary.dmarc.pass, false)
   )
   // sender profile
   and (
