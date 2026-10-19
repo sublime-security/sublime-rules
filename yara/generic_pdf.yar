@@ -927,3 +927,18 @@ rule pdf_gcpay_blurred_check {
 		uint32be(0) == 0x25504446
 		and $jpeg
 }
+
+rule pdf_suspect_guardbreak_strings {
+	meta:
+		author      = "kyle eaton"
+		date        = "2026-10-19"
+		description = "pdf containing dict keys related to guardbreak techniques"
+	strings:
+		$key_a = ">>/instractions("
+		$key_b = ">>/instructions("
+		$key_c = ">>/instraction("
+		$key_d = ">>/instruction("
+	condition:
+		uint32be(0) == 0x25504446
+		and any of ($key_*)
+}
