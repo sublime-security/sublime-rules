@@ -1,0 +1,27 @@
+name: "PR# 5671 - TEST - internal.qr_scan no-op validation"
+description: "Test rule that calls internal.qr_scan on each inbound image attachment to validate alternative QR scanning. Rule will never flag, as items clause cannot be fulfilled"
+type: "rule"
+severity: "low"
+source: |
+  type.inbound
+  and any(attachments,
+          .file_type in $file_types_images
+          // Sentinel comparison: the optimizer cannot fold a string equality
+          // against a function result, so the call is really emitted and run.
+          // Never matches real mail -> rule never flags.
+          and any(internal.qr_scan(.).items,
+                  .data == "sublime-qr-v2-validation-sentinel-do-not-match"
+          )
+  )
+tactics_and_techniques:
+  - "Image as content"
+  - "QR code"
+detection_methods:
+  - "File analysis"
+id: "e9b162f5-7f9a-552f-a634-6ad17bf986da"
+tags:
+  - created_from_open_prs
+  - rule_status_added
+  - pr_author_dlynch-sublime
+references:
+  - https://github.com/sublime-security/sublime-rules/pull/5671
