@@ -901,3 +901,17 @@ rule pdf_blue_oneDrive_lure_2 {
 			and $arialReg and $arialBold
 		)
 }
+
+rule pdf_small_qr_phishing_template {
+	meta:
+		author      = "kyle eaton"
+		date        = "2026-10-19"
+		description = "looking for pdfs matching a specific page size with very few objects per the xref table and string counts."
+	strings:
+		$mb   = { 2F 4D 65 64 69 61 42 6F 78 20 5B 20 30 20 30 20 35 39 35 2E 32 37 35 35 39 30 34 39 20 38 34 31 2E 38 38 }
+		$xref = { 65 6E 64 6F 62 6A 0A 0A 78 72 65 66 0A 30 20 37 0A }
+		$obj  = " 0 obj"
+	condition:
+		uint32be(0) == 0x25504446
+		and $mb and $xref and #obj == 6
+}
