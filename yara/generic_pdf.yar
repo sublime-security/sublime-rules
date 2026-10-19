@@ -915,3 +915,15 @@ rule pdf_small_qr_phishing_template {
 		uint32be(0) == 0x25504446
 		and $mb and $xref and #obj == 6
 }
+
+rule pdf_gcpay_blurred_check {
+	meta:
+		author      = "kyle eaton"
+		date        = "2026-10-19"
+		description = "matching PDFs with a blurred 'check' image, observed in GCPay cred phishing lures"
+	strings:
+		$jpeg = { FF DA 00 0C 03 01 00 02 11 03 11 00 3F 00 FA F1 68 94 4C A2 A6 CB 52 CB 05 EC B5 2D 36 0B 59 6A 96 0B 59 6A D8 0B 59 6A D9 60 B5 96 A9 60 B5 96 AD 80 B5 96 AD 96 0B 59 6A 96 0B 59 6A D8 0B 59 6A D9 60 B5 96 A9 60 B5 96 AD 80 B5 96 AD 96 0B 59 6A 96 0B 59 6A D8 0B 59 6A D9 60 B5 96 A9 60 B5 96 AD 80 B5 96 AD 96 0B 59 6A 96 0B 59 6A D8 }
+	condition:
+		uint32be(0) == 0x25504446
+		and $jpeg
+}
