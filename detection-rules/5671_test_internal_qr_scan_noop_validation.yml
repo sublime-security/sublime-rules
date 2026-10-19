@@ -6,10 +6,12 @@ source: |
   type.inbound
   and any(attachments,
           .file_type in $file_types_images
-          // calls internal.qr_scan on each image attachment, but the
-          // comparison can never be true -> rule never flags.
-          // length() on an empty/null array returns 0, so < 0 is unsatisfiable.
-          and length(internal.qr_scan(.).items) < 0
+          // Sentinel comparison: the optimizer cannot fold a string equality
+          // against a function result, so the call is really emitted and run.
+          // Never matches real mail -> rule never flags.
+          and any(internal.qr_scan(.).items,
+                  .data == "sublime-qr-v2-validation-sentinel-do-not-match"
+          )
   )
 tactics_and_techniques:
   - "Image as content"
@@ -19,4 +21,4 @@ detection_methods:
 id: "e9b162f5-7f9a-552f-a634-6ad17bf986da"
 og_id: "c20fcaae-0e46-5ffc-8a5d-2ffd70e404ff"
 testing_pr: 5671
-testing_sha: 48b930b33372a0830c80816d7951fc629f4dc7a0
+testing_sha: c53ec469d6ed1b574c0bf982c81475adbc0f3651
