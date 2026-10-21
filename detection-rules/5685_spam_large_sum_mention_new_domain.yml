@@ -1,0 +1,34 @@
+name: "Spam: Large financial amount mention from newly registered sender domain"
+description: "Detects inbound messages from domains less than 180 days old that solicit investment interest from named organizations or individuals on behalf of a purported private family office. Senders use financial-sounding names and rotate first names and target company names while keeping the subject line structure nearly identical. The outreach is designed to appear as a legitimate investment inquiry to bait a response."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and (
+    network.whois(sender.email.domain).days_old < 180
+    or (
+      network.whois(sender.email.domain).days_old is null
+      and any(ml.nlu_classifier(body.current_thread.text).topics,
+              .name in ("B2B Cold Outreach", "Charity and Non-Profit")
+              and .confidence != "low"
+      )
+    )
+  )
+  and any([body.html.display_text, subject.base],
+          regex.icontains(.,
+                          '\$\d{1,3}\s*(?:m|million|k)?\s*(?:\p{Pd}|to|through)\s*\$\d{1,3}\s*(?:m|million|k)'
+          )
+  )
+attack_types:
+  - "BEC/Fraud"
+  - "Spam"
+tactics_and_techniques:
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Sender analysis"
+  - "Whois"
+id: "2e01a4f5-17fb-5757-9c22-126a200520fb"
+og_id: "e28e1597-6a89-562e-b1e9-e551c5ac4fdd"
+testing_pr: 5685
+testing_sha: a3c729cd79813de41b28b0f60a81c285bbefe25b
