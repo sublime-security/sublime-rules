@@ -60,35 +60,37 @@ source: |
                                      ),
                                      strings.icontains(., ..email.email)
                               )
+                              // QR code contains the hex encoded email address in fragment
+                              or strings.decode_hex(..scan.qr.url.fragment) == .email.email
                             )
                           )
                           or strings.icontains(.display_name, "undisclosed")
                         )
                     )
-  
+
                     // the recipients sld is in the senders display name
                     or any(recipients.to,
                            strings.icontains(sender.display_name,
                                              .email.domain.sld
                            )
                     )
-  
+
                     // the recipient local is in the body
                     or any(recipients.to,
                            strings.icontains(body.current_thread.text,
                                              .email.local_part
                            )
                     )
-  
+
                     // or the body is null
                     or body.current_thread.text is null
                     or body.current_thread.text == ""
-  
+
                     // or the subject contains authentication/urgency verbiage
                     or regex.contains(subject.subject,
                                       "(Authenticat(e|or|ion)|2fa|Multi.Factor|(qr|bar).code|action.require|alert|Att(n|ention):)"
                     )
-  
+
                     // high confidence cred theft in body
                     or any(ml.nlu_classifier(body.current_thread.text).intents,
                            .name == "cred_theft" and .confidence in ("high")
@@ -128,14 +130,11 @@ source: |
                and .authentication_results.compauth.verdict == "pass"
     )
   )
-  
+
   // negate highly trusted sender domains unless they fail DMARC authentication
-  and (
-    (
-      sender.email.domain.root_domain in $high_trust_sender_root_domains
-      and not headers.auth_summary.dmarc.pass
-    )
-    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  and not (
+    sender.email.domain.root_domain in $high_trust_sender_root_domains
+    and coalesce(headers.auth_summary.dmarc.pass, false)
   )
 attack_types:
   - "Credential Phishing"

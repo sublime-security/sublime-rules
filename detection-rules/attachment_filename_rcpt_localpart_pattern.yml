@@ -1,0 +1,29 @@
+name: "Attachment: Personalized fake order/invoice file naming pattern"
+description: "Detects inbound messages from free webmail senders with fake order confirmation or overdue invoice lures, carrying an attachment whose file name is dynamically personalized with the recipient's email local part and follows a structured pattern (date-like prefix, recipient identifier, and an alphanumeric code). This naming convention is used to make the attachment appear as a legitimate, individually generated invoice or receipt tailored to the target."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and recipients.to[0].email.local_part is not null
+  and recipients.to[0].email.local_part != ""
+  and any(attachments,
+          strings.count(.file_name, '_') == 2
+          and strings.icontains(.file_name,
+                                strings.concat('_',
+                                               recipients.to[0].email.local_part,
+                                               '_'
+                                )
+          )
+          and regex.match(.file_name, '202\d{5}_[^\_]+_[A-Z0-9]+\..*')
+  )
+attack_types:
+  - "Callback Phishing"
+tactics_and_techniques:
+  - "Social engineering"
+  - "Free email provider"
+  - "Impersonation: Brand"
+detection_methods:
+  - "File analysis"
+  - "Content analysis"
+  - "Sender analysis"
+id: "e8765086-b112-545c-a100-32d92d065445"

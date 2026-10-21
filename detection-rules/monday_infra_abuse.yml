@@ -8,8 +8,12 @@ source: |
     (
       length(body.links) < 15
       and any(body.links,
-              'monday_tracker' in .href_url.rewrite.encoders
-              and .href_url.scheme != "mailto"
+              .href_url.scheme != "mailto"
+              and (
+                'monday_tracker' in .href_url.rewrite.encoders
+                // link is raw url
+                or .href_url.domain.domain == "trackingservice.monday.com"
+              )
       )
     )
     or (
@@ -97,7 +101,7 @@ source: |
   and not (
     headers.auth_summary.dmarc.details.from.root_domain == "monday.com"
     and headers.auth_summary.spf.pass
-    and headers.auth_summary.dmarc.pass
+    and coalesce(headers.auth_summary.dmarc.pass, false)
   )
   and any(ml.nlu_classifier(body.current_thread.text).intents,
           .name != "benign" and .confidence in ("medium", "high")

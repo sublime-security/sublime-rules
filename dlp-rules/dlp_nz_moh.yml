@@ -1,0 +1,43 @@
+name: "DLP: New Zealand MOH"
+description: "Detects messages containing New Zealand Ministry of Health numbers."
+type: "dlp"
+severity: "high"
+attack_types:
+  - "DLP: Healthcare Data"
+data_categories:
+  - "DLP: Healthcare Data"
+tags:
+  - "Healthcare Data"
+  - "NZ Privacy Act"
+source: |
+  type.outbound
+  and (
+    any(ml.extract_sensitive_information(body.current_thread.text).elements,
+        .type == "nz_national_health_index_number"
+        and .confidence in ("medium", "high")
+    )
+    or any(ml.extract_sensitive_information(subject.subject).elements,
+           .type == "nz_national_health_index_number"
+           and .confidence in ("medium", "high")
+    )
+    or any(attachments,
+           any(file.explode(.),
+               (
+                 any(ml.extract_sensitive_information(.scan.strings.raw).elements,
+                     .type == "nz_national_health_index_number"
+                     and .confidence in ("medium", "high")
+                 )
+                 or any(ml.extract_sensitive_information(.scan.ocr.raw).elements,
+                        .type == "nz_national_health_index_number"
+                        and .confidence in ("medium", "high")
+                 )
+               )
+           )
+    )
+  )
+detection_methods:
+  - "Content analysis"
+  - "Natural Language Understanding"
+  - "File analysis"
+  - "Optical Character Recognition"
+id: "2133c95c-6c9f-5336-a34d-39fbd41db48b"

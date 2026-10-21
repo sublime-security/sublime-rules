@@ -1,0 +1,41 @@
+name: "DLP: Australia ABN"
+description: "Detects messages containing Australian Business Numbers (ABN)."
+type: "dlp"
+severity: "high"
+attack_types:
+  - "DLP: Financial Data"
+data_categories:
+  - "DLP: Financial Data"
+tags:
+  - "Financial Data"
+  - "AU Privacy Act"
+source: |
+  type.outbound
+  and (
+    any(ml.extract_sensitive_information(body.current_thread.text).elements,
+        .type == "au_business_number" and .confidence in ("medium", "high")
+    )
+    or any(ml.extract_sensitive_information(subject.subject).elements,
+           .type == "au_business_number" and .confidence in ("medium", "high")
+    )
+    or any(attachments,
+           any(file.explode(.),
+               (
+                 any(ml.extract_sensitive_information(.scan.strings.raw).elements,
+                     .type == "au_business_number"
+                     and .confidence in ("medium", "high")
+                 )
+                 or any(ml.extract_sensitive_information(.scan.ocr.raw).elements,
+                        .type == "au_business_number"
+                        and .confidence in ("medium", "high")
+                 )
+               )
+           )
+    )
+  )
+detection_methods:
+  - "Content analysis"
+  - "Natural Language Understanding"
+  - "File analysis"
+  - "Optical Character Recognition"
+id: "2893bfe4-d741-5584-bee1-b35aa37546f0"
