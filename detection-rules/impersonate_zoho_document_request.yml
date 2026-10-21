@@ -1,0 +1,39 @@
+name: "Brand impersonation: Zoho Sign document request"
+description: "Detects messages that impersonate Zoho Sign document-signing notifications by including a legitimate-looking guest signing link and forged thread references to a prior Zoho Sign notification, yet lack any authentic Zoho DKIM signature on the message. The lure typically poses as a colleague or business contact requesting review and signature of a document or proposal, aiming to lead recipients to a fraudulent signing page. Highly trusted sender domains that pass DMARC are excluded to reduce false positives."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  // the zoho sign notification for this document sits in the message's thread history
+  and any(headers.references, strings.icontains(., "notifications.zohosign."))
+  // the zoho sign guest signing cta is still in the body
+  and any(body.current_thread.links,
+          strings.istarts_with(.href_url.domain.domain, "sign.zoho.")
+          and strings.icontains(.href_url.path, "/zsguest")
+  )
+  // but zoho never signed this message
+  and not any(headers.hops,
+              any(.authentication_results.dkim_details,
+                  strings.icontains(.domain, "zoho.")
+              )
+  )
+  and not subject.is_reply
+  and not subject.is_forward
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and not (
+    sender.email.domain.root_domain in $high_trust_sender_root_domains
+    and coalesce(headers.auth_summary.dmarc.pass, false)
+  )
+attack_types:
+  - "Credential Phishing"
+  - "BEC/Fraud"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Social engineering"
+  - "Spoofing"
+detection_methods:
+  - "Header analysis"
+  - "URL analysis"
+  - "Sender analysis"
+  - "Content analysis"
+id: "1ff2234e-b418-5c99-8318-532ffe069ea3"
