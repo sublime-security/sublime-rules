@@ -1,0 +1,36 @@
+name: "PR# 5375 - Attachment: PDF impersonating recipient's organization"
+description: "Detects inbound messages containing a PDF attachment whose filename consists solely of the recipient's email domain SLD (e.g., 'acme.pdf'), while the exploded page content, verified via OCR, also references that same domain. This pattern suggests the sender is attempting to masquerade as the recipient's own organization or a trusted internal source to increase perceived legitimacy of the attachment."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and any(filter(attachments, .file_extension == "pdf"),
+          any(file.explode(.),
+              // the recipient's org is both the filename and the claimed sharer
+              any(recipients.to,
+                  .email.domain.valid
+                  and strings.icontains(..scan.ocr.raw, .email.domain.sld)
+                  and strings.istarts_with(...file_name, .email.domain.sld)
+                  // + 4 == .pdf
+                  and length(...file_name) == length(.email.domain.sld) + 4
+              )
+          )
+  )
+attack_types:
+  - "Credential Phishing"
+  - "Spam"
+tactics_and_techniques:
+  - "PDF"
+  - "Impersonation: Brand"
+  - "Social engineering"
+detection_methods:
+  - "File analysis"
+  - "Optical Character Recognition"
+  - "Content analysis"
+id: "91125ce4-2c7b-5c39-a7cb-0f7c57b5be66"
+tags:
+  - created_from_open_prs
+  - rule_status_added
+  - pr_author_IndiaAce
+references:
+  - https://github.com/sublime-security/sublime-rules/pull/5375
