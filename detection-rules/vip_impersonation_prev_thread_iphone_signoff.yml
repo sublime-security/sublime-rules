@@ -29,12 +29,27 @@ source: |
                          // the fabricated VIP message is one-to-one; long legitimate threads cc many people
                          and length(.recipients.to) + length(.recipients.cc) <= 2
                          and (
-                           all(flatten([recipients.to, recipients.cc, recipients.bcc]),
+                           all(flatten([
+                                         recipients.to,
+                                         recipients.cc,
+                                         recipients.bcc
+                                       ]
+                               ),
                                .email.domain.root_domain in $org_domains
                            )
                            // or every recipient shares one domain that isn't the sender's (subsidiary domains)
-                           or all(flatten([recipients.to, recipients.cc, recipients.bcc]),
-                                  .email.domain.root_domain == flatten([recipients.to, recipients.cc, recipients.bcc])[0].email.domain.root_domain
+                           or all(flatten([
+                                            recipients.to,
+                                            recipients.cc,
+                                            recipients.bcc
+                                          ]
+                                  ),
+                                  .email.domain.root_domain == flatten([
+                                                                         recipients.to,
+                                                                         recipients.cc,
+                                                                         recipients.bcc
+                                                                       ]
+                                  )[0].email.domain.root_domain
                                   and .email.domain.root_domain != sender.email.domain.root_domain
                            )
                          )
@@ -45,13 +60,22 @@ source: |
                      // the actor sometimes sends the fake thread to the VIP's own inbox
                      and (
                        .sender.email.email == ""
-                       or not any(flatten([recipients.to, recipients.cc, recipients.bcc]),
+                       or not any(flatten([
+                                            recipients.to,
+                                            recipients.cc,
+                                            recipients.bcc
+                                          ]
+                                  ),
                                   any($org_vips,
                                       .email != ""
                                       and strings.icontains(..email.email, .email)
                                       and (
-                                        strings.icontains(...sender.display_name, .display_name)
-                                        or strings.icontains(...sender.email.email, .email)
+                                        strings.icontains(...sender.display_name,
+                                                          .display_name
+                                        )
+                                        or strings.icontains(...sender.email.email,
+                                                             .email
+                                        )
                                       )
                                   )
                        )
@@ -69,7 +93,7 @@ source: |
                               )
                               and .confidence != "low"
                        )
-
+  
                        // if we don't get NLU but there is a W9 or Inv attached, we can assume it's invoice related
                        or any(attachments,
                               strings.istarts_with(.file_name, 'INV', "W-9", 'W9')
