@@ -4,9 +4,20 @@ type: "rule"
 severity: "medium"
 source: |
   type.inbound
-  and network.whois(sender.email.domain).days_old < 180
+  and (
+    network.whois(sender.email.domain).days_old < 180
+    or (
+      network.whois(sender.email.domain).days_old is null
+      and any(ml.nlu_classifier(body.current_thread.text).topics,
+              .name in ("B2B Cold Outreach", "Charity and Non-Profit")
+              and .confidence != "low"
+      )
+    )
+  )
   and any([body.html.display_text, subject.base],
-          regex.icontains(., '\$\d\p{Pd}\$\d{1,2}(?:m\b|million)')
+          regex.icontains(.,
+                          '\$\d{1,3}\s*(?:m|million|k)?\s*(?:\p{Pd}|to|through)\s*\$\d{1,3}\s*(?:m|million|k)'
+          )
   )
 attack_types:
   - "BEC/Fraud"
