@@ -38,20 +38,15 @@ source: |
                                ),
                                .email.domain.root_domain in $org_domains
                            )
-                           // or every recipient shares one domain that isn't the sender's (subsidiary domains)
-                           or all(flatten([
-                                            recipients.to,
-                                            recipients.cc,
-                                            recipients.bcc
-                                          ]
-                                  ),
-                                  .email.domain.root_domain == flatten([
-                                                                         recipients.to,
-                                                                         recipients.cc,
-                                                                         recipients.bcc
-                                                                       ]
-                                  )[0].email.domain.root_domain
-                                  and .email.domain.root_domain != sender.email.domain.root_domain
+                           // or every recipient is at one domain that isn't the sender's (subsidiary domains)
+                           or (
+                             length(distinct(map(flatten([recipients.to, recipients.cc, recipients.bcc]),
+                                                 .email.domain.root_domain
+                                    )
+                             )) == 1
+                             and not any(flatten([recipients.to, recipients.cc, recipients.bcc]),
+                                         .email.domain.root_domain == sender.email.domain.root_domain
+                             )
                            )
                          )
                          // the VIP who wrote this segment is not on the live message, checked by their listed address.
