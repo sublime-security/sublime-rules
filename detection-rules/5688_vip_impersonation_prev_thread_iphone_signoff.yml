@@ -38,20 +38,26 @@ source: |
                                ),
                                .email.domain.root_domain in $org_domains
                            )
-                           // or every recipient shares one domain that isn't the sender's (subsidiary domains)
-                           or all(flatten([
-                                            recipients.to,
-                                            recipients.cc,
-                                            recipients.bcc
-                                          ]
-                                  ),
-                                  .email.domain.root_domain == flatten([
-                                                                         recipients.to,
-                                                                         recipients.cc,
-                                                                         recipients.bcc
-                                                                       ]
-                                  )[0].email.domain.root_domain
-                                  and .email.domain.root_domain != sender.email.domain.root_domain
+                           // or every recipient is at one domain that isn't the sender's (subsidiary domains)
+                           or (
+                             length(distinct(map(flatten([
+                                                           recipients.to,
+                                                           recipients.cc,
+                                                           recipients.bcc
+                                                         ]
+                                                 ),
+                                                 .email.domain.root_domain
+                                             )
+                                    )
+                             ) == 1
+                             and not any(flatten([
+                                                   recipients.to,
+                                                   recipients.cc,
+                                                   recipients.bcc
+                                                 ]
+                                         ),
+                                         .email.domain.root_domain == sender.email.domain.root_domain
+                             )
                            )
                          )
                          // the VIP who wrote this segment is not on the live message, checked by their listed address.
@@ -124,4 +130,4 @@ detection_methods:
 id: "7937c97a-5bf4-5f0f-84f1-d4221c290d96"
 og_id: "7b3b9dcb-adcf-5335-813b-51f1a42cb4d6"
 testing_pr: 5688
-testing_sha: d68dcc4d56a725e6969bc899e545dcb8dea9e912
+testing_sha: 20c8ce6aab3247beafcf902b2c63e641b6b86c85
