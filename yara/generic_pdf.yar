@@ -689,9 +689,10 @@ rule pdf_w9_signatures {
 		description = "matching PDFs with signatures observed in fake w9 documents"
 	strings:
 		$noel_docusign = { FF DA 00 0C 03 01 00 02 11 03 11 00 3F 00 FE FC 39 E7 DF AF 3D 78 C7 3E BC 60 73 DB 8A 00 51 96 3D F2 3A 73 D3 D7 1E 9F E7 DE 80 FE BF AF EB F2 17 63 72 31 C1 EA 33 D7 EB C7 3D 07 5D DD 3F 0A 00 5D AF D7 9C FA E7 D7 A8 FC 70 3B F6 EF 40 09 B1 B0 47 63 C9 19 18 3E E7 B5 00 27 3B C2 E4 EF }
+		$signature_from_linkedin_related_w9 = { FF DA 00 0C 03 01 00 02 11 03 11 00 3F 00 F9 52 80 0A 00 28 00 A0 02 80 0A 00 28 00 A0 02 80 0A 00 28 00 A0 02 80 0A 00 28 03 4E 2D 0B 52 96 DE }
 	condition:
 		uint32be(0) == 0x25504446
-		and all of them
+		and any of them
 }
 
 rule pdf_msft_lure_signature {
@@ -811,20 +812,6 @@ rule pdf_fake_linkedIn_invoice_lure {
 		and $linkedin_lure
 }
 
-rule pdf_w9_signatures_update {
-	meta:
-		author      = "kyle eaton"
-		date        = "2026-09-16"
-		update      = "2026-10-02"
-		description = "matching PDFs with signatures observed in fake w9 documents"
-	strings:
-		//$noel_docusign                      = { FF DA 00 0C 03 01 00 02 11 03 11 00 3F 00 FE FC 39 E7 DF AF 3D 78 C7 3E BC 60 73 DB 8A 00 51 96 3D F2 3A 73 D3 D7 1E 9F E7 DE 80 FE BF AF EB F2 17 63 72 31 C1 EA 33 D7 EB C7 3D 07 5D DD 3F 0A 00 5D AF D7 9C FA E7 D7 A8 FC 70 3B F6 EF 40 09 B1 B0 47 63 C9 19 18 3E E7 B5 00 27 3B C2 E4 EF }
-		$signature_from_linkedin_related_w9 = { FF DA 00 0C 03 01 00 02 11 03 11 00 3F 00 F9 52 80 0A 00 28 00 A0 02 80 0A 00 28 00 A0 02 80 0A 00 28 00 A0 02 80 0A 00 28 03 4E 2D 0B 52 96 DE }
-	condition:
-		uint32be(0) == 0x25504446
-		and any of them
-}
-
 rule pdf_ssa_lure {
 	meta:
 		author      = "kyle eaton"
@@ -860,4 +847,98 @@ rule pdf_ITA_signature_lure {
 	condition:
 		uint32be(0) == 0x25504446
 		and $stream1 and $stream2
+}
+
+rule pdf_red_adobe_lure {
+	meta:
+		author      = "kyle eaton"
+		date        = "2026-10-07"
+		description = "pdf rect value from red adobe lure"
+	strings:
+		$rect = { 2F 52 65 63 74 20 5B 31 38 36 20 31 38 38 2E 32 35 20 [5-6] 20 32 32 32 2E 37 35 5D }
+	condition:
+		uint32be(0) == 0x25504446
+		and $rect
+}
+
+rule pdf_blue_oneDrive_lure_structure {
+	meta:
+		author      = "kyle eaton"
+		date        = "2026-10-08"
+		description = "PDF with specific OneDrive lure, matching on templated structure in the document."
+	strings:
+		$ref_obj_3  = { 0A 2F 49 6E 66 6F 20 33 20 30 20 52 0A }
+		$num_obj_3  = /[^0-9]3 0 obj/
+		$ref_obj_4  = { 2F 50 61 67 65 73 20 34 20 30 20 52 }
+		$num_obj_4  = /[^0-9]4 0 obj/
+		$ref_obj_5  = { 2F 41 46 20 5B 35 20 30 20 52 5D }
+		$num_obj_5  = /[^0-9]5 0 obj/
+		$ref_obj_6  = { 2F 4E 61 6D 65 73 20 36 20 30 20 52 }
+		$num_obj_6  = /[^0-9]6 0 obj/
+		$ref_obj_23 = { 2F 46 20 32 33 20 30 20 52 }
+		$num_obj_23 = /[^0-9]23 0 obj/
+	condition:
+		uint32be(0) == 0x25504446
+		and all of ($ref_*)
+		and none of ($num_*)
+}
+
+rule pdf_blue_oneDrive_lure_2 {
+	meta:
+		author      = "kyle eaton"
+		date        = "2026-10-14"
+		description = "PDF matching specific blue oneDrive lure"
+	strings:
+		$jpg_onedrive_1 = { 0A 28 A2 80 0A 28 A2 80 0A 28 A2 80 0A 2A D5 96 9F 3D E9 F9 00 54 1D 5C F4 AD 54 F0 FD B8 5F 9E }
+		$cid_font       = "/CIDFontType2"
+		$arialReg       = "ArialRegular"
+		$arialBold      = "ArialBold"
+	condition:
+		uint32be(0) == 0x25504446
+		and any of ($jpg*)
+		and (
+			#cid_font == 2
+			and $arialReg and $arialBold
+		)
+}
+
+rule pdf_small_qr_phishing_template {
+	meta:
+		author      = "kyle eaton"
+		date        = "2026-10-19"
+		description = "looking for pdfs matching a specific page size with very few objects per the xref table and string counts."
+	strings:
+		$mb   = { 2F 4D 65 64 69 61 42 6F 78 20 5B 20 30 20 30 20 35 39 35 2E 32 37 35 35 39 30 34 39 20 38 34 31 2E 38 38 }
+		$xref = { 65 6E 64 6F 62 6A 0A 0A 78 72 65 66 0A 30 20 37 0A }
+		$obj  = " 0 obj"
+	condition:
+		uint32be(0) == 0x25504446
+		and $mb and $xref and #obj == 6
+}
+
+rule pdf_gcpay_blurred_check {
+	meta:
+		author      = "kyle eaton"
+		date        = "2026-10-19"
+		description = "matching PDFs with a blurred 'check' image, observed in GCPay cred phishing lures"
+	strings:
+		$jpeg = { FF DA 00 0C 03 01 00 02 11 03 11 00 3F 00 FA F1 68 94 4C A2 A6 CB 52 CB 05 EC B5 2D 36 0B 59 6A 96 0B 59 6A D8 0B 59 6A D9 60 B5 96 A9 60 B5 96 AD 80 B5 96 AD 96 0B 59 6A 96 0B 59 6A D8 0B 59 6A D9 60 B5 96 A9 60 B5 96 AD 80 B5 96 AD 96 0B 59 6A 96 0B 59 6A D8 0B 59 6A D9 60 B5 96 A9 60 B5 96 AD 80 B5 96 AD 96 0B 59 6A 96 0B 59 6A D8 }
+	condition:
+		uint32be(0) == 0x25504446
+		and $jpeg
+}
+
+rule pdf_suspect_guardbreak_strings {
+	meta:
+		author      = "kyle eaton"
+		date        = "2026-10-19"
+		description = "pdf containing dict keys related to guardbreak techniques"
+	strings:
+		$key_a = ">>/instractions("
+		$key_b = ">>/instructions("
+		$key_c = ">>/instraction("
+		$key_d = ">>/instruction("
+	condition:
+		uint32be(0) == 0x25504446
+		and any of ($key_*)
 }
