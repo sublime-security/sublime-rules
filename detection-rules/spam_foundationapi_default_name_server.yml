@@ -1,0 +1,27 @@
+name: "Spam: Cold outreach from FoundationAPI-hosted domain"
+description: "Detects inbound messages from domains using FoundationAPI default name-servers, where the message content is classified as B2B cold outreach by NLU analysis."
+type: "rule"
+severity: "low"
+source: |
+  type.inbound
+  // there are 2 name-servers which have subdomains containing .dns
+  and length(network.whois(sender.email.domain).name_servers) == 2
+  and all(network.whois(sender.email.domain).name_servers,
+          strings.istarts_with(.subdomain, 'dns')
+          and .root_domain == 'foundationapi.com'
+  )
+  
+  // nlu logic
+  and any(ml.nlu_classifier(body.current_thread.text).topics,
+          .name == 'B2B Cold Outreach'
+  )
+tags:
+  - "Attack surface reduction"
+attack_types:
+  - "Spam"
+tactics_and_techniques:
+  - "Social engineering"
+detection_methods:
+  - "Whois"
+  - "Natural Language Understanding"
+id: "b0c00565-c901-5832-84e9-9d276daa9664"
