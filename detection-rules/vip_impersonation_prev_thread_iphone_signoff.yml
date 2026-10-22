@@ -20,6 +20,74 @@ source: |
                        or regex.icontains(.text,
                                           '(?:sent (?:via|from) (?:my )?(?:iphone|ipad)[^\n]{0,140}siri|siri[^\n]{0,120}sent (?:via|from) (?:my )?(?:iphone|ipad))[^\n]{0,40}$'
                        )
+                       // newer sign-offs ("Sent from this iPhone", "Sent from iPhone", optional period) are common in
+                       // legitimate mail, so only count them on a one-to-one VIP message sent to internal recipients,
+                       // with that VIP absent from the live message
+                       or (
+                         regex.icontains(.text,
+                                         'sent (?:via|from) (?:my |this |an? )?(?:iphone|ipad)\.?\s*$'
+                         )
+                         // the fabricated VIP message is one-to-one; long legitimate threads cc many people
+                         and length(.recipients.to) + length(.recipients.cc) <= 2
+                         and (
+                           all(flatten([
+                                         recipients.to,
+                                         recipients.cc,
+                                         recipients.bcc
+                                       ]
+                               ),
+                               .email.domain.root_domain in $org_domains
+                           )
+                           // or every recipient is at one domain that isn't the sender's (subsidiary domains)
+                           or (
+                             length(distinct(map(flatten([
+                                                           recipients.to,
+                                                           recipients.cc,
+                                                           recipients.bcc
+                                                         ]
+                                                 ),
+                                                 .email.domain.root_domain
+                                             )
+                                    )
+                             ) == 1
+                             and not any(flatten([
+                                                   recipients.to,
+                                                   recipients.cc,
+                                                   recipients.bcc
+                                                 ]
+                                         ),
+                                         .email.domain.root_domain == sender.email.domain.root_domain
+                             )
+                           )
+                         )
+                         // the VIP who wrote this segment is not on the live message, checked by their listed address.
+                         // skipped when the segment has no sender address: the fabricated VIP message usually has none, and
+                         // the actor sometimes sends the fake thread to the VIP's own inbox
+                         and (
+                           .sender.email.email == ""
+                           or not any(flatten([
+                                                recipients.to,
+                                                recipients.cc,
+                                                recipients.bcc
+                                              ]
+                                      ),
+                                      any($org_vips,
+                                          .email != ""
+                                          and strings.icontains(..email.email,
+                                                                .email
+                                          )
+                                          and (
+                                            strings.icontains(...sender.display_name,
+                                                              .display_name
+                                            )
+                                            or strings.icontains(...sender.email.email,
+                                                                 .email
+                                            )
+                                          )
+                                      )
+                           )
+                         )
+                       )
                      )
                      and (
                        // any previous thread authored by the "VIP" has invoice/payment
