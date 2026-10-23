@@ -1,0 +1,25 @@
+name: "Link: Google Cloud Storage object named after its bucket"
+description: "Detects Google Cloud Storage links where the HTML object repeats the bucket name, a known actor-controlled hosting pattern. Observed in affiliate spam and account notice lures."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and any(body.links,
+          .href_url.domain.domain == "storage.googleapis.com"
+          and regex.match(.href_url.path, '/[^/]+/[^/]+\.html')
+          and strings.starts_with(.href_url.path,
+                                  strings.concat('/',
+                                                 regex.extract(.href_url.path,
+                                                               '^/[^/]+/(?P<o>[^/]+)\.html$'
+                                                 )[0].named_groups["o"],
+                                                 '/'
+                                  )
+          )
+  )
+attack_types:
+  - "Spam"
+tactics_and_techniques:
+  - "Free file host"
+  - "Evasion"
+detection_methods:
+  - "URL analysis"
