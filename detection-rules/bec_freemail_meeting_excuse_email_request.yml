@@ -1,0 +1,36 @@
+name: "BEC/Fraud: Busy excuse paired with reply-via-email request"
+description: "Flags inbound messages sent from free email provider domains where the sender's text is classified as business email compromise with at least medium confidence, and the message body combines a 'busy in meetings' excuse with a request to respond only by email, a common social engineering pattern used to pressure quick action and avoid phone verification."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  // sender is freemail
+  and sender.email.domain.root_domain in $free_email_providers
+  and any(ml.nlu_classifier(body.current_thread.text).intents,
+          .name == 'bec' and .confidence != 'low'
+  )
+  and strings.icontains(body.current_thread.text,
+                        'tied up with meetings',
+                        "I'm in a meeting",
+                        "I'm in meetings",
+                        'upcoming meeting',
+                        'meeting now'
+  )
+  and strings.icontains(body.current_thread.text,
+                        'email would be easiest',
+                        'reply to my email',
+                        'email is best',
+                        'replying to this email',
+                        'reply my email'
+  )
+  
+attack_types:
+  - "BEC/Fraud"
+tactics_and_techniques:
+  - "Free email provider"
+  - "Social engineering"
+detection_methods:
+  - "Natural Language Understanding"
+  - "Content analysis"
+  - "Sender analysis"
+id: "a8e4ffd7-6bfd-55c6-836b-a4187f4d66c2"
