@@ -1,0 +1,49 @@
+name: "PR# 5700 - Link: Google Cloud Storage /index and /unsub link pair"
+description: "This rule detects inbound messages that abuse Google Cloud Storage (storage.googleapis.com) hosting by embedding exactly two distinct links that share the same bucket directory, with paths following an /index and /unsub pattern. This structure is commonly seen in bulk spam campaigns promoting wellness products, supplement pitches, or reward/loyalty offers, where the hosted content serves as a landing page and the second link mimics an unsubscribe mechanism to lend legitimacy. The use of a trusted cloud storage domain helps the messages evade reputation-based filtering while funneling recipients to spam content."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  // two distinct paths
+  and length(distinct(map(filter(body.links,
+                                 .href_url.domain.domain == "storage.googleapis.com"
+                          ),
+                          .href_url.path
+                      )
+             )
+  ) == 2
+  // they are exactly /<bucket>/index or /<bucket>/unsub
+  and all(distinct(map(filter(body.links,
+                              .href_url.domain.domain == "storage.googleapis.com"
+                       ),
+                       .href_url.path
+                   )
+          ),
+          regex.imatch(., '/[^/]+/(?:index|unsubv?)')
+  )
+  // all buckets share the same name before the last hyphen
+  and length(distinct(map(filter(body.links,
+                                 .href_url.domain.domain == "storage.googleapis.com"
+                          ),
+                          regex.extract(.href_url.path,
+                                        '^/(?P<stem>[^/]+?)(?:-[^/-]+)?/'
+                          )[0].named_groups["stem"]
+                      )
+             )
+  ) == 1
+tags:
+  - "Attack surface reduction"
+  - pr_author_zoomequipd
+  - created_from_open_prs
+  - rule_status_modified
+attack_types:
+  - "Spam"
+tactics_and_techniques:
+  - "Free file host"
+  - "Social engineering"
+detection_methods:
+  - "URL analysis"
+  - "Content analysis"
+id: "cd75c230-01a1-5d14-9b15-d667b0d36cc3"
+references:
+  - https://github.com/sublime-security/sublime-rules/pull/5700
