@@ -955,3 +955,15 @@ rule pdf_w9_signature_c004 {
 		uint32be(0) == 0x25504446
 		and ($stream or $size)
 }
+
+rule pdf_quickbooks_payment_image_lure {
+	meta:
+		author      = "kyle eaton"
+		date        = "2026-10-23"
+		description = "quickbooks PDF lure used in TOAD campaigns"
+	strings:
+		$jpg_01 = { A2 8A 28 00 A2 8A 28 00 A2 8A 28 00 A2 8A E2 7F 68 4F 18 D8 F8 2F E1 17 88 EF B5 1D 6B 51 F0 F5 8D }
+	condition:
+		uint32be(0) == 0x25504446
+		and $jpg_01
+}
