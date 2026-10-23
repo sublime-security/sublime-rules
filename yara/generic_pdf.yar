@@ -942,3 +942,16 @@ rule pdf_suspect_guardbreak_strings {
 		uint32be(0) == 0x25504446
 		and any of ($key_*)
 }
+
+rule pdf_w9_signature_c004 {
+	meta:
+		author      = "kyle eaton"
+		date        = "2026-10-23"
+		description = "fake w9 lure with specific signature/size"
+	strings:
+		$stream = { BC A2 AE 67 E2 81 EB 1A 77 F1 20 61 15 D7 64 E3 81 C6 0B 0F A2 6E 76 3D E2 15 AF E0 B5 AB 62 A2 }
+		$size   = { 2F 49 6D 61 67 65 0A 2F 48 65 69 67 68 74 20 31 30 39 0A 2F 57 69 64 74 68 20 31 32 37 0A 2F }
+	condition:
+		uint32be(0) == 0x25504446
+		and ($stream or $size)
+}
