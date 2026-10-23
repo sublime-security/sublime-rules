@@ -45,8 +45,18 @@ source: |
     )
     or (
       any(attachments,
-          any(ml.logo_detect(.).brands,
-              .name == "Quickbooks" and .confidence in ("medium", "high")
+          (
+            any(ml.logo_detect(.).brands,
+                .name == "Quickbooks" and .confidence in ("medium", "high")
+            )
+            // the QuickBooks/Intuit logo lockup, footer or copyright in the
+            // attachment, mirroring the body-text markers used above
+            or regex.icontains(beta.ocr(.).text,
+                               '©\s*(?:[0-9]{4})?\s*intuit\b',
+                               'intuit\s+(?:inc|quickbooks)\b',
+                               '@intuit\b',
+                               'quickbooks\s+(?:billing|support|cloud\s+services|subscription)'
+            )
           )
           and any(ml.nlu_classifier(beta.ocr(.).text).intents,
                   .name in ("cred_theft", "callback_scam")
@@ -230,7 +240,11 @@ source: |
     )
   )
   // negate common sender of quickbooks reseller
-  and not strings.icontains(body.current_thread.text, 'Purchasing Reviews, Inc')
+  and not coalesce(strings.icontains(body.current_thread.text,
+                                     'Purchasing Reviews, Inc'
+                   ),
+                   false
+  )
   // negate highly trusted sender domains unless they fail DMARC authentication
   and not (
     sender.email.domain.root_domain in $high_trust_sender_root_domains
