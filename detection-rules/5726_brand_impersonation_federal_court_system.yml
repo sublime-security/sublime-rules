@@ -1,0 +1,61 @@
+name: "PR# 5726 - Brand impersonation: Federal court system"
+description: "Detects inbound messages impersonating U.S. federal courts or related judiciary services (e.g., PACER, jury summons, clerk of court, Federal Rules of Civil Procedure) that attempt credential theft. The rule combines NLU-based detection of court/sender entities with credential-theft intent, or matches on multiple suspicious keywords/phrases commonly used in these notices. Legitimate newsletters are excluded, as are genuine .gov senders and highly trusted domains that pass DMARC authentication."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and (
+    (
+      any(ml.nlu_classifier(body.current_thread.text).entities,
+          .name in ("sender", "org")
+          and regex.icontains(.text,
+                              '(?:U\.?S\.?|United States)\s*(?:District\s+)?Courts?\b'
+          )
+      )
+      and any(ml.nlu_classifier(body.current_thread.text).intents,
+              .name == "cred_theft" and .confidence != "low"
+      )
+    )
+    or 2 of (
+      strings.icontains(body.current_thread.text, "PACER"),
+      // real PACER Service Center phone number
+      strings.icontains(body.current_thread.text, "1-800-676-6856"),
+      strings.icontains(body.current_thread.text, "contempt charges"),
+      strings.icontains(body.current_thread.text, "Official Court Notice"),
+      regex.icontains(body.current_thread.text, '(?:jury summons|juror number)'),
+      strings.icontains(body.current_thread.text,
+                        'complaint has been filed against you'
+      )
+    )
+  )
+  and not any(ml.nlu_classifier(body.current_thread.text).topics,
+              .name == "Newsletters and Digests" and .confidence == "high"
+  )
+  // negate the actual federal judiciary unless it fails DMARC authentication
+  and not (
+    sender.email.domain.tld == "gov"
+    and coalesce(headers.auth_summary.dmarc.pass, false)
+  )
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and not (
+    sender.email.domain.root_domain in $high_trust_sender_root_domains
+    and coalesce(headers.auth_summary.dmarc.pass, false)
+  )
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Social engineering"
+  - "Spoofing"
+detection_methods:
+  - "Natural Language Understanding"
+  - "Content analysis"
+  - "Header analysis"
+  - "Sender analysis"
+id: "9a74c4ad-d2c7-5f74-aa40-0f42825c39a3"
+tags:
+  - created_from_open_prs
+  - rule_status_modified
+  - pr_author_markmsublime
+references:
+  - https://github.com/sublime-security/sublime-rules/pull/5726
