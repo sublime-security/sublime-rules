@@ -1,0 +1,35 @@
+name: "Brand impersonation: Bluehost"
+description: "Detects inbound messages where NLU-extracted sender or organization entities reference 'Bluehost' and the message intent is classified as credential theft with non-low confidence. Excludes messages from verified Bluehost-related domains (bluehost.com, bluehost.in, newfold.com, ccsend.com) or other high-trust sender domains that pass DMARC authentication."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and any(ml.nlu_classifier(body.current_thread.text).entities,
+          .name in ("sender", "org") and strings.icontains(.text, 'bluehost')
+  )
+  and any(ml.nlu_classifier(body.current_thread.text).intents,
+          .name == "cred_theft" and .confidence != "low"
+  )
+  and not (
+    sender.email.domain.root_domain in (
+      "bluehost.com",
+      "bluehost.in",
+      "newfold.com",
+      "ccsend.com"
+    )
+    and coalesce(headers.auth_summary.dmarc.pass, false)
+  )
+  and not (
+    sender.email.domain.root_domain in $high_trust_sender_root_domains
+    and coalesce(headers.auth_summary.dmarc.pass, false)
+  )
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Social engineering"
+detection_methods:
+  - "Natural Language Understanding"
+  - "Header analysis"
+  - "Sender analysis"
+id: "c5b72c08-5afc-58ad-903e-9b7859a67cf4"
