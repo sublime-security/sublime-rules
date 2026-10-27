@@ -1,0 +1,43 @@
+name: "Link: Suspicious recipient with sender SLD as subject and free host link"
+description: "Detects inbound emails where the subject line consists solely of the sender's domain SLD, combined with signs of self-addressing or invalid/missing recipients (such as sender and recipient sharing the same email or local part, invalid recipient domains, or no CC/BCC recipients). The rule also requires that the email body contains links pointing to known free file hosting or free subdomain hosting services, a pattern often used to disguise malicious links as legitimate self-sent notifications."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  // mention this in the rule name: subject is just the senders domain sld
+  and subject.base =~ sender.email.domain.sld
+  and (
+      // self sender or invaild recipent domain or local parts match
+      (
+        length(recipients.to) == 1
+        and (
+          sender.email.email == recipients.to[0].email.email
+          or recipients.to[0].email.domain.valid == false
+          or sender.email.local_part == recipients.to[0].email.local_part
+        )
+      )
+      // no recipients defined
+      or (
+        (
+          length(recipients.to) == 0
+          or all(recipients.to, .email.domain.valid == false)
+        )
+        and length(recipients.cc) == 0
+        and length(recipients.bcc) == 0
+      )
+    )
+  and any(body.current_thread.links,
+          .href_url.domain.root_domain in $free_file_hosts
+          or .href_url.domain.root_domain in $free_subdomain_hosts
+  )
+  
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Free file host"
+  - "Free subdomain host"
+detection_methods:
+  - "URL analysis"
+  - "Header analysis"
+  - "Sender analysis"
+  - "Content analysis"
