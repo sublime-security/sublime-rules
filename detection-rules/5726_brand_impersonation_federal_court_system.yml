@@ -7,7 +7,7 @@ source: |
   and (
     (
       any(ml.nlu_classifier(body.current_thread.text).entities,
-          .name in ("sender", "org")
+          .name == "sender"
           and regex.icontains(.text,
                               '(?:U\.?S\.?|United States)\s*(?:District\s+)?Courts?\b'
           )
@@ -16,9 +16,17 @@ source: |
               .name == "cred_theft" and .confidence != "low"
       )
     )
+    // display name asserts court authority
+    or regex.icontains(sender.display_name,
+                       '(?:U\.?S\.?|United States)\s*(?:Bankruptcy\s+|District\s+)?Courts?\b',
+                       'clerk of (?:the )?court\b'
+    )
+    // court identity in letterhead position, first line of the body
+    or regex.imatch(body.current_thread.text,
+                    '\s*(?:U\.?S\.?|United States)\s*(?:Bankruptcy\s+|District\s+)?Courts?\b'
+    )
     or 2 of (
       strings.icontains(body.current_thread.text, "PACER"),
-      // real PACER Service Center phone number
       strings.icontains(body.current_thread.text, "1-800-676-6856"),
       strings.icontains(body.current_thread.text, "contempt charges"),
       strings.icontains(body.current_thread.text, "Official Court Notice"),
