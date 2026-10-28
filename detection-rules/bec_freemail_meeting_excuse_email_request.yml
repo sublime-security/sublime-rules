@@ -12,8 +12,18 @@ source: |
   and any(ml.nlu_classifier(body.current_thread.text).topics,
           .name == 'Out of Band Pivot' and .confidence != 'low'
   )
+  and any(ml.nlu_classifier(body.current_thread.text).entities,
+        .name == 'urgency'
+  )
   and strings.icontains(body.current_thread.text, 'meeting')
   and strings.icontains(body.current_thread.text, 'email')
+  // sender display name not in the actual email address local part
+  and not any(regex.iextract(sender.display_name, '\w+'),
+              length(.full_match) > 1
+              and strings.icontains(sender.email.local_part, .full_match)
+  )
+  // at least three random digits
+  and regex.contains(sender.email.local_part, '\d{3}')
   // no previous threads
   and length(body.previous_threads) == 0
   // no links
