@@ -1,0 +1,33 @@
+name: "Service abuse: Google security alert credential phishing"
+description: "Detects messages spoofing Google's automated account security alert notifications, warning that someone else may be using the recipient's account. These messages either trigger a callback scam intent classifier or embed a suspicious URL disguised as an app name within the alert text, luring recipients into calling a fraudulent number or visiting an attacker-controlled link under the guise of securing their account."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and sender.email.email == "no-reply@accounts.google.com"
+  and (
+    any(ml.nlu_classifier(body.current_thread.text).intents,
+        .name == "callback_scam" and .confidence != "low"
+    )
+    or any(regex.iextract(body.current_thread.text,
+                          'generate this password for (?P<app_name>.+), someone (?:else )?might be using your account'
+           ),
+           any(regex.iextract(.named_groups["app_name"],
+                              '(?:https?://)?(?P<url>[a-z0-9-]+(?:\.[a-z0-9-]+)+/[^\s,]*)'
+               ),
+               strings.parse_url(strings.concat("https://", .named_groups["url"])).domain.valid
+           )
+    )
+  )
+attack_types:
+  - "Callback Phishing"
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Social engineering"
+  - "Spoofing"
+detection_methods:
+  - "Natural Language Understanding"
+  - "Content analysis"
+  - "URL analysis"
+  - "Sender analysis"
