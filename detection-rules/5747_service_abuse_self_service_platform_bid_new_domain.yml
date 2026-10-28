@@ -1,0 +1,33 @@
+name: "PR# 5747 - Service abuse: Self-service platform page with bid or proposal lure text linking to newly registered domain"
+description: "Detects inbound emails containing links to self-service website creation platforms where the rendered page links to a domain registered within the last 30 days. The linked anchor text uses bid, proposal, or tender-related language such as 'review bid' or 'open proposal', a pattern commonly used to lure victims into engaging with fraudulent procurement or tender schemes."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and any(body.current_thread.links,
+          .href_url.domain.root_domain in $self_service_creation_platform_domains
+          and any(ml.link_analysis(.).final_dom.links,
+                  network.whois(.href_url.domain).days_old < 30
+                  and regex.icontains(.display_text,
+                                      '(?:review|view|open|access|download|bid)\W+(?:bid|proposal|document|rfp|rfq|tender)'
+                  )
+          )
+  )
+attack_types:
+  - "BEC/Fraud"
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Social engineering"
+  - "Lookalike domain"
+detection_methods:
+  - "URL analysis"
+  - "HTML analysis"
+  - "Whois"
+  - "Content analysis"
+id: "af197a86-9f94-59c3-8ed1-b54e172b466d"
+tags:
+  - created_from_open_prs
+  - rule_status_added
+  - pr_author_D-Bolton
+references:
+  - https://github.com/sublime-security/sublime-rules/pull/5747
