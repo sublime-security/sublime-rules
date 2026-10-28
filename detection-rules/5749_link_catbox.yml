@@ -1,0 +1,30 @@
+name: "Catbox.moe link from untrusted source"
+description: "Detects messages containing links to catbox.moe file hosting service from senders who either aren't in highly trusted domains or failed DMARC authentication"
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and any(body.links,
+          .href_url.domain.root_domain == "catbox.moe"
+          and not strings.iends_with(.href_url.path, ".json")
+  )
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and not (
+    sender.email.domain.root_domain in $high_trust_sender_root_domains
+    and coalesce(headers.auth_summary.dmarc.pass, false)
+  )
+tags:
+ - "Attack surface reduction"
+attack_types:
+  - "Malware/Ransomware"
+tactics_and_techniques:
+  - "Free file host"
+  - "Social engineering"
+detection_methods:
+  - "Header analysis"
+  - "Sender analysis"
+  - "URL analysis"
+id: "80964ef0-5e22-5d1f-90e4-d92767b0a1ad"
+og_id: "d6041a8b-55a9-5016-b214-ba021f4eba64"
+testing_pr: 5749
+testing_sha: d85e27e2adb4d555e4471a880c1f74faf342af70
