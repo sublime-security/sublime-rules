@@ -1,0 +1,51 @@
+name: "Link: Generic subdomain link from newly registered domain"
+description: "Detects short, single-threaded inbound messages that contain exactly one hyperlink pointing to a generic subdomain landing page on the sender's own root domain, with no path and brief display text. The sender's domain is also newly registered, being less than 365 days old, a strong indicator of infrastructure set up for spam, reconnoissance or malicious use."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  // only one short thread is present
+  and length(body.previous_threads) == 0
+  and length(body.current_thread.text) < 300
+  
+  // negate attachments
+  and length(attachments) == 0
+  
+  // generic link
+  and (
+    // only one link is present
+    length(body.links) == 1
+    // link is a generic subdomain landing page of sender root domain
+    and any(body.links,
+            .parser == "hyperlink"
+            and .href_url.domain.root_domain == sender.email.domain.root_domain
+            and .href_url.domain.subdomain is not null
+            and .href_url.domain.subdomain != "www"
+            and .href_url.path is null
+            // short display text hyperlink
+            and length(.display_text) < 20
+            and (
+              // single word action link
+              not strings.icontains(.display_text, " ")
+              // action link is third word from the end of body
+              and any(regex.extract(body.html.raw,
+                                    "<a.*?>[\r\n]{0,2}[a-zA-Z0-9-''%()]*?[.,?!]?</a>\\s([0-9a-zA-Z-''%]+[.,?!:]?\\s[0-9a-zA-Z-''%]+[.,?!']?)"
+                      ),
+                      strings.ends_with(body.html.display_text, .groups[0])
+              )
+            )
+    )
+  )
+  
+attack_types:
+  - "Credential Phishing"
+  - "Spam"
+  - "BEC/Fraud"
+tactics_and_techniques:
+  - "Social engineering"
+detection_methods:
+  - "URL analysis"
+  - "Whois"
+  - "Sender analysis"
+  - "Content analysis"
+id: "f5024ab8-2d82-5bb0-bc71-c3494f7bea6c"
