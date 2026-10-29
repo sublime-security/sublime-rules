@@ -4,25 +4,23 @@ type: "rule"
 severity: "medium"
 source: |
   type.inbound
-  // the zoho sign notification for this document sits in the message's thread history
-  and any(headers.references, strings.icontains(., "notifications.zohosign."))
-  // the zoho sign guest signing cta is still in the body
+  // zoho sign's notification footer is in the current message, not a quoted thread
+  and strings.icontains(body.current_thread.text,
+                        "automated email from Zoho Sign"
+  )
+  // with somewhere to send the recipient... zoho's own report-abuse footer link doesn't count
   and any(body.current_thread.links,
-          strings.istarts_with(.href_url.domain.domain, "sign.zoho.")
-          and strings.icontains(.href_url.path, "/zsguest")
+          .href_url.scheme in~ ("http", "https")
+          and not (
+            .href_url.domain.root_domain == "zoho.com"
+            and strings.istarts_with(.href_url.path, "/report-abuse")
+          )
   )
-  // but zoho never signed this message
+  // but it never left zoho sign's sending infra
   and not any(headers.hops,
-              any(.authentication_results.dkim_details,
-                  strings.icontains(.domain, "zoho.")
+              regex.icontains(.received.source.raw,
+                              '^[^ (]+\.(?:transmail\.net(?:\.in)?|zeptomail\.net|zohomail360\.in) '
               )
-  )
-  and not subject.is_reply
-  and not subject.is_forward
-  // negate highly trusted sender domains unless they fail DMARC authentication
-  and not (
-    sender.email.domain.root_domain in $high_trust_sender_root_domains
-    and coalesce(headers.auth_summary.dmarc.pass, false)
   )
 attack_types:
   - "Credential Phishing"
@@ -39,4 +37,4 @@ detection_methods:
 id: "f3d7704e-db07-59e6-8d5a-b60ebc14f9a0"
 og_id: "1ff2234e-b418-5c99-8318-532ffe069ea3"
 testing_pr: 5377
-testing_sha: 901ed09d27605bfefa08adde284bf42a8009c829
+testing_sha: 54203b1cc03cbda1cb72b4b48c598016fd86d4bc
