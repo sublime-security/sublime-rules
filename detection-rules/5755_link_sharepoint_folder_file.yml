@@ -1,0 +1,62 @@
+name: "PR# 5755 - Link: Suspicious Sharepoint folder share"
+description: "Detection Rule matches on messages which contain a link to a sharepoint shared folder containing a single .url file. These messages must not be sent from sharepoint and are either not solicited or from a new or outlier sender."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and any(filter(body.links,
+                 // folder share
+                 strings.icontains(.href_url.domain.domain, "-my.sharepoint.com")
+                 and strings.icontains(.href_url.url, "/:f:/g/personal")
+  
+                 // remove links which contains the domain sld in the subdomain (tenenat) name
+                 and not any($org_slds,
+                             strings.icontains(..href_url.domain.subdomain, .)
+                 )
+          ),
+          // a single shared URL file
+          length(html.xpath(ml.link_analysis(., mode="aggressive").final_dom,
+                            '//div[@role="row" and starts-with(@data-automationid, "row-")][.//span[@data-id="heroField"][contains(@title, ".url")]][.//button[@data-automationid="manageAccess"]]'
+                 ).nodes
+          ) == 1
+  )
+  
+  // message is not from sharepoint actual
+  and not (
+    strings.starts_with(headers.message_id, '<Share-')
+    and strings.ends_with(headers.message_id, '@odspnotify>')
+  )
+  and (
+    // not solicited
+    not profile.by_sender().solicited
+    // new or outlier sender prevalence
+    or profile.by_sender().prevalence in ("new", "outlier")
+    // marked as spam and no FPs
+    or (
+      profile.by_sender().any_messages_malicious_or_spam
+      and not profile.by_sender().any_messages_benign
+    )
+  )
+  
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and not (
+    sender.email.domain.root_domain in $high_trust_sender_root_domains
+    and coalesce(headers.auth_summary.dmarc.pass, false)
+  )
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Free file host"
+  - "Evasion"
+detection_methods:
+  - "HTML analysis"
+  - "Header analysis"
+  - "Sender analysis"
+  - "URL analysis"
+id: "059bfefe-bdcf-59de-9241-e919ae34cae7"
+tags:
+  - created_from_open_prs
+  - rule_status_modified
+  - pr_author_D-Bolton
+references:
+  - https://github.com/sublime-security/sublime-rules/pull/5755
