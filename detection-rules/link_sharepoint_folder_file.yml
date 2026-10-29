@@ -1,5 +1,5 @@
 name: "Link: Suspicious Sharepoint folder share"
-description: "Detection Rule matches on messages which contain a link to a sharepoint shared folder containing a single file which is either a .url file, the filename is all caps, or includes call to action wording.  These messages must not be sent from sharepoint and are either not solicited or from a new or outlier sender."
+description: "Detection Rule matches on messages which contain a link to a sharepoint shared folder containing a single .url file. These messages must not be sent from sharepoint and are either not solicited or from a new or outlier sender."
 type: "rule"
 severity: "high"
 source: |
@@ -14,26 +14,13 @@ source: |
                              strings.icontains(..href_url.domain.subdomain, .)
                  )
           ),
-          ( // a shared URL file
-            regex.icontains(ml.link_analysis(., mode="aggressive").final_dom.raw,
-                            '<div role="row" aria-label="[^\"]+.url, url File, Shared'
-            )
-            or 
-            // the name of the file is all caps allowing for special charaters too
-            regex.contains(ml.link_analysis(., mode="aggressive").final_dom.raw,
-                           '<button data-automationid=\"FieldRenderer-name\" data-selection-invoke=\"true\" title="[A-Z0-9_\-\s]+\.[^\"]{3,4}\" role=\"link\" type=\"button\"'
-            )
-            or 
-            // includes odd wording
-            regex.icontains(ml.link_analysis(., mode="aggressive").final_dom.raw,
-                            '<button data-automationid=\"FieldRenderer-name\" data-selection-invoke=\"true\" title="[^\"]*(?:dropbox|docusign|secured?|important|shared?|protected|encrypted|scanne[rd]|_IMG_|IMG[_-](?:\d|\W)|doc(?:ument)?\s?\d+|one_drive|OneDrive|Access|Review Document|Click Here|Download|validate|Confidential(?:ity)?|payment|invoice|INV(?:_|\s)?\d+|INV(?:_|\s)|P[O0]\W+?\d+|Past Due|Remit(?:tance)?|statement|Purchase Order|settlement|contract agreement|Pr[0o]p[0o]sal|contract doc|EFax|\.\.\.)[^\"]*\.[^\"]{3,4}\" role=\"link\" type=\"button\"'
-            )
-          )
-          // and only a single file shared
-          and strings.icount(ml.link_analysis(., mode="aggressive").final_dom.raw,
-                             '<div role="presentation" data-automationid="ListCell" class="ms-List-cell"'
+          // a single shared URL file
+          length(html.xpath(ml.link_analysis(., mode="aggressive").final_dom,
+                            '//div[@role="row" and starts-with(@data-automationid, "row-")][.//span[@data-id="heroField"][contains(@title, ".url")]][.//button[@data-automationid="manageAccess"]]'
+                 ).nodes
           ) == 1
-  )
+          )
+  
   // message is not from sharepoint actual
   and not (
     strings.starts_with(headers.message_id, '<Share-')
