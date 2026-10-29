@@ -10,28 +10,38 @@ source: |
     or strings.ilevenshtein(sender.display_name, 'barracuda') <= 1
     or strings.ilike(sender.email.domain.domain, '*barracuda*')
   )
-  and sender.email.domain.root_domain not in (
-    'barracuda.com',
-    'barracudamsp.com',
-    'barracudanetworks.com',
-    'netsuite.com',
-  
-    // hockey team
-    'sharkssports.net',
-    'sjbarracuda.com',
-  
-    // Barracuda Barcatering
-    'barracuda-barcatering.de',
-  
-    // Barracuda Events Team
-    'worldspan.co.uk',
-  
-    // Barracudas Day Camps
-    'barracudas.co.uk',
-  
-    // BarracudaShoes
-    'barracudashoes.it'
+  and not (
+    sender.email.domain.root_domain in (
+      'barracuda.com',
+      'barracudamsp.com',
+      'barracudanetworks.com',
+      'netsuite.com',
+
+      // hockey team
+      'sharkssports.net',
+      'sjbarracuda.com',
+
+      // Barracuda Barcatering
+      'barracuda-barcatering.de',
+
+      // Barracuda Events Team
+      'worldspan.co.uk',
+
+      // Barracudas Day Camps
+      'barracudas.co.uk',
+
+      // BarracudaShoes
+      'barracudashoes.it'
+    )
+    and coalesce(headers.auth_summary.dmarc.pass, false)
   )
+
+  // negate bouncebacks
+  and not any(ml.nlu_classifier(body.current_thread.text).topics,
+              .name == "Bounce Back and Delivery Failure Notifications"
+  )
+
+  // sender profiles
   and (
     profile.by_sender().prevalence in ("new", "outlier")
     or (
@@ -39,6 +49,7 @@ source: |
       and not profile.by_sender().any_messages_benign
     )
   )
+
 attack_types:
   - "Credential Phishing"
 tactics_and_techniques:
