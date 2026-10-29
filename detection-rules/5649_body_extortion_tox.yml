@@ -1,7 +1,7 @@
 name: "PR# 5649 - Extortion: Tox messenger ID"
 description: "Flags inbound messages where NLU classification identifies extortion or the body contains extortion keywords, and the message body references the Tox or qTox messaging application alongside a 76-character hexadecimal string matching the Tox ID format. This pattern is commonly used in extortion scams where attackers direct victims to continue communication over Tox to evade detection."
 type: "rule"
-severity: "medium"
+severity: "high"
 source: |
   type.inbound
   and (
@@ -17,7 +17,13 @@ source: |
   )
   and regex.icontains(body.current_thread.text, '\bq?tox\b')
   and regex.contains(body.current_thread.text, '[0-9a-fA-F]{76}')
-  and not strings.contains(body.current_thread.text, 'IOC')
+  // negate intel feeds
+  and not strings.icontains(body.current_thread.text, 'IOC', 'threat hunt')
+  and not sender.email.domain.root_domain in (
+    "crowdstrike.com",
+    "intel471.com",
+    "recordedfuture.com"
+  )
 attack_types:
   - "Extortion"
 tactics_and_techniques:
