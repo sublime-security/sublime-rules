@@ -17,6 +17,12 @@ source: |
                          'american express customer service'
     )
     or strings.ilike(sender.email.domain.domain, '*americanexpress*')
+    or (
+      strings.istarts_with(body.current_thread.text, 'american express')
+      and any(ml.nlu_classifier(body.current_thread.text).intents,
+              .name == "cred_theft" and .confidence != "low"
+      )
+    )
   )
   and sender.email.domain.root_domain not in (
     'aexp.com',
@@ -35,7 +41,8 @@ source: |
     'secure.com',
     'nectar.com',
     'accentinfomedia.com',
-    'egencia.com'
+    'egencia.com',
+    'cardbenefitsadministration.com'
   )
   and sender.email.domain.domain not in (
     'accountprotection.microsoft.com',
@@ -44,12 +51,9 @@ source: |
   and not profile.by_sender().solicited
   
   // negate highly trusted sender domains unless they fail DMARC authentication
-  and (
-    (
-      sender.email.domain.root_domain in $high_trust_sender_root_domains
-      and not headers.auth_summary.dmarc.pass
-    )
-    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  and not (
+    sender.email.domain.root_domain in $high_trust_sender_root_domains
+    and coalesce(headers.auth_summary.dmarc.pass, false)
   )
 attack_types:
   - "Credential Phishing"

@@ -13,9 +13,15 @@ source: |
                     '^sba[\s-]support[\s-]\w+'
     )
     or (
-      strings.icontains(body.current_thread.text,
-                        'sam.gov',
-                        'system for award management'
+      (
+        strings.icontains(body.current_thread.text,
+                          'sam.gov',
+                          'system for award management'
+        )
+        or any(ml.nlu_classifier(body.current_thread.text).entities,
+               .name == "org"
+               and regex.icontains(.text, '\bsba.gov', 'small business admin')
+        )
       )
       and (
         any(html.xpath(body.html, '//img/@src').nodes,
@@ -25,6 +31,11 @@ source: |
         or regex.icontains(subject.base,
                            'cage\s+code\s+[a-z0-9]{5}',
                            'sam\s(?:renew|status)'
+        )
+        or any(regex.iextract(body.current_thread.text,
+                              'cage\s+code:?\s*([a-z0-9]{5})'
+               ),
+               strings.icontains(subject.base, .groups[0])
         )
       )
     )

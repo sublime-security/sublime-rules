@@ -71,18 +71,11 @@ source: |
   and not (
     any(headers.domains, strings.ends_with(.domain, "mailer.myclickfunnels.com"))
     or (
-      (
-        any(headers.hops,
-            .index == 0
-            and any(.authentication_results.dkim_details,
-                    .domain == "mailer.myclickfunnels.com"
-            )
-        )
+      any(headers.hops[0].authentication_results.dkim_details,
+          .domain == "mailer.myclickfunnels.com"
       )
-      and any(distinct(headers.hops, .authentication_results.dmarc is not null),
-              .index == 0
-              and strings.ilike(.authentication_results.dmarc, "*pass")
-      )
+      and headers.hops[0].authentication_results.dmarc is not null
+      and strings.iends_with(headers.hops[0].authentication_results.dmarc, "pass")
     )
   )
   // negating legit replies
@@ -96,16 +89,9 @@ source: |
     and (length(headers.references) > 0 and headers.in_reply_to is not null)
   )
   // negate highly trusted sender domains unless they fail DMARC authentication
-  and (
-    (
-      sender.email.domain.root_domain in $high_trust_sender_root_domains
-      and (
-        any(distinct(headers.hops, .authentication_results.dmarc is not null),
-            strings.ilike(.authentication_results.dmarc, "*fail")
-        )
-      )
-    )
-    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  and not (
+    sender.email.domain.root_domain in $high_trust_sender_root_domains
+    and coalesce(headers.auth_summary.dmarc.pass, false)
   )
 attack_types:
   - "Credential Phishing"

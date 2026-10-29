@@ -107,6 +107,9 @@ source: |
           any(ml.nlu_classifier(body.current_thread.text).entities,
               .name == "financial" and regex.imatch(.text, "(?:rfp|rfq)")
           ),
+          any(ml.nlu_classifier(body.current_thread.text).entities,
+              .name == "request" and regex.imatch(.text, "bid invitation")
+          ),
           any(attachments,
               any(file.explode(.),
                   any(ml.nlu_classifier(.scan.ocr.raw).entities,
@@ -210,12 +213,9 @@ source: |
   )
   
   // negate highly trusted sender domains unless they fail DMARC authentication
-  and (
-    (
-      sender.email.domain.root_domain in $high_trust_sender_root_domains
-      and not headers.auth_summary.dmarc.pass
-    )
-    or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+  and not (
+    sender.email.domain.root_domain in $high_trust_sender_root_domains
+    and coalesce(headers.auth_summary.dmarc.pass, false)
   )
   and (
     (
