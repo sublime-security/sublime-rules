@@ -1,0 +1,65 @@
+name: "Brand impersonation: Barracuda Networks"
+description: |
+  Impersonation of Barracuda Networks, an IT security company.
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and (
+    strings.ilike(sender.display_name, '*barracuda*')
+    or strings.ilevenshtein(sender.display_name, 'barracuda') <= 1
+    or strings.ilike(sender.email.domain.domain, '*barracuda*')
+  )
+  and not (
+    sender.email.domain.root_domain in (
+      'barracuda.com',
+      'barracudamsp.com',
+      'barracudanetworks.com',
+      'netsuite.com',
+
+      // hockey team
+      'sharkssports.net',
+      'sjbarracuda.com',
+
+      // Barracuda Barcatering
+      'barracuda-barcatering.de',
+
+      // Barracuda Events Team
+      'worldspan.co.uk',
+
+      // Barracudas Day Camps
+      'barracudas.co.uk',
+
+      // BarracudaShoes
+      'barracudashoes.it'
+    )
+    and coalesce(headers.auth_summary.dmarc.pass, false)
+  )
+
+  // negate bouncebacks
+  and not any(ml.nlu_classifier(body.current_thread.text).topics,
+              .name == "Bounce Back and Delivery Failure Notifications"
+  )
+
+  // sender profiles
+  and (
+    profile.by_sender().prevalence in ("new", "outlier")
+    or (
+      profile.by_sender().any_messages_malicious_or_spam
+      and not profile.by_sender().any_messages_benign
+    )
+  )
+
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Lookalike domain"
+  - "Social engineering"
+detection_methods:
+  - "Header analysis"
+  - "Sender analysis"
+id: "0ca67f2a-5093-5054-b035-a6bc0156b6c3"
+og_id: "583fd5eb-ebd1-5753-944c-1d85f2a82348"
+testing_pr: 5756
+testing_sha: 3379e9a8417bd12eaabb60416e82ffe5e305ce31
