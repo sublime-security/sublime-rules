@@ -9,10 +9,19 @@ source: |
   and length(body.current_thread.text) < 5000
   and (
     any(headers.reply_to,
-        // mismatched reply-to and sender domain
-        .email.domain.root_domain != sender.email.domain.root_domain
-        // newly registered reply-to domain
-        and network.whois(.email.domain).days_old <= 30
+        ( // mismatched reply-to and sender domain
+          .email.domain.root_domain != sender.email.domain.root_domain
+          // newly registered reply-to domain
+          and network.whois(.email.domain).days_old <= 30
+        )
+        or (
+          network.whois(.email.domain).days_old <= 90
+          and any(regex.iextract(body.current_thread.text,
+                                 'message id:\s*\S+@([a-z0-9.-]+\.[a-z]{2,})'
+                  ),
+                  .groups[0] != sender.email.domain.root_domain
+          )
+        )
     )
     or (
       network.whois(sender.email.domain).days_old < 30
@@ -35,10 +44,10 @@ source: |
   and (
     not profile.by_sender().solicited
   
-    // 
+    //
     // This rule makes use of a beta feature and is subject to change without notice
     // using the beta feature in custom rules is not suggested until it has been formally released
-    // 
+    //
     or not beta.profile.by_reply_to().solicited
     or (
       profile.by_sender().any_messages_malicious_or_spam
