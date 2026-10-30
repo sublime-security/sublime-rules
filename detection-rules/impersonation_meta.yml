@@ -77,6 +77,9 @@ source: |
         )
         or strings.ilevenshtein(sender.display_name, 'facebook') <= 2
         or sender.email.email == 'noreply@appsheet.com'
+        or strings.icontains(body.current_thread.text,
+                             "Official announcement from Meta"
+        )
       )
       and 2 of (
         any(ml.logo_detect(file.message_screenshot()).brands,
@@ -190,29 +193,33 @@ source: |
       strings.icontains(body.current_thread.text, 'Menlo Park, CA 91024'),
     )
   )
-  and sender.email.domain.root_domain not in~ (
-    'facebook.com',
-    'facebookmail.com',
-    'eventsatfacebook.com',
-    'facebookenterprise.com',
-    'meta.com',
-    'metamail.com',
-    'instagram.com',
-    'medallia.com',
-    'fbworkmail.com',
-    'workplace.com',
-    'capterra.com', // they mention "Community Guidelines"
-    'facebookblueprint.com',
-    'metaenterprisemail.com',
-    'pigfacebookstore.com.au', // unrelated domain but hitting on facebook
-    'metacompliance.com',
-    'metaprop.com', // unrelated domain but hitting on meta pro
-    'oakley.com', // meta intelligence glasses
-    'facebookuserprivacysettlement.com', // fb settlement website
-    'perceptyx.com', // ai employee engagement
-    'unroll.me', // unroll contains instagram logo
-    'har.com' // facebook ads management
+  and not (
+    sender.email.domain.root_domain in (
+      'facebook.com',
+      'facebookmail.com',
+      'eventsatfacebook.com',
+      'facebookenterprise.com',
+      'meta.com',
+      'metamail.com',
+      'instagram.com',
+      'medallia.com',
+      'fbworkmail.com',
+      'workplace.com',
+      'capterra.com', // they mention "Community Guidelines"
+      'facebookblueprint.com',
+      'metaenterprisemail.com',
+      'pigfacebookstore.com.au', // unrelated domain but hitting on facebook
+      'metacompliance.com',
+      'metaprop.com', // unrelated domain but hitting on meta pro
+      'oakley.com', // meta intelligence glasses
+      'facebookuserprivacysettlement.com', // fb settlement website
+      'perceptyx.com', // ai employee engagement
+      'unroll.me', // unroll contains instagram logo
+      'har.com' // facebook ads management
+    )
+    and coalesce(headers.auth_summary.dmarc.pass, false)
   )
+  
   // negate metaenterprise links
   and not any(headers.reply_to, .email.email == "noreply@facebookmail.com")
   
