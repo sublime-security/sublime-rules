@@ -1,0 +1,40 @@
+name: "Attachment: Re-stamped invoice PDF with IRS references from external sender"
+description: "Detects inbound messages from external senders that carry a PDF attachment generated with the MuhammaraJS or Hummus-Recipe PDF libraries, identified via embedded EXIF/producer metadata. These PDFs masquerade as outstanding invoice or payment follow-up notices and contain an embedded link pointing to irs.gov/FormW9, attempting to lend legitimacy to the fraudulent invoice by referencing an official IRS tax form. The pattern spans numerous unrelated sender domains and spoofed invoice subject lines, consistent with a shared PDF-generation toolkit used for business email compromise style lures."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and any(attachments,
+          .file_type == "pdf"
+          and (
+            strings.icontains(beta.parse_exif(.).producer, 'MuhammaraJS')
+            or strings.icontains(beta.parse_exif(.).creator, 'Hummus-Recipe')
+          )
+          //
+          // This rule makes use of a beta feature and is subject to change without notice
+          // using the beta feature in custom rules is not suggested until it has been formally released
+          //
+          and any(beta.parse_exif(.).fields, .key == "Source-Producer")
+          and beta.parse_exif(.).page_count <= 4
+          //
+          // This rule makes use of a beta feature and is subject to change without notice
+          // using the beta feature in custom rules is not suggested until it has been formally released
+          //
+          and regex.icontains(beta.ocr(.).text,
+                              'irs\.gov/form',
+                              'request for taxpayer',
+                              'identification number and certification',
+                              'form\s*w-?9\b'
+          )
+  )
+attack_types:
+  - "BEC/Fraud"
+tactics_and_techniques:
+  - "PDF"
+  - "Social engineering"
+  - "Impersonation: Brand"
+detection_methods:
+  - "Exif analysis"
+  - "File analysis"
+  - "Optical Character Recognition"
+id: "27d941d3-d589-5c74-816f-07d7b14315ac"

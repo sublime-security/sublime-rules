@@ -5,44 +5,29 @@ severity: "high"
 source: |
   type.inbound
   and length(coalesce(body.plain.raw, body.html.display_text)) < 6000
-  and strings.icontains(strings.replace_confusables(subject.base),
-                        '"',
-                        '/-/',
-                        '-//',
-                        '-/',
-                        '-#'
+  and any([subject.base, strings.replace_confusables(subject.base)],
+          strings.icontains(., '"', '-#', '/')
   )
-  and any(body.previous_threads,
-          any($org_vips,
-              (
-                strings.icontains(strings.replace_confusables(subject.base),
-                                  strings.concat('"', .display_name)
-                )
-                or strings.icontains(strings.replace_confusables(subject.base),
-                                     strings.concat(.display_name, '"')
-                )
-                or strings.icontains(strings.replace_confusables(subject.base),
-                                     strings.concat('/-/', .display_name)
-                )
-                or strings.icontains(strings.replace_confusables(subject.base),
-                                     strings.concat('-//', .display_name)
-                )
-                or strings.icontains(strings.replace_confusables(subject.base),
-                                     strings.concat('-/', .display_name)
-                )
-                or strings.icontains(strings.replace_confusables(subject.base),
-                                     strings.concat('-#', .display_name)
-                )
-              )
-              and (
-                strings.icontains(..sender.display_name, .display_name)
-                or (
-                  .email != "" and strings.icontains(..sender.email.email, .email)
-                )
-                or (
-                  strings.icontains(sender.display_name, .display_name)
-                  and sender.email.email != .email
-                )
+  and any([subject.base, strings.replace_confusables(subject.base)],
+          any(body.previous_threads,
+              any($org_vips,
+                  (
+                    strings.icontains(..., strings.concat('"', .display_name))
+                    or strings.icontains(..., strings.concat(.display_name, '"'))
+                    or strings.icontains(..., strings.concat('-#', .display_name))
+                    or strings.icontains(..., strings.concat('/', .display_name))
+                  )
+                  and (
+                    strings.icontains(..sender.display_name, .display_name)
+                    or (
+                      .email != ""
+                      and strings.icontains(..sender.email.email, .email)
+                    )
+                    or (
+                      strings.icontains(sender.display_name, .display_name)
+                      and sender.email.email != .email
+                    )
+                  )
               )
           )
   )

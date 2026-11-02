@@ -1,0 +1,42 @@
+name: "BEC/Fraud: Meeting excuse paired with reply-via-email request"
+description: "Flags inbound messages sent from free email provider domains where the sender's text is classified as business email compromise with at least medium confidence, and the message body combines a meeting excuse with a request to respond only by email, a common social engineering pattern used to pressure quick action and avoid phone verification."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  // sender is freemail
+  and sender.email.domain.root_domain in $free_email_providers
+  and any(ml.nlu_classifier(body.current_thread.text).intents,
+          .name == 'bec' and .confidence != 'low'
+  )
+  and any(ml.nlu_classifier(body.current_thread.text).topics,
+          .name == 'Out of Band Pivot' and .confidence != 'low'
+  )
+  and any(ml.nlu_classifier(body.current_thread.text).entities,
+          .name == 'urgency'
+  )
+  and strings.icontains(body.current_thread.text, 'meeting')
+  and strings.icontains(body.current_thread.text, 'email')
+  // sender display name not in the actual email address local part
+  and not any(regex.iextract(sender.display_name, '\w+'),
+              length(.full_match) > 1
+              and strings.icontains(sender.email.local_part, .full_match)
+  )
+  // at least three random digits
+  and regex.contains(sender.email.local_part, '\d{3}')
+  // no previous threads
+  and length(body.previous_threads) == 0
+  // no links
+  and length(body.links) == 0
+  // no attchments
+  and length(attachments) == 0
+attack_types:
+  - "BEC/Fraud"
+tactics_and_techniques:
+  - "Free email provider"
+  - "Social engineering"
+detection_methods:
+  - "Natural Language Understanding"
+  - "Content analysis"
+  - "Sender analysis"
+id: "a8e4ffd7-6bfd-55c6-836b-a4187f4d66c2"

@@ -1,12 +1,23 @@
 name: "Spam: Large financial amount mention from newly registered sender domain"
-description: "Detects inbound messages from domains less than 180 days old that solicit investment interest from named organizations or individuals on behalf of a purported private family office. Senders use financial-sounding names and rotate first names and target company names while keeping the subject line structure nearly identical. The outreach is designed to appear as a legitimate investment inquiry to bait a response."
+description: "Detects inbound messages where the sender's domain was registered less than 180 days ago, or where whois data is unavailable and the message body is classified by NLU as B2B cold outreach or charity/non-profit solicitation with non-low confidence. Senders use financial-sounding names and rotate first names and target company names while keeping the subject line structure nearly identical. The outreach is designed to appear as a legitimate investment inquiry to bait a response."
 type: "rule"
 severity: "medium"
 source: |
   type.inbound
-  and network.whois(sender.email.domain).days_old < 180
+  and (
+    network.whois(sender.email.domain).days_old < 180
+    or (
+      network.whois(sender.email.domain).days_old is null
+      and any(ml.nlu_classifier(body.current_thread.text).topics,
+              .name in ("B2B Cold Outreach", "Charity and Non-Profit")
+              and .confidence != "low"
+      )
+    )
+  )
   and any([body.html.display_text, subject.base],
-          regex.icontains(., '\$\d\p{Pd}\$\d{1,2}(?:m\b|million)')
+          regex.icontains(.,
+                          '\$\d{1,3}\s*(?:m|million)\s*(?:\p{Pd}|to|through)\s*\$\d{1,3}\s*(?:m\b|million)'
+          )
   )
 attack_types:
   - "BEC/Fraud"

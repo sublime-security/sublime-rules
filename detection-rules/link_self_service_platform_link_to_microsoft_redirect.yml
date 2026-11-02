@@ -1,0 +1,60 @@
+name: "Link: Self-service platform link to Microsoft login redirect"
+description: "Detects inbound emails containing links to self-service creation platforms that lead to a final destination page embedding links to Microsoft login domains with OAuth or session parameters such as offline_access, read/write scopes, ctx, or sessionId. This pattern is indicative of abuse of legitimate hosting services to stage credential or consent phishing pages that redirect victims to Microsoft authentication flows."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and (
+    any(body.current_thread.links,
+        (
+          .href_url.domain.root_domain in $self_service_creation_platform_domains
+          or .href_url.domain.domain in $self_service_creation_platform_domains
+        )
+        and any(ml.link_analysis(.).final_dom.links,
+                (
+                  .href_url.domain.domain in (
+                    'login.microsoftonline.com',
+                    'login.microsoft.com'
+                  )
+                  or strings.icontains(.href_url.query_params,
+                                       "login.microsoftonline.com",
+                                       'login.microsoft.com'
+                  )
+                )
+                and (
+                  strings.ilike(.href_url.query_params,
+                                '*offline_access*',
+                                '*.readwrite*',
+                                '*.read*',
+                                '*ctx=*',
+                                '*prompt=none*'
+                  )
+                  or (
+                    (
+                      strings.icontains(.href_url.path, '/common/reprocess')
+                      or strings.icontains(.href_url.query_params,
+                                           "/common/reprocess"
+                      )
+                    )
+                    and strings.icontains(.href_url.query_params, 'ctx=')
+                    and strings.icontains(.href_url.query_params, 'sessionId=')
+                  )
+                )
+        )
+    )
+  )
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Open redirect"
+  - "Social engineering"
+detection_methods:
+  - "URL analysis"
+  - "HTML analysis"
+  - "Content analysis"
+related_detections:
+  - "link_office365_suspicious_app_authorization.yml"
+  - "attachment_link_office365_suspicious_app_authorization.yml"
+  - "attachment_eml_link_office365_suspicious_app_authorization.yml"
+  - "attachment_ics_link_office365_suspicious_app_authorization.yml"
+id: "848a0abf-8b53-5c03-bad7-a8b9c1e9acc2"

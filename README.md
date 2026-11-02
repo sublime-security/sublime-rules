@@ -4,7 +4,7 @@ Sublime Rules
 ==========
 by Sublime Security
 
-This repo contains open-source rules for [Sublime](https://github.com/sublime-security/sublime-platform), a free and open platform for detecting and preventing email attacks like BEC, malware, and credential phishing.
+This repo contains open-source rules for [Sublime](https://github.com/sublime-security/sublime-platform) for detecting and preventing email attacks like BEC, malware, and credential phishing. Try out the cloud offering for free at [Sublime Cloud](https://docs.sublime.security/docs/sublime-managed) 
 
 Examples
 ----------

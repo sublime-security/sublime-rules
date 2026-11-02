@@ -1,0 +1,37 @@
+name: "Service abuse: Microsoft messaging with suspicious link"
+description: "Detects inbound messages sent through Microsoft's messaging.microsoft.com infrastructure that contain links with long numeric parameters, base64-like encoded paths, or links that resolve to Cloudflare Turnstile challenges, indicating attempts to obscure the final destination or evade analysis."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and sender.email.domain.domain == 'messaging.microsoft.com'
+  and any(filter(body.current_thread.links, .href_url.scheme != 'mailto'),
+          regex.icontains(.href_url.url, '=\d{15,}', '[a-z]+%[a-z]{4,}')
+          or regex.imatch(.href_url.path, '/[a-z0-9+/]{40,}={0,2}')
+          or any([ml.link_analysis(., mode="aggressive")],
+                 // CF Turnstile
+                 any(.unique_urls_accessed,
+                     .domain.domain == "challenges.cloudflare.com"
+                 )
+                 // or site is down behind Cloudflare
+                 or (
+                   regex.icontains(.final_dom.display_text,
+                                   'error\s*(?:code\s*)?(?:5\d{2}|1\d{3})'
+                   )
+                   and regex.icontains(.final_dom.display_text, 'cloudflare')
+                 )
+          )
+  )
+  and not any(ml.nlu_classifier(body.current_thread.text).topics,
+              .name in ("Advertising and Promotions")
+  )
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Evasion"
+  - "Social engineering"
+detection_methods:
+  - "URL analysis"
+  - "Content analysis"
+  - "Sender analysis"
+id: "fca5ddba-df52-546f-9683-6800f5d23fff"
