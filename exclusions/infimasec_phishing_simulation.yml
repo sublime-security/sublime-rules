@@ -1,0 +1,19 @@
+name: "InfimaSec phishing simulation"
+description: "Identifies phishing simulations sent by InfimaSec and excludes the message from live analysis."
+type: "exclusion"
+source: |
+  type.inbound
+  and (
+    // smtp delivery
+    any(headers.ips, ip.in_range(., '34.232.212.184', '54.240.43.212'))
+    // dmi delivery
+    or length(headers.hops) <= 1
+  )
+  // a single hop has the headers
+  and any(headers.hops,
+          all(['x-infima-phish', 'x-infima-mail'], . in~ map(..fields, .name))
+  )
+  
+references:
+ - "https://kb.infimasec.com/troubleshooting/training-emails-not-delivering/"
+ - "https://kb.infimasec.com/tasks/phishing/landing-pages/"

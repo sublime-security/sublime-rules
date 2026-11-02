@@ -1,0 +1,84 @@
+name: "Body: HTML @import tag-splitting XSS — RoundPress/ZimReaper webmail exploit delivery"
+description: |
+  Detects emails containing the @import tag-splitting obfuscation technique used by
+  Russian threat actors TA458 (Operation RoundPress/SpyPress) and TA488 (Void Blizzard/ZimReaper)
+  to deliver cross-site scripting exploits against self-hosted webmail platforms including
+  Zimbra, Roundcube, mDaemon, SOGo, and Kerio.
+
+  The technique fragments HTML tags with CSS @import directives to bypass webmail
+  HTML sanitizers. The sanitizer strips @import sequences; the browser reassembles
+  the remaining characters into valid executable markup. Opening the email in a
+  vulnerable webmail client is sufficient to trigger execution — no link click or
+  attachment required (half-click exploit). The exploit has been delivered both in
+  the message body and in HTML attachments.
+
+  Active campaigns targeting Ukrainian government entities, US nuclear installations,
+  and NATO member governments were disclosed jointly by Proofpoint, NSA, and FBI
+  on July 23, 2026.
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and (
+    // zimreaper payload id... plain text, then the three base64 alignments of `zmb_pl_`
+    // base64 is case-sensitive, so the encoded forms use contains
+    strings.icontains(body.html.raw, 'zmb_pl_v')
+    or strings.contains(body.html.raw, 'em1iX3BsX', 'ptYl9wbF', '6bWJfcGxf')
+  
+    // @import tag-splitting... the sanitizer strips `@import ...;` and the browser rejoins
+    // the tag, so @import abuts a tag or attribute name
+    // legit css @import follows `<style>`, `;`, `}` or whitespace, never a tag/attribute name
+    or regex.icontains(body.html.raw,
+                       '<@import[\s"'';(/]',
+                       '<[a-z][^<>\s]*@import[\s"'';(/]',
+                       '[\s"'']/?[a-z][a-z-]*@import[\s"'';(/]'
+    )
+  
+    // unsplit payload... a hidden svg that decodes base64 on load
+    // html attachments are covered by attachment_html_smuggling_eval_atob.yml
+    or regex.icontains(body.html.raw,
+                       '<svg[^>]{0,200}onload[^=]{0,10}=.{0,30}eval\s*\(\s*atob\s*\('
+    )
+  
+    // the same markup in an html attachment... keep in sync with the body arms above
+    or any(attachments,
+           (
+             .file_extension in~ ("html", "htm", "shtml", "dhtml")
+             or .file_type == "html"
+           )
+           and (
+             strings.icontains(file.parse_html(.).raw, 'zmb_pl_v')
+             or strings.contains(file.parse_html(.).raw,
+                                 'em1iX3BsX',
+                                 'ptYl9wbF',
+                                 '6bWJfcGxf'
+             )
+             or regex.icontains(file.parse_html(.).raw,
+                                '<@import[\s"'';(/]',
+                                '<[a-z][^<>\s]*@import[\s"'';(/]',
+                                '[\s"'']/?[a-z][a-z-]*@import[\s"'';(/]'
+             )
+           )
+    )
+  )
+attack_types:
+  - "Malware/Ransomware"
+tactics_and_techniques:
+  - "HTML smuggling"
+  - "Evasion"
+  - "Scripting"
+  - "Encryption"
+detection_methods:
+  - "HTML analysis"
+  - "Content analysis"
+  - "File analysis"
+  - "Javascript analysis"
+references:
+  - "https://www.proofpoint.com/us/blog/threat-insight/ta488-targets-zimbra-mailservers-half-click-exploits"
+  - "https://www.proofpoint.com/us/blog/threat-insight/ta458-roundpress-exploits"
+  - "https://media.defense.gov/2026/Jul/22/2003965244/-1/-1/1/CSA_RUSSIA_PHISHING_TARGET_ZIMBRA.PDF"
+  - "https://nvd.nist.gov/vuln/detail/CVE-2025-66376"
+  - "https://unit42.paloaltonetworks.com/russian-webmail-espionage/"
+  - "https://www.seqrite.com/blog/operation-ghostmail-zimbra-xss-russian-apt-ukraine/"
+  - "https://yanaivanov.com/analysis/roundpress_analysis.html"
+id: "a30fb73e-a5ff-5499-bd8c-2b47f785c182"
