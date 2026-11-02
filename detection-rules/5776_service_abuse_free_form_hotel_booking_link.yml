@@ -1,0 +1,80 @@
+name: "PR# 5776 - Service abuse: Hotel booking via free form page & Google Groups"
+description: "Detects inbound messages distributed through Google Groups that combine conference or event terminology with hotel and reservation language, while linking to a form-building platform disguised as a legitimate booking page."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  // delivered via google groups
+  and (
+    sender.email.domain.domain == "googlegroups.com"
+    or any(headers.hops,
+           .index == 0
+           and any(.fields,
+                   strings.icontains(.value, "googlegroups")
+                   or .name == "X-Google-Group-Id"
+           )
+    )
+  )
+  
+  // hotel booking language present
+  and (
+    strings.icontains(body.current_thread.text,
+                      'accommodation',
+                      'convention center',
+                      'hotel',
+                      'nearby properties',
+                      'nearby property',
+                      'reservation details',
+                      'room rate'
+    )
+    and strings.icontains(body.current_thread.text,
+                          'annual meeting',
+                          'conference',
+                          'congress',
+                          'convention',
+                          'expo',
+                          'forum',
+                          'seminar',
+                          'summit',
+                          'symposium',
+                          'trade show'
+    )
+  )
+  
+  // link to a form service used as a fake booking page
+  and any(body.current_thread.links,
+          .href_url.domain.root_domain in $self_service_creation_platform_domains
+          and strings.icontains(.display_text, 'book', 'hotel')
+  )
+  
+  // sender profiles
+  and (
+    not profile.by_sender().solicited
+    or (
+      profile.by_sender().any_messages_malicious_or_spam
+      and not profile.by_sender().any_messages_benign
+    )
+  )
+  
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and not (
+    sender.email.domain.root_domain in $high_trust_sender_root_domains
+    and coalesce(headers.auth_summary.dmarc.pass, false)
+  )
+attack_types:
+  - "Spam"
+  - "BEC/Fraud"
+tactics_and_techniques:
+  - "Social engineering"
+detection_methods:
+  - "Header analysis"
+  - "Sender analysis"
+  - "Content analysis"
+  - "URL analysis"
+id: "c1a7073c-fdbd-5a81-85d5-ffe6a0e9d277"
+tags:
+  - created_from_open_prs
+  - rule_status_added
+  - pr_author_missingn0pe
+references:
+  - https://github.com/sublime-security/sublime-rules/pull/5776
