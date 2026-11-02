@@ -4,7 +4,18 @@ type: "rule"
 severity: "medium"
 source: |
   type.inbound
-  and network.whois(sender.email.domain).days_old < 90
+  and (
+    network.whois(sender.email.domain).days_old < 30
+    or (
+      network.whois(sender.email.domain).days_old < 90
+      and (
+        regex.icontains(body.current_thread.text,
+                        'invoice\s+#[A-Z]{2,}(?:-\d+){1,2}'
+        )
+        or strings.icontains(subject.base, 'annuity financial')
+      )
+    )
+  )
   and any(ml.nlu_classifier(body.current_thread.text).intents, .name == "bec")
   and (
     any(ml.nlu_classifier(body.current_thread.text).topics,
