@@ -1,5 +1,5 @@
 name: "Prompt injection: Hidden instructions to an AI in body HTML"
-description: "Detects instructions a human recipient never sees but an AI assistant reads: text in unrendered HTML elements or HTML comments that addresses an AI, where NLU finds a request and the prompt injection model agrees, or long runs of invisible Unicode tag or variation-selector characters. Excludes email preheaders. Restricted to senders with low prevalence and no benign history, and excludes graymail from senders passing DMARC."
+description: "Detects instructions a human recipient never sees but an AI assistant reads: text in unrendered HTML elements or HTML comments that addresses an AI, where NLU finds a request and the prompt injection model agrees, or long runs of invisible Unicode tag or variation-selector characters. Excludes email preheaders and graymail from senders passing DMARC."
 type: "rule"
 severity: "low"
 source: |
@@ -47,13 +47,8 @@ source: |
     )
   )
   
-  // an injection arrives from outside the recipient's correspondence... the profile
-  // is unauthenticated, so a spoofed known correspondent is suppressed too
-  and profile.by_sender_email().prevalence in ("new", "outlier", "rare")
-  and not profile.by_sender_email().any_messages_benign
-  
   // graymail from authenticated senders... AI-product newsletters and webinars
-  and not coalesce(beta.attack_score_flash().verdict == "graymail"
+  and not coalesce(ml.attack_score_flash().verdict == "graymail"
                    and headers.auth_summary.dmarc.pass,
                    false
   )
