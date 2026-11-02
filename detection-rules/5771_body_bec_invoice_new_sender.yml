@@ -4,7 +4,18 @@ type: "rule"
 severity: "medium"
 source: |
   type.inbound
-  and network.whois(sender.email.domain).days_old < 90
+  and (
+    network.whois(sender.email.domain).days_old < 30
+    or (
+      network.whois(sender.email.domain).days_old < 90
+      and (
+        regex.icontains(body.current_thread.text,
+                        'invoice\s+#[A-Z]{2,}(?:-\d+){1,2}'
+        )
+        or strings.icontains(subject.base, 'annuity financial')
+      )
+    )
+  )
   and any(ml.nlu_classifier(body.current_thread.text).intents, .name == "bec")
   and (
     any(ml.nlu_classifier(body.current_thread.text).topics,
@@ -50,4 +61,4 @@ detection_methods:
 id: "4ef802c6-7da2-5d82-b1f0-a3301bc3b3ed"
 og_id: "4be9b165-975f-5587-b780-9441d1b30782"
 testing_pr: 5771
-testing_sha: 118c6258700359a5a5a10ee95cdc27555a3ae719
+testing_sha: c8877a115d5f72378b9e791b4148759c2613ce29
