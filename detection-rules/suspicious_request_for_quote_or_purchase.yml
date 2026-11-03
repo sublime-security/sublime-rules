@@ -62,7 +62,7 @@ source: |
                            '(please|kindly|preferred).{0,30}(?:proposal|quot(e|ation))'
         )
         or regex.icontains(subject.subject,
-                           '(request for (purchase|quot(e|ation))|\bRFQ\b|\bRFP\b|bid invit(e|ation))'
+                           '(request for (purchase|quot(e|ation))|\b(?:RFP|RFQ)\d*\b|bid invit(e|ation))'
         )
         or any(attachments,
                regex.icontains(.file_name, "(purchase.?order|Quot(e|ation))")
@@ -96,7 +96,7 @@ source: |
                           '(?:invitation|intent) to bid'
           ),
           regex.icontains(subject.subject,
-                          '(request for (purchase|quot(e|ation))|\bRFQ\b|\bRFP\b|bid invit(e|ation))'
+                          '(request for (purchase|quot(e|ation))|\b(?:RFP|RFQ)\d*\b|bid invit(e|ation))'
           ),
           any(attachments,
               regex.icontains(.file_name, "(purchase.?order|Quot(e|ation))")
@@ -156,10 +156,14 @@ source: |
             length(attachments) == 0
             and strings.icontains(body.current_thread.text, "attached")
           ),
-          any(body.current_thread.links, regex.icontains(.href_url.url, 'RFP'))
+          // url contains RFP
+          any(body.current_thread.links, regex.icontains(.href_url.url, 'RFP')),
+          // linktr.ee hosted url
+          any(body.links, .href_url.domain.root_domain == "linktr.ee")
         )
       )
     )
+    // check attachments
     or (
       length(attachments) == 1
       and length(body.current_thread.text) < 100
@@ -190,7 +194,7 @@ source: |
                         any(ml.nlu_classifier(.scan.ocr.raw).entities,
                             .name == "financial"
                             and regex.imatch(.text, "rfp|rfq")
-                        ),
+                        )
                       )
               )
       )
@@ -202,10 +206,11 @@ source: |
               regex.icontains(.display_text, 'project\s+summary')
       )
       and regex.icontains(body.current_thread.text,
-                          '(put a bid|\bbid\s+(for|on)\b|submit.{1,20}(bid|quot(e|ation))|request for (purchase|quot(e|ation))|\bRFQ\b|\bRFP\b|project\s+summary)'
+                          '(put a bid|\bbid\s+(for|on)\b|submit.{1,20}(bid|quot(e|ation))|request for (purchase|quot(e|ation))|\b(?:RFP|RFQ)\d*\b|project\s+summary)'
       )
     )
   )
+  
   // wetransfer includes user specific reply-to's & link display text which triggers NLU logic further within the rule
   and not (
     sender.email.domain.root_domain == "wetransfer.com"
@@ -217,6 +222,8 @@ source: |
     sender.email.domain.root_domain in $high_trust_sender_root_domains
     and coalesce(headers.auth_summary.dmarc.pass, false)
   )
+  
+  // sender profiles
   and (
     (
       (
