@@ -13,8 +13,7 @@ source: |
       and regex.icontains(body.current_thread.text,
                           '\$\d{3} weekly',
                           'week \$\d{3}',
-                          'weekly(?:\s+\w+){0,4}\s+\$\d{3}[^\d]',
-                          '\$\d{3,}[\s.,;:-]{0,8}week'
+                          'weekly(?:\s+\w+){0,4}\s+\$\d{3}[^\d]'
       )
     )
   
@@ -27,15 +26,14 @@ source: |
            and regex.icontains(.text,
                                '\$\d{3} weekly',
                                'week \$\d{3}',
-                               'weekly(?:\s+\w+){0,4}\s+\$\d{3}[^\d]',
-                               '\$\d{3,}[\s.,;:-]{0,8}week'
+                               'weekly(?:\s+\w+){0,4}\s+\$\d{3}[^\d]'
            )
     )
-    // job scam lure delivered as a PDF or DOCX with an empty email body
+    // job scam lure delivered as a PDF with an empty email body
     or (
       coalesce(length(body.current_thread.text), 0) == 0
+      and length(attachments) == 1
       and (
-        // PDF: salary + job-context in OCR text
         any(filter(attachments, .file_type == "pdf"),
             any(file.explode(.),
                 regex.icontains(.scan.ocr.raw,
@@ -70,40 +68,43 @@ source: |
                 )
             )
         )
-        // DOCX: salary + job-context in extracted strings
-        or any(filter(attachments, .file_type == "docx"),
-               any(file.explode(.),
-                   regex.icontains(.scan.strings.raw,
-                                   '\$\d{3,}(?:\s+\w+){0,3}\s+week',
-                                   'week(?:\s+\w+){0,3}\s+\$\d{3,}',
-                                   'weekly(?:\s+\w+){0,4}\s+\$\d{3}[^\d]',
-                                   '\$\d{3,}[\s.,;:-]{0,8}week'
-                   )
-                   and (
-                     regex.icontains(.scan.strings.raw,
-                                     'fully remote',
-                                     'remote\b[\s-]*(?:work|position|role|job|employee|worker|assistant|opportunit)',
-                                     'remotely',
-                                     'work[\s-]?from[\s-]?home',
-                                     'equal opportunity employer',
-                                     'how to apply',
-                                     'submit (?:your )?application',
-                                     'open to all (?:majors|backgrounds|students)',
-                                     'employment opportunity',
-                                     '\bhiring\b'
-                     )
-                     or any(ml.nlu_classifier(.scan.strings.raw).intents,
-                            .name in ("job_scam") and .confidence != "low"
-                     )
-                   )
-                   and not regex.icontains(.scan.strings.raw,
-                                           'unemployment',
-                                           'monetary (?:re)?determination',
-                                           'weekly benefit amount',
-                                           'supplemental unemployment',
-                                           'work search activit'
-                   )
-               )
+        // job scam lure delivered as a DOCX with no previous threads
+        or (
+          length(body.previous_threads) == 0
+          and any(filter(attachments, .file_type == "docx"),
+                  any(file.explode(.),
+                      regex.icontains(.scan.strings.raw,
+                                      '\$\d{3,}(?:\s+\w+){0,3}\s+week',
+                                      'week(?:\s+\w+){0,3}\s+\$\d{3,}',
+                                      'weekly(?:\s+\w+){0,4}\s+\$\d{3}[^\d]',
+                                      '\$\d{3,}[\s.,;:-]{0,8}week'
+                      )
+                      and (
+                        regex.icontains(.scan.strings.raw,
+                                        'fully remote',
+                                        'remote\b[\s-]*(?:work|position|role|job|employee|worker|assistant|opportunit)',
+                                        'remotely',
+                                        'work[\s-]?from[\s-]?home',
+                                        'equal opportunity employer',
+                                        'how to apply',
+                                        'submit (?:your )?application',
+                                        'open to all (?:majors|backgrounds|students)',
+                                        'employment opportunity',
+                                        '\bhiring\b'
+                        )
+                        or any(ml.nlu_classifier(.scan.strings.raw).intents,
+                               .name in ("job_scam") and .confidence != "low"
+                        )
+                      )
+                      and not regex.icontains(.scan.strings.raw,
+                                              'unemployment',
+                                              'monetary (?:re)?determination',
+                                              'weekly benefit amount',
+                                              'supplemental unemployment',
+                                              'work search activit'
+                      )
+                  )
+          )
         )
       )
     )
@@ -136,4 +137,4 @@ detection_methods:
 id: "8f71b0e3-c036-5690-b473-b97988bff2a1"
 og_id: "af7f9e21-54a1-5bba-a70d-e4d52a13eae3"
 testing_pr: 5795
-testing_sha: d5446792408262170d5ed35a880fa4ab8af5e658
+testing_sha: 4735c93af7c6d5e892436baa1a83e7896161fff8
