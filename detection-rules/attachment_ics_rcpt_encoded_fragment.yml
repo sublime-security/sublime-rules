@@ -1,5 +1,5 @@
-name: "Attachment: ICS calendar invite with hex-encoded recipient in link"
-description: "Flags inbound messages carrying an ICS calendar attachment whose event data contains a link where the URL fragment is hex-encoded to match the recipient's own email address. This encoding technique is used to personalize and track malicious links delivered through calendar invites, distinguishing this detection from rules covering links in the message body or non-ICS attachments."
+name: "Attachment: ICS calendar invite with encoded recipient in link"
+description: "Flags inbound messages carrying an ICS calendar attachment whose event data contains a link where the URL fragment is encoded to match the recipient's own email address. This encoding technique is used to personalize and track malicious links delivered through calendar invites, distinguishing this detection from rules covering links in the message body or non-ICS attachments."
 type: "rule"
 severity: "medium"
 source: |
@@ -17,6 +17,9 @@ source: |
           and any(beta.file.parse_ics(.).events,
                   any(.links,
                       strings.decode_hex(.href_url.fragment) == recipients.to[0].email.email
+                      or recipients.to[0].email.email in strings.scan_base64(.href_url.fragment,
+                                                                             ignore_padding=true
+                      )
                   )
           )
   )
