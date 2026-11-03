@@ -967,3 +967,15 @@ rule pdf_quickbooks_payment_image_lure {
 		uint32be(0) == 0x25504446
 		and $jpg_01
 }
+
+rule pdf_payment_confirmation_lure {
+	meta:
+		author      = "kyle eaton"
+		date        = "2026-11-02"
+		description = "PDF matching stream content from payment confirmation lures"
+	strings:
+		$stream = { 78 9C 9D 57 79 6C 23 57 19 7F 6F 66 EC F8 8E AF F1 99 D8 E3 23 3E 12 1F 9B 38 B6 93 AC 93 DD 4D 36 BB D9 64 B3 E9 26 D9 6D B7 DD 76 EB D8 93 C4 AD 2F 6C 67 B3 EE 6E 81 0A 4A 0B 94 A3 7F 50 55 45 15 A0 02 A2 52 0B 42 08 04 94 53 82 22 04 42 AA F8 A3 88 3F 28 5B 51 C4 A9 AA A8 48 88 B2 0E DF BC }
+	condition:
+		uint32be(0) == 0x25504446
+		and $stream
+}
