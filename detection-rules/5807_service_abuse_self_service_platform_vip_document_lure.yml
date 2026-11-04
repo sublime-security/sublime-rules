@@ -1,0 +1,33 @@
+name: "PR# 5807 - Service abuse: VIP impersonation via self-service platform with document lure"
+description: "Detects inbound messages where the sender's display name impersonates an organizational VIP while being sent from a self-service email creation platform or containing 'via' in the sender name or subject line. The message body also references a review document by page number, a common social engineering lure used to add legitimacy and prompt the recipient to engage with a fraudulent request."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and (
+    sender.email.domain.domain in $self_service_creation_platform_domains
+    or regex.icontains(sender.display_name, '\bvia\b')
+    or regex.icontains(subject.base, '\bvia\b')
+  )
+  and any($org_vips, strings.icontains(sender.display_name, .display_name))
+  // review document lure
+  and regex.icontains(body.current_thread.text, 'on pages \d[a-z] and \d[a-z]')
+tags:
+  - "Attack surface reduction"
+  - pr_author_D-Bolton
+  - created_from_open_prs
+  - rule_status_added
+attack_types:
+  - "BEC/Fraud"
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Impersonation: VIP"
+  - "Social engineering"
+  - "Spoofing"
+detection_methods:
+  - "Sender analysis"
+  - "Content analysis"
+  - "Header analysis"
+id: "4ec3f7ae-a478-5125-8603-149d4dd7ef45"
+references:
+  - https://github.com/sublime-security/sublime-rules/pull/5807
