@@ -1,0 +1,32 @@
+name: "Open redirect: Kelkoo Group"
+description: "Detects inbound messages containing links that leverage kelkoogroup.net's redirect functionality to send recipients to an external domain outside of kelkoogroup.net. The rule excludes messages where the sender's domain is kelkoogroup.net and passes DMARC authentication, as well as messages from other highly trusted sender domains that pass DMARC, reducing false positives from legitimate use of the redirect service."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and any(body.links,
+          .href_url.domain.root_domain == 'kelkoogroup.net'
+          and strings.icontains(.href_url.path, '/redirect')
+          and length(.href_url.query_params_decoded['url']) > 0
+          and any(.href_url.query_params_decoded['url'],
+                  strings.parse_url(.).domain.root_domain != 'kelkoogroup.net'
+          )
+  )
+  and not (
+    sender.email.domain.root_domain == "kelkoogroup.net"
+    and coalesce(headers.auth_summary.dmarc.pass, false)
+  )
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and not (
+    sender.email.domain.root_domain in $high_trust_sender_root_domains
+    and coalesce(headers.auth_summary.dmarc.pass, false)
+  )
+attack_types:
+  - "Credential Phishing"
+  - "Spam"
+tactics_and_techniques:
+  - "Open redirect"
+detection_methods:
+  - "URL analysis"
+  - "Header analysis"
+  - "Sender analysis"
