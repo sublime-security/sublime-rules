@@ -1,0 +1,49 @@
+name: "Service abuse: CrossTenant Microsoft notification with link"
+description: "Detects inbound messages sent from Microsoft's legitimate messaging/alert infrastructure (messaging.microsoft.com or office365alerts@microsoft.com) that carry cross-tenant headers and include at least one link in the body. Legitimate Purview encryption links and rpmsg-protected attachments are excluded, isolating cases where the trusted Microsoft notification channel is being leveraged to deliver suspicious links."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and (
+    sender.email.domain.domain == "messaging.microsoft.com"
+    or sender.email.email == 'office365alerts@microsoft.com'
+  )
+  // CrossTenant headers
+  and any(headers.hops,
+          any(.fields,
+              strings.ilike(.name,
+                            "X-MS-Exchange-CrossTenant-OriginalAttributedTenantConnectingIp"
+              )
+          )
+  )
+  // needs to contain at least one link
+  and length(filter(body.current_thread.links, .href_url.scheme != 'mailto')) > 0
+  // exclude Purview links or rpmsg attachments
+  and not (
+    any(body.current_thread.links,
+        strings.starts_with(.href_url.url,
+                            'https://outlook.office365.com/Encryption'
+        )
+        or .href_url.domain.domain in (
+          'purview.microsoft.com',
+          'security.microsoft.com'
+        )
+    )
+    or any(attachments,
+           .file_extension == "rpmsg"
+           or .content_type == "application/x-microsoft-rpmsg-message"
+    )
+  )
+tags:
+  - "Attack surface reduction"
+attack_types:
+  - "Credential Phishing"
+  - "Spam"
+tactics_and_techniques:
+  - "Out of band pivot"
+  - "Social engineering"
+detection_methods:
+  - "Header analysis"
+  - "Sender analysis"
+  - "URL analysis"
+id: "45ba23f8-5ce2-5d2a-8dce-9c4cba0efe8e"
