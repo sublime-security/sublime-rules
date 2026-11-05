@@ -1,0 +1,102 @@
+name: "BEC/Fraud: Fake investment outreach from suspicious senders"
+description: |
+  Detects unsolicited investment/funding outreach emails from suspicious senders.
+  Targets mass-mailed spam campaigns offering business funding, capital allocation,
+  and family office outreach.
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  // subject contains investment language
+  and (
+    strings.istarts_with(subject.base,
+                         'acquisition opportunity',
+                         'an investment opportunity',
+                         'business opportunity',
+                         'investment into',
+                         'investing in',
+                         'financing for'
+    )
+    or any([subject.base, body.current_thread.text],
+           regex.icontains(.,
+                           'family.?office',
+                           '(?:finding|looking for).{1,15}\b(?:manag(?:ing|ement))?\b.firm'
+           )
+    )
+  )
+  // financial body content
+  and (
+    any(ml.nlu_classifier(body.current_thread.text).topics,
+        .name == "Financial Communications" and .confidence != "low"
+    )
+    or (
+      any(ml.nlu_classifier(body.current_thread.text).topics,
+          .name in ("B2B Cold Outreach", "Charity and Non-Profit")
+          and .confidence != "low"
+      )
+      and not any(ml.nlu_classifier(body.current_thread.text).topics,
+                  .name in ("Contact List Solicitation")
+      )
+      and regex.icontains(body.current_thread.text,
+                          '\d{3}k',
+                          'capital',
+                          'family.?office',
+                          'fee structure',
+                          'funding',
+                          'funded in \d+',
+                          'private equity',
+                          'rates from \d+%'
+      )
+    )
+  )
+  // suspicious sender
+  and (
+    (
+      sender.email.domain.tld in $suspicious_tlds
+      or sender.email.domain.tld in ("info", "de")
+      // freemailer
+      or sender.email.domain.domain in $free_email_providers
+      // new sender domain
+      or network.whois(sender.email.domain).days_old <= 180
+      // sender mismatch sent via amazonses
+      or (
+        headers.return_path.email is not null
+        and headers.return_path.email != sender.email.email
+        and headers.return_path.domain.root_domain != sender.email.domain.root_domain
+        and headers.return_path.domain.root_domain == "amazonses.com"
+      )
+    )
+  
+    // sender profiles
+    or (
+      (
+        profile.by_sender_email().prevalence == "new"
+        and not profile.by_sender_email().solicited
+      )
+      or (
+        profile.by_sender_email().any_messages_malicious_or_spam
+        and not profile.by_sender_email().any_messages_benign
+      )
+    )
+  )
+  
+  // negate mailers with unsubscribe links
+  and not (
+    any(headers.hops, any(.fields, .name =~ "List-Unsubscribe"))
+    or any(body.current_thread.links,
+           strings.icontains(.display_text, "unsubscribe")
+    )
+  )
+tags:
+ - "Attack surface reduction"
+attack_types:
+  - "BEC/Fraud"
+tactics_and_techniques:
+  - "Social engineering"
+detection_methods:
+  - "Header analysis"
+  - "Sender analysis"
+  - "Content analysis"
+  - "Natural Language Understanding"
+  - "Whois"
+id: "5d4c4a15-661c-5fd1-9d5f-1c72c8230be8"
