@@ -4,59 +4,33 @@ type: "rule"
 severity: "low"
 source: |
   type.inbound
-  and (
-    // pdf image
-    strings.contains(body.html.raw,
-                     'https://ci3.googleusercontent.com/meips/ADKq_Naq6rm1GwC4XYZepCUQtEMnJ-r-HjyX_C5lBU7lpxQk1OIDV7vvQYvSJQWYmQCzG8moTgX3Wak625OtyHWRinVeUJs7K710JiIZ4JNXVpTmC8PJjV4K34GsBA=s0-d-e1-ft#https://res-1.cdn.office.net/assets/mail/file-icon/png/pdf_16x16.png'
-    )
-    // or there is an small attached image, directly before the link ending in .pdf
-    or any(filter(attachments,
-                  .file_type in $file_types_images
-                  and strings.icontains(body.html.raw, .content_id)
-                  // use megapixels to get a rough idea of the actual size of the image
-                  and any(beta.parse_exif(.).fields,
-                          .key == "Megapixels"
-                          and strings.parse_float(.value) < 0.1
+  // a pdf icon directly before a current-thread link ending in .pdf
+  and any(html.xpath(body.html,
+                     '//a[preceding-sibling::*[1][self::img or .//img] or parent::*/preceding-sibling::*[1][self::img or .//img]]'
+          ).nodes,
+          any(.links,
+              strings.iends_with(.display_text, '.pdf')
+              and .href_url.url in map(body.current_thread.links, .href_url.url)
+          )
+          and any(html.xpath(.,
+                             'preceding-sibling::*[1]/descendant-or-self::img/@src | parent::*/preceding-sibling::*[1]/descendant-or-self::img/@src'
+                  ).nodes,
+                  // an inline (cid) image
+                  any(attachments,
+                      strings.iends_with(..raw,
+                                         strings.concat("cid:", .content_id)
+                      )
                   )
-           ),
-           any(html.xpath(body.html,
-                          '//a[preceding-sibling::*[1][self::img or .//img] or parent::*/preceding-sibling::*[1][self::img or .//img]]'
-               ).nodes,
-               any(.links, strings.iends_with(.display_text, '.pdf'))
-               and any(html.xpath(.,
-                                  'preceding-sibling::*[1]/descendant-or-self::img | parent::*/preceding-sibling::*[1]/descendant-or-self::img'
-                       ).nodes,
-                       strings.icontains(.raw, ...content_id)
-               )
-           )
-    )
+                  // or office's pdf file-icon (sometimes proxied by gmail)
+                  or strings.icontains(.raw, '/assets/mail/file-icon/png/pdf')
+          )
   )
-  // mentions attachments but there are none or just images with no pdfs
-  and (
-    strings.starts_with(body.current_thread.text, 'Please see attached.')
-    or strings.icontains(body.current_thread.text, 'Please find attached')
-    // NLU
-    or any(ml.nlu_classifier(body.current_thread.text).entities,
-           .name == "request"
-           and strings.istarts_with(.text, 'please ')
-           and strings.icontains(.text, 'attached')
-    )
-  )
+  // no real attachments, only images
   and all(attachments, .file_type in $file_types_images)
   // self sender
   and (
     length(recipients.to) == 1
     and sender.email.email == recipients.to[0].email.email
-  )
-  // display text ends with .pdf
-  and any(body.current_thread.links,
-          strings.ends_with(.display_text, '.pdf')
-          and .href_url.domain.subdomain is not null
-          and .visible
-          and not (
-            .href_url.domain.root_domain == "googleusercontent.com"
-            and strings.istarts_with(.href_url.path, "/mail-sig")
-          )
   )
 attack_types:
   - "Credential Phishing"
