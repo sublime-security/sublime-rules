@@ -4,8 +4,14 @@ type: "rule"
 severity: "medium"
 source: |
   type.inbound
-  and any(beta.ml_topic(body.html.display_text).topics,
-          .name == "File Sharing and Cloud Services" and .confidence == "high"
+  and any(ml.nlu_classifier(body.current_thread.text).topics,
+          .name in (
+            "File Sharing and Cloud Services",
+            "Financial Communications",
+            "Payment Information",
+            "Secure Message"
+          )
+          and .confidence == "high"
   )
   and 0 < length(body.links) < 10
   and length(body.html.display_text) < 2000
@@ -70,8 +76,8 @@ source: |
                       strings.icontains(..href_url.domain.subdomain, .)
           )
   
-          // it is either a OneNote or PDF file, or unknown
-          and regex.icontains(.href_url.path, '\/:[obu]:\/(?:p|g\/personal)')
+          // it is a OneNote, PDF or unknown file, or a shared folder
+          and regex.icontains(.href_url.path, '\/:[obuf]:\/(?:p|g\/personal)')
   )
   
   // a way to negate long threads
