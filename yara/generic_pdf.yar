@@ -979,3 +979,16 @@ rule pdf_payment_confirmation_lure {
 		uint32be(0) == 0x25504446
 		and $stream
 }
+
+rule pdf_disclosure_slop_lure {
+	meta:
+		author      = "kyle eaton"
+		date        = "2026-11-05"
+		description = "disclosure/signature request slop lure"
+	strings:
+		$mb   = { 5B 30 2E 30 30 30 20 30 2E 30 30 30 20 38 34 31 2E 38 39 30 20 31 31 39 30 2E 35 35 30 5D 0A }
+		$rect = { 2F 52 65 63 74 20 5B 20 33 34 32 2E 37 39 33 31 20 }
+	condition:
+		uint32be(0) == 0x25504446
+		and $mb and $rect
+}
