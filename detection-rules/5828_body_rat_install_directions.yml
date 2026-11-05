@@ -1,0 +1,36 @@
+name: "PR# 5828 - Social engineering: Remote access tool install instructions disguised as document share"
+description: "Detects messages that reference a remote access tool (e.g., Zoho Assist, AnyDesk, ScreenConnect, TeamViewer, Splashtop) alongside step-by-step installation guidance, framed as a shared document or report notification. This pattern is commonly used to socially engineer recipients into installing remote access software under false pretenses."
+type: "rule"
+severity: "high"
+source: |
+  (type.inbound or type.internal)
+  // remote access tool named in the body
+  and regex.icontains(body.current_thread.text,
+                      '(?:zoho assist|anydesk|screenconnect|teamviewer|splashtop|remote (?:support|access))'
+  )
+  // with step-by-step install instructions
+  and regex.icontains(body.current_thread.text,
+                      'allow the installation',
+                      'installation to finish',
+                      'select .{0,3}(?:yes|allow)'
+  )
+  // and the template's framing
+  and (
+    strings.icontains(body.current_thread.text, 'important viewing note')
+    or regex.icontains(body.current_thread.text,
+                       'has shared (?:a|an|the) [^.]{0,80}?(?:report|statement|document)'
+    )
+  )
+attack_types:
+  - "Malware/Ransomware"
+tactics_and_techniques:
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+id: "ccf42f49-21d9-51cc-a3cf-0959daf5c927"
+tags:
+  - created_from_open_prs
+  - rule_status_added
+  - pr_author_zoomequipd
+references:
+  - https://github.com/sublime-security/sublime-rules/pull/5828
