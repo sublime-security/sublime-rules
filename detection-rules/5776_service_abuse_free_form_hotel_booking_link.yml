@@ -1,50 +1,29 @@
-name: "Service abuse: Hotel booking via free form page & Google Groups"
-description: "Detects inbound messages distributed through Google Groups that combine conference or event terminology with hotel and reservation language, while linking to a form-building platform disguised as a legitimate booking page."
+name: "Service abuse: Hotel booking via free form page"
+description: "Detects inbound messages that combine conference or event terminology with hotel and reservation language, while linking to a form-building platform disguised as a legitimate booking page."
 type: "rule"
 severity: "medium"
 source: |
   type.inbound
-  // delivered via google groups
-  and (
-    sender.email.domain.domain == "googlegroups.com"
-    or any(headers.hops,
-           .index == 0
-           and any(.fields,
-                   strings.icontains(.value, "googlegroups")
-                   or .name == "X-Google-Group-Id"
-           )
-    )
-  )
-  
-  // hotel booking language present
-  and (
-    strings.icontains(body.current_thread.text,
-                      'accommodation',
-                      'convention center',
-                      'hotel',
-                      'nearby properties',
-                      'nearby property',
-                      'reservation details',
-                      'room rate'
-    )
-    and strings.icontains(body.current_thread.text,
-                          'annual meeting',
-                          'conference',
-                          'congress',
-                          'convention',
-                          'expo',
-                          'forum',
-                          'seminar',
-                          'summit',
-                          'symposium',
-                          'trade show'
-    )
-  )
-  
-  // link to a form service used as a fake booking page
   and any(body.current_thread.links,
           .href_url.domain.root_domain in $self_service_creation_platform_domains
-          and strings.icontains(.display_text, 'book', 'hotel')
+          and regex.icontains(.display_text, '\b(?:book(?:ing)?|hotels?)\b')
+  )
+  
+  // an event housing pitch
+  and regex.icontains(body.current_thread.text,
+                      '\b(?:hotels?|housing|accommodations?|room rates?|reserve your room)\b'
+  )
+  and strings.icontains(body.current_thread.text,
+                        'annual meeting',
+                        'conference',
+                        'congress',
+                        'convention',
+                        'expo',
+                        'forum',
+                        'seminar',
+                        'summit',
+                        'symposium',
+                        'trade show'
   )
   
   // sender profiles
@@ -74,4 +53,4 @@ detection_methods:
 id: "c1a7073c-fdbd-5a81-85d5-ffe6a0e9d277"
 og_id: "e25d8b91-756b-5439-befa-00226a57593f"
 testing_pr: 5776
-testing_sha: 900079d20a6cf33d7ac9b7f831d5374dcc38cea4
+testing_sha: 50b511e17a1066b4384efeca8decb7f768bc3784
