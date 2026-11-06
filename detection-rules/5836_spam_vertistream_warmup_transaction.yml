@@ -1,0 +1,26 @@
+name: "Spam: VertiStream email warmup messages with transaction ID artifact"
+description: "Detects VertiStream email warm-up messages: inbound mail with no attachments and no non-mailto links that contains an empty HTML div with a 'transactionid' class and a UUID id. The body is typically a single excerpt from a real article or talk with punctuation stripped, sent from freemail accounts or bulk-registered lookalike domains tied to VertiStream's B2B lead-gen operation."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and length(filter(body.current_thread.links, .href_url.scheme != "mailto")) == 0
+  and length(attachments) == 0
+  and strings.icontains(body.html.raw, 'class="transactionid"')
+  // verify the extracted div exactly: empty, with a uuid id
+  and any(html.xpath(body.html, "//div[@class='transactionid']").nodes,
+          regex.imatch(.raw,
+                       '<div class="transactionid" id="[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"></div>'
+          )
+  )
+attack_types:
+  - "Spam"
+tactics_and_techniques:
+  - "Social engineering"
+detection_methods:
+  - "HTML analysis"
+  - "Content analysis"
+id: "9261269f-038c-532b-8025-65a119d729e8"
+og_id: "359200e9-5e82-54e3-82a5-7ef3234c0ea9"
+testing_pr: 5836
+testing_sha: 2b439546588ecdbb4d66489db5707ff91f9a40ee
