@@ -1,5 +1,5 @@
 name: "Prompt injection: Instructions to an AI in a calendar invite"
-description: "Detects calendar invites whose summary or description addresses an AI (an assistant, a named model such as 'Gemini,', 'the user', 'previous instructions') where NLU finds a request and the prompt injection model agrees on the same field. Calendar assistants read the full event text. Restricted to senders with low prevalence and no benign history, and excludes graymail from senders passing DMARC."
+description: "Detects calendar invites whose summary or description addresses an AI (an assistant, a named model such as 'Gemini,', 'the user', 'previous instructions') where NLU finds a request and the prompt injection model agrees on the same field. Calendar assistants read the full event text. Excludes graymail from senders passing DMARC."
 type: "rule"
 severity: "low"
 source: |
@@ -33,13 +33,8 @@ source: |
           )
   )
   
-  // an injection arrives from outside the recipient's correspondence... the profile
-  // is unauthenticated, so a spoofed known correspondent is suppressed too
-  and profile.by_sender_email().prevalence in ("new", "outlier", "rare")
-  and not profile.by_sender_email().any_messages_benign
-  
   // graymail from authenticated senders... AI-product newsletters and webinars
-  and not coalesce(beta.attack_score_flash().verdict == "graymail"
+  and not coalesce(ml.attack_score_flash().verdict == "graymail"
                    and headers.auth_summary.dmarc.pass,
                    false
   )

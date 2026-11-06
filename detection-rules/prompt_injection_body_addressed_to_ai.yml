@@ -1,5 +1,5 @@
 name: "Prompt injection: Body instructions addressed to an AI"
-description: "Detects message bodies that speak to an AI assistant rather than about one, such as a vocative ('Mail agent:'), a note to the model, 'if you are an AI', or a forged chat-template turn, where NLU finds a request and the prompt injection model agrees on the same text. Targets instructions aimed at AI assistants that read mail on the recipient's behalf. Restricted to senders with low prevalence and no benign history, and excludes graymail from senders passing DMARC."
+description: "Detects message bodies that speak to an AI assistant rather than about one, such as a vocative ('Mail agent:'), a note to the model, 'if you are an AI', or a forged chat-template turn, where NLU finds a request and the prompt injection model agrees on the same text. Targets instructions aimed at AI assistants that read mail on the recipient's behalf. Excludes graymail from senders passing DMARC."
 type: "rule"
 severity: "low"
 source: |
@@ -18,13 +18,8 @@ source: |
           and beta.prompt_injection_detection(.).confidence in ("medium", "high")
   )
   
-  // an injection arrives from outside the recipient's correspondence... the profile
-  // is unauthenticated, so a spoofed known correspondent is suppressed too
-  and profile.by_sender_email().prevalence in ("new", "outlier", "rare")
-  and not profile.by_sender_email().any_messages_benign
-
   // graymail from authenticated senders... AI-product newsletters and webinars
-  and not coalesce(beta.attack_score_flash().verdict == "graymail"
+  and not coalesce(ml.attack_score_flash().verdict == "graymail"
                    and headers.auth_summary.dmarc.pass,
                    false
   )
