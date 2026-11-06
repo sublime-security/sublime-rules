@@ -1,0 +1,25 @@
+name: "Service abuse: Amazon SES with newly registered reply-to domain"
+description: "Detects inbound messages sent through Amazon SES infrastructure where the reply-to address uses a domain different from the sender's domain and that domain was registered within the last 30 days, a strong indicator of disposable infrastructure used to evade detection and redirect replies to attacker-controlled addresses."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and headers.return_path.domain.root_domain in ("amazonses.com")
+  and any(headers.reply_to,
+          .email.domain.root_domain != sender.email.domain.root_domain
+          and network.whois(.email.domain).days_old <= 30
+  )
+tags:
+ - "Attack surface reduction"
+attack_types:
+  - "Spam"
+  - "BEC/Fraud"
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Spoofing"
+  - "Social engineering"
+detection_methods:
+  - "Header analysis"
+  - "Whois"
+  - "Sender analysis"
+id: "54158d1a-2e67-51b7-840a-b3e1652ae29f"
