@@ -1,0 +1,60 @@
+name: "BEC/Fraud: Freemail sender with embedded domain in username and suspicious content"
+description: "Detects emails with previous threads from new freemail senders where the sender's username contains a domain found in the previous threads email participants, combined with suspicious content indicators or financial topics. This pattern is commonly used to impersonate legitimate services by embedding recognizable domains in the sender's email address."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  // sender is a freemail and there are previous threads
+  and length(body.previous_threads) > 1
+  and sender.email.domain.root_domain in $free_email_providers
+  
+  // the sender's local part contains a previous threads linked sld 
+  and any(body.links,
+          length(.href_url.domain.sld) > 3
+          and not .href_url.domain.root_domain in $org_domains
+          and strings.contains(sender.email.local_part,
+                               strings.concat(".", .href_url.domain.sld)
+          )
+  )
+  // exclude mailing lists
+  and not any(headers.hops,
+              any(.fields,
+                  .name == "Delivered-To"
+                  and strings.starts_with(.value, "mailing list")
+              )
+  )
+  
+  // nlu intents not benign, or purchase order topics, or payment invoicing or purchase order tags
+  and (
+    any(ml.nlu_classifier(body.current_thread.text).intents,
+        .name != "benign" and .confidence == "high"
+    )
+    or any(ml.nlu_classifier(body.current_thread.text).topics,
+           .name in ("Purchase Orders")
+    )
+    or any(ml.nlu_classifier(body.current_thread.text).tags,
+           .name in ("payment", "purchase_order", "invoice")
+    )
+  )
+  
+  // new sender
+  and profile.by_sender().days_known == 0
+  
+  // and not customer service mailboxes
+  and not any(recipients.to,
+              .email.local_part in ("support", "help", "customerservice")
+  )
+
+
+attack_types:
+  - "BEC/Fraud"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Free email provider"
+  - "Social engineering"
+detection_methods:
+  - "Header analysis"
+  - "Natural Language Understanding"
+  - "Sender analysis"
+  - "URL analysis"
+id: "62b65f44-1584-5591-a3fa-70701acad001"
