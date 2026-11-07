@@ -1,0 +1,28 @@
+name: "Evasion: Invisible characters interleaved in subject or sender display name"
+description: "Detects inbound messages with links where the subject or sender display name contains 3 or more invisible or filler characters placed directly after Latin letters, breaking words apart (\"He<U+034F>loc Of<U+205F>fer\") so they render normally but evade keyword matching. Covers characters not handled by the existing zero-width rule and seen in active spam campaigns: combining grapheme joiner (U+034F), Hangul and Khmer fillers, Mongolian selectors, bidi embedding controls, invisible operators, odd-width spaces (U+2000-U+200A, U+205F) and unassigned plane-14 code points. Left-to-right/right-to-left marks and emoji variation selectors are excluded because legitimate senders use them."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and length(body.links) > 0
+  and any([subject.subject, sender.display_name],
+          regex.count(.,
+                      '[A-Za-z][\x{00AD}\x{034F}\x{115F}\x{1160}\x{17B4}\x{17B5}\x{180B}-\x{180E}\x{200B}-\x{200D}\x{202A}-\x{202E}\x{2060}-\x{2064}\x{2066}-\x{206F}\x{3164}\x{FEFF}\x{FFA0}\x{E0000}-\x{E0FFF}\x{2000}-\x{200A}\x{202F}\x{205F}\x{3000}]'
+          ) >= 3
+  )
+
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and not (
+    sender.email.domain.root_domain in $high_trust_sender_root_domains
+    and coalesce(headers.auth_summary.dmarc.pass, false)
+  )
+tags:
+  - "Attack surface reduction"
+attack_types:
+  - "Spam"
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Evasion"
+detection_methods:
+  - "Content analysis"
+  - "Header analysis"
