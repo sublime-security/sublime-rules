@@ -1,36 +1,39 @@
 name: "Spam: VertiStream marketing tracking links"
-description: "Detects VertiStream B2B content-syndication lead-gen messages: sponsor-branded content offers with tracking links and no attachments, sent from bulk-registered, tech-themed compound domains. Matches either the empty 'transactionid' div with a UUID id that VertiStream embeds in its mail, or VertiStream's tracking-link format on the sender's own domain (a numeric path with uid, prom_type and prom_id parameters)"
+description: "Detects VertiStream B2B content-syndication lead-gen messages by their tracking links: sponsor-branded content offers with no attachments, sent from bulk-registered, tech-themed compound domains, linking to a numeric tracking path on the sender's own domain with either uid, prom_type and prom_id parameters, or the newer c and s UUID parameters."
 type: "rule"
 severity: "medium"
 source: |
   type.inbound
-  // with links
-  and length(filter(body.current_thread.links, .href_url.scheme != "mailto")) > 0
   and length(attachments) == 0
-  and (
-    (
-      strings.icontains(body.html.raw, 'class="transactionid"')
-      and any(html.xpath(body.html, "//div[@class='transactionid']").nodes,
-              regex.imatch(.raw,
-                           '<div class="transactionid" id="[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"></div>'
+  // VertiStream's tracking-link format on the sender's own domain
+  and any(body.current_thread.links,
+          .href_url.domain.root_domain == sender.email.domain.root_domain
+          and regex.imatch(.href_url.path, '/[0-9]+-[0-9]+/[0-9]+')
+          and (
+            // ?uid=&prom_type=&prom_id=
+            all(["uid", "prom_type", "prom_id"],
+                . in keys(..href_url.query_params_decoded)
+            )
+            // ?c=<uuid>&s=<uuid>
+            or (
+              any(.href_url.query_params_decoded["c"],
+                  regex.imatch(.,
+                               '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'
+                  )
               )
-      )
-    )
-    // or VertiStream's tracking-link format on the sender's own domain
-    or any(body.current_thread.links,
-           .href_url.domain.root_domain == sender.email.domain.root_domain
-           and regex.imatch(.href_url.path, '/[0-9]+-[0-9]+/[0-9]+')
-           and "uid" in keys(.href_url.query_params_decoded)
-           and "prom_type" in keys(.href_url.query_params_decoded)
-           and "prom_id" in keys(.href_url.query_params_decoded)
-    )
+              and any(.href_url.query_params_decoded["s"],
+                      regex.imatch(.,
+                                   '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'
+                      )
+              )
+            )
+          )
   )
 attack_types:
   - "Spam"
 tactics_and_techniques:
   - "Social engineering"
 detection_methods:
-  - "HTML analysis"
   - "URL analysis"
   - "Sender analysis"
 id: "90680852-5b35-58ec-991a-a38dd5a5e8b0"
