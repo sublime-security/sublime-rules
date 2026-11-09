@@ -56,8 +56,15 @@ source: |
       and strings.icontains(body.current_thread.text, "amazon")
     )
     or (
-      strings.istarts_with(body.current_thread.text, 'amazon')
-      and length(body.current_thread.links) == 1
+      (
+        any([body.current_thread.text, body.html.inner_text],
+            strings.istarts_with(., 'amazon')
+        )
+        or any(ml.logo_detect(file.message_screenshot()).brands,
+               .name == "Amazon" and .confidence == "high"
+        )
+      )
+      and length(body.current_thread.links) < 10
       and any(body.current_thread.links,
               strings.istarts_with(.display_text, 'amazon')
               and .href_url.domain.sld != "amazon"
@@ -146,7 +153,8 @@ source: |
     'proofpointessentials.com',
     'area1security.com',
     'marketplace.aws',
-    'quicksight.aws'
+    'quicksight.aws',
+    'amazonpreview.com'
   )
   
   // negate amazon.com.be explicitly, this cannot be part of the root_domain set above as it uses the PSL (Public suffix list) for parsing and com.be is owned by amazon directly.
