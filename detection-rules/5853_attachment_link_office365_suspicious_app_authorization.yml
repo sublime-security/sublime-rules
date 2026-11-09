@@ -1,0 +1,64 @@
+name: "Attachment: Suspicious Office 365 app authorization (OAuth) link"
+description: "Detects inbound messages whose PDF, HTML, DOCX, or PPTX attachments contain a suspicious Office 365 app authorization (OAuth) link. The app may be compromised or was stood up for malicious purposes. Once the app has been authorized, the attacker will have read or write permissions to the user's Office 365 account. ICS and EML attachments are covered by separate rules."
+references:
+  - "https://info.phishlabs.com/blog/office-365-phishing-uses-malicious-app-persist-password-reset"
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and any(filter(attachments, .file_type in ("pdf", "html", "docx", "pptx")),
+          any(file.explode(.),
+              any(.scan.url.urls,
+                  (
+                    (
+                      .domain.domain in (
+                        'login.microsoftonline.com',
+                        'login.microsoft.com'
+                      )
+                      or strings.icontains(.query_params,
+                                           "login.microsoftonline.com",
+                                           'login.microsoft.com'
+                      )
+                    )
+                    and (
+                      strings.ilike(.query_params,
+                                    '*offline_access*',
+                                    '*.readwrite*',
+                                    '*.read*',
+                                    '*ctx=*',
+                                    '*prompt=none*'
+                      )
+                      or (
+                        strings.icontains(.path, '/common/reprocess')
+                        and strings.icontains(.query_params, 'ctx=')
+                        and strings.icontains(.query_params, 'sessionId=')
+                      )
+                    )
+                  )
+                  or any(flatten(values(.query_params_decoded)),
+                         any(strings.scan_base64(., ignore_padding=true),
+                             strings.icontains(., "login.microsoftonline.com")
+                             and strings.ilike(.,
+                                               '*offline_access*',
+                                               '*.readwrite*',
+                                               '*.read*',
+                                               '*prompt=none*'
+                             )
+                         )
+                  )
+              )
+          )
+  )
+attack_types:
+  - "Credential Phishing"
+detection_methods:
+  - "URL analysis"
+related_detections:
+  - "link_office365_suspicious_app_authorization.yml"
+  - "attachment_ics_link_office365_suspicious_app_authorization.yml"
+  - "attachment_eml_link_office365_suspicious_app_authorization.yml"
+  - "link_self_service_platform_link_to_microsoft_redirect.yml"
+id: "a8a22546-f4a9-513a-898e-f26a77f9dbb8"
+og_id: "b25398fa-42c6-5add-a9ee-f1f1ed586447"
+testing_pr: 5853
+testing_sha: 03375dd443855906abb416fa3f1726691851b60e
