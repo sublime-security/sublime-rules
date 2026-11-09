@@ -1,0 +1,28 @@
+name: "Link: AWS S3 website hosting credential theft"
+description: "Detects inbound messages containing a link to a domain using Amazon S3 static website hosting (s3-website-*.amazonaws.com) where the message body is classified with high confidence as credential theft by natural language understanding analysis. Threat actors frequently abuse free S3 website hosting to host credential harvesting pages, leveraging the trusted AWS domain to bypass reputation-based filtering."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and any(body.current_thread.links,
+          regex.icontains(.href_url.domain.domain,
+                          '\.s3-website[\-.][a-z0-9\-]+\.amazonaws\.com$'
+          )
+  )
+  and any(ml.nlu_classifier(body.current_thread.text).intents,
+          .name == "cred_theft" and .confidence == "high"
+  )
+  
+    
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Free file host"
+  - "Social engineering"
+detection_methods:
+  - "Natural Language Understanding"
+  - "URL analysis"
+id: "50c16b79-5c80-5e3d-8d2e-6cf26b803d22"
+og_id: "d17b9a73-f117-5c18-912e-48b930448693"
+testing_pr: 5850
+testing_sha: 12f243ad1a1f047932db40090a2709ed5ce4fbee
