@@ -1,0 +1,50 @@
+name: "Attachment: PDF with version-only producer and default, anonymized or missing metadata"
+description: "Detects PDF attachments whose EXIF producer field contains only a version string (no software or product name) combined with default, anonymized or missing metadata—untitled document, anonymous creator/author, and unspecified subject—and embedded OCR text prompting the recipient to open the document. This combination of an unnamed generation tool, placeholder/missing metadata, and an open-document lure prompt is characteristic of automated PDF-generation kits used in credential phishing and BEC lures."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and any(attachments,
+          .file_type == "pdf"
+          and any([beta.parse_exif(.)],
+                  regex.imatch(.producer, '[\d.\s()]*\d[\d.\s()]*')
+                  and (
+                    2 of (
+                      (.title =~ "untitled" or .title is null or .title == ""),
+                      (
+                        .creator =~ "anonymous"
+                        or .creator is null
+                        or .creator == ""
+                      ),
+                      (.author =~ "anonymous" or .author is null or .author == ""),
+                      (
+                        any(.fields,
+                            .key == "Subject" and .value =~ "unspecified"
+                        )
+                        or not any(.fields, .key == "Subject" and .value != "")
+                      )
+                    )
+                  )
+          )
+  
+          //
+          // This rule makes use of a beta feature and is subject to change without notice
+          // using the beta feature in custom rules is not suggested until it has been formally released
+          //
+          and regex.icontains(beta.ocr(.).text, 'open\b[\s\S]{0,30}document')
+  )
+attack_types:
+  - "BEC/Fraud"
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Image as content"
+  - "Social engineering"
+  - "Evasion"
+detection_methods:
+  - "Exif analysis"
+  - "Optical Character Recognition"
+  - "Content analysis"
+id: "4d29f4c6-56d0-52d7-b720-ca95c805573f"
+og_id: "40f73aea-39cf-5a36-a9bc-267bdf0f7cfc"
+testing_pr: 5855
+testing_sha: 7d2ecc94e2c82178668b6e3407bae1752245fa0e
