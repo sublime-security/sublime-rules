@@ -992,3 +992,17 @@ rule pdf_disclosure_slop_lure {
 		uint32be(0) == 0x25504446
 		and $mb and $rect
 }
+
+rule pdf_enc_adobe_lure {
+	meta:
+		author      = "kyle eaton"
+		date        = "2026-11-09"
+		description = "Adobe 'view secure document' lure - typically seen delivered encrypted with password in message body. Rule is looking for objects of specific sizes that they've used repeatedly."
+	strings:
+		$obj1       = "<</Alternate/DeviceRGB/Filter/FlateDecode/Length 2640/N 3>>"
+		$img_params = "/DeviceGray/Filter/FlateDecode/Height 833/Interpolate true/Length 4608/"
+	condition:
+		uint32be(0) == 0x25504446
+		and $obj1 and $img_params
+
+}
