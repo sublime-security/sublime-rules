@@ -1,0 +1,29 @@
+name: "Spam: VertiStream warm-up HTML template"
+description: "Detects VertiStream warm-up messages by the generator's styled paragraph markup under an unpunctuated article title, with or without the transaction ID artifact or a trailing ellipsis."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and length(filter(body.current_thread.links, .href_url.scheme != "mailto")) == 0
+  and length(attachments) == 0
+  and not subject.is_reply
+  and not subject.is_forward
+  and not subject.is_auto_reply
+  // generator markup: a styled <p> holding only unpunctuated text, sometimes ending in "..."
+  // <p style="font-family:Bookman Old Style, serif; color: #9400D3;">Tipping once contained to ...</p>
+  and regex.icontains(body.html.raw,
+                      '<p style=["'']font-family:[^;"'']+; ?color: ?#[0-9a-f]{6};?["'']>[a-z0-9\s]*(?:\.\.\.|…)?\s*</p>'
+  )
+  // warning banners can add a few paragraphs, but not a full message
+  and strings.icount(body.html.raw, '</p>') <= 4
+  // unpunctuated multi-word title
+  and regex.icontains(subject.base, '\w\s+\w')
+  and regex.imatch(subject.base, '[\s[:punct:]\p{P}]{0,3}[^[:punct:]\p{P}]+')
+attack_types:
+  - "Spam"
+tactics_and_techniques:
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "HTML analysis"
+id: "bb688ddf-dc4e-5c45-a64a-18d02386bc69"
