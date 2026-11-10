@@ -1,0 +1,51 @@
+name: "PR# 5861 - Reconnaissance: Empty message from uncommon sender"
+description: "Detects incoming messages that are completely empty, containing no subject line, message body content, or file attachments. Such messages may be used for reconnaissance, delivery confirmation, or as part of multi-stage attacks."
+type: "rule"
+severity: "low"
+source: |
+  type.inbound
+  and subject.base == ""
+  and length(attachments) == 0
+  and (
+    // body is empty
+    (
+      (
+        body.plain.raw is null
+        or body.plain.raw == ""
+        or regex.imatch(body.plain.raw, '^\s*$')
+      )
+      and (
+        body.html.raw is null
+        or body.html.raw == ""
+        or regex.imatch(body.html.raw, '^\s*$')
+      )
+    )
+    // account for disclaimers
+    or (
+      any(map(filter(ml.nlu_classifier(body.current_thread.text).entities,
+                     .name == "disclaimer"
+              ),
+              .text
+          ),
+          (length(body.current_thread.text) - length(.)) == 0
+      )
+    )
+  )
+  and profile.by_sender().prevalence != "common"
+tags:
+  - "Attack surface reduction"
+  - pr_author_markmsublime
+  - created_from_open_prs
+  - rule_status_modified
+attack_types:
+  - "Spam"
+  - "Reconnaissance"
+tactics_and_techniques:
+  - "Evasion"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Header analysis"
+id: "c48075ac-b75e-5b10-9762-a0fb8838735f"
+references:
+  - https://github.com/sublime-security/sublime-rules/pull/5861
