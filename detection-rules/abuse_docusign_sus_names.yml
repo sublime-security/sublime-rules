@@ -4,7 +4,10 @@ type: "rule"
 severity: "medium"
 source: |
   type.inbound
-  and length(attachments) == 0
+  and length(filter(attachments,
+                    .sha256 not in $file_hashes_image_warning_banners
+             )
+  ) == 0
   
   // Legitimate Docusign sending infratructure
   and sender.email.domain.root_domain == 'docusign.net'
@@ -15,10 +18,10 @@ source: |
               or .email.domain.root_domain in $high_trust_sender_root_domains
               or .email.domain.root_domain in ("docusign.net", "docusign.com")
   )
-  // 
+  //
   // This rule makes use of a beta feature and is subject to change without notice
   // using the beta feature in custom rules is not suggested until it has been formally released
-  // 
+  //
   
   // reply-to address has never sent an email to the org
   and beta.profile.by_reply_to().prevalence == "new"
@@ -111,7 +114,7 @@ source: |
       or regex.icontains(subject.subject, 'Employee Handbook')
       or regex.icontains(subject.subject, 'Reimbursement Approved')
   
-      // 
+      //
       // shared files/extenstion/urgency/CTA
       or regex.icontains(subject.subject, 'Urgent')
       or regex.icontains(subject.subject, 'Important')
@@ -130,7 +133,6 @@ source: |
       or regex.icontains(subject.subject, '\bMFA\b')
     )
   )
-
 attack_types:
   - "Callback Phishing"
   - "BEC/Fraud"
