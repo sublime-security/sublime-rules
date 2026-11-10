@@ -1006,3 +1006,16 @@ rule pdf_enc_adobe_lure {
 		and $obj1 and $img_params
 
 }
+
+rule pdf_blue_remittance_lure {
+	meta:
+		author      = "kyle eaton"
+		date        = "2026-11-10"
+		description = "PDF containing one of two images observed in a fake remittance lure"
+	strings:
+		$jpg1 = { 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 04 1C E6 B5 2E E5 B0 16 B3 35 69 69 64 BB DC 89 EF 50 28 33 12 48 C4 76 8B 22 35 54 0B D8 13 70 A3 FD 45 F9 81 54 00 00 00 00 00 00 00 00 00 00 }
+		$jpg2 = { 00 00 00 00 00 00 00 00 00 00 1E 62 44 6C 26 2B DD BC 80 63 6A 16 AA 9B 20 B8 46 8C D4 EB 50 2C }
+	condition:
+		uint32be(0) == 0x25504446
+		and any of ($jpg*)
+}
