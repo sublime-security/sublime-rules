@@ -4,7 +4,7 @@ type: "rule"
 severity: "high"
 source: |
   type.inbound
-  // SendGird impersonation patterns
+  // SendGrid impersonation patterns
   and (
     strings.ilike(strings.replace_confusables(sender.display_name), '*sendgrid*')
     or strings.ilevenshtein(strings.replace_confusables(sender.display_name),
@@ -24,19 +24,17 @@ source: |
     )
     or regex.icontains(body.current_thread.text, 'sendgrid\s*20[0-9]{2}')
   )
-  // sent from sendgrid infra
-  and any(headers.domains,
-          strings.icontains(.domain, 'outbound-mail.sendgrid.net')
-  )
+  // sent through a sendgrid account... sendgrid stamps X-SG-EID/X-SG-ID on every
+  // send, including white-labelled dedicated IPs that hide sendgrid.net
+  and any(headers.hops, any(.fields, .name in~ ("X-SG-EID", "X-SG-ID")))
   // not common senders with valid domains
   // this catches cases where the domain is invalid and senders become common
   and not (
     profile.by_sender_email().prevalence == "common" and sender.email.domain.valid
   )
-  
   // negate legit sendgrid messages
   and not (
-    sender.email.domain.domain == "sendgrid.com"
+    sender.email.domain.root_domain in ("sendgrid.com", "kke.co.jp")
     and coalesce(headers.auth_summary.dmarc.pass, false)
   )
 attack_types:
