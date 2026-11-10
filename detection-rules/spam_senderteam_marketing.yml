@@ -1,0 +1,28 @@
+name: "Spam: SenderTeam marketing tracking links"
+description: "Detects B2B content-syndication lead-gen messages from SenderTeam, VertiStream's sister sending identity, by their tracking links: sponsor-branded content offers and surveys with no attachments, linking to /tr/click, /tr/unsubscribe or a hidden /tr/bclick on the sender's own domain with a base58 uid, a numeric sid and a type parameter."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and length(attachments) == 0
+  // SenderTeam's tracking-link format on the sender's own domain
+  // /tr/click?uid=<base58>&type=c&sid=<n>
+  and any(body.current_thread.links,
+          .href_url.domain.root_domain == sender.email.domain.root_domain
+          and regex.imatch(.href_url.path, '/tr/(?:click|unsubscribe|bclick)')
+          and any(.href_url.query_params_decoded["uid"],
+                  regex.match(., '[1-9A-HJ-NP-Za-km-z]+')
+          )
+          and any(.href_url.query_params_decoded["sid"],
+                  regex.imatch(., '[0-9]+')
+          )
+          and any(.href_url.query_params_decoded["type"], . in ("c", "u", "b"))
+  )
+attack_types:
+  - "Spam"
+tactics_and_techniques:
+  - "Social engineering"
+detection_methods:
+  - "URL analysis"
+  - "Sender analysis"
+id: "e6202ccd-9a5f-5ec2-9501-796066ee9af9"

@@ -10,33 +10,46 @@ source: |
             // links in attached EML body
             any(file.parse_eml(.).body.links,
                 (
-                  .href_url.domain.domain in (
-                    'login.microsoftonline.com',
-                    'login.microsoft.com'
+                  (
+                    .href_url.domain.domain in (
+                      'login.microsoftonline.com',
+                      'login.microsoft.com'
+                    )
+                    or strings.icontains(.href_url.query_params,
+                                         "login.microsoftonline.com",
+                                         'login.microsoft.com'
+                    )
                   )
-                  or strings.icontains(.href_url.query_params,
-                                       "login.microsoftonline.com",
-                                       'login.microsoft.com'
+                  and (
+                    strings.ilike(.href_url.query_params,
+                                  '*offline_access*',
+                                  '*.readwrite*',
+                                  '*.read*',
+                                  '*ctx=*',
+                                  '*prompt=none*'
+                    )
+                    or (
+                      (
+                        strings.icontains(.href_url.path, '/common/reprocess')
+                        or strings.icontains(.href_url.query_params,
+                                             "/common/reprocess"
+                        )
+                      )
+                      and strings.icontains(.href_url.query_params, 'ctx=')
+                      and strings.icontains(.href_url.query_params, 'sessionId=')
+                    )
                   )
                 )
-                and (
-                  strings.ilike(.href_url.query_params,
-                                '*offline_access*',
-                                '*.readwrite*',
-                                '*.read*',
-                                '*ctx=*',
-                                '*prompt=none*'
-                  )
-                  or (
-                    (
-                      strings.icontains(.href_url.path, '/common/reprocess')
-                      or strings.icontains(.href_url.query_params,
-                                           "/common/reprocess"
-                      )
-                    )
-                    and strings.icontains(.href_url.query_params, 'ctx=')
-                    and strings.icontains(.href_url.query_params, 'sessionId=')
-                  )
+                or any(flatten(values(.href_url.query_params_decoded)),
+                       any(strings.scan_base64(., ignore_padding=true),
+                           strings.icontains(., "login.microsoftonline.com")
+                           and strings.ilike(.,
+                                             '*offline_access*',
+                                             '*.readwrite*',
+                                             '*.read*',
+                                             '*prompt=none*'
+                           )
+                       )
                 )
             )
             // links in PDF and HTML attachments inside the EML
@@ -46,28 +59,45 @@ source: |
                    any(file.explode(.),
                        any(.scan.url.urls,
                            (
-                             .domain.domain in (
-                               'login.microsoftonline.com',
-                               'login.microsoft.com'
+                             (
+                               .domain.domain in (
+                                 'login.microsoftonline.com',
+                                 'login.microsoft.com'
+                               )
+                               or strings.icontains(.query_params,
+                                                    "login.microsoftonline.com",
+                                                    'login.microsoft.com'
+                               )
                              )
-                             or strings.icontains(.query_params,
-                                                  "login.microsoftonline.com",
-                                                  'login.microsoft.com'
+                             and (
+                               strings.ilike(.query_params,
+                                             '*offline_access*',
+                                             '*.readwrite*',
+                                             '*.read*',
+                                             '*ctx=*',
+                                             '*prompt=none*'
+                               )
+                               or (
+                                 strings.icontains(.path, '/common/reprocess')
+                                 and strings.icontains(.query_params, 'ctx=')
+                                 and strings.icontains(.query_params,
+                                                       'sessionId='
+                                 )
+                               )
                              )
                            )
-                           and (
-                             strings.ilike(.query_params,
-                                           '*offline_access*',
-                                           '*.readwrite*',
-                                           '*.read*',
-                                           '*ctx=*',
-                                           '*prompt=none*'
-                             )
-                             or (
-                               strings.icontains(.path, '/common/reprocess')
-                               and strings.icontains(.query_params, 'ctx=')
-                               and strings.icontains(.query_params, 'sessionId=')
-                             )
+                           or any(flatten(values(.query_params_decoded)),
+                                  any(strings.scan_base64(., ignore_padding=true),
+                                      strings.icontains(.,
+                                                        "login.microsoftonline.com"
+                                      )
+                                      and strings.ilike(.,
+                                                        '*offline_access*',
+                                                        '*.readwrite*',
+                                                        '*.read*',
+                                                        '*prompt=none*'
+                                      )
+                                  )
                            )
                        )
                    )
@@ -85,34 +115,49 @@ source: |
                    any(beta.file.parse_ics(.).events,
                        any(.links,
                            (
-                             .href_url.domain.domain in (
-                               'login.microsoftonline.com',
-                               'login.microsoft.com'
+                             (
+                               .href_url.domain.domain in (
+                                 'login.microsoftonline.com',
+                                 'login.microsoft.com'
+                               )
+                               or strings.icontains(.href_url.query_params,
+                                                    "login.microsoftonline.com",
+                                                    'login.microsoft.com'
+                               )
                              )
-                             or strings.icontains(.href_url.query_params,
-                                                  "login.microsoftonline.com",
-                                                  'login.microsoft.com'
+                             and (
+                               strings.ilike(.href_url.query_params,
+                                             '*offline_access*',
+                                             '*.readwrite*',
+                                             '*.read*',
+                                             '*ctx=*',
+                                             '*prompt=none*'
+                               )
+                               or (
+                                 strings.icontains(.href_url.path,
+                                                   '/common/reprocess'
+                                 )
+                                 and strings.icontains(.href_url.query_params,
+                                                       'ctx='
+                                 )
+                                 and strings.icontains(.href_url.query_params,
+                                                       'sessionId='
+                                 )
+                               )
                              )
                            )
-                           and (
-                             strings.ilike(.href_url.query_params,
-                                           '*offline_access*',
-                                           '*.readwrite*',
-                                           '*.read*',
-                                           '*ctx=*',
-                                           '*prompt=none*'
-                             )
-                             or (
-                               strings.icontains(.href_url.path,
-                                                 '/common/reprocess'
-                               )
-                               and strings.icontains(.href_url.query_params,
-                                                     'ctx='
-                               )
-                               and strings.icontains(.href_url.query_params,
-                                                     'sessionId='
-                               )
-                             )
+                           or any(flatten(values(.href_url.query_params_decoded)),
+                                  any(strings.scan_base64(., ignore_padding=true),
+                                      strings.icontains(.,
+                                                        "login.microsoftonline.com"
+                                      )
+                                      and strings.ilike(.,
+                                                        '*offline_access*',
+                                                        '*.readwrite*',
+                                                        '*.read*',
+                                                        '*prompt=none*'
+                                      )
+                                  )
                            )
                        )
                    )
