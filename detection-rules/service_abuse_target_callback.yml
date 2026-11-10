@@ -1,0 +1,29 @@
+name: "Service abuse: Target shipping notification callback scam"
+description: "Detects inbound emails spoofed from Target's domain that contain a shipping address block with a suspiciously formatted zip code and phone number, indicating the legitimate service is being leveraged to deliver a callback scam lure."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and sender.email.email == "orders@oe1.target.com"
+  and any(map(html.xpath(body.html, '//h1[contains(@class,"ship-address")]/span').nodes,
+              .display_text
+          ),
+          regex.icontains(., '[a-z]{2}\s[ilo0-9]{5}(?:-[ilo0-9]{4})?\s*$')
+          and regex.icontains(.,
+                              '\+?(?:[ilo0-9]{1}.)?\(?[ilo0-9]{3}?\)?.[ilo0-9]{3}.?[ilo0-9]{4}',
+                              '\+?(?:[ilo0-9]{1,2})?\s?\(?\d{3}\)?[\s\.\-⋅]{0,5}[ilo0-9]{3}[\s\.\-⋅]{0,5}[ilo0-9]{4}'
+          )
+  )
+attack_types:
+  - "Credential Phishing"
+  - "Spam"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Evasion"
+  - "Spoofing"
+  - "Social engineering"
+detection_methods:
+  - "HTML analysis"
+  - "Content analysis"
+  - "Sender analysis"
+id: "ac2279f8-caec-5f93-8c9c-b9a84b3e2450"
