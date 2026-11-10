@@ -6,32 +6,27 @@ source: |
   type.inbound
   and any(attachments,
           .file_type == "pdf"
-          and any([beta.parse_exif(.)],
-                  regex.imatch(.producer, '[\d.\s()]*\d[\d.\s()]*')
-                  and (
-                    2 of (
-                      (.title =~ "untitled" or .title is null or .title == ""),
-                      (
-                        .creator =~ "anonymous"
-                        or .creator is null
-                        or .creator == ""
-                      ),
-                      (.author =~ "anonymous" or .author is null or .author == ""),
-                      (
-                        any(.fields,
-                            .key == "Subject" and .value =~ "unspecified"
-                        )
-                        or not any(.fields, .key == "Subject" and .value != "")
-                      )
-                    )
-                  )
-          )
-  
           //
           // This rule makes use of a beta feature and is subject to change without notice
           // using the beta feature in custom rules is not suggested until it has been formally released
           //
-          and regex.icontains(beta.ocr(.).text, 'open\b[\s\S]{0,30}document')
+          and any([beta.parse_exif(.)],
+                  regex.imatch(.producer, '[\d.\s()]*\d[\d.\s()]*')
+                  // placeholder or blank document info... exiftool returns "" for absent keys,
+                  // so a stripped info dict satisfies every arm
+                  and 2 of (
+                    .title in~ ("untitled", ""),
+                    .creator in~ ("anonymous", ""),
+                    .author in~ ("anonymous", ""),
+                    (
+                      any(.fields, .key == "Subject" and .value =~ "unspecified")
+                      or not any(.fields, .key == "Subject" and .value != "")
+                    )
+                  )
+          )
+          and regex.icontains(beta.ocr(.).text,
+                              '\bopen(?:s|ed|ing)?\b[\s\S]{0,30}document'
+          )
   )
 attack_types:
   - "BEC/Fraud"
