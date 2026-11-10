@@ -1,0 +1,40 @@
+name: "Rule flags on newly registered sender domains less than 365 days old, using Dynadot's default DNS name servers."
+description: "Detects inbound messages from domains registered less than 365 days ago using DynaDot (dyna-ns.net) nameservers, where the message content is classified as B2B cold outreach by NLU analysis. The rule only flags senders who are either unsolicited or have a history of malicious/spam activity without any benign messages."
+type: "rule"
+severity: "low"
+source: |
+  type.inbound
+  // newly registered sender domain
+  and network.whois(sender.email.domain).days_old < 365
+  
+  // there are 2 name servers which have subdomains containing .ns
+  and length(network.whois(sender.email.domain).name_servers) == 2
+  and all(network.whois(sender.email.domain).name_servers,
+          strings.istarts_with(.subdomain, 'ns') and .root_domain == 'dyna-ns.net'
+  )
+  
+  // nlu topic
+  and any(ml.nlu_classifier(body.current_thread.text).topics,
+          .name == 'B2B Cold Outreach'
+  )
+  
+  // sender profiles
+  and (
+    not profile.by_sender_email().solicited
+    or (
+      profile.by_sender().any_messages_malicious_or_spam
+      and not profile.by_sender().any_messages_benign
+    )
+  )
+  
+tags:
+  - "Attack surface reduction"
+attack_types:
+  - "Spam"
+tactics_and_techniques:
+  - "Social engineering"
+detection_methods:
+  - "Whois"
+  - "Natural Language Understanding"
+  - "Sender analysis"
+id: "90f144fc-50d2-5010-bfe1-06431d07791d"
