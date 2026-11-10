@@ -9,18 +9,16 @@ source: |
   and (
     // GoToWebinar campaign header present and organizer is not GoTo
     (
-      any(headers.hops,
-          any(.fields,
-              strings.ilike(.name, "x-campaignid")
-              and strings.icontains(.value, "g2w")
-          )
+      any(filter(flatten(map(headers.hops, .fields)),
+                 strings.ilike(.name, "x-campaignid")
+          ),
+          strings.icontains(.value, "g2w")
       )
-      and any(headers.hops,
-              any(.fields,
-                  strings.ilike(.name, "x-organizeremail")
-                  and not regex.icontains(.value,
-                                          '@(?:[a-z0-9-]+\.)?(?:gotowebinar|goto|logmein|gotomeeting)\.com'
-                  )
+      and any(filter(flatten(map(headers.hops, .fields)),
+                     strings.ilike(.name, "x-organizeremail")
+              ),
+              not regex.icontains(.value,
+                                  '@(?:[a-z0-9-]+\.)?(?:gotowebinar|goto|logmein|gotomeeting)\.com'
               )
       )
     )
@@ -66,31 +64,30 @@ source: |
     // !!!!!!
   
     // extract organizer email from header if reply-to is missing
-    or any(headers.hops,
-           any(.fields,
-               strings.ilike(.name, "x-organizeremail")
-               and .value not in $recipient_emails
-               // organizer email has no relationship with this org
-               and (
-                 strings.parse_email(.value).domain.root_domain in $free_email_providers
-                 or (
-                   strings.parse_email(.value).domain.root_domain not in $org_domains
-                   and strings.parse_email(.value).domain.root_domain not in $recipient_domains
-                 )
-               )
-               and (
-                 (
-                   // mismatched event organizer and reply-to address (only when a reply-to exists)
-                   length(headers.reply_to) > 0
-                   and strings.parse_email(.value).domain.root_domain != headers.reply_to[0].email.domain.root_domain
-                 )
-                 // organizer email tld is suspicious
-                 or strings.parse_email(.value).domain.tld in $suspicious_tlds
-                 // organizer email sent from freemailer
-                 or strings.parse_email(.value).domain.root_domain in $free_email_providers
-                 // organizer email is new sender domain
-                 or network.whois(strings.parse_email(.value).domain).days_old < 30
-               )
+    or any(filter(flatten(map(headers.hops, .fields)),
+                  strings.ilike(.name, "x-organizeremail")
+           ),
+           .value not in $recipient_emails
+           // organizer email has no relationship with this org
+           and (
+             strings.parse_email(.value).domain.root_domain in $free_email_providers
+             or (
+               strings.parse_email(.value).domain.root_domain not in $org_domains
+               and strings.parse_email(.value).domain.root_domain not in $recipient_domains
+             )
+           )
+           and (
+             (
+               // mismatched event organizer and reply-to address (only when a reply-to exists)
+               length(headers.reply_to) > 0
+               and strings.parse_email(.value).domain.root_domain != headers.reply_to[0].email.domain.root_domain
+             )
+             // organizer email tld is suspicious
+             or strings.parse_email(.value).domain.tld in $suspicious_tlds
+             // organizer email sent from freemailer
+             or strings.parse_email(.value).domain.root_domain in $free_email_providers
+             // organizer email is new sender domain
+             or network.whois(strings.parse_email(.value).domain).days_old < 30
            )
     )
     // failsafe - organizer from the unsubscribe/report-spam link if the header is missing
