@@ -14,12 +14,6 @@ Examples
 - [Malicious LNK files](https://github.com/sublime-security/sublime-rules/blob/main/detection-rules/attachment_lnk_file_with_embedded_content.yml)
 - [Encrypted zips](https://github.com/sublime-security/sublime-rules/blob/main/detection-rules/attachment_with_encrypted_zip_unsolicited.yml)
 
-Community Rule Feeds
-----------
-- [DelivrTo](https://github.com/delivr-to/detections)
-- [vector-sec](https://github.com/vector-sec/public-sublime-rules)
-- [amitchell516](https://github.com/aidenmitchell/custom-sublime-rules)
-
 Learn more
 ----------
 - [Blog](https://sublime.security/blog)
