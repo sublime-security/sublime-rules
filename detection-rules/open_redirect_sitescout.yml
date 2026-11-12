@@ -1,0 +1,27 @@
+name: "Open redirect: SiteScout pixel tracking"
+description: "Detects inbound emails containing links that use pixel.sitescout.com's /iap/ tracking pixel endpoint with a populated 'r' redirect parameter, a known open redirect abused to disguise malicious destination URLs. The rule excludes messages from highly trusted sender domains that successfully pass DMARC authentication to reduce false positives."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and any(body.links,
+          .href_url.domain.domain == "pixel.sitescout.com"
+          and strings.istarts_with(.href_url.path, '/iap/')
+          and length(.href_url.query_params_decoded['r']) > 0
+  )
+  
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and not (
+    sender.email.domain.root_domain in $high_trust_sender_root_domains
+    and coalesce(headers.auth_summary.dmarc.pass, false)
+  )
+attack_types:
+  - "Credential Phishing"
+  - "Spam"
+tactics_and_techniques:
+  - "Open redirect"
+  - "Evasion"
+detection_methods:
+  - "URL analysis"
+  - "Header analysis"
+  - "Sender analysis"
