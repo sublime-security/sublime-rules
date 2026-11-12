@@ -1,0 +1,26 @@
+name: "Brand impersonation: SendGrid lookalike domain"
+description: "Detects inbound messages that reference SendGrid in the message body or sender display name, where embedded links redirect through a lookalike domain mimicking SendGrid (e.g., containing 'sendgrld'), indicating an attempt to impersonate the SendGrid service."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and (
+    strings.icontains(body.current_thread.text, 'sendgrid')
+    or strings.icontains(sender.display_name, 'sendgrid')
+  )
+  and any(body.current_thread.links,
+          any(ml.link_analysis(., mode="aggressive").redirect_history,
+              regex.match(.domain.sld, '[a-z]+-sendgrld')
+          )
+  )
+      
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Lookalike domain"
+  - "Open redirect"
+detection_methods:
+  - "URL analysis"
+  - "Content analysis"
+  - "Sender analysis"
