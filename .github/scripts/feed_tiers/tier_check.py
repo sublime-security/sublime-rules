@@ -6,12 +6,11 @@
 Compares the rules at base and head:
 - Every added or changed rule must parse, and any feed_tier must be a known value.
 - No rule id may be used twice at head (the sync would fail on it).
-- No demotion: a rule that's public at base (core, or no key) can't be core_with_delay or enterprise_only at head,
-  matched by path and by id, so renaming it in the same PR doesn't hide the change. Deleting it is fine.
-- Until non-core tiers are enabled (the repo variable NON_CORE_TIERS_ENABLED), only core is accepted. Once they
-  are, a new rule must declare its tier: forgetting it would publish the rule.
-
-A rule counts as new when neither its path nor its id exists at base.
+- No demotion: a rule that's core at base can't be core_with_delay or enterprise_only at head (removing its
+  feed_tier line counts, since no key means core_with_delay), matched by path and by id, so renaming it in the same
+  PR doesn't hide the change. Deleting it is fine.
+- Until non-core tiers are enabled (the repo variable NON_CORE_TIERS_ENABLED), every added or changed rule must say
+  `feed_tier: core`.
 """
 
 from __future__ import annotations
@@ -24,7 +23,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import ci  # noqa: E402
 from gittree import GitError, read_tree, rev_parse  # noqa: E402
-from rules import CORE, RULES_DIR, TIER_KEY, TIERS, RuleError, parse_rule, parse_rules  # noqa: E402
+from rules import CORE, RULES_DIR, TIER_KEY, RuleError, parse_rule, parse_rules  # noqa: E402
 
 
 def check(base_files: dict, head_files: dict, non_core_enabled: bool) -> list[tuple[str, str]]:
@@ -34,7 +33,6 @@ def check(base_files: dict, head_files: dict, non_core_enabled: bool) -> list[tu
     base_rules, _ = parse_rules({p: e.content for p, e in base_files.items()})
     base_public_paths = {p for p, r in base_rules.items() if r.is_public}
     base_public_ids = {r.id for r in base_rules.values() if r.is_public and r.id is not None}
-    base_ids = {r.id for r in base_rules.values() if r.id is not None}
 
     changed = sorted(p for p, e in head_files.items() if base_files.get(p) != e)
     head_rules = {}
@@ -60,21 +58,19 @@ def check(base_files: dict, head_files: dict, non_core_enabled: bool) -> list[tu
             others = ", ".join(p for p in sorted(paths_by_id[rule.id]) if p != path)
             problems.append((path, f"id {rule.id} is also used by {others}"))
 
-        if rule.tier not in (None, CORE) and not non_core_enabled:
-            problems.append((path, f"{TIER_KEY}: {rule.tier} isn't allowed yet; only {CORE} is (NON_CORE_TIERS_ENABLED is off)"))
+        if not rule.is_public and not non_core_enabled:
+            problems.append(
+                (path, f"is {rule.tier_label}, which isn't allowed yet: set {TIER_KEY}: {CORE} (NON_CORE_TIERS_ENABLED is off)")
+            )
 
         if not rule.is_public and (path in base_public_paths or rule.id in base_public_ids):
             problems.append(
                 (
                     path,
-                    f"this rule is public, so it can't become {rule.tier}. Rules are never demoted: to take it out "
+                    f"this rule is public, so it can't become {rule.tier_label}. Rules are never demoted: to take it out "
                     "of the public feed, delete it.",
                 )
             )
-
-        is_new = path not in base_files and (rule.id is None or rule.id not in base_ids)
-        if is_new and rule.tier is None and non_core_enabled:
-            problems.append((path, f"new rules must set {TIER_KEY} to one of {', '.join(TIERS)}"))
 
     return problems
 

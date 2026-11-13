@@ -17,7 +17,7 @@ def rule_id(name: str) -> str:
 
 
 def rule_yaml(name: str, tier=_UNSET, rule_id_=_UNSET, source: str = "type.inbound", extra: str = "") -> bytes:
-    """A rule file shaped like the real ones. tier=None or omitted writes no feed_tier key."""
+    """A rule file shaped like the real ones. tier defaults to core; tier=None writes no feed_tier key."""
     lines = [
         f'name: "{name}"',
         'description: "A test rule."',
@@ -30,7 +30,9 @@ def rule_yaml(name: str, tier=_UNSET, rule_id_=_UNSET, source: str = "type.inbou
     ]
     if extra:
         lines += extra.rstrip("\n").splitlines()
-    if tier is not _UNSET and tier is not None:
+    if tier is _UNSET:
+        tier = "core"
+    if tier is not None:
         lines.append(f"feed_tier: {tier}")
     rid = rule_id(name) if rule_id_ is _UNSET else rule_id_
     if rid is not None:

@@ -7,7 +7,7 @@ import pytest
 
 import guard
 import sync
-from helpers import Repo, rule_path, rule_yaml, run_git
+from helpers import Repo, rule_id, rule_path, rule_yaml, run_git
 from rules import CORE, CORE_WITH_DELAY, ENTERPRISE_ONLY
 
 MIRROR = ("Sublime Rules Mirror", "mirror@example.com")
@@ -130,13 +130,41 @@ def test_commit_message_and_identity(private, public):  # S17, S20
     assert run_sync(private, public) == 0
     message = run_git(public.path, "log", "-1", "--format=%B")
     assert "ACME" not in message and "hidden" not in message and "#7" not in message
-    assert message.startswith("Sync detection rules: 1 added, 1 removed\n")
+    assert message.startswith("Sync 2 rules: 1 added, 1 removed\n")
     assert f"- Visible rule ({rule_path('visible')})" in message
     assert f"- legacy_b ({rule_path('legacy_b')})" in message
     assert f"Source-Commit: {private.head()}" in message
     author_committer = run_git(public.path, "log", "-1", "--format=%an <%ae>|%cn <%ce>").strip()
     assert author_committer == f"{MIRROR[0]} <{MIRROR[1]}>|{MIRROR[0]} <{MIRROR[1]}>"
     assert sync.source_commit(str(public.path), "HEAD") == private.head()
+
+
+@pytest.mark.parametrize(
+    "change, subject",
+    [
+        ("add", "Add rule {id}"),
+        ("update", "Update rule {id}"),
+        ("remove", "Remove rule {id}"),
+        ("add_two", "Add 2 rules"),
+        ("remove_two", "Remove 2 rules"),
+        ("mixed", "Sync 3 rules: 1 added, 1 updated, 1 removed"),
+        ("add_no_id", "Add rule detection-rules/noid"),
+    ],
+)
+def test_commit_subject(private, public, change, subject):
+    changes = {
+        "add": {rule_path("one"): rule_yaml("one")},
+        "update": {rule_path("legacy_a"): rule_yaml("legacy_a", source="type.outbound")},
+        "remove": {rule_path("legacy_a"): None},
+        "add_two": {rule_path("one"): rule_yaml("one"), rule_path("two"): rule_yaml("two")},
+        "remove_two": {rule_path("legacy_a"): None, rule_path("legacy_b"): None},
+        "mixed": {rule_path("one"): rule_yaml("one"), rule_path("legacy_a"): rule_yaml("legacy_a", source="x"), rule_path("legacy_b"): None},
+        "add_no_id": {"detection-rules/noid": rule_yaml("noid", rule_id_=None)},
+    }[change]
+    private.commit({**changes, rule_path("private"): rule_yaml("private", tier=ENTERPRISE_ONLY)})
+    assert run_sync(private, public) == 0
+    expected_id = rule_id({"add": "one", "update": "legacy_a", "remove": "legacy_a"}.get(change, "x"))
+    assert run_git(public.path, "log", "-1", "--format=%s").strip() == subject.format(id=expected_id)
 
 
 def test_long_lists_are_truncated(private, public):
@@ -368,7 +396,12 @@ class TestGuard:
     def test_fails_on_private_tier(self, public, tier, capsys):
         public.commit({rule_path("leak"): rule_yaml("leak", tier=tier)})
         assert guard.main(["--repo", str(public.path)]) == 1
-        assert f"has feed_tier {tier}" in capsys.readouterr().err
+        assert f"is {tier} and must not be public" in capsys.readouterr().err
+
+    def test_fails_on_rule_with_no_key(self, public, capsys):
+        public.commit({rule_path("leak"): rule_yaml("leak", tier=None)})
+        assert guard.main(["--repo", str(public.path)]) == 1
+        assert "is core_with_delay (no feed_tier key) and must not be public" in capsys.readouterr().err
 
     def test_fails_on_unparseable(self, public):
         public.commit({"detection-rules/x.yml": b"[\n"})

@@ -1,6 +1,8 @@
 """The projection: what the public repo's rules should be, given the private repo's.
 
-    public rules = every private rule whose tier is core or absent, byte for byte
+    public rules = every private rule whose feed_tier is core, byte for byte
+
+A rule with no feed_tier key is core_with_delay (see rules.py), so it stays private.
 
 This is a pure function of the two trees. It never looks at history, so running it again changes nothing, a missed
 run is fixed by the next one, and anything pushed to the public repo by other means is undone.
@@ -62,7 +64,7 @@ def project(private: dict[str, Entry], public: dict[str, Entry]) -> Plan:
         held_back = _held_back_rule(path, public[path], rules, private_by_id)
         if held_back is not None:
             errors.append(
-                f"{path} is public, but the private repo now has it as {held_back.tier} at {held_back.path}. "
+                f"{path} is public, but the private repo now has it as {held_back.tier_label} at {held_back.path}. "
                 "Rules are never demoted: make it core again, or delete it from the private repo to remove it from both."
             )
         else:

@@ -1,7 +1,7 @@
 """Hypothesis state machine: random histories of rule changes and syncs against real git repos.
 
 Invariants, checked after every sync:
-- I1: the public rules are exactly the private rules whose tier is core or absent, byte for byte.
+- I1: the public rules are exactly the private rules whose tier is core, byte for byte (no key is core_with_delay).
 - I2: the leak guard passes on the public repo.
 - I3: syncing again changes nothing.
 - I4: a failed sync changes nothing in the public repo.
@@ -24,7 +24,7 @@ from rules import CORE, CORE_WITH_DELAY, ENTERPRISE_ONLY, parse_rule
 
 NAMES = [f"r{i}" for i in range(6)]
 TIERS = st.sampled_from([None, CORE, CORE_WITH_DELAY, ENTERPRISE_ONLY])
-PUBLIC_TIERS = (None, CORE)
+PUBLIC_TIERS = (CORE,)
 
 
 class SyncMachine(RuleBasedStateMachine):
@@ -39,7 +39,7 @@ class SyncMachine(RuleBasedStateMachine):
         run_git(self.public.path, "config", "user.name", "Mirror")
         run_git(self.public.path, "config", "user.email", "m@example.com")
         # name -> (path, tier, version)
-        self.rules = {"seed": ("detection-rules/seed.yml", None, 0)}
+        self.rules = {"seed": ("detection-rules/seed.yml", CORE, 0)}
         self.ever_public = {"seed"}
         self.version = 0
         self.synced_once = False
@@ -101,7 +101,7 @@ class SyncMachine(RuleBasedStateMachine):
         self.public.commit({target: junk} if junk is not None else {target: None}, message="by hand")
 
     @precondition(lambda self: any(t in PUBLIC_TIERS for _, t, _ in self.rules.values()))
-    @rule(data=st.data(), to=st.sampled_from([CORE_WITH_DELAY, ENTERPRISE_ONLY]))
+    @rule(data=st.data(), to=st.sampled_from([CORE_WITH_DELAY, ENTERPRISE_ONLY, None]))
     def demotion_slips_through(self, data, to):
         """A demotion reaches main despite tier-check: the sync must refuse, then work again once it's undone."""
         name = data.draw(st.sampled_from(sorted(n for n, (_, t, _) in self.rules.items() if t in PUBLIC_TIERS)))

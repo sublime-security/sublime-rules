@@ -31,10 +31,12 @@ class TestParseRule:
     def test_reads_tier(self, line, tier):
         assert parse_rule(P, doc(*BASE, line)).tier == tier
 
-    def test_no_key_is_legacy_and_public(self):
+    def test_no_key_is_core_with_delay(self):
         rule = parse_rule(P, doc(*BASE))
         assert rule.tier is None
-        assert rule.is_public
+        assert rule.effective_tier == CORE_WITH_DELAY
+        assert not rule.is_public
+        assert rule.tier_label == "core_with_delay (no feed_tier key)"
 
     @pytest.mark.parametrize(
         "tier, public", [(CORE, True), (CORE_WITH_DELAY, False), (ENTERPRISE_ONLY, False)]
@@ -227,9 +229,37 @@ class TestSetTier:
         after = set_tier(P, before, CORE)
         assert after == before.replace(b"feed_tier: core_with_delay", b"feed_tier: core")
 
-    def test_no_tier_line(self):
-        with pytest.raises(RuleError, match="no feed_tier line"):
-            set_tier(P, doc(*BASE), CORE)
+    def test_no_tier_line_is_added_above_id(self):
+        assert set_tier(P, doc(*BASE), CORE) == doc(*BASE[:-1], "feed_tier: core", BASE[-1])
+
+    def test_no_tier_line_and_no_id_appends(self):
+        assert set_tier(P, doc(*BASE[:-1]), CORE) == doc(*BASE[:-1], "feed_tier: core")
+
+    def test_no_tier_line_appends_after_a_missing_final_newline(self):
+        before = doc("source: |", "  type.inbound", 'name: "R"').rstrip(b"\n")
+        assert set_tier(P, before, CORE) == doc("source: |", "  type.inbound", 'name: "R"', "feed_tier: core")
+
+    def test_no_final_newline_after_a_block_scalar_fails(self):
+        # The scalar's value has no trailing newline; adding one would change it.
+        with pytest.raises(RuleError, match="would change other keys"):
+            set_tier(P, doc(*BASE[:-1]).rstrip(b"\n"), CORE)
+
+    def test_no_tier_line_keeps_crlf(self):
+        before = doc(*BASE).replace(b"\n", b"\r\n")
+        assert set_tier(P, before, CORE) == doc(*BASE[:-1], "feed_tier: core", BASE[-1]).replace(b"\n", b"\r\n")
+
+    def test_id_inside_source_is_not_the_id_line(self):
+        before = doc('name: "R"', "source: |", "  id: not this one", "  type.inbound")
+        assert set_tier(P, before, CORE) == before + b"feed_tier: core\n"
+
+    def test_adding_a_line_that_would_change_a_value_fails(self):
+        # Appending to a keep-chomped block scalar with no final newline would add a newline to its value.
+        with pytest.raises(RuleError, match="would change other keys"):
+            set_tier(P, doc('name: "R"', "source: |+", "  type.inbound").rstrip(b"\n"), CORE)
+
+    def test_added_line_reparses_for_every_tier(self):
+        for tier in (CORE, CORE_WITH_DELAY, ENTERPRISE_ONLY):
+            assert parse_rule(P, set_tier(P, doc(*BASE), tier)).tier == tier
 
     def test_invalid_rule(self):
         with pytest.raises(RuleError):

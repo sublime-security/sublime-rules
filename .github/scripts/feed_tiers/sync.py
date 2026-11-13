@@ -92,8 +92,7 @@ def source_commit(repo: str, rev: str) -> str | None:
 
 def commit_message(plan: Plan, public_files: dict[str, Entry], source: str) -> str:
     """Built only from rules that are public before or after this commit, so nothing private can appear in it."""
-    counts = [f"{len(items)} {word}" for items, word in ((plan.added, "added"), (plan.updated, "updated"), (plan.removed, "removed")) if items]
-    lines = [f"Sync detection rules: {', '.join(counts)}", ""]
+    lines = [_subject(plan, public_files), ""]
     for heading, paths, files in (
         ("Added", plan.added, plan.desired),
         ("Updated", plan.updated, plan.desired),
@@ -108,6 +107,34 @@ def commit_message(plan: Plan, public_files: dict[str, Entry], source: str) -> s
         lines.append("")
     lines.append(f"{SOURCE_TRAILER}: {source}")
     return "\n".join(lines) + "\n"
+
+
+def _subject(plan: Plan, public_files: dict[str, Entry]) -> str:
+    """One rule: `Add rule <id>`. Several of one kind: `Add 3 rules`. Mixed: `Sync 4 rules: 3 added, 1 removed`."""
+    kinds = [
+        (paths, verb, word, files)
+        for paths, verb, word, files in (
+            (plan.added, "Add", "added", plan.desired),
+            (plan.updated, "Update", "updated", plan.desired),
+            (plan.removed, "Remove", "removed", public_files),
+        )
+        if paths
+    ]
+    if len(kinds) == 1:
+        paths, verb, _, files = kinds[0]
+        if len(paths) == 1:
+            return f"{verb} rule {_rule_key(paths[0], files[paths[0]])}"
+        return f"{verb} {len(paths)} rules"
+    total = sum(len(paths) for paths, *_ in kinds)
+    return f"Sync {total} rules: {', '.join(f'{len(paths)} {word}' for paths, _, word, _ in kinds)}"
+
+
+def _rule_key(path: str, entry: Entry) -> str:
+    """The rule's id, or its path if it has none or can't be parsed."""
+    try:
+        return parse_rule(path, entry.content).id or path
+    except RuleError:
+        return path
 
 
 def _describe(path: str, entry: Entry) -> str:

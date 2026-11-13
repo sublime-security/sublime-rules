@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 """Opens a PR promoting each core_with_delay rule to core once it's been on main for the delay.
 
+A rule with no feed_tier key counts as core_with_delay; its promotion PR adds `feed_tier: core`.
+
     promote.py --repo . --github-repo owner/name [--delay-days 90] [--as-of 2027-01-31] [--dry-run true]
 
 --repo is a full-history checkout of main. For each due rule:
 - skip it if a PR from its branch, auto/promote-core/<rule id>, is already open;
-- otherwise commit the one-line tier change on top of HEAD, force-push the branch, open the PR and start
+- otherwise commit the one-line tier change (or addition) on top of HEAD, force-push the branch, open the PR and start
   rule-validate on it.
 
 A PR closed without merging is opened again on the next run. To keep a rule private, change it to enterprise_only
@@ -67,12 +69,12 @@ def branch_key(rule: Rule) -> str:
 
 
 def candidates(repo: str, rev: str = "HEAD") -> tuple[list[Candidate], list[str]]:
-    """Every core_with_delay rule at rev, with its merge date."""
+    """Every core_with_delay rule at rev (including those with no feed_tier key), with its merge date."""
     files = read_tree(repo, rev, RULES_DIR)
     rules, errors = parse_rules({path: entry.content for path, entry in files.items()})
     out = []
     for path, rule in sorted(rules.items()):
-        if rule.tier != CORE_WITH_DELAY:
+        if rule.effective_tier != CORE_WITH_DELAY:
             continue
         try:
             out.append(Candidate(rule, files[path], first_merged(repo, path, rule.id, rev)))
@@ -136,7 +138,7 @@ def _body(candidate: Candidate, days: int) -> str:
     rule = candidate.rule
     return "\n".join(
         [
-            f"`{rule.path}` has been `{CORE_WITH_DELAY}` since it first merged on "
+            f"`{rule.path}` has been {_tier_phrase(rule)} since it first merged on "
             f"{candidate.first_merged.date().isoformat()}, {days} days ago. Merging this makes it `{CORE}`, and the "
             "next sync publishes it to the public repo.",
             "",
@@ -146,6 +148,12 @@ def _body(candidate: Candidate, days: int) -> str:
             f"Rule id: `{rule.id}`" if rule.id else "This rule has no id.",
         ]
     )
+
+
+def _tier_phrase(rule: Rule) -> str:
+    if rule.tier is None:
+        return f"`{CORE_WITH_DELAY}` (it has no `feed_tier` key)"
+    return f"`{rule.tier}`"
 
 
 def parse_as_of(value: str) -> datetime:

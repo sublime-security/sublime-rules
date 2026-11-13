@@ -5,9 +5,12 @@ rule's tier is its top-level `feed_tier` key:
 
 | `feed_tier` | Public repo |
 |---|---|
-| absent (rules from before tiers) or `core` | synced on every merge |
-| `core_with_delay` | private until `promote.py` opens a PR changing it to `core`, 90 days after it first merged |
+| `core` | synced on every merge |
+| `core_with_delay`, or no `feed_tier` key | private until `promote.py` opens a PR changing it to `core`, 90 days after it first merged |
 | `enterprise_only` | never |
+
+No key means `core_with_delay`, so forgetting it can't publish a rule early. Rules from before tiers get an explicit
+`feed_tier: core` from `stamp_core.py`, once, before the sync is turned on.
 
 Only `detection-rules/` is mirrored. Everything else in the public repo is left alone.
 
@@ -16,7 +19,8 @@ Only `detection-rules/` is mirrored. Everything else in the public repo is left 
 | `sync.py` | `sync-public.yml`, on push to main and hourly | Makes the public `detection-rules/` exactly the private public-tier rules, as one commit. All or nothing: any unparseable rule, unknown tier, duplicate id or demotion fails the run and changes nothing. |
 | `guard.py` | `sync-public.yml`, before the push | Re-checks the result independently: fails if any rule in the tree isn't public. |
 | `promote.py` | `promote-delayed.yml`, hourly | Opens a one-line PR for each `core_with_delay` rule that's due, and starts its required checks. |
-| `tier_check.py` | `tier-check.yml`, on PRs and the merge queue | Blocks unknown tiers, demotions, and (until `NON_CORE_TIERS_ENABLED`) any tier but `core`. |
+| `tier_check.py` | `tier-check.yml`, on PRs and the merge queue | Blocks unknown tiers, demotions (including deleting a `feed_tier: core` line), and (until `NON_CORE_TIERS_ENABLED`) any added or changed rule that isn't `core`. |
+| `stamp_core.py` | by hand, once | Adds `feed_tier: core` to every rule with no key, in the working tree. |
 
 `sync-public.yml` and `promote-delayed.yml` only run in `sublime-security/sublime-rules-enterprise`, so they do nothing
 until the rename.

@@ -264,12 +264,23 @@ class TestPromote:
         branch = github.prs[1]["branch"]
         assert run_git(origin, "rev-parse", f"{branch}^").strip() == repo.head()
 
-    @pytest.mark.parametrize("tier", [CORE, ENTERPRISE_ONLY, None])
+    @pytest.mark.parametrize("tier", [CORE, ENTERPRISE_ONLY])
     def test_only_core_with_delay(self, repo, tier):
         repo.commit({rule_path("r"): rule_yaml("r", tier=tier)}, when=day(0))
         github = FakeGitHub()
         report = self.run(repo, github, day(1000))
         assert github.prs == [] and report.waiting == []
+
+    def test_rule_with_no_key_is_promoted_by_adding_the_line(self, repo, origin):
+        content = rule_yaml("d", tier=None)
+        repo.commit({rule_path("d"): content}, when=day(0))
+        github = FakeGitHub()
+        assert self.run(repo, github, day(89)).waiting
+        self.run(repo, github, day(90))
+        assert len(github.prs) == 1
+        assert "`core_with_delay` (it has no `feed_tier` key)" in github.prs[0]["body"]
+        promoted = run_git(origin, "show", f"{github.prs[0]['branch']}:{rule_path('d')}").encode()
+        assert promoted == content.replace(b'id: "', b'feed_tier: core\nid: "')
 
     def test_promoted_by_hand_is_left_alone(self, repo):  # S7
         repo.commit({rule_path("d"): rule_yaml("d", tier=CORE_WITH_DELAY)}, when=day(0))

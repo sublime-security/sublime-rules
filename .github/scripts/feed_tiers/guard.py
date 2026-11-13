@@ -29,7 +29,7 @@ def check(files: dict[str, Entry]) -> list[str]:
             problems.append(str(e))
             continue
         if not rule.is_public:
-            problems.append(f"{path}: has feed_tier {rule.tier} and must not be public")
+            problems.append(f"{path}: is {rule.tier_label} and must not be public")
     return problems
 
 

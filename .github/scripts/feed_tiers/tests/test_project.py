@@ -10,13 +10,13 @@ def entries(files: dict[str, bytes], mode: str = "100644") -> dict[str, Entry]:
     return {path: Entry(mode, content) for path, content in files.items()}
 
 
-def rule(name, tier=None, **kwargs):
+def rule(name, tier=CORE, **kwargs):
     return {rule_path(name): rule_yaml(name, tier=tier, **kwargs)}
 
 
 class TestTierTable:
     @pytest.mark.parametrize(
-        "tier, public", [(None, True), (CORE, True), (CORE_WITH_DELAY, False), (ENTERPRISE_ONLY, False)]
+        "tier, public", [(None, False), (CORE, True), (CORE_WITH_DELAY, False), (ENTERPRISE_ONLY, False)]
     )
     def test_new_rule(self, tier, public):
         plan = project(entries(rule("r", tier)), {})
@@ -54,13 +54,20 @@ class TestTierTable:
         assert not project(entries(rule("r", from_tier)), {}).changed
         assert project(entries(rule("r", CORE)), {}).added == [rule_path("r")]
 
-    def test_legacy_rule_gets_explicit_core(self):
-        plan = project(entries(rule("r", CORE)), entries(rule("r")))
+    def test_stamping_an_unstamped_public_rule_updates_it(self):
+        plan = project(entries(rule("r", CORE)), entries(rule("r", None)))
         assert plan.updated == [rule_path("r")]
 
-    def test_core_back_to_no_key_is_fine(self):
-        plan = project(entries(rule("r")), entries(rule("r", CORE)))
-        assert plan.updated == [rule_path("r")]
+    def test_removing_the_core_line_is_a_demotion(self):
+        with pytest.raises(ProjectionError, match=r"now has it as core_with_delay \(no feed_tier key\)"):
+            project(entries(rule("r", None)), entries(rule("r", CORE)))
+
+    def test_unstamped_rules_already_public_fail_until_stamped(self):
+        # The first sync after the rename, if the existing rules weren't stamped with feed_tier: core first.
+        unstamped = {**rule("a", None), **rule("b", None)}
+        with pytest.raises(ProjectionError) as e:
+            project(entries(unstamped), entries(unstamped))
+        assert len(e.value.errors) == 2
 
     def test_deleted_public_rule_is_removed(self):
         plan = project(entries(rule("keep")), entries({**rule("keep"), **rule("gone")}))
@@ -113,7 +120,7 @@ class TestTierTable:
 
 class TestFailsClosed:
     def test_unknown_tier_fails_everything(self):
-        files = {**rule("good"), rule_path("bad"): rule_yaml("bad").replace(b'id:', b"feed_tier: corez\nid:")}
+        files = {**rule("good"), rule_path("bad"): rule_yaml("bad", tier=None).replace(b'id:', b"feed_tier: corez\nid:")}
         with pytest.raises(ProjectionError) as e:
             project(entries(files), {})
         assert "feed_tier must be one of" in str(e.value)

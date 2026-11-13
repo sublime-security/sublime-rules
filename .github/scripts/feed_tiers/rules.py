@@ -6,7 +6,8 @@ A rule's tier is the top-level `feed_tier` key:
     core_with_delay   private until promote.py opens a PR changing it to core
     enterprise_only   private, permanently
 
-A rule with no `feed_tier` key predates tiers and is treated as core.
+A rule with no `feed_tier` key is core_with_delay, so forgetting the key can't publish a rule early. Rules that
+predate tiers get an explicit `feed_tier: core` from stamp_core.py before the sync is turned on.
 """
 
 from __future__ import annotations
@@ -24,9 +25,13 @@ CORE_WITH_DELAY = "core_with_delay"
 ENTERPRISE_ONLY = "enterprise_only"
 TIERS = (CORE, CORE_WITH_DELAY, ENTERPRISE_ONLY)
 
+DEFAULT_TIER = CORE_WITH_DELAY  # the tier of a rule with no feed_tier key
+
 # A top-level feed_tier line. Rule files are block mappings at column 0, and block scalars (like `source: |`) are
 # always indented, so a match can't be inside another value.
 _TIER_LINE = re.compile(rb"^(?:feed_tier|\"feed_tier\"|'feed_tier')[ \t]*:.*?(\r?\n|$)", re.MULTILINE)
+# A top-level id line, which set_tier adds a missing feed_tier line above.
+_ID_LINE = re.compile(rb"^(?:id|\"id\"|'id')[ \t]*:", re.MULTILINE)
 
 
 class RuleError(Exception):
@@ -44,8 +49,16 @@ class Rule:
     tier: str | None  # None when the rule has no feed_tier key
 
     @property
+    def effective_tier(self) -> str:
+        return self.tier if self.tier is not None else DEFAULT_TIER
+
+    @property
+    def tier_label(self) -> str:
+        return self.tier if self.tier is not None else f"{DEFAULT_TIER} (no {TIER_KEY} key)"
+
+    @property
     def is_public(self) -> bool:
-        return self.tier is None or self.tier == CORE
+        return self.effective_tier == CORE
 
     @property
     def label(self) -> str:
@@ -114,17 +127,26 @@ def parse_rule(path: str, content: bytes) -> Rule:
 
 
 def set_tier(path: str, content: bytes, tier: str) -> bytes:
-    """Rewrites only the feed_tier line, leaving every other byte as it was."""
+    """Rewrites only the feed_tier line, leaving every other byte as it was.
+
+    A rule with no feed_tier line gets one, above its top-level id line if it has exactly one, or else at the end.
+    """
     if tier not in TIERS:
         raise ValueError(f"unknown tier {tier!r}")
     before = load_rule_document(path, content)
-    parse_rule(path, content)
+    rule = parse_rule(path, content)
 
-    matches = list(_TIER_LINE.finditer(content))
-    if len(matches) != 1:
-        raise RuleError(path, f"has no {TIER_KEY} line to change")
-    match = matches[0]
-    updated = content[: match.start()] + f"{TIER_KEY}: {tier}".encode() + match.group(1) + content[match.end() :]
+    if rule.tier is not None:
+        match = _TIER_LINE.search(content)
+        updated = content[: match.start()] + f"{TIER_KEY}: {tier}".encode() + match.group(1) + content[match.end() :]
+    else:
+        newline = b"\r\n" if b"\r\n" in content else b"\n"
+        line = f"{TIER_KEY}: {tier}".encode() + newline
+        ids = list(_ID_LINE.finditer(content))
+        if len(ids) == 1:
+            updated = content[: ids[0].start()] + line + content[ids[0].start() :]
+        else:
+            updated = content + (newline if content and not content.endswith(b"\n") else b"") + line
 
     after = load_rule_document(path, updated)
     expected = dict(before, **{TIER_KEY: tier})

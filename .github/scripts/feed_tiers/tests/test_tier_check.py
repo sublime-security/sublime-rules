@@ -16,34 +16,35 @@ def check(base, head, enabled=True):
     return tier_check.check(entries(base), entries(head), enabled)
 
 
-def rule(name, tier=None, **kw):
+def rule(name, tier=CORE, **kw):
     return {rule_path(name): rule_yaml(name, tier=tier, **kw)}
 
 
-BASE = {**rule("legacy"), **rule("core", CORE), **rule("delayed", CORE_WITH_DELAY), **rule("ent", ENTERPRISE_ONLY)}
+# "nokey" has no feed_tier key, so it's core_with_delay.
+BASE = {**rule("nokey", None), **rule("core"), **rule("delayed", CORE_WITH_DELAY), **rule("ent", ENTERPRISE_ONLY)}
+
+GATE_MESSAGE = "is {}, which isn't allowed yet: set feed_tier: core (NON_CORE_TIERS_ENABLED is off)"
 
 
 class TestNewRules:
-    @pytest.mark.parametrize("tier", [CORE, CORE_WITH_DELAY, ENTERPRISE_ONLY])
-    def test_with_tier(self, tier):
+    @pytest.mark.parametrize("tier", [CORE, CORE_WITH_DELAY, ENTERPRISE_ONLY, None])
+    def test_any_tier_or_none(self, tier):
         assert check(BASE, {**BASE, **rule("new", tier)}) == []
 
-    def test_without_tier_once_enabled(self):
-        assert check(BASE, {**BASE, **rule("new")}) == [(rule_path("new"), "new rules must set feed_tier to one of core, core_with_delay, enterprise_only")]
-
     def test_without_tier_before_enabled(self):
-        assert check(BASE, {**BASE, **rule("new")}, enabled=False) == []
+        problems = check(BASE, {**BASE, **rule("new", None)}, enabled=False)
+        assert problems == [(rule_path("new"), GATE_MESSAGE.format("core_with_delay (no feed_tier key)"))]
 
-    def test_rename_of_existing_legacy_rule_is_not_new(self):
-        head = {k: v for k, v in BASE.items() if k != rule_path("legacy")}
-        head["detection-rules/moved.yml"] = BASE[rule_path("legacy")]
+    def test_rename_of_core_rule(self):
+        head = {k: v for k, v in BASE.items() if k != rule_path("core")}
+        head["detection-rules/moved.yml"] = BASE[rule_path("core")]
         assert check(BASE, head) == []
 
-    def test_editing_legacy_rule_needs_no_tier(self):
-        assert check(BASE, {**BASE, **rule("legacy", source="changed")}) == []
+    def test_editing_a_rule_with_no_key(self):
+        assert check(BASE, {**BASE, **rule("nokey", None, source="changed")}) == []
 
     def test_new_rule_without_id(self):
-        assert len(check(BASE, {**BASE, **rule("noid", rule_id_=None)})) == 1
+        assert check(BASE, {**BASE, **rule("noid", None, rule_id_=None)}) == []
         assert check(BASE, {**BASE, **rule("noid", CORE, rule_id_=None)}) == []
 
 
@@ -51,24 +52,32 @@ class TestCanaryGate:
     @pytest.mark.parametrize("tier", [CORE_WITH_DELAY, ENTERPRISE_ONLY])
     def test_non_core_blocked(self, tier):
         problems = check(BASE, {**BASE, **rule("new", tier)}, enabled=False)
-        assert problems == [(rule_path("new"), f"feed_tier: {tier} isn't allowed yet; only core is (NON_CORE_TIERS_ENABLED is off)")]
+        assert problems == [(rule_path("new"), GATE_MESSAGE.format(tier))]
 
     def test_core_allowed(self):
         assert check(BASE, {**BASE, **rule("new", CORE)}, enabled=False) == []
 
     def test_unchanged_files_are_not_rechecked(self):
-        # Already on main; this PR didn't touch them.
+        # nokey, delayed and ent are already on main; this PR didn't touch them.
         assert check(BASE, {**BASE, **rule("new", CORE)}, enabled=False) == []
+
+    def test_stamping_pr_passes(self):
+        # The one-time PR from stamp_core.py, before non-core tiers are enabled.
+        base = {**rule("a", None), **rule("b", None)}
+        assert check(base, {**rule("a", CORE), **rule("b", CORE)}, enabled=False) == []
 
 
 class TestDemotion:
-    @pytest.mark.parametrize("name", ["legacy", "core"])
-    @pytest.mark.parametrize("to", [CORE_WITH_DELAY, ENTERPRISE_ONLY])
-    def test_in_place(self, name, to):  # S11
-        problems = check(BASE, {**BASE, **rule(name, to)})
+    @pytest.mark.parametrize("to", [CORE_WITH_DELAY, ENTERPRISE_ONLY, None])
+    def test_in_place(self, to):  # S11
+        problems = check(BASE, {**BASE, **rule("core", to)})
         assert len(problems) == 1 and "never demoted" in problems[0][1]
 
-    @pytest.mark.parametrize("to", [CORE_WITH_DELAY, ENTERPRISE_ONLY])
+    def test_removing_the_core_line_says_why(self):
+        problems = check(BASE, {**BASE, **rule("core", None)})
+        assert "can't become core_with_delay (no feed_tier key)" in problems[0][1]
+
+    @pytest.mark.parametrize("to", [CORE_WITH_DELAY, ENTERPRISE_ONLY, None])
     def test_with_rename(self, to):  # S12
         head = {k: v for k, v in BASE.items() if k != rule_path("core")}
         head["detection-rules/sneaky.yml"] = rule_yaml("core", tier=to)
@@ -87,15 +96,12 @@ class TestDemotion:
         head = {k: v for k, v in BASE.items() if k != rule_path("core")}
         assert check(BASE, head) == []
 
-    @pytest.mark.parametrize("to", [CORE, None])
-    def test_promotion_is_fine(self, to):  # S7, S8
-        assert check(BASE, {**BASE, **rule("delayed", to), **rule("ent", to)}) == []
+    def test_promotion_is_fine(self):  # S7, S8
+        assert check(BASE, {**BASE, **rule("delayed"), **rule("ent"), **rule("nokey")}) == []
 
     def test_moving_between_private_tiers_is_fine(self):
-        assert check(BASE, {**BASE, **rule("delayed", ENTERPRISE_ONLY), **rule("ent", CORE_WITH_DELAY)}) == []
-
-    def test_legacy_to_explicit_core_is_fine(self):
-        assert check(BASE, {**BASE, **rule("legacy", CORE)}) == []
+        head = {**BASE, **rule("delayed", None), **rule("ent", CORE_WITH_DELAY), **rule("nokey", ENTERPRISE_ONLY)}
+        assert check(BASE, head) == []
 
 
 class TestValidity:

@@ -84,13 +84,19 @@ class TestBeforeTheRename:
                 world.merge_pr(number)
             world.close_pr(number)
 
-    @pytest.mark.parametrize("tier", [CORE, None])
-    def test_core_and_untiered_rules_merge_as_today(self, before_rename, tier):
+    def test_core_rules_merge_as_today(self, before_rename):
         world = before_rename
-        number = world.open_pr({rule_path("new"): rule_yaml("new", tier=tier)}, repo=OLD_NAME)
+        number = world.open_pr({rule_path("new"): rule_yaml("new", tier=CORE)}, repo=OLD_NAME)
         assert last(world, "tier-check.yml").ok
         world.merge_pr(number)
         assert rule_path("new") in world.files(OLD_NAME)
+
+    def test_rules_with_no_tier_must_say_core(self, before_rename):
+        world = before_rename
+        number = world.open_pr({rule_path("new"): rule_yaml("new", tier=None)}, repo=OLD_NAME)
+        assert "set feed_tier: core" in last(world, "tier-check.yml").log
+        with pytest.raises(MergeBlocked):
+            world.merge_pr(number)
 
     def test_demotion_is_blocked_even_now(self, before_rename):
         world = before_rename
@@ -469,10 +475,25 @@ class TestFailsClosed:
             world.merge_pr(two)
         assert_in_sync(world)
 
-    def test_new_rule_must_declare_a_tier_once_enabled(self, world):
-        world.vars[PRIVATE]["NON_CORE_TIERS_ENABLED"] = "true"
-        number = world.open_pr({rule_path("forgot"): rule_yaml("forgot")})
-        assert "new rules must set feed_tier" in last(world, "tier-check.yml").log
+    def test_new_rule_with_no_tier_stays_private_until_promoted(self, world):
+        content = rule_yaml("forgot", tier=None)
+        world.merge_pr(world.open_pr({rule_path("forgot"): content}))
+        assert rule_path("forgot") not in world.files(PUBLIC)
+        assert_in_sync(world)
+
+        world.advance(90)
+        assert world.promote().ok
+        (pr,) = open_promotions(world)
+        promoted = content.replace(b'id: "', b'feed_tier: core\nid: "')
+        assert world.files(PRIVATE, ref=pr["head"])[rule_path("forgot")] == promoted
+        assert world.checks[world.head(PRIVATE, pr["head"])] == {"tier-check": "success", "rule-validate": "success"}
+        world.merge_pr(pr["number"])
+        assert world.files(PUBLIC)[rule_path("forgot")] == promoted
+        assert_in_sync(world)
+
+    def test_removing_the_core_line_is_blocked(self, world):
+        number = world.open_pr({rule_path("legacy_a"): rule_yaml("legacy_a", tier=None)})
+        assert "can't become core_with_delay (no feed_tier key)" in last(world, "tier-check.yml").log
         with pytest.raises(MergeBlocked):
             world.merge_pr(number)
 
