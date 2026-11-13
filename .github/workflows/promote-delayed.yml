@@ -1,0 +1,66 @@
+name: Promote delayed rules to core
+
+# Opens a PR for each core_with_delay rule that first merged at least 90 days ago. Inert until this repo is renamed
+# to sublime-rules-enterprise. See .github/scripts/feed_tiers/promote.py.
+#
+# Needs the repo setting "Allow GitHub Actions to create and approve pull requests" and an auto-promote label.
+
+on:
+  schedule:
+    - cron: "23 * * * *"
+  workflow_dispatch:
+    inputs:
+      as_of:
+        description: Pretend it's this time (ISO 8601), for testing
+        required: false
+      dry_run:
+        description: List what's due without opening PRs
+        type: boolean
+        default: false
+
+concurrency:
+  group: promote-delayed
+  cancel-in-progress: false
+
+permissions:
+  contents: write  # push auto/promote-core/* branches
+  pull-requests: write  # open the PRs
+  actions: write  # start rule-validate on each new PR's branch
+
+jobs:
+  promote:
+    if: github.repository == 'sublime-security/sublime-rules-enterprise'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out main
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          ref: main
+          fetch-depth: 0  # merge dates need the full history
+
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: "3.13"
+
+      - name: Install dependencies
+        run: pip install -r .github/scripts/feed_tiers/requirements.txt
+
+      - name: Set the bot identity
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Open promotion PRs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          AS_OF: ${{ inputs.as_of }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: >-
+          python .github/scripts/feed_tiers/promote.py
+          --repo .
+          --github-repo "$GITHUB_REPOSITORY"
+          --delay-days 90
+          --as-of "$AS_OF"
+          --dry-run "$DRY_RUN"
