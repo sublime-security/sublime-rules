@@ -1,26 +1,51 @@
-name: "Link: .onion From Unsolicited Sender"
-description: "Detects messages containing .onion (Tor network) links from unsolicited senders that either lack proper DMARC authentication or are not from trusted domains."
+name: "Link: .onion link with suspicious indicators"
+description: "Detects inbound messages that reference onion/Tor addresses alongside extortion indicators such as cryptocurrency payment demands, language claiming stolen or exfiltrated data, Tor browser instructions, or a stolen filename used as the subject with no attachment. Also flags messages where an NLU classifier identifies malicious intent. Excludes solicited senders and highly trusted domains that pass DMARC authentication."
 type: "rule"
 severity: "low"
 source: |
   type.inbound
-  and any(body.links, .href_url.domain.tld == "onion")
+  and (
+    any(body.links, .href_url.domain.tld == "onion")
+    or regex.icontains(body.current_thread.text, '\b[a-z2-7]{56}\.onion\b')
+  )
+  and (
+    sender.email.domain.root_domain in $free_email_providers
+    // the actor speaks for themselves... "we hold copies", "we will publish it"
+    or regex.icontains(strings.replace_confusables(body.current_thread.text),
+                       '\bwe\s+(?:have|hold|obtained|took|stole|downloaded|exfiltrated|copied|(?:will|are going to)\s+(?:publish|release|leak|sell|share|expose|send|tell))\b'
+    )
+    or regex.icontains(body.current_thread.text,
+                       '\btor\s*browser|torproject\.org'
+    )
+    or regex.icontains(strings.replace_confusables(body.current_thread.text),
+                       '\b(?:bitcoin|btc|monero|xmr|usdt)\b|\bbc1q'
+    )
+    // a stolen file's name as the subject, with nothing attached
+    or (
+      regex.icontains(subject.subject, '\.(?:pdf|xlsx?|docx?|csv|zip)$')
+      and length(attachments) == 0
+    )
+    or any(ml.nlu_classifier(strings.replace_confusables(body.current_thread.text
+                             )
+           ).intents,
+           .name != "benign" and .confidence != "low"
+    )
+  )
   and not profile.by_sender_email().solicited
-  // and the sender is not from high trust sender root domains
+  // negate highly trusted sender domains unless they fail DMARC authentication
   and not (
     sender.email.domain.root_domain in $high_trust_sender_root_domains
     and coalesce(headers.auth_summary.dmarc.pass, false)
   )
-tags:
- - "Attack surface reduction"
 attack_types:
-  - "Malware/Ransomware"
-  - "Credential Phishing"
+  - "Extortion"
 tactics_and_techniques:
-  - "Evasion"
+  - "Free email provider"
   - "Social engineering"
 detection_methods:
+  - "Content analysis"
+  - "Natural Language Understanding"
   - "URL analysis"
-  - "Header analysis"
   - "Sender analysis"
+  - "Header analysis"
 id: "9ac0fc83-4c18-5a62-83e0-8fd0af9cffe0"
