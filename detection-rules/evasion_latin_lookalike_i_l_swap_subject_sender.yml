@@ -1,0 +1,43 @@
+name: "Evasion: Capital I / lowercase l letter swaps in subject or sender display name"
+description: "Detects unsolicited messages with links where the subject or sender display name swaps a capital I for a lowercase l (or the reverse) inside a word, for example \"SoIar\", \"CeIIuIar\", \"GIobe\", \"lnsurance\" or \"GElCO\". The two letters look identical in most fonts, so the text reads normally but evades keyword filters. CamelCase brand names (\"LinkedIn\", \"SmartInsights\") are avoided by only matching a capital I followed by a vowel, y, l, p, b, k, w, h or the end of the word."
+type: "rule"
+severity: "low"
+source: |
+  type.inbound
+  and length(body.links) > 0
+  and any([subject.subject, sender.display_name],
+          regex.contains(.,
+                         // capital I for l after a lowercase letter: heIps, SoIar, CeIIuIar, FederaI
+                         '[a-z]I+([aeiouylpbkwh]|\b)',
+                         // capital I for l after a leading capital: GIobe, AIert, FIoors
+                         '\b[A-Z]I[aeiouy][a-z]',
+                         // lowercase l for capital I at the start of a word: lnsurance, lmagine, lRS
+                         '\bl[nmNMRSTD][a-zA-Z-]',
+                         // lowercase l inside an all-caps word: GElCO, LlMlTED
+                         '\b[A-Z]+l[A-Z]+(l[A-Z]+)*\b'
+          )
+  )
+  and (
+    not profile.by_sender().solicited
+    or (
+      length(headers.reply_to) > 0
+      and all(headers.reply_to, .email.email not in $recipient_emails)
+    )
+  )
+  and not profile.by_sender().any_messages_benign
+
+  // negate highly trusted sender domains unless they fail DMARC authentication
+  and not (
+    sender.email.domain.root_domain in $high_trust_sender_root_domains
+    and coalesce(headers.auth_summary.dmarc.pass, false)
+  )
+attack_types:
+  - "Spam"
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Evasion"
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+  - "Sender analysis"
+id: "ed7621b2-31de-5d0c-b3d9-d6a5e9647b51"
