@@ -1,5 +1,5 @@
-name: "Attachment: ICS calendar invite with Google share.google URL shortener in google.<tld>/share.google path form"
-description: "Detects inbound messages with ICS calendar invites containing links in the form google.<tld>/share.google?q=<code>, which inherits google.<tld> domain reputation to mask an attacker-controlled destination. This google.<tld>/share.google?q= path form is undocumented: Google publishes the share.google shortener feature, but not this on-Google-domain form or its 'q' parameter."
+name: "Attachment: ICS calendar invite with Google share.google URL shortener in undocumented redirect forms"
+description: “Detects inbound messages with ICS calendar invites containing links in either of two undocumented Google share.google redirect forms: google.<tld>/share.google?q=<code>, and share.google/?link=<url>. Both inherit Google domain reputation to mask an attacker-controlled destination. Google publishes the share.google shortener as a share.google/<code> path, but neither the on-Google-domain ‘q’ form nor the ‘link’ parameter form is documented.”
 type: "rule"
 severity: "medium"
 source: |
@@ -16,9 +16,15 @@ source: |
           //
           and any(beta.file.parse_ics(.).events,
                   any(.links,
-                      .href_url.domain.sld == "google"
-                      and strings.istarts_with(.href_url.path, '/share.google')
-                      and 'q' in keys(.href_url.query_params_decoded)
+                      (
+                        .href_url.domain.sld == "google"
+                        and strings.istarts_with(.href_url.path, '/share.google')
+                        and 'q' in keys(.href_url.query_params_decoded)
+                      )
+                      or (
+                        .href_url.domain.root_domain == "share.google"
+                        and 'link' in keys(.href_url.query_params_decoded)
+                      )
                   )
           )
   )
