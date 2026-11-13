@@ -1,0 +1,42 @@
+name: "PR# 5890 - Service abuse: Webex notifications linking to suspicious domains"
+description: "Detects inbound messages sent from legitimate webex.com infrastructure where links embedded in the body point to newly registered domains, known URL shorteners, or open-redirect chains instead of trusted Webex/Cisco properties. Observed lures include fake TikTok Business Account security alerts and bogus advertising partnership terms updates, leveraging Webex's trusted sending reputation to deliver credential phishing links."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and sender.email.domain.root_domain == "webex.com"
+  and any(body.current_thread.links,
+          .href_url.domain.root_domain not in (
+            "webex.com",
+            "cisco.com",
+            "ciscospark.com",
+            "wbx2.com",
+            "webexcontent.com"
+          )
+          and (
+            .href_url.domain.domain in $url_shorteners
+            or .href_url.domain.root_domain in $url_shorteners
+            or network.whois(.href_url.domain).days_old < 90
+            or any(.href_url.rewrite.encoders,
+                   strings.icontains(., "open_redirect")
+            )
+          )
+  )
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Open redirect"
+  - "Social engineering"
+detection_methods:
+  - "URL analysis"
+  - "Whois"
+  - "Content analysis"
+  - "Sender analysis"
+id: "7bd6fdc4-9d4b-5d2c-a3c8-8c8f5ed5baf5"
+tags:
+  - created_from_open_prs
+  - rule_status_added
+  - pr_author_JFarina5
+references:
+  - https://github.com/sublime-security/sublime-rules/pull/5890
