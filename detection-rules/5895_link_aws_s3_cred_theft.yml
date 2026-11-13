@@ -1,0 +1,36 @@
+name: "PR# 5895 - Link: AWS S3 website hosting credential theft"
+description: "Detects inbound messages containing a link to a domain using Amazon S3 static website hosting (s3-website-*.amazonaws.com) where the message body is classified with high confidence as credential theft by natural language understanding analysis. Threat actors frequently abuse free S3 website hosting to host credential harvesting pages, leveraging the trusted AWS domain to bypass reputation-based filtering."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and any(body.current_thread.links,
+          regex.icontains(.href_url.domain.domain,
+                          '\.s3-website[\-.][a-z0-9\-]+\.amazonaws\.com$'
+          )
+          or (
+            regex.imatch(.href_url.domain.domain,
+                         '[a-z0-9]{16,63}\.s3(?:[\-.][a-z0-9\-]+)?\.amazonaws\.com$.*'
+            )
+            and strings.iends_with(.href_url.path, '.html')
+          )
+  )
+  and any(ml.nlu_classifier(body.current_thread.text).intents,
+          .name == "cred_theft" and .confidence == "high"
+  )
+tags:
+  - "Attack surface reduction"
+  - pr_author_markmsublime
+  - created_from_open_prs
+  - rule_status_modified    
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Free file host"
+  - "Social engineering"
+detection_methods:
+  - "Natural Language Understanding"
+  - "URL analysis"
+id: "5ea27378-8922-5c15-95b2-b1331ace9fc8"
+references:
+  - https://github.com/sublime-security/sublime-rules/pull/5895
