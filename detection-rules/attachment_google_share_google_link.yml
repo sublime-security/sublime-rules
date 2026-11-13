@@ -1,5 +1,5 @@
-name: "Attachment: Google share.google URL shortener in google.<tld>/share.google path form"
-description: "Detects inbound messages whose attachments contain links in the form google.<tld>/share.google?q=<code>, which inherits google.<tld> domain reputation to mask an attacker-controlled destination. This google.<tld>/share.google?q= path form is undocumented: Google publishes the share.google shortener feature, but not this on-Google-domain form or its 'q' parameter. ICS calendar attachments are covered by a separate rule."
+name: "Attachment: Google share.google URL shortener in undocumented redirect forms"
+description: "Detects inbound messages whose attachments contain links in either of two undocumented Google share.google redirect forms: google.<tld>/share.google?q=<code>, and share.google/?link=<url>. Both inherit Google domain reputation to mask an attacker-controlled destination. Google publishes the share.google shortener as a share.google/<code> path, but neither the on-Google-domain ‘q’ form nor the ‘link’ parameter form is documented. ICS calendar attachments are covered by a separate rule."
 type: "rule"
 severity: "medium"
 source: |
@@ -12,9 +12,15 @@ source: |
           )
           and any(file.explode(.),
                   any(.scan.url.urls,
-                      .domain.sld == "google"
-                      and strings.istarts_with(.path, '/share.google')
-                      and 'q' in keys(.query_params_decoded)
+                      (
+                        .domain.sld == "google"
+                        and strings.istarts_with(.path, '/share.google')
+                        and 'q' in keys(.query_params_decoded)
+                      )
+                      or (
+                        .domain.root_domain == "share.google"
+                        and 'link' in keys(.query_params_decoded)
+                      )
                   )
           )
   )
