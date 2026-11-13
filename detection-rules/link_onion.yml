@@ -4,9 +4,12 @@ type: "rule"
 severity: "low"
 source: |
   type.inbound
-  and any(body.links, .href_url.domain.tld == "onion")
+  and (
+    any(body.links, .href_url.domain.tld == "onion")
+    or regex.icontains(body.current_thread.text, '\b[a-z2-7]{56}\.onion\b')
+  )
   and not profile.by_sender_email().solicited
-  // and the sender is not from high trust sender root domains
+  // negate highly trusted sender domains unless they fail DMARC authentication
   and not (
     sender.email.domain.root_domain in $high_trust_sender_root_domains
     and coalesce(headers.auth_summary.dmarc.pass, false)
