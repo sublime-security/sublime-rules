@@ -1,0 +1,25 @@
+name: "Attachment: BEC content within compressed archive"
+description: "Flags inbound messages carrying gzip attachments that, once expanded, contain an email file whose thread body text is classified by the NLU model as business email compromise with high confidence."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and any(filter(attachments, .file_type == "gz"),
+          any(file.expand_archives(.).files,
+              any(ml.nlu_classifier(file.parse_eml(.).body.current_thread.text).intents,
+                  .name == "bec" and .confidence == "high"
+              )
+          )
+  )
+attack_types:
+  - "BEC/Fraud"
+tactics_and_techniques:
+  - "Social engineering"
+detection_methods:
+  - "Archive analysis"
+  - "File analysis"
+  - "Natural Language Understanding"
+id: "4697505f-3f65-54da-9d58-3147fe0a31a2"
+og_id: "168bfd77-9d10-53b4-a30c-1c5ff7e38c10"
+testing_pr: 5879
+testing_sha: a7548e2da7871d742465c8b15768402dd87bbf5f
