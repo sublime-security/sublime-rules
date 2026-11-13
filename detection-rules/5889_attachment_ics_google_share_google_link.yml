@@ -1,0 +1,50 @@
+name: "PR# 5889 - Attachment: ICS calendar invite with Google share.google URL shortener in undocumented redirect forms"
+description: "Detects inbound messages with ICS calendar invites containing links in either of two undocumented Google share.google redirect forms: google.<tld>/share.google?q=<code>, and share.google/?link=<url>. Both inherit Google domain reputation to mask an attacker-controlled destination. Google publishes the share.google shortener as a share.google/<code> path, but neither the on-Google-domain ‘q’ form nor the ‘link’ parameter form is documented."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and any(attachments,
+          (
+            .file_type == "ics"
+            or .file_extension == "ics"
+            or .content_type in ("application/ics", "text/calendar")
+          )
+          //
+          // This rule makes use of a beta feature and is subject to change without notice
+          // using the beta feature in custom rules is not suggested until it has been formally released
+          //
+          and any(beta.file.parse_ics(.).events,
+                  any(.links,
+                      (
+                        .href_url.domain.sld == "google"
+                        and strings.istarts_with(.href_url.path, '/share.google')
+                        and 'q' in keys(.href_url.query_params_decoded)
+                      )
+                      or (
+                        .href_url.domain.root_domain == "share.google"
+                        and 'link' in keys(.href_url.query_params_decoded)
+                      )
+                  )
+          )
+  )
+attack_types:
+  - "Spam"
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Open redirect"
+  - "Social engineering"
+detection_methods:
+  - "URL analysis"
+  - "Content analysis"
+  - "File analysis"
+related_detections:
+  - "link_google_share_google.yml"
+  - "attachment_google_share_google_link.yml"
+id: "f6e62f3e-4709-56ba-8b9b-0796eacd88f2"
+tags:
+  - created_from_open_prs
+  - rule_status_modified
+  - pr_author_markmsublime
+references:
+  - https://github.com/sublime-security/sublime-rules/pull/5889
