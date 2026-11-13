@@ -1,0 +1,79 @@
+name: "Service abuse: Alibaba Cloud infrastructure links"
+description: "Flags inbound messages containing links to Alibaba Cloud or Alibaba CDN domains (alibabacloud.com, aliyun.com, aliyuncs.com, alicdn.com, tbcdn.cn, etc.) where the sender is not from a trusted Alibaba domain. The rule further requires language model signals indicating credential theft intent, urgency, or financial themes, or topic classification around security, financial, or legal communications. Sender reputation checks and DMARC validation help reduce false positives from legitimate or previously benign senders."
+type: "rule"
+severity: "medium"
+source: |
+    type.inbound
+    and any(body.links,
+            (
+              .href_url.domain.root_domain in (
+                "alibabacloud.com",
+                "aliyun.com",
+                "aliyuncs.com",
+                "aliyuncsslb.com",
+                "alicdn.com",
+                "tbcdn.cn"
+              )
+              or .href_url.domain.domain == "cloud.video.taobao.com"
+            )
+            and .href_url.scheme in ("http", "https")
+    )
+    and sender.email.domain.root_domain not in (
+      "alibabacloud.com",
+      "aliyun.com",
+      "aliyuncs.com",
+      "aliyuncsslb.com",
+      "alicdn.com",
+      "tbcdn.cn",
+      "alibaba.com",
+      "alibaba-inc.com"
+    )
+    // message language gate
+    and (
+      any(ml.nlu_classifier(body.current_thread.text).intents,
+          .name == "cred_theft" and .confidence in ("medium", "high")
+      )
+      or any(ml.nlu_classifier(body.current_thread.text).entities,
+             .name in ("urgency", "financial")
+      )
+      or any(ml.nlu_classifier(body.current_thread.text).topics,
+             .name in (
+               "Security and Authentication",
+               "Financial Communications",
+               "Legal and Compliance"
+             )
+             and .confidence in ("medium", "high")
+      )
+    )
+    // sender profile gate
+    and (
+      not profile.by_sender().solicited
+      or (
+        profile.by_sender().any_messages_malicious_or_spam
+        and not profile.by_sender().any_false_positives
+      )
+    )
+    and not profile.by_sender().any_messages_benign
+    // negate highly trusted senders unless DMARC fails
+    and (
+      (
+        sender.email.domain.root_domain in $high_trust_sender_root_domains
+        and not headers.auth_summary.dmarc.pass
+      )
+      or sender.email.domain.root_domain not in $high_trust_sender_root_domains
+    )
+tags:
+  - "Attack surface reduction"
+attack_types:
+  - "Credential Phishing"
+  - "Malware/Ransomware"
+  - "Spam"
+tactics_and_techniques:
+  - "Social engineering"
+  - "Spoofing"
+detection_methods:
+  - "URL analysis"
+  - "Natural Language Understanding"
+  - "Sender analysis"
+  - "Header analysis"
+id: "f154fc32-24b8-5081-9608-835122048f71"
