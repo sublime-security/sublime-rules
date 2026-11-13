@@ -1,0 +1,39 @@
+name: "Link: All-caps PDF link with suspicious recipient"
+description: "Flags inbound messages that lack a legitimate recipient context—either no 'to' recipients, all 'to' recipients having invalid domains, or a 'self-sender' pattern where the sole recipient matches the sender with no CC—combined with a link whose display text is in all capital letters and ends in '.PDF', points to a domain unrelated to the sender, and where no actual PDF attachment is present in the message."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and (
+    // there are no recipients
+    length(recipients.to) == 0
+    // or the recipients are all invalid
+    or all(recipients.to, .email.domain.valid == false)
+  
+    // or the sender exhibits a "self sender" pattern
+    or (
+      length(recipients.to) == 1
+      and recipients.to[0].email.email == sender.email.email
+      and length(recipients.cc) == 0
+    )
+  )
+  and any(body.current_thread.links,
+          strings.ends_with(.display_text, '.PDF')
+          // link text is in all caps
+          and not regex.contains(.display_text, "[a-z]")
+          and not .href_url.domain.root_domain == sender.email.domain.root_domain
+  )
+  and not any(attachments, .file_type == 'pdf' or .file_extension == 'pdf')
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Social engineering"
+  - "Spoofing"
+detection_methods:
+  - "URL analysis"
+  - "Header analysis"
+  - "Content analysis"
+id: "d6e67bf3-8738-503f-af5f-08994d01468e"
+og_id: "3872dfc1-4072-5ca1-8f0e-c5ebfcf4e9db"
+testing_pr: 5897
+testing_sha: 7bdc79f3e227821cf0187bdabb96d82c48d9d038
