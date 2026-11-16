@@ -1,0 +1,55 @@
+name: "Brand impersonation: Better Business Bureau (BBB)"
+description: "Detects inbound messages impersonating the Better Business Bureau (BBB) by matching sender display names, NLU-extracted organization/sender entities, or body text referencing 'BBB Business Profile' or the International Association of Better Business Bureaus. The rule further requires at least two BBB-specific business profile indicators (e.g., 'Local BBB', 'BBB File Opened', 'Years in Business', 'Business Started') or common social engineering phrases such as 'Log In to Read Review', 'new review has been posted', or 'received a complaint about your business'. Legitimate BBB senders with DMARC-validated root domains (bbb.org, thebbb.org, thefirstbbb.org, bbbec.org) or other high-trust domains are excluded."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and (
+    regex.icontains(sender.display_name, '\bBBB\b|Better Business Bureau')
+    or any(ml.nlu_classifier(body.current_thread.text).entities,
+           .name in ("org", "sender") and regex.icontains(.text, '\bBBB\b')
+    )
+    or strings.icontains(body.current_thread.text, 'BBB Business Profile')
+    or strings.icontains(body.current_thread.text,
+                         'International Association of Better Business Bureaus'
+    )
+  )
+  and (
+    2 of (
+      strings.icontains(body.current_thread.text, 'Local BBB'),
+      strings.icontains(body.current_thread.text, 'BBB File Opened'),
+      strings.icontains(body.current_thread.text, 'Years in Business'),
+      strings.icontains(body.current_thread.text, 'Business Started')
+    )
+    or strings.icontains(body.current_thread.text,
+                         'Log In to Read Review',
+                         'new review has been posted',
+                         'received a complaint about your business'
+    )
+  )
+  and not (
+    sender.email.domain.root_domain in (
+      "bbb.org",
+      "thebbb.org",
+      "thefirstbbb.org",
+      "bbbec.org"
+    )
+    and coalesce(headers.auth_summary.dmarc.pass, false)
+  )
+  and not (
+    sender.email.domain.root_domain in $high_trust_sender_root_domains
+    and coalesce(headers.auth_summary.dmarc.pass, false)
+  )
+attack_types:
+  - "BEC/Fraud"
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Social engineering"
+  - "Spoofing"
+detection_methods:
+  - "Content analysis"
+  - "Natural Language Understanding"
+  - "Sender analysis"
+  - "Header analysis"
+id: "76f54e5f-c937-5693-b8e7-3ced7dac61f9"
