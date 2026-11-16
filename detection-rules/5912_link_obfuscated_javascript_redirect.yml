@@ -1,0 +1,58 @@
+name: "PR# 5912 - Link: Obfuscated JavaScript redirect"
+description: "Flags inbound HTML emails that embed a <script> tag containing both an obfuscation primitive (base64 decoding via atob, String.fromCharCode, array reverse/join shuffling, or scheme string concatenation) and a location-based redirect sink (location.href, location.replace, or location.assign) within the same script block. The regex is anchored to the opening script tag to avoid false positives from quoted code samples in <pre>/<code> blocks, and excludes common http-to-https upgrade boilerplate found in newsletter web-view templates as well as legitimate RD Station landing page form handlers."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  // javascript tags within the html
+  and strings.icontains(body.html.raw, '<script')
+  and strings.icontains(body.html.raw, 'location')
+  
+  // each <script> element body (stops at the first closing tag, so quoted code
+  // in <pre>/<code> blocks such as GitHub PR reviews is never considered)
+  and any(regex.extract(body.html.raw, '(?i)<script[^>]*>(?:[^<]|<[^/])*'),
+          // a window of up to 600 chars on either side of a redirect sink
+          // (location = / location.href = / location.replace( / location.assign()
+          any(regex.extract(.full_match,
+                            '(?i)[\s\S]{0,600}location(?:\.href)?\s*(?:=[^=]|\.(?:replace|assign)\s*\()[\s\S]{0,600}'
+              ),
+              // destination built or decoded at runtime near the sink
+              // split/reverse/join string shuffling
+              regex.icontains(.full_match, '\.reverse\(\s*\)\s*\.join\(')
+              // base64 decoding
+              or regex.icontains(.full_match, '\batob\s*\(')
+              // charcode decoding
+              or strings.icontains(.full_match, 'String.fromCharCode')
+              // scheme concatenated onto a variable
+              or regex.icontains(.full_match,
+                                 '["\x27]https?://["\x27]\s*\+\s*[a-z_$]'
+              )
+          )
+  )
+  
+  // negate http -> https upgrade in newsletter web-view templates
+  and not regex.icontains(body.html.raw,
+                          '(?:document\.URL|location\.(?:href|protocol))[\s\S]{0,200}!=\s*["\x27]https:'
+  )
+  
+  // negate RD Station form-submit handler embedded in marketing mail
+  and not strings.icontains(body.html.raw, 'lpConversionForm.dataset.assetAction')
+attack_types:
+  - "Credential Phishing"
+  - "BEC/Fraud"
+tactics_and_techniques:
+  - "Open redirect"
+  - "Scripting"
+  - "Evasion"
+  - "Encryption"
+detection_methods:
+  - "HTML analysis"
+  - "Javascript analysis"
+  - "Content analysis"
+id: "7d909f42-d371-5907-aaba-b547cb71f8af"
+tags:
+  - created_from_open_prs
+  - rule_status_added
+  - pr_author_missingn0pe
+references:
+  - https://github.com/sublime-security/sublime-rules/pull/5912
