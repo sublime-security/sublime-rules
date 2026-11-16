@@ -1019,3 +1019,16 @@ rule pdf_blue_remittance_lure {
 		uint32be(0) == 0x25504446
 		and any of ($jpg*)
 }
+
+rule pdf_click_to_view_red_lure {
+	meta:
+		author      = "kyle eaton"
+		date        = "2026-11-16"
+		description = "PDF document with a generic 'click to view pdf' lure"
+	strings:
+		$image = { FF DA 00 0C 03 01 00 02 11 03 11 00 3F 00 F7 EA 28 A2 80 0A 29 29 68 01 29 68 A2 80 0A 28 A2 80 0A 28 A2 80 0A 28 A2 80 0A 28 A2 80 0A 28 A2 80 0A 28 A2 80 0A 28 A2 80 0A 28 A2 80 0A 28 A2 80 0A 28 A2 80 0A 28 A2 80 0A 28 A2 80 0A 28 A2 80 0A 28 A2 80 12 8A 5A 28 00 A4 A5 A2 80 0A 28 A2 80 }
+	condition:
+		uint32be(0) == 0x25504446
+		and $image
+}
+
