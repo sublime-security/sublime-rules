@@ -1,0 +1,40 @@
+name: "Open redirect: Obfuscated JavaScript location redirect"
+description: "Flags inbound HTML emails that embed a <script> tag containing both an obfuscation primitive (base64 decoding via atob, String.fromCharCode, array reverse/join shuffling, or scheme string concatenation) and a location-based redirect sink (location.href, location.replace, or location.assign) within the same script block. The regex is anchored to the opening script tag to avoid false positives from quoted code samples in <pre>/<code> blocks, and excludes common http-to-https upgrade boilerplate found in newsletter web-view templates as well as legitimate RD Station landing page form handlers."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  // gates before regex on raw html
+  and strings.icontains(body.html.raw, '<script')
+  and strings.icontains(body.html.raw, 'location')
+  
+  // redirect sink and runtime built destination within the same <script> element
+  // anchored to the opening tag so quoted code in <pre>/<code> blocks doesn't match
+  // obfuscation: split/reverse/join shuffling, base64/charcode decoding, or scheme concatenated onto a variable
+  and regex.icontains(body.html.raw,
+                      // obfuscation primitive followed by sink
+                      '<script[^>]*>(?:[^<]|<[^/])*(?:\.reverse\(\s*\)\s*\.join\(|\batob\s*\(|String\.fromCharCode|["\x27]https?://["\x27]\s*\+\s*[a-z_$])(?:[^<]|<[^/]){0,600}location(?:\.href)?\s*(?:=[^=]|\.(?:replace|assign)\s*\()',
+                      // sink followed by obfuscation primitive
+                      '<script[^>]*>(?:[^<]|<[^/])*location(?:\.href)?\s*(?:=[^=]|\.(?:replace|assign)\s*\()(?:[^<]|<[^/]){0,600}(?:\.reverse\(\s*\)\s*\.join\(|\batob\s*\(|String\.fromCharCode|["\x27]https?://["\x27]\s*\+\s*[a-z_$])'
+  )
+  
+  // http -> https upgrade boilerplate in newsletter web-view templates
+  and not regex.icontains(body.html.raw,
+                          '(?:document\.URL|location\.(?:href|protocol))[\s\S]{0,200}!=\s*["\x27]https:'
+  )
+  
+  // sender negations
+  // RD Station landing page form handler embedded in marketing mail
+  and not strings.icontains(body.html.raw, 'lpConversionForm.dataset.assetAction')
+attack_types:
+  - "Credential Phishing"
+  - "BEC/Fraud"
+tactics_and_techniques:
+  - "Open redirect"
+  - "Scripting"
+  - "Evasion"
+  - "Encryption"
+detection_methods:
+  - "HTML analysis"
+  - "Javascript analysis"
+  - "Content analysis"
