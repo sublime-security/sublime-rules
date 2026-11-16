@@ -8,8 +8,30 @@ source: |
     any(attachments,
         (
           .file_type == "pdf"
-          and any(ml.logo_detect(.).brands, .name == "Microsoft SharePoint")
-          and any(file.explode(.), length(.scan.url.urls) > 0)
+          and (
+            (
+              any(ml.logo_detect(.).brands, .name == "Microsoft SharePoint")
+              and any(file.explode(.), length(.scan.url.urls) > 0)
+            )
+            // a kit share page saved from the browser... scans and exported how-to guides carry other producers
+            or (
+              beta.parse_exif(.).page_count <= 2
+              and any(beta.parse_exif(.).fields,
+                      .key == "Producer"
+                      and (
+                        strings.starts_with(.value, "Skia/PDF")
+                        or .value == "Microsoft: Print To PDF"
+                      )
+              )
+              and any(file.explode(.),
+                      strings.icontains(.scan.ocr.raw, "sharepoint")
+              )
+              // a share page is a few lines of ui... printed documents that mention sharepoint run far longer
+              and all(filter(file.explode(.), .scan.ocr.raw is not null),
+                      length(.scan.ocr.raw) < 800
+              )
+            )
+          )
           and any(file.explode(.),
                   any(ml.nlu_classifier(.scan.ocr.raw).intents,
                       .name == "cred_theft" and .confidence == "high"
