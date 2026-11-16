@@ -1,0 +1,30 @@
+name: "Attachment: PDF banking detail change request"
+description: "Detects inbound messages from free email providers where the subject line mirrors the sender's display name and the body is unusually short, accompanied by a single PDF attachment. The PDF's extracted text is scanned for keyword pairs such as 'bank'/'direct' combined with 'change'/'update', a pattern consistent with fraudulent requests to alter banking or direct deposit details."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and sender.email.domain.root_domain in $free_email_providers
+  and subject.base == sender.display_name
+  and length(body.current_thread.text) < 60
+  and length(filter(attachments, .file_type == "pdf")) == 1
+  and any(filter(attachments, .file_type == "pdf"),
+          any(file.explode(.),
+              .depth == 1
+              and .file_name == "text"
+              and strings.icontains(.scan.strings.strings[0], "bank", "direct")
+              and strings.icontains(.scan.strings.strings[0], "change", "update")
+          )
+  )
+attack_types:
+  - "BEC/Fraud"
+tactics_and_techniques:
+  - "Free email provider"
+  - "PDF"
+  - "Social engineering"
+  - "Impersonation: Employee"
+detection_methods:
+  - "File analysis"
+  - "Content analysis"
+  - "Sender analysis"
+id: "463001fc-a731-5b26-9cfa-9bd13d98d59d"
