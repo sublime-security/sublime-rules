@@ -1,0 +1,71 @@
+name: "PR# 5900 - Service abuse: SendGrid impersonation via Sendgrid from new sender"
+description: "Detects messages impersonating SendGrid from new senders, while routing through legitimate SendGrid infrastructure. This pattern is commonly used to abuse trusted email services for malicious purposes."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  // SendGrid impersonation patterns
+  and (
+    strings.ilike(strings.replace_confusables(sender.display_name), '*sendgrid*')
+    or strings.ilevenshtein(strings.replace_confusables(sender.display_name),
+                            'sendgrid'
+    ) <= 1
+    or (
+      strings.ilike(strings.replace_confusables(sender.email.local_part),
+                    '*sendgrid*'
+      )
+      and (
+        sender.display_name is null
+        or strings.ilike(strings.replace_confusables(subject.base), '*sendgrid*')
+      )
+    )
+    or any(ml.logo_detect(file.message_screenshot()).brands,
+           .name == "SendGrid" and .confidence == "high"
+    )
+    or regex.icontains(body.current_thread.text, 'sendgrid\s*20[0-9]{2}')
+    or (
+      (
+        strings.icontains(body.current_thread.text, 'sendgrid')
+        or strings.icontains(sender.display_name, 'sendgrid')
+      )
+      and any(body.current_thread.links,
+              any(ml.link_analysis(., mode="aggressive").redirect_history,
+                  regex.match(.domain.sld, '[a-z]+-sendgrld')
+              )
+      )
+    )
+    or regex.icontains(body.current_thread.text,
+                       '\bthe\s+(?:twilio\s+)?sendgrid\s+(?:\w+\s+)?team\b',
+                       '\b(?:to|by)\s+(?:your|the)\s+sendgrid\s+(?:account|api|integration)\b',
+                       '(?:^|\n)\s*your\s+sendgrid\s+(?:account|api|integration)\b',
+                       '\breceipt\s+from\s+(?:twilio\s+)?sendgrid\b'
+    )
+  )
+  // sent through a sendgrid account... sendgrid stamps X-SG-EID/X-SG-ID on every
+  // send, including white-labelled dedicated IPs that hide sendgrid.net
+  and any(headers.hops, any(.fields, .name in~ ("X-SG-EID", "X-SG-ID")))
+  // not common senders with valid domains
+  // this catches cases where the domain is invalid and senders become common
+  and not (
+    profile.by_sender_email().prevalence == "common" and sender.email.domain.valid
+  )
+  // negate legit sendgrid messages
+  and not (
+    sender.email.domain.root_domain in ("sendgrid.com", "kke.co.jp")
+    and coalesce(headers.auth_summary.dmarc.pass, false)
+  )
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Social engineering"
+detection_methods:
+  - "Header analysis"
+  - "Sender analysis"
+id: "8e0105d7-d544-5738-90bc-448d4e30368d"
+tags:
+  - created_from_open_prs
+  - rule_status_modified
+  - pr_author_IndiaAce
+references:
+  - https://github.com/sublime-security/sublime-rules/pull/5900
