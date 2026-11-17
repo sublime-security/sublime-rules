@@ -1,6 +1,7 @@
 """The projection: what the public repo's rules should be, given the private repo's.
 
-    public rules = every private rule whose feed_tier is core, byte for byte
+    public files = every private file in the managed folders whose feed_tier is core, plus the always-public ones
+                   (insights/, and yara/ files that aren't .yar), byte for byte
 
 A rule with no feed_tier key is core_with_delay (see rules.py), so it stays private.
 

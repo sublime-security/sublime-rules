@@ -8,6 +8,15 @@ A rule's tier is the top-level `feed_tier` key:
 
 A rule with no `feed_tier` key is core_with_delay, so forgetting the key can't publish a rule early. Rules that
 predate tiers get an explicit `feed_tier: core` from stamp_core.py before the sync is turned on.
+
+Which files have tiers (the folders the platform's feeds read):
+
+    detection-rules/, dlp-rules/, automations/, exclusions/   every file; YAML, tier as above
+    yara/*.yar                                                 tier on the first line as `// feed_tier: <tier>`,
+                                                               core or core_with_delay only
+    insights/, and yara/ files that aren't .yar               no tier: always public
+
+Everything else in the repo isn't managed by the sync at all.
 """
 
 from __future__ import annotations
@@ -18,20 +27,33 @@ from dataclasses import dataclass
 import yaml
 
 RULES_DIR = "detection-rules"
+YARA_DIR = "yara"
+YARA_SUFFIX = ".yar"
+# Folders whose files have a tier.
+TIERED_DIRS = ("automations", RULES_DIR, "dlp-rules", "exclusions", YARA_DIR)
+# Folders mirrored as they are, with no tiers.
+ALWAYS_PUBLIC_DIRS = ("insights",)
+# Everything the sync reads and writes.
+MANAGED_DIRS = tuple(sorted(TIERED_DIRS + ALWAYS_PUBLIC_DIRS))
 
 TIER_KEY = "feed_tier"
 CORE = "core"
 CORE_WITH_DELAY = "core_with_delay"
 ENTERPRISE_ONLY = "enterprise_only"
 TIERS = (CORE, CORE_WITH_DELAY, ENTERPRISE_ONLY)
+# YARA rules can't be enterprise_only.
+YARA_TIERS = (CORE, CORE_WITH_DELAY)
 
 DEFAULT_TIER = CORE_WITH_DELAY  # the tier of a rule with no feed_tier key
 
 # A top-level feed_tier line. Rule files are block mappings at column 0, and block scalars (like `source: |`) are
 # always indented, so a match can't be inside another value.
 _TIER_LINE = re.compile(rb"^(?:feed_tier|\"feed_tier\"|'feed_tier')[ \t]*:.*?(\r?\n|$)", re.MULTILINE)
-# A top-level id line, which set_tier adds a missing feed_tier line above.
+# A top-level id line, which set_tier adds a missing feed_tier line above; failing that, a top-level source line.
 _ID_LINE = re.compile(rb"^(?:id|\"id\"|'id')[ \t]*:", re.MULTILINE)
+_SOURCE_LINE = re.compile(rb"^(?:source|\"source\"|'source')[ \t]*:", re.MULTILINE)
+# A YARA file's tier: its first line, a comment.
+_YARA_TIER_LINE = re.compile(rb"\A//[ \t]*feed_tier[ \t]*:[ \t]*([^\s]*)[ \t]*(\r?\n|\Z)")
 
 
 class RuleError(Exception):
@@ -47,13 +69,18 @@ class Rule:
     id: str | None
     name: str | None
     tier: str | None  # None when the rule has no feed_tier key
+    always_public: bool = False  # a file with no tier (see ALWAYS_PUBLIC_DIRS)
 
     @property
     def effective_tier(self) -> str:
+        if self.always_public:
+            return CORE
         return self.tier if self.tier is not None else DEFAULT_TIER
 
     @property
     def tier_label(self) -> str:
+        if self.always_public:
+            return f"{CORE} (always public)"
         return self.tier if self.tier is not None else f"{DEFAULT_TIER} (no {TIER_KEY} key)"
 
     @property
@@ -101,8 +128,28 @@ def load_rule_document(path: str, content: bytes) -> dict:
     return documents[0]
 
 
+def is_managed(path: str) -> bool:
+    return path.split("/", 1)[0] in MANAGED_DIRS
+
+
+def has_tier(path: str) -> bool:
+    """Whether the file at path has a tier, rather than being always public."""
+    top = path.split("/", 1)[0]
+    if top == YARA_DIR:
+        return path.endswith(YARA_SUFFIX)
+    return top in TIERED_DIRS
+
+
+def is_yara(path: str) -> bool:
+    return path.split("/", 1)[0] == YARA_DIR and path.endswith(YARA_SUFFIX)
+
+
 def parse_rule(path: str, content: bytes) -> Rule:
     """Parses a rule file, failing on anything that would make its tier ambiguous."""
+    if not has_tier(path):
+        return Rule(path=path, id=None, name=None, tier=None, always_public=True)
+    if is_yara(path):
+        return _parse_yara(path, content)
     document = load_rule_document(path, content)
 
     tier_lines = len(_TIER_LINE.findall(content))
@@ -126,13 +173,53 @@ def parse_rule(path: str, content: bytes) -> Rule:
     return Rule(path=path, id=rule_id, name=name if isinstance(name, str) else None, tier=tier)
 
 
+def _parse_yara(path: str, content: bytes) -> Rule:
+    try:
+        content.decode("utf-8")
+    except UnicodeDecodeError:
+        raise RuleError(path, "is not valid UTF-8")
+    match = _YARA_TIER_LINE.match(content)
+    if match is not None:
+        tier = match.group(1).decode()
+        if tier not in YARA_TIERS:
+            raise RuleError(path, f"{TIER_KEY} must be one of {', '.join(YARA_TIERS)} for a YARA file, not {tier!r}")
+        rest = content[match.end() :]
+    else:
+        tier, rest = None, content
+    if TIER_KEY.encode() in rest:
+        raise RuleError(path, f"{TIER_KEY} must only appear on the first line, as `// {TIER_KEY}: <tier>`")
+    return Rule(path=path, id=None, name=None, tier=tier)
+
+
+def _set_yara_tier(path: str, content: bytes, tier: str) -> bytes:
+    if tier not in YARA_TIERS:
+        raise RuleError(path, f"a YARA file can't be {tier}")
+    rule = _parse_yara(path, content)
+    if rule.tier is not None:
+        match = _YARA_TIER_LINE.match(content)
+        newline = match.group(2) or (b"\r\n" if b"\r\n" in content else b"\n")
+        updated = f"// {TIER_KEY}: {tier}".encode() + newline + content[match.end() :]
+    else:
+        newline = b"\r\n" if b"\r\n" in content else b"\n"
+        updated = f"// {TIER_KEY}: {tier}".encode() + newline + content
+    if _parse_yara(path, updated).tier != tier:
+        raise RuleError(path, f"couldn't set {TIER_KEY}")
+    return updated
+
+
 def set_tier(path: str, content: bytes, tier: str) -> bytes:
     """Rewrites only the feed_tier line, leaving every other byte as it was.
 
-    A rule with no feed_tier line gets one, above its top-level id line if it has exactly one, or else at the end.
+    A rule with no feed_tier line gets one above its top-level id line if it has exactly one, else above its top-level
+    source line if it has exactly one (automations and exclusions have no id, and often end in a source block with no
+    final newline, which a line after it would change), else at the end. A YARA file's line is always its first.
     """
     if tier not in TIERS:
         raise ValueError(f"unknown tier {tier!r}")
+    if not has_tier(path):
+        raise RuleError(path, "is always public and has no tier")
+    if is_yara(path):
+        return _set_yara_tier(path, content, tier)
     before = load_rule_document(path, content)
     rule = parse_rule(path, content)
 
@@ -143,8 +230,10 @@ def set_tier(path: str, content: bytes, tier: str) -> bytes:
         newline = b"\r\n" if b"\r\n" in content else b"\n"
         line = f"{TIER_KEY}: {tier}".encode() + newline
         ids = list(_ID_LINE.finditer(content))
-        if len(ids) == 1:
-            updated = content[: ids[0].start()] + line + content[ids[0].start() :]
+        sources = list(_SOURCE_LINE.finditer(content))
+        anchor = ids[0] if len(ids) == 1 else sources[0] if len(sources) == 1 else None
+        if anchor is not None:
+            updated = content[: anchor.start()] + line + content[anchor.start() :]
         else:
             updated = content + (newline if content and not content.endswith(b"\n") else b"") + line
 

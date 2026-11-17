@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Leak guard: fails if any rule in a tree isn't public.
+"""Leak guard: fails if any file in a tree's managed folders isn't public.
 
 It's an independent re-check of what sync.py produced, run before the push. It parses every rule from scratch, so a
 bug in the projection can't also hide the leak.
@@ -17,7 +17,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import ci  # noqa: E402
 from gittree import Entry, GitError, read_tree  # noqa: E402
-from rules import RULES_DIR, RuleError, parse_rule  # noqa: E402
+from rules import MANAGED_DIRS, RuleError, parse_rule  # noqa: E402
 
 
 def check(files: dict[str, Entry]) -> list[str]:
@@ -40,7 +40,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     try:
-        files = read_tree(args.repo, args.rev, RULES_DIR)
+        files = read_tree(args.repo, args.rev, MANAGED_DIRS)
     except GitError as e:
         ci.error(str(e))
         return 1
@@ -50,7 +50,7 @@ def main(argv: list[str] | None = None) -> int:
         ci.error(problem)
     if problems:
         return 1
-    print(f"Leak guard: all {len(files)} files under {RULES_DIR}/ are public.")
+    print(f"Leak guard: all {len(files)} files under {', '.join(d + '/' for d in MANAGED_DIRS)} are public.")
     return 0
 
 

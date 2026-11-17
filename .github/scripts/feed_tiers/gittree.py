@@ -41,9 +41,11 @@ def rev_parse(repo: Path | str, rev: str) -> str:
     return git(repo, "rev-parse", "--verify", "--end-of-options", f"{rev}^{{commit}}").decode().strip()
 
 
-def read_tree(repo: Path | str, rev: str, prefix: str) -> dict[str, Entry]:
-    """Every file under prefix at rev. Symlinks and submodules are errors, because their content isn't a rule."""
-    listing = git(repo, "ls-tree", "-r", "-z", "--full-tree", rev, "--", f"{prefix}/")
+def read_tree(repo: Path | str, rev: str, prefix: str | tuple[str, ...]) -> dict[str, Entry]:
+    """Every file under prefix (a folder, or several) at rev. Symlinks and submodules are errors, because their
+    content isn't a rule."""
+    prefixes = (prefix,) if isinstance(prefix, str) else prefix
+    listing = git(repo, "ls-tree", "-r", "-z", "--full-tree", rev, "--", *(f"{p}/" for p in prefixes))
     entries: list[tuple[str, str, str]] = []
     for record in listing.split(b"\0"):
         if not record:

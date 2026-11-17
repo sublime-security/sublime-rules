@@ -31,7 +31,7 @@ import ci  # noqa: E402
 from gitdates import DateError, first_merged  # noqa: E402
 from github import GhCli, GitHub, GitHubError  # noqa: E402
 from gittree import Entry, GitError, commit_changes, git, read_tree, rev_parse  # noqa: E402
-from rules import CORE, CORE_WITH_DELAY, RULES_DIR, Rule, RuleError, parse_rules, set_tier  # noqa: E402
+from rules import CORE, CORE_WITH_DELAY, MANAGED_DIRS, Rule, RuleError, parse_rules, set_tier  # noqa: E402
 
 BRANCH_PREFIX = "auto/promote-core/"
 LABEL = "auto-promote"
@@ -64,13 +64,14 @@ def branch_key(rule: Rule) -> str:
     if rule.id is not None:
         key = rule.id
     else:
-        key = os.path.splitext(os.path.basename(rule.path))[0]
+        # The path, not just the file name: automations/x.yml and exclusions/x.yml are different files.
+        key = os.path.splitext(rule.path)[0]
     return re.sub(r"[^A-Za-z0-9._-]+", "-", key).strip("-.") or "rule"
 
 
 def candidates(repo: str, rev: str = "HEAD") -> tuple[list[Candidate], list[str]]:
     """Every core_with_delay rule at rev (including those with no feed_tier key), with its merge date."""
-    files = read_tree(repo, rev, RULES_DIR)
+    files = read_tree(repo, rev, MANAGED_DIRS)
     rules, errors = parse_rules({path: entry.content for path, entry in files.items()})
     out = []
     for path, rule in sorted(rules.items()):

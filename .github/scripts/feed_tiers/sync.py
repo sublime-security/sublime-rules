@@ -6,7 +6,7 @@
 Both arguments are checkouts. The private repo is read at HEAD, and the commit goes on top of the public repo's HEAD,
 which then points at it. Pushing is left to the workflow, after the leak guard has checked the result.
 
-Only detection-rules/ is managed. Everything else in the public repo is left alone. The commit's author and
+Only the folders in rules.MANAGED_DIRS are managed. Everything else in the public repo is left alone. The commit's author and
 committer come from the public checkout's git config.
 
 The sync is all or nothing: if any rule can't be projected (see project.py), it changes nothing and exits 1.
@@ -27,7 +27,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import ci  # noqa: E402
 from gittree import Entry, GitError, commit_changes, git, read_tree, rev_parse  # noqa: E402
 from project import Plan, ProjectionError, project  # noqa: E402
-from rules import RULES_DIR, RuleError, parse_rule  # noqa: E402
+from rules import MANAGED_DIRS, RuleError, parse_rule  # noqa: E402
 
 SOURCE_TRAILER = "Source-Commit"
 MAX_LISTED = 100
@@ -52,15 +52,15 @@ def sync(private: str, public: str, dry_run: bool = False) -> Result:
     if _already_synced_newer(private, public, source):
         return Result(plan=None, source=source, stale=True)
 
-    public_files = read_tree(public, public_head, RULES_DIR)
-    plan = project(read_tree(private, source, RULES_DIR), public_files)
+    public_files = read_tree(public, public_head, MANAGED_DIRS)
+    plan = project(read_tree(private, source, MANAGED_DIRS), public_files)
     if not plan.changed or dry_run:
         return Result(plan=plan, source=source)
 
     commit = commit_changes(public, public_head, plan.changes(), commit_message(plan, public_files, source))
 
     # Re-read what was committed rather than trusting commit_changes.
-    if read_tree(public, commit, RULES_DIR) != plan.desired:
+    if read_tree(public, commit, MANAGED_DIRS) != plan.desired:
         raise SyncError(f"the commit {commit} doesn't match the projection; not updating the public checkout")
 
     git(public, "update-ref", "-m", "feed tier sync", "HEAD", commit, public_head)

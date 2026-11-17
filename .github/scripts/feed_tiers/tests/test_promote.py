@@ -348,7 +348,22 @@ class TestPromote:
         repo.commit({"detection-rules/no id here": rule_yaml("x", tier=CORE_WITH_DELAY, rule_id_=None)}, when=day(0))
         github = FakeGitHub()
         self.run(repo, github, day(90))
-        assert github.prs[0]["branch"] == "auto/promote-core/no-id-here"
+        assert github.prs[0]["branch"] == "auto/promote-core/detection-rules-no-id-here"
+
+    def test_same_file_name_in_two_folders_gets_two_branches(self, repo):
+        repo.commit(
+            {
+                "automations/report.yml": rule_yaml("a", tier=CORE_WITH_DELAY, rule_id_=None),
+                "exclusions/report.yml": rule_yaml("e", tier=CORE_WITH_DELAY, rule_id_=None),
+            },
+            when=day(0),
+        )
+        github = FakeGitHub()
+        self.run(repo, github, day(90))
+        assert sorted(pr["branch"] for pr in github.prs) == [
+            "auto/promote-core/automations-report",
+            "auto/promote-core/exclusions-report",
+        ]
 
 
 class TestCli:

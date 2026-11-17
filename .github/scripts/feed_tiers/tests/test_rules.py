@@ -232,17 +232,26 @@ class TestSetTier:
     def test_no_tier_line_is_added_above_id(self):
         assert set_tier(P, doc(*BASE), CORE) == doc(*BASE[:-1], "feed_tier: core", BASE[-1])
 
-    def test_no_tier_line_and_no_id_appends(self):
-        assert set_tier(P, doc(*BASE[:-1]), CORE) == doc(*BASE[:-1], "feed_tier: core")
+    def test_no_id_goes_above_source(self):
+        # BASE[:-1] is name, type, source, with no id.
+        assert set_tier(P, doc(*BASE[:-1]), CORE) == doc(*BASE[:2], "feed_tier: core", *BASE[2:-1])
 
-    def test_no_tier_line_appends_after_a_missing_final_newline(self):
-        before = doc("source: |", "  type.inbound", 'name: "R"').rstrip(b"\n")
-        assert set_tier(P, before, CORE) == doc("source: |", "  type.inbound", 'name: "R"', "feed_tier: core")
+    def test_no_id_and_a_block_scalar_with_no_final_newline(self):
+        # Like automations/ and exclusions/ files: the line goes above source, so its value is unchanged.
+        before = doc(*BASE[:-1]).rstrip(b"\n")
+        assert set_tier(P, before, CORE) == doc(*BASE[:2], "feed_tier: core", *BASE[2:-1]).rstrip(b"\n")
+
+    def test_no_id_or_source_appends(self):
+        assert set_tier(P, doc('name: "R"', 'type: "rule"'), CORE) == doc('name: "R"', 'type: "rule"', "feed_tier: core")
+
+    def test_no_id_or_source_appends_after_a_missing_final_newline(self):
+        before = doc('name: "R"', 'type: "rule"').rstrip(b"\n")
+        assert set_tier(P, before, CORE) == doc('name: "R"', 'type: "rule"', "feed_tier: core")
 
     def test_no_final_newline_after_a_block_scalar_fails(self):
-        # The scalar's value has no trailing newline; adding one would change it.
+        # No id or source line to go above, and the last value has no trailing newline; adding one would change it.
         with pytest.raises(RuleError, match="would change other keys"):
-            set_tier(P, doc(*BASE[:-1]).rstrip(b"\n"), CORE)
+            set_tier(P, doc('name: "R"', "notes: |", "  text").rstrip(b"\n"), CORE)
 
     def test_no_tier_line_keeps_crlf(self):
         before = doc(*BASE).replace(b"\n", b"\r\n")
@@ -250,12 +259,12 @@ class TestSetTier:
 
     def test_id_inside_source_is_not_the_id_line(self):
         before = doc('name: "R"', "source: |", "  id: not this one", "  type.inbound")
-        assert set_tier(P, before, CORE) == before + b"feed_tier: core\n"
+        assert set_tier(P, before, CORE) == doc('name: "R"', "feed_tier: core", "source: |", "  id: not this one", "  type.inbound")
 
     def test_adding_a_line_that_would_change_a_value_fails(self):
         # Appending to a keep-chomped block scalar with no final newline would add a newline to its value.
         with pytest.raises(RuleError, match="would change other keys"):
-            set_tier(P, doc('name: "R"', "source: |+", "  type.inbound").rstrip(b"\n"), CORE)
+            set_tier(P, doc('name: "R"', "notes: |+", "  text").rstrip(b"\n"), CORE)
 
     def test_added_line_reparses_for_every_tier(self):
         for tier in (CORE, CORE_WITH_DELAY, ENTERPRISE_ONLY):

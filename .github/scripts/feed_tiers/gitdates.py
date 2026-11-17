@@ -2,11 +2,12 @@
 
 main is squash-merged, so a commit's committer date is when its PR merged.
 
-- A rule with an id: the oldest commit that added or removed a top-level `id: <id>` line anywhere under
-  detection-rules/. That's when a rule with this id first existed, so renames and moves keep the clock, and the
+- A rule with an id: the oldest commit that added or removed a top-level `id: <id>` line anywhere in the managed
+  folders. That's when a rule with this id first existed, so renames and moves keep the clock, and the
   same id is the same rule to the feed anyway. Mentions of the id elsewhere (comments, other keys, text inside
   `source`) don't match.
-- A rule without an id: the oldest commit that added this exact path. Renaming it restarts the clock.
+- A rule without an id (automations, exclusions, YARA files): the oldest commit that added this exact path.
+  Renaming it restarts the clock, which matches the platform: it identifies a file with no id by its path.
 
 `git log --follow` is deliberately not used: rule files all share one structure, so its similarity guess calls an
 unrelated older rule a copy or rename of a new one, which would promote the new rule early.
@@ -18,7 +19,7 @@ import re
 from datetime import datetime
 
 from gittree import git
-from rules import RULES_DIR
+from rules import MANAGED_DIRS
 
 
 class DateError(Exception):
@@ -32,7 +33,7 @@ def first_merged(repo: str, path: str, rule_id: str | None, rev: str = "HEAD") -
     else:
         quote = "[\"']?"
         pattern = f"^id:[[:space:]]*{quote}{_ere_escape(rule_id)}{quote}[[:space:]]*(#.*)?$"
-        log = git(repo, "log", f"-G{pattern}", "--format=%cI", rev, "--", f"{RULES_DIR}/")
+        log = git(repo, "log", f"-G{pattern}", "--format=%cI", rev, "--", *(f"{d}/" for d in MANAGED_DIRS))
         what = f"{path}: can't find the commit that added id {rule_id}"
 
     dates = log.decode().split()

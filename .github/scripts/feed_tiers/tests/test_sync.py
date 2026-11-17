@@ -21,7 +21,7 @@ def private(tmp_path):
             rule_path("legacy_a"): rule_yaml("legacy_a"),
             rule_path("legacy_b"): rule_yaml("legacy_b"),
             "detection-rules/no_extension": rule_yaml("no_extension", rule_id_=None) + b"---\n",
-            "yara/sig.yar": "rule x { condition: true }\n",
+            "emls/sample.eml": "From: sample@example.com\n",
             "README.md": "private readme\n",
         },
         message="Initial rules (#1)",
@@ -174,14 +174,14 @@ def test_long_lists_are_truncated(private, public):
     assert "- and 5 more" in message
 
 
-def test_only_detection_rules_are_touched(private, public):
-    private.commit({"yara/sig.yar": "changed\n", "README.md": "changed\n", "new-dir/x.yml": "x: 1\n", rule_path("r"): rule_yaml("r")})
+def test_only_managed_folders_are_touched(private, public):
+    private.commit({"emls/sample.eml": "changed\n", "README.md": "changed\n", "new-dir/x.yml": "x: 1\n", rule_path("r"): rule_yaml("r")})
     run_git(public.path, "rm", "-q", "README.md")
     public.commit({"CONTRIBUTING.md": "public only\n"}, message="public bootstrap")
     assert run_sync(private, public) == 0
     tree = set(run_git(public.path, "ls-tree", "-r", "--name-only", "HEAD").split())
     assert "README.md" not in tree and "CONTRIBUTING.md" in tree and "new-dir/x.yml" not in tree
-    assert public.read("yara/sig.yar") == b"rule x { condition: true }\n"
+    assert public.read("emls/sample.eml") == b"From: sample@example.com\n"
     assert rule_path("r") in tree
 
 

@@ -1,4 +1,4 @@
-"""The few GitHub operations promote.py needs, through the gh CLI and the job's GITHUB_TOKEN."""
+"""The few GitHub operations promote.py and default_tier.py need, through the gh CLI and the job's GITHUB_TOKEN."""
 
 from __future__ import annotations
 
@@ -17,6 +17,8 @@ class GitHub(Protocol):
     def create_pr(self, *, branch: str, base: str, title: str, body: str, label: str) -> str: ...
 
     def dispatch_workflow(self, workflow: str, ref: str) -> None: ...
+
+    def comment_pr(self, number: int, body: str) -> None: ...
 
 
 class GhCli:
@@ -42,3 +44,6 @@ class GhCli:
 
     def dispatch_workflow(self, workflow: str, ref: str) -> None:
         self._gh("workflow", "run", workflow, "--ref", ref)
+
+    def comment_pr(self, number: int, body: str) -> None:
+        self._gh("pr", "comment", str(number), "--body-file", "-", input=body)

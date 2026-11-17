@@ -20,7 +20,7 @@ LEGACY = {
     rule_path("legacy_a"): rule_yaml("legacy_a"),
     rule_path("legacy_b"): rule_yaml("legacy_b"),
     "detection-rules/attachment_no_extension": rule_yaml("no_extension", rule_id_=None) + b"---\n",
-    "yara/sig.yar": b"rule x { condition: true }\n",
+    "emls/sample.eml": b"From: sample@example.com\n",
     "README.md": b"Sublime rules\n",
 }
 
@@ -213,10 +213,10 @@ class TestStandardUse:
         everything = b"".join(world.files(PUBLIC, prefix="detection-rules").values())
         assert b"ACME" not in everything
 
-    def test_only_detection_rules_are_mirrored(self, world):
-        merge(world, {"yara/sig.yar": b"changed\n", "README.md": b"private readme\n", "insights/x.yml": b"a: 1\n", rule_path("n"): rule_yaml("n", tier=CORE)})
-        assert world.files(PUBLIC, prefix="yara") == {"yara/sig.yar": b"rule x { condition: true }\n"}
-        assert world.files(PUBLIC, prefix="insights") == {}
+    def test_only_managed_folders_are_mirrored(self, world):
+        merge(world, {"emls/sample.eml": b"changed\n", "README.md": b"private readme\n", "insights/x.yml": b"a: 1\n", rule_path("n"): rule_yaml("n", tier=CORE)})
+        assert world.files(PUBLIC, prefix="emls") == {"emls/sample.eml": b"From: sample@example.com\n"}
+        assert world.files(PUBLIC, prefix="insights") == {"insights/x.yml": b"a: 1\n"}  # always public
         assert world.files(PUBLIC, prefix=".github") == {}
 
     def test_dry_run_dispatch(self, world):

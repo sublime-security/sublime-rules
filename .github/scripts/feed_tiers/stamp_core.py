@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Adds `feed_tier: core` to every rule in a checkout that has no feed_tier key.
+"""Adds `feed_tier: core` to every file in a checkout that has a tier but no feed_tier key (YARA files get
+`// feed_tier: core` as their first line).
 
     stamp_core.py --repo . [--dry-run true]
 
@@ -20,7 +21,7 @@ from pathlib import Path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import ci  # noqa: E402
-from rules import CORE, RULES_DIR, RuleError, parse_rules, set_tier  # noqa: E402
+from rules import CORE, TIERED_DIRS, RuleError, has_tier, parse_rules, set_tier  # noqa: E402
 
 
 def stamp(repo: str | Path, dry_run: bool = False) -> list[str]:
@@ -28,8 +29,9 @@ def stamp(repo: str | Path, dry_run: bool = False) -> list[str]:
     root = Path(repo)
     files = {
         path.relative_to(root).as_posix(): path.read_bytes()
-        for path in sorted((root / RULES_DIR).rglob("*"))
-        if path.is_file() and not path.is_symlink()
+        for folder in TIERED_DIRS
+        for path in sorted((root / folder).rglob("*"))
+        if path.is_file() and not path.is_symlink() and has_tier(path.relative_to(root).as_posix())
     }
     rules, errors = parse_rules(files)
     updates = {}
@@ -40,7 +42,7 @@ def stamp(repo: str | Path, dry_run: bool = False) -> list[str]:
             except RuleError as e:
                 errors.append(str(e))
     if errors:
-        raise RuleError(RULES_DIR, "\n".join(errors))
+        raise RuleError(", ".join(TIERED_DIRS), "\n".join(errors))
     if not dry_run:
         for path, content in updates.items():
             (root / path).write_bytes(content)
@@ -58,7 +60,7 @@ def main(argv: list[str] | None = None) -> int:
         for problem in e.message.splitlines():
             ci.error(problem)
         return 1
-    print(f"{'Would stamp' if args.dry_run else 'Stamped'} {len(stamped)} rules with feed_tier: {CORE}.")
+    print(f"{'Would stamp' if args.dry_run else 'Stamped'} {len(stamped)} files with feed_tier: {CORE}.")
     return 0
 
 

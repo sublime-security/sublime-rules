@@ -23,7 +23,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import ci  # noqa: E402
 from gittree import GitError, read_tree, rev_parse  # noqa: E402
-from rules import CORE, RULES_DIR, TIER_KEY, RuleError, parse_rule, parse_rules  # noqa: E402
+from rules import CORE, MANAGED_DIRS, TIER_KEY, RuleError, parse_rule, parse_rules  # noqa: E402
 
 
 def check(base_files: dict, head_files: dict, non_core_enabled: bool) -> list[tuple[str, str]]:
@@ -86,7 +86,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         base = rev_parse(args.repo, args.base)
         head = rev_parse(args.repo, args.head)
-        problems = check(read_tree(args.repo, base, RULES_DIR), read_tree(args.repo, head, RULES_DIR), args.non_core_tiers_enabled)
+        problems = check(read_tree(args.repo, base, MANAGED_DIRS), read_tree(args.repo, head, MANAGED_DIRS), args.non_core_tiers_enabled)
     except GitError as e:
         ci.error(str(e))
         return 1

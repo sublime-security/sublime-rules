@@ -24,7 +24,7 @@ def steps(name):
     return job(name)["steps"]
 
 
-ALL = ["sync-public.yml", "promote-delayed.yml", "tier-check.yml", "feed-tiers-tests.yml"]
+ALL = ["sync-public.yml", "promote-delayed.yml", "tier-check.yml", "feed-tiers-tests.yml", "default-tier.yml"]
 
 
 @pytest.mark.parametrize("name", ALL)
@@ -91,6 +91,21 @@ def test_tier_check_has_no_secrets_and_reads_only():
     on = load("tier-check.yml")[True]
     assert set(on) == {"pull_request", "merge_group", "workflow_dispatch"}
     assert "pull_request_target" not in on
+
+
+def test_default_tier_permissions_and_guards():
+    workflow = load("default-tier.yml")
+    assert workflow["permissions"] == {"contents": "write", "pull-requests": "write", "actions": "write"}
+    assert set(workflow[True]) == {"pull_request"}  # never pull_request_target: PR code must not get a write token from a fork
+    from rules import TIERED_DIRS
+
+    assert workflow[True]["pull_request"]["paths"] == [f"{d}/**" for d in sorted(TIERED_DIRS)]
+    condition = job("default-tier.yml")["if"]
+    assert "github.event.pull_request.head.repo.full_name == github.repository" in condition
+    assert "vars.NON_CORE_TIERS_ENABLED == 'true'" in condition
+    assert "secrets." not in (WORKFLOWS / "default-tier.yml").read_text()
+    checkout = steps("default-tier.yml")[0]
+    assert checkout["with"]["ref"] == "${{ github.event.pull_request.head.sha }}"
 
 
 def test_dispatched_workflows_accept_dispatch():

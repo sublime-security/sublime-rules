@@ -24,18 +24,19 @@ def repo(tmp_path):
             "detection-rules/noid": rule_yaml("noid", tier=None, rule_id_=None),
             rule_path("core"): rule_yaml("core", tier=CORE),
             rule_path("ent"): rule_yaml("ent", tier=ENTERPRISE_ONLY),
-            "yara/x.yml": "not: a rule\n",
+            "emls/x.yml": "not: a rule\n",
         }
     )
     return r
 
 
 def test_stamps_only_rules_with_no_key(repo):
-    before = {p: disk(repo, p) for p in (rule_path("core"), rule_path("ent"), "yara/x.yml")}
+    before = {p: disk(repo, p) for p in (rule_path("core"), rule_path("ent"), "emls/x.yml")}
     assert stamp_core.stamp(repo.path) == sorted([rule_path("a"), rule_path("b"), "detection-rules/noid"])
     assert disk(repo, rule_path("a")) == rule_yaml("a", tier=CORE)
     assert disk(repo, rule_path("b")) == rule_yaml("b", tier=CORE).replace(b"\n", b"\r\n")
-    assert disk(repo, "detection-rules/noid") == rule_yaml("noid", tier=None, rule_id_=None) + b"feed_tier: core\n"
+    # No id: the line goes above source.
+    assert disk(repo, "detection-rules/noid") == rule_yaml("noid", tier=None, rule_id_=None).replace(b"source: |", b"feed_tier: core\nsource: |")
     assert {p: disk(repo, p) for p in before} == before
 
 
