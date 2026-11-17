@@ -89,7 +89,7 @@ class TestYara:
         rule = parse_rule(self.P, yara())
         assert (rule.tier, rule.effective_tier, rule.is_public) == (None, CORE_WITH_DELAY, False)
 
-    @pytest.mark.parametrize("tier", [CORE, CORE_WITH_DELAY])
+    @pytest.mark.parametrize("tier", [CORE, CORE_WITH_DELAY, ENTERPRISE_ONLY])
     def test_first_line(self, tier):
         assert parse_rule(self.P, yara(tier)).tier == tier
 
@@ -97,13 +97,14 @@ class TestYara:
     def test_spacing_and_crlf(self, line):
         assert parse_rule(self.P, line + YARA).tier == CORE
 
-    def test_enterprise_only_is_not_allowed(self):
-        with pytest.raises(RuleError, match="for a YARA file, not 'enterprise_only'"):
-            parse_rule(self.P, yara(ENTERPRISE_ONLY))
+    def test_enterprise_only_is_private(self):
+        rule = parse_rule(self.P, yara(ENTERPRISE_ONLY))
+        assert rule.tier == ENTERPRISE_ONLY and not rule.is_public
 
-    def test_unknown_tier_fails(self):
-        with pytest.raises(RuleError, match="for a YARA file"):
-            parse_rule(self.P, yara("Core"))
+    @pytest.mark.parametrize("tier", ["Core", "enterprise", ""])
+    def test_unknown_tier_fails(self, tier):
+        with pytest.raises(RuleError, match="must be one of core, core_with_delay, enterprise_only"):
+            parse_rule(self.P, f"// feed_tier: {tier}\n".encode() + YARA)
 
     @pytest.mark.parametrize(
         "content",
@@ -134,9 +135,10 @@ class TestYara:
         assert set_tier(self.P, body, CORE) == b"// feed_tier: core\r\n" + body
         assert set_tier(self.P, b"// feed_tier: core_with_delay\r\n" + body, CORE) == b"// feed_tier: core\r\n" + body
 
-    def test_set_tier_refuses_enterprise_only(self):
-        with pytest.raises(RuleError, match="can't be enterprise_only"):
-            set_tier(self.P, YARA, ENTERPRISE_ONLY)
+    @pytest.mark.parametrize("tier", [CORE, CORE_WITH_DELAY, ENTERPRISE_ONLY])
+    def test_set_tier_any_tier(self, tier):
+        assert set_tier(self.P, YARA, tier) == yara(tier)
+        assert set_tier(self.P, yara(CORE_WITH_DELAY), tier) == yara(tier)
 
     def test_non_yar_files_are_always_public(self):
         rule = parse_rule("yara/sublime_yara_test.zip", b"PK\x03\x04\xff\xfe binary")
@@ -165,6 +167,7 @@ PRIVATE = {
     "exclusions/ent.yml": rule_yaml("e-ent", tier=ENTERPRISE_ONLY, rule_id_=None),
     "yara/core.yar": yara(CORE),
     "yara/delayed.yar": yara(CORE_WITH_DELAY),
+    "yara/ent.yar": yara(ENTERPRISE_ONLY),
     "yara/nokey.yar": yara(),
     "yara/sublime_yara_test.zip": b"PK\x03\x04 binary",
     "insights/category/q.yml": b"name: q\ntype: query\nsource: |\n  1\n",
@@ -198,6 +201,7 @@ class TestProjection:
             ("exclusions/core.yml", rule_yaml("e-core", tier=None, rule_id_=None)),
             ("dlp-rules/core.yml", rule_yaml("dlp-core", tier=CORE_WITH_DELAY)),
             ("yara/core.yar", yara(CORE_WITH_DELAY)),
+            ("yara/core.yar", yara(ENTERPRISE_ONLY)),
             ("yara/core.yar", yara()),
         ],
     )
@@ -208,7 +212,7 @@ class TestProjection:
 
     def test_bad_yara_tier_fails_the_whole_sync(self):
         with pytest.raises(ProjectionError, match="yara/bad.yar"):
-            project(entries({**PRIVATE, "yara/bad.yar": yara(ENTERPRISE_ONLY)}), {})
+            project(entries({**PRIVATE, "yara/bad.yar": yara("Core")}), {})
 
 
 class TestTierCheck:
@@ -222,13 +226,13 @@ class TestTierCheck:
     def test_new_yaml_rule_any_tier(self, folder, tier):
         assert self.check({f"{folder}/new.yml": rule_yaml(f"{folder}-new", tier=tier, rule_id_=None)}) == []
 
-    @pytest.mark.parametrize("tier", [None, CORE, CORE_WITH_DELAY])
-    def test_new_yara_core_or_delayed(self, tier):
+    @pytest.mark.parametrize("tier", [None, CORE, CORE_WITH_DELAY, ENTERPRISE_ONLY])
+    def test_new_yara_any_tier(self, tier):
         assert self.check({"yara/new.yar": yara(tier)}) == []
 
-    def test_new_yara_enterprise_only_fails(self):
-        [(path, problem)] = self.check({"yara/new.yar": yara(ENTERPRISE_ONLY)})
-        assert path == "yara/new.yar" and "for a YARA file, not 'enterprise_only'" in problem
+    def test_yara_demoted_to_enterprise_only_fails(self):
+        [(path, problem)] = self.check({"yara/core.yar": yara(ENTERPRISE_ONLY)})
+        assert path == "yara/core.yar" and "Rules are never demoted" in problem
 
     def test_gate_applies_to_every_folder(self):
         head = {
@@ -328,6 +332,7 @@ class TestSyncAndGuard:
             ("exclusions/leak.yml", rule_yaml("leak", tier=None, rule_id_=None)),
             ("dlp-rules/leak.yml", rule_yaml("leak", tier=CORE_WITH_DELAY)),
             ("yara/leak.yar", yara(CORE_WITH_DELAY)),
+            ("yara/leak.yar", yara(ENTERPRISE_ONLY)),
             ("yara/leak.yar", YARA),
         ],
     )

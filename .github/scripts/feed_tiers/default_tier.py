@@ -83,7 +83,7 @@ def comment_body(paths: list[str], skipped: list[tuple[str, str]], commit: str) 
             f"A rule with no `{TIER_KEY}` was already `{CORE_WITH_DELAY}`, so this doesn't change anything; it just "
             f"makes the tier visible. `{CORE_WITH_DELAY}` keeps the rule out of the public repo until a promotion PR "
             f"makes it `{CORE}`, {DEFAULT_DELAY_DAYS} days after it first merges. To choose differently, change the "
-            f"line to `{CORE}` (public as soon as this merges) or `{ENTERPRISE_ONLY}` (never public; not for YARA files).",
+            f"line to `{CORE}` (public as soon as this merges) or `{ENTERPRISE_ONLY}` (never public).",
             "",
             "Pull before you push to this branch again.",
         ]

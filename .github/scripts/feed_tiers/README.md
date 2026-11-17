@@ -17,7 +17,7 @@ The sync manages the folders the platform's feeds read (`rules.py`):
 | Folder | Tier |
 |---|---|
 | `detection-rules/`, `dlp-rules/`, `automations/`, `exclusions/` | `feed_tier:` key, as above |
-| `yara/*.yar` | first line `// feed_tier: core` or `// feed_tier: core_with_delay`; YARA can't be `enterprise_only` |
+| `yara/*.yar` | first line `// feed_tier: <tier>`, any of the three |
 | `insights/`, and files in `yara/` that aren't `.yar` | none: always public |
 
 Everything else in the public repo (`discovery-rules/`, `emls/`, the README, ...) is left alone.

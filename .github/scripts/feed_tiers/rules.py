@@ -12,8 +12,7 @@ predate tiers get an explicit `feed_tier: core` from stamp_core.py before the sy
 Which files have tiers (the folders the platform's feeds read):
 
     detection-rules/, dlp-rules/, automations/, exclusions/   every file; YAML, tier as above
-    yara/*.yar                                                 tier on the first line as `// feed_tier: <tier>`,
-                                                               core or core_with_delay only
+    yara/*.yar                                                 tier on the first line as `// feed_tier: <tier>`
     insights/, and yara/ files that aren't .yar               no tier: always public
 
 Everything else in the repo isn't managed by the sync at all.
@@ -41,8 +40,6 @@ CORE = "core"
 CORE_WITH_DELAY = "core_with_delay"
 ENTERPRISE_ONLY = "enterprise_only"
 TIERS = (CORE, CORE_WITH_DELAY, ENTERPRISE_ONLY)
-# YARA rules can't be enterprise_only.
-YARA_TIERS = (CORE, CORE_WITH_DELAY)
 
 DEFAULT_TIER = CORE_WITH_DELAY  # the tier of a rule with no feed_tier key
 
@@ -181,8 +178,8 @@ def _parse_yara(path: str, content: bytes) -> Rule:
     match = _YARA_TIER_LINE.match(content)
     if match is not None:
         tier = match.group(1).decode()
-        if tier not in YARA_TIERS:
-            raise RuleError(path, f"{TIER_KEY} must be one of {', '.join(YARA_TIERS)} for a YARA file, not {tier!r}")
+        if tier not in TIERS:
+            raise RuleError(path, f"{TIER_KEY} must be one of {', '.join(TIERS)}, not {tier!r}")
         rest = content[match.end() :]
     else:
         tier, rest = None, content
@@ -192,8 +189,6 @@ def _parse_yara(path: str, content: bytes) -> Rule:
 
 
 def _set_yara_tier(path: str, content: bytes, tier: str) -> bytes:
-    if tier not in YARA_TIERS:
-        raise RuleError(path, f"a YARA file can't be {tier}")
     rule = _parse_yara(path, content)
     if rule.tier is not None:
         match = _YARA_TIER_LINE.match(content)
