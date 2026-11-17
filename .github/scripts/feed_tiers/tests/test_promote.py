@@ -5,9 +5,9 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 import promote
-from gitdates import DateError, first_merged
+from gitdates import DateError, delayed_since
 from helpers import Repo, rule_id, rule_path, rule_yaml, run_git
-from rules import CORE, CORE_WITH_DELAY, ENTERPRISE_ONLY, parse_rule
+from rules import CORE, CORE_WITH_DELAY, ENTERPRISE_ONLY, Rule, parse_rule
 
 T0 = datetime(2027, 1, 1, 12, 0, tzinfo=timezone.utc)
 DAY = timedelta(days=1)
@@ -56,11 +56,15 @@ def repo(tmp_path, origin):
     return r
 
 
-class TestFirstMerged:
+def since(repo, path, rule_id_):
+    return delayed_since(str(repo.path), Rule(path=path, id=rule_id_, name=None, tier=CORE_WITH_DELAY))
+
+
+class TestDelayedSince:
     def test_add_date(self, repo):
         repo.commit({rule_path("d"): rule_yaml("d", tier=CORE_WITH_DELAY)}, when=day(0))
         repo.commit({rule_path("d"): rule_yaml("d", tier=CORE_WITH_DELAY, source="edited")}, when=day(10))
-        assert first_merged(str(repo.path), rule_path("d"), rule_id("d")) == day(0)
+        assert since(repo, rule_path("d"), rule_id("d")) == day(0)
 
     def test_committer_date_not_author_date(self, repo):
         run_git(repo.path, "config", "user.name", "x")
@@ -70,17 +74,47 @@ class TestFirstMerged:
             repo.path, "commit", "-q", "-m", "squash",
             env={"GIT_AUTHOR_DATE": "2020-01-01T00:00:00+00:00", "GIT_COMMITTER_DATE": day(5).isoformat()},
         )
-        assert first_merged(str(repo.path), rule_path("d"), rule_id("d")) == day(5)
+        assert since(repo, rule_path("d"), rule_id("d")) == day(5)
 
     def test_follows_renames(self, repo):  # S9
         repo.commit({rule_path("d"): rule_yaml("d", tier=CORE_WITH_DELAY)}, when=day(0))
         repo.rename(rule_path("d"), "detection-rules/renamed.yml", when=day(50))
-        assert first_merged(str(repo.path), "detection-rules/renamed.yml", rule_id("d")) == day(0)
+        assert since(repo, "detection-rules/renamed.yml", rule_id("d")) == day(0)
 
-    def test_tier_change_keeps_the_clock(self, repo):  # S18
+    def test_becoming_core_with_delay_starts_the_clock(self, repo):  # S18
         repo.commit({rule_path("d"): rule_yaml("d", tier=ENTERPRISE_ONLY)}, when=day(-200))
         repo.commit({rule_path("d"): rule_yaml("d", tier=CORE_WITH_DELAY)}, when=day(0))
-        assert first_merged(str(repo.path), rule_path("d"), rule_id("d")) == day(-200)
+        assert since(repo, rule_path("d"), rule_id("d")) == day(0)
+
+    def test_enterprise_only_and_back_starts_it_again(self, repo):
+        repo.commit({rule_path("d"): rule_yaml("d", tier=CORE_WITH_DELAY)}, when=day(-200))
+        repo.commit({rule_path("d"): rule_yaml("d", tier=ENTERPRISE_ONLY)}, when=day(-100))
+        repo.commit({rule_path("d"): rule_yaml("d", tier=CORE_WITH_DELAY, source="edited")}, when=day(-50))
+        repo.commit({rule_path("d"): rule_yaml("d", tier=CORE_WITH_DELAY, source="edited again")}, when=day(-10))
+        assert since(repo, rule_path("d"), rule_id("d")) == day(-50)
+
+    def test_adding_the_default_line_keeps_the_clock(self, repo):
+        repo.commit({rule_path("d"): rule_yaml("d", tier=None)}, when=day(0))
+        repo.commit({rule_path("d"): rule_yaml("d", tier=CORE_WITH_DELAY)}, when=day(10))
+        assert since(repo, rule_path("d"), rule_id("d")) == day(0)
+
+    def test_a_version_that_does_not_parse_starts_it_again(self, repo):
+        repo.commit({rule_path("d"): rule_yaml("d", tier=CORE_WITH_DELAY)}, when=day(0))
+        repo.commit({rule_path("d"): b"not: [valid"}, when=day(10))
+        repo.commit({rule_path("d"): rule_yaml("d", tier=CORE_WITH_DELAY)}, when=day(20))
+        assert since(repo, rule_path("d"), rule_id("d")) == day(20)
+
+    def test_moved_and_made_core_with_delay_in_one_commit(self, repo):
+        repo.commit({rule_path("d"): rule_yaml("d", tier=ENTERPRISE_ONLY)}, when=day(-100))
+        repo.rename(rule_path("d"), "detection-rules/moved.yml", when=day(0), content=rule_yaml("d", tier=CORE_WITH_DELAY))
+        assert since(repo, "detection-rules/moved.yml", rule_id("d")) == day(0)
+
+    def test_follows_several_moves(self, repo):
+        repo.commit({rule_path("d"): rule_yaml("d", tier=CORE_WITH_DELAY)}, when=day(0))
+        repo.rename(rule_path("d"), "detection-rules/a.yml", when=day(10))
+        repo.commit({"detection-rules/a.yml": rule_yaml("d", tier=CORE_WITH_DELAY, source="edited")}, when=day(15))
+        repo.rename("detection-rules/a.yml", "dlp-rules/b.yml", when=day(20))
+        assert since(repo, "dlp-rules/b.yml", rule_id("d")) == day(0)
 
     def test_similar_rule_is_not_its_ancestor(self, repo):
         # git log --follow calls this a copy or rename of the older rule; the id doesn't.
@@ -91,13 +125,13 @@ class TestFirstMerged:
         )
         follow = run_git(repo.path, "log", "--follow", "--diff-filter=A", "--format=%cI", "--", rule_path("new")).split()
         assert datetime.fromisoformat(follow[-1]) < day(0)  # what --follow would have said
-        assert first_merged(str(repo.path), rule_path("new"), "new-id") == day(0)
+        assert since(repo, rule_path("new"), "new-id") == day(0)
 
     def test_new_rule_is_not_a_copy_of_an_existing_one(self, repo):
         repo.commit({"detection-rules/noid": rule_yaml("noid", tier=CORE_WITH_DELAY, rule_id_=None)}, when=day(3))
         repo.commit({rule_path("d"): rule_yaml("legacy", tier=CORE_WITH_DELAY, rule_id_="d-id")}, when=day(4))
-        assert first_merged(str(repo.path), "detection-rules/noid", None) == day(3)
-        assert first_merged(str(repo.path), rule_path("d"), "d-id") == day(4)
+        assert since(repo, "detection-rules/noid", None) == day(3)
+        assert since(repo, rule_path("d"), "d-id") == day(4)
 
     @pytest.mark.parametrize(
         "mention",
@@ -111,29 +145,29 @@ class TestFirstMerged:
     def test_id_mentioned_earlier_does_not_count(self, repo, mention):
         repo.commit({rule_path("other"): rule_yaml("other", extra=mention)}, when=day(-300))
         repo.commit({rule_path("d"): rule_yaml("d", tier=CORE_WITH_DELAY, rule_id_="later-id")}, when=day(0))
-        assert first_merged(str(repo.path), rule_path("d"), "later-id") == day(0)
+        assert since(repo, rule_path("d"), "later-id") == day(0)
 
     def test_id_inside_source_does_not_count(self, repo):
         repo.commit({rule_path("other"): rule_yaml("other", source='type.inbound\nid: "later-id"')}, when=day(-300))
         repo.commit({rule_path("d"): rule_yaml("d", tier=CORE_WITH_DELAY, rule_id_="later-id")}, when=day(0))
-        assert first_merged(str(repo.path), rule_path("d"), "later-id") == day(0)
+        assert since(repo, rule_path("d"), "later-id") == day(0)
 
     @pytest.mark.parametrize("line", ['id: "x-1"', "id: 'x-1'", "id: x-1", 'id:   "x-1"   ', 'id: "x-1"  # generated'])
     def test_id_line_styles(self, repo, line):
         content = rule_yaml("d", tier=CORE_WITH_DELAY, rule_id_=None) + line.encode() + b"\n"
         repo.commit({rule_path("d"): content}, when=day(0))
-        assert first_merged(str(repo.path), rule_path("d"), "x-1") == day(0)
+        assert since(repo, rule_path("d"), "x-1") == day(0)
 
     def test_crlf(self, repo):
         repo.commit({rule_path("d"): rule_yaml("d", tier=CORE_WITH_DELAY).replace(b"\n", b"\r\n")}, when=day(0))
-        assert first_merged(str(repo.path), rule_path("d"), rule_id("d")) == day(0)
+        assert since(repo, rule_path("d"), rule_id("d")) == day(0)
 
     def test_id_with_regex_characters(self, repo):
         repo.commit({rule_path("x"): rule_yaml("x", rule_id_="a.b")}, when=day(-10))  # "." would match "a-b"... and "a.b"
         repo.commit({rule_path("d"): rule_yaml("d", tier=CORE_WITH_DELAY, rule_id_="a-b")}, when=day(0))
-        assert first_merged(str(repo.path), rule_path("d"), "a-b") == day(0)
+        assert since(repo, rule_path("d"), "a-b") == day(0)
         repo.commit({rule_path("e"): rule_yaml("e", tier=CORE_WITH_DELAY, rule_id_="a+b")}, when=day(1))
-        assert first_merged(str(repo.path), rule_path("e"), "a+b") == day(1)
+        assert since(repo, rule_path("e"), "a+b") == day(1)
 
     def test_heavy_rewrite_and_rename_keeps_the_clock(self, repo):
         repo.commit({rule_path("d"): rule_yaml("d", tier=CORE_WITH_DELAY)}, when=day(0))
@@ -143,38 +177,38 @@ class TestFirstMerged:
             when=day(40),
             content=rule_yaml("totally different", tier=CORE_WITH_DELAY, rule_id_=rule_id("d"), source="x\n" * 40),
         )
-        assert first_merged(str(repo.path), "detection-rules/rewritten.yml", rule_id("d")) == day(0)
+        assert since(repo, "detection-rules/rewritten.yml", rule_id("d")) == day(0)
 
     def test_new_id_restarts_the_clock(self, repo):
         repo.commit({rule_path("d"): rule_yaml("d", tier=CORE_WITH_DELAY, rule_id_="first")}, when=day(0))
         repo.commit({rule_path("d"): rule_yaml("d", tier=CORE_WITH_DELAY, rule_id_="second")}, when=day(30))
-        assert first_merged(str(repo.path), rule_path("d"), "second") == day(30)
+        assert since(repo, rule_path("d"), "second") == day(30)
 
     def test_rule_without_id_restarts_on_rename(self, repo):
         repo.commit({"detection-rules/noid": rule_yaml("noid", tier=CORE_WITH_DELAY, rule_id_=None)}, when=day(0))
         repo.rename("detection-rules/noid", "detection-rules/noid2", when=day(30))
-        assert first_merged(str(repo.path), "detection-rules/noid2", None) == day(30)
+        assert since(repo, "detection-rules/noid2", None) == day(30)
 
     def test_id_outside_detection_rules_does_not_count(self, repo):
         repo.commit({"discovery-rules/x.yml": rule_yaml("x", rule_id_="shared")}, when=day(-100))
         repo.commit({rule_path("d"): rule_yaml("d", tier=CORE_WITH_DELAY, rule_id_="shared")}, when=day(0))
-        assert first_merged(str(repo.path), rule_path("d"), "shared") == day(0)
+        assert since(repo, rule_path("d"), "shared") == day(0)
 
-    def test_deleted_and_re_added_counts_from_first_add(self, repo):
+    def test_deleted_and_re_added_starts_again(self, repo):
         repo.commit({rule_path("d"): rule_yaml("d", tier=CORE_WITH_DELAY)}, when=day(0))
         repo.commit({rule_path("d"): None}, when=day(5))
         repo.commit({rule_path("d"): rule_yaml("d", tier=CORE_WITH_DELAY)}, when=day(20))
-        assert first_merged(str(repo.path), rule_path("d"), rule_id("d")) == day(0)
+        assert since(repo, rule_path("d"), rule_id("d")) == day(20)
 
     def test_without_id(self, repo):
         repo.commit({"detection-rules/noid": rule_yaml("noid", tier=CORE_WITH_DELAY, rule_id_=None)}, when=day(3))
-        assert first_merged(str(repo.path), "detection-rules/noid", None) == day(3)
+        assert since(repo, "detection-rules/noid", None) == day(3)
 
     def test_missing(self, repo):
         with pytest.raises(DateError):
-            first_merged(str(repo.path), rule_path("nope"), "nope-id")
+            since(repo, rule_path("nope"), "nope-id")
         with pytest.raises(DateError):
-            first_merged(str(repo.path), rule_path("nope"), None)
+            since(repo, rule_path("nope"), None)
 
 
 class TestPromote:
@@ -299,11 +333,15 @@ class TestPromote:
         assert len(github.prs) == 1
 
     def test_was_enterprise_only_first(self, repo):  # S18
+        # The delay counts from when it became core_with_delay, not from when it first merged.
         repo.commit({rule_path("d"): rule_yaml("d", tier=ENTERPRISE_ONLY)}, when=day(-200))
         repo.commit({rule_path("d"): rule_yaml("d", tier=CORE_WITH_DELAY)}, when=day(0))
         github = FakeGitHub()
-        self.run(repo, github, day(1))
+        self.run(repo, github, day(89))
+        assert github.prs == []
+        self.run(repo, github, day(90))
         assert len(github.prs) == 1
+        assert "has been `core_with_delay` since 2027-01-01, 90 days ago" in github.prs[0]["body"]
 
     def test_dry_run(self, repo, origin):
         repo.commit({rule_path("d"): rule_yaml("d", tier=CORE_WITH_DELAY)}, when=day(0))

@@ -328,6 +328,9 @@ class TestPromotion:
         merge(world, {rule_path("x"): rule_yaml("x", tier=CORE_WITH_DELAY)})
         world.advance(0.1)
         world.promote()
+        assert open_promotions(world) == []  # the delay counts from becoming core_with_delay
+        world.advance(90)
+        world.promote()
         assert len(open_promotions(world)) == 1
 
     def test_decline_by_changing_to_enterprise_only(self, world):

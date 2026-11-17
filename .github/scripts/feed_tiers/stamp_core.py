@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-"""Adds `feed_tier: core` to every file in a checkout that has a tier but no feed_tier key (in a YARA file,
-every rule gets `feed_tier = "core"` in its meta).
+"""Adds `feed_tier: core` to every rule in a checkout that has a tier but no feed_tier key (in a YARA file, each
+rule without one gets `feed_tier = "core"` in its meta).
 
     stamp_core.py --repo . [--dry-run true]
 
@@ -35,10 +35,12 @@ def stamp(repo: str | Path, dry_run: bool = False) -> list[str]:
     }
     rules, errors = parse_rules(files)
     updates = {}
-    for path, rule in rules.items():
-        if rule.tier is None:
+    for path, file_rules in rules.items():
+        missing = [rule for rule in file_rules if rule.tier is None]
+        if missing:
+            names = [rule.yara_name for rule in missing] if missing[0].yara_name is not None else None
             try:
-                updates[path] = set_tier(path, files[path], CORE)
+                updates[path] = set_tier(path, files[path], CORE, names)
             except RuleError as e:
                 errors.append(str(e))
     if errors:

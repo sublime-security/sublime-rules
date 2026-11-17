@@ -5,12 +5,12 @@
 
 Compares the rules at base and head:
 - Every added or changed rule must parse, and any feed_tier must be a known value.
-- No rule id may be used twice at head (the sync would fail on it).
+- No rule id, or YARA rule name, may be used twice at head (the sync would fail on it).
 - No demotion: a rule that's core at base can't be core_with_delay or enterprise_only at head (removing its
-  feed_tier line counts, since no key means core_with_delay), matched by path and by id, so renaming it in the same
-  PR doesn't hide the change. Deleting it is fine.
-- Until non-core tiers are enabled (the repo variable NON_CORE_TIERS_ENABLED), every added or changed rule must say
-  `feed_tier: core`.
+  feed_tier line counts, since no key means core_with_delay), matched by path and by id, and a YARA rule by its name,
+  so renaming or moving it in the same PR doesn't hide the change. Deleting it is fine.
+- Until non-core tiers are enabled (the repo variable NON_CORE_TIERS_ENABLED), every rule in an added or changed
+  file must say core.
 """
 
 from __future__ import annotations
@@ -23,7 +23,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import ci  # noqa: E402
 from gittree import GitError, read_tree, rev_parse  # noqa: E402
-from rules import CORE, MANAGED_DIRS, TIER_KEY, RuleError, parse_rule, parse_rules  # noqa: E402
+from rules import CORE, MANAGED_DIRS, TIER_KEY, RuleError, duplicate_errors, parse_file, parse_rules  # noqa: E402
 
 
 def check(base_files: dict, head_files: dict, non_core_enabled: bool) -> list[tuple[str, str]]:
@@ -31,46 +31,54 @@ def check(base_files: dict, head_files: dict, non_core_enabled: bool) -> list[tu
     problems: list[tuple[str, str]] = []
 
     base_rules, _ = parse_rules({p: e.content for p, e in base_files.items()})
-    base_public_paths = {p for p, r in base_rules.items() if r.is_public}
-    base_public_ids = {r.id for r in base_rules.values() if r.is_public and r.id is not None}
+    base_public = [r for rules in base_rules.values() for r in rules if r.is_public]
+    base_public_paths = {r.path for r in base_public if r.yara_name is None}
+    base_public_ids = {r.id for r in base_public if r.id is not None}
+    base_public_yara = {r.yara_name for r in base_public if r.yara_name is not None}
 
     changed = sorted(p for p, e in head_files.items() if base_files.get(p) != e)
-    head_rules = {}
+    head_rules: dict[str, list] = {}
     for path in changed:
         try:
-            head_rules[path] = parse_rule(path, head_files[path].content)
+            head_rules[path] = parse_file(path, head_files[path].content)
         except RuleError as e:
             problems.append((path, e.message))
 
-    paths_by_id: dict[str, list[str]] = {}
+    # Duplicates involving a changed file. Unchanged files that don't parse were already reported when they changed.
+    every_rule = []
     for path, entry in head_files.items():
-        rule = head_rules.get(path)
-        if rule is None and path not in changed:
+        rules = head_rules.get(path)
+        if rules is None and path not in changed:
             try:
-                rule = parse_rule(path, entry.content)
+                rules = parse_file(path, entry.content)
             except RuleError:
                 continue
-        if rule is not None and rule.id is not None:
-            paths_by_id.setdefault(rule.id, []).append(path)
+        every_rule += rules or []
+    for duplicate in duplicate_errors(every_rule):
+        involved = sorted(p for p in head_rules if p in duplicate)
+        if involved:
+            problems.append((involved[0], duplicate))
 
-    for path, rule in head_rules.items():
-        if rule.id is not None and len(paths_by_id.get(rule.id, [])) > 1:
-            others = ", ".join(p for p in sorted(paths_by_id[rule.id]) if p != path)
-            problems.append((path, f"id {rule.id} is also used by {others}"))
-
-        if not rule.is_public and not non_core_enabled:
-            problems.append(
-                (path, f"is {rule.tier_label}, which isn't allowed yet: set {TIER_KEY}: {CORE} (NON_CORE_TIERS_ENABLED is off)")
-            )
-
-        if not rule.is_public and (path in base_public_paths or rule.id in base_public_ids):
-            problems.append(
-                (
-                    path,
-                    f"this rule is public, so it can't become {rule.tier_label}. Rules are never demoted: to take it out "
-                    "of the public feed, delete it.",
+    for path, rules in head_rules.items():
+        for rule in rules:
+            what = f"YARA rule {rule.yara_name} " if rule.yara_name else ""
+            if not rule.is_public and not non_core_enabled:
+                fix = f'{TIER_KEY} = "{CORE}" in its meta' if rule.yara_name else f"{TIER_KEY}: {CORE}"
+                problems.append((path, f"{what}is {rule.tier_label}, which isn't allowed yet: set {fix} (NON_CORE_TIERS_ENABLED is off)"))
+            if rule.is_public:
+                continue
+            if rule.yara_name is not None:
+                demoted = rule.yara_name in base_public_yara
+            else:
+                demoted = path in base_public_paths or rule.id in base_public_ids
+            if demoted:
+                problems.append(
+                    (
+                        path,
+                        f"{what or 'this rule '}is public, so it can't become {rule.tier_label}. Rules are never demoted: "
+                        "to take it out of the public feed, delete it.",
+                    )
                 )
-            )
 
     return problems
 

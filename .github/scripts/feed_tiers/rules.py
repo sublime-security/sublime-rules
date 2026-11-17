@@ -12,16 +12,21 @@ predate tiers get an explicit `feed_tier: core` from stamp_core.py before the sy
 Which files have tiers (the folders the platform's feeds read):
 
     detection-rules/, dlp-rules/, automations/, exclusions/   every file; YAML, tier as above
-    yara/*.yar                                                 `feed_tier = "<tier>"` in each rule's meta, the
-                                                               same in every rule in the file
+    yara/*.yar                                                 `feed_tier = "<tier>"` in each YARA rule's meta;
+                                                               every YARA rule has its own tier
     insights/, and yara/ files that aren't .yar               no tier: always public
 
 Everything else in the repo isn't managed by the sync at all.
+
+A YARA file whose rules have different tiers is published with only its core rules (see public_content). That only
+works if the core rules don't need anything left out, so such a file can't have include lines or global rules, and a
+core rule can't use a rule that isn't core.
 """
 
 from __future__ import annotations
 
 import re
+from collections.abc import Collection, Iterable
 from dataclasses import dataclass
 
 import plyara
@@ -67,6 +72,7 @@ class Rule:
     name: str | None
     tier: str | None  # None when the rule has no feed_tier key
     always_public: bool = False  # a file with no tier (see ALWAYS_PUBLIC_DIRS)
+    yara_name: str | None = None  # for a rule in a .yar file, the YARA rule's name (a file can have several)
 
     @property
     def effective_tier(self) -> str:
@@ -86,6 +92,8 @@ class Rule:
 
     @property
     def label(self) -> str:
+        if self.yara_name:
+            return f"YARA rule {self.yara_name} ({self.path})"
         return f"{self.name} ({self.path})" if self.name else self.path
 
 
@@ -141,12 +149,33 @@ def is_yara(path: str) -> bool:
     return path.split("/", 1)[0] == YARA_DIR and path.endswith(YARA_SUFFIX)
 
 
-def parse_rule(path: str, content: bytes) -> Rule:
-    """Parses a rule file, failing on anything that would make its tier ambiguous."""
+def parse_file(path: str, content: bytes) -> list[Rule]:
+    """Parses a file into its rules (one, except in a YARA file), failing on anything that would make a tier
+    ambiguous or keep the file from being published as its core rules."""
     if not has_tier(path):
-        return Rule(path=path, id=None, name=None, tier=None, always_public=True)
+        return [Rule(path=path, id=None, name=None, tier=None, always_public=True)]
     if is_yara(path):
-        return _parse_yara(path, content)
+        return _yara_split(path, content)[0]
+    return [_parse_yaml(path, content)]
+
+
+def parse_rule(path: str, content: bytes) -> Rule:
+    """parse_file, for a file that has one rule (anything but a YARA file with several)."""
+    rules = parse_file(path, content)
+    if len(rules) != 1:
+        raise RuleError(path, f"has {len(rules)} YARA rules, not one")
+    return rules[0]
+
+
+def public_content(path: str, content: bytes) -> bytes | None:
+    """What the public repo gets for this file: the file itself if every rule in it is core, nothing if none is, and
+    for a YARA file with some core rules, just those rules (see _yara_split)."""
+    if is_yara(path):
+        return _yara_split(path, content)[1]
+    return content if parse_rule(path, content).is_public else None
+
+
+def _parse_yaml(path: str, content: bytes) -> Rule:
     document = load_rule_document(path, content)
 
     tier_lines = len(_TIER_LINE.findall(content))
@@ -196,23 +225,97 @@ def _yara_rule_tier(path: str, rule: dict) -> str | None:
     return values[0]
 
 
-def _parse_yara(path: str, content: bytes) -> Rule:
-    """A YARA file's tier is the feed_tier in each rule's meta. The platform syncs a .yar file as a whole, so every
-    rule in it must agree (all with the same value, or all without one)."""
-    tiers = {rule["rule_name"]: _yara_rule_tier(path, rule) for rule in _yara_rules(path, content)}
-    distinct = set(tiers.values())
-    if len(distinct) > 1:
-        detail = ", ".join(f"{name}: {tier or 'none'}" for name, tier in tiers.items())
+_INCLUDE_LINE = re.compile(r"^[ \t]*include[ \t]", re.MULTILINE)
+# A rule set in a condition, like `any of (abc*)`, which can use rules without naming them: a name ending in *
+# inside an `of (...)` list. ($abc* in the same place is a string set, which is fine.)
+_OF_LIST = re.compile(r"\bof\s*\(([^)]*)\)")
+_RULE_SET = re.compile(r"(?<![$\w])[A-Za-z_]\w*\*")
+
+
+def _yara_rule_start(name: str) -> re.Pattern:
+    return re.compile(r"^[ \t]*(?:(?:private|global)[ \t]+)*rule[ \t]+" + re.escape(name) + r"(?![A-Za-z0-9_])")
+
+
+_YARA_RULE_STOP = re.compile(r"\}[ \t]*(?://.*)?\r?\n?$")
+
+
+def _yara_split(path: str, content: bytes) -> tuple[list[Rule], bytes | None]:
+    """A YARA file's rules, each with the tier in its own meta, and the file's public content.
+
+    The public content is the whole file if every rule is core, and None if none is. Otherwise it's the core rules'
+    own lines, exactly as they are, after an `import` line for each module they use. Comments and anything else
+    outside those rules is left out, since it could be about a rule that isn't public. That needs the core rules to
+    stand on their own, so a file like that fails here if:
+    - a core rule uses a rule that isn't core, or uses a rule set like `any of (abc*)`;
+    - it has a global rule, which applies to every rule in the file;
+    - it has an include line;
+    - a rule doesn't start and end on lines of its own.
+    """
+    parsed = _yara_rules(path, content)
+    rules: list[Rule] = []
+    seen: set[str] = set()
+    for rule in parsed:
+        name = rule["rule_name"]
+        if name in seen:
+            raise RuleError(path, f"has more than one YARA rule named {name}")
+        seen.add(name)
+        rules.append(Rule(path=path, id=None, name=name, tier=_yara_rule_tier(path, rule), yara_name=name))
+
+    public = [rule.is_public for rule in rules]
+    if all(public):
+        return rules, content
+    if not any(public):
+        return rules, None
+
+    text = content.decode("utf-8")
+    problems = []
+    if _INCLUDE_LINE.search(text):
+        problems.append("it has an include line")
+    tiers = {rule.yara_name: rule for rule in rules}
+    for rule in parsed:
+        name = rule["rule_name"]
+        if "global" in (rule.get("scopes") or []):
+            problems.append(f"rule {name} is global, so it applies to every rule in the file")
+        if not tiers[name].is_public:
+            continue
+        for dependency in sorted({term for term in rule.get("condition_terms", []) if term in tiers}):
+            if not tiers[dependency].is_public:
+                problems.append(f"core rule {name} uses rule {dependency}, which is {tiers[dependency].tier_label}")
+        if any(_RULE_SET.search(group) for group in _OF_LIST.findall(rule.get("raw_condition", ""))):
+            problems.append(f"core rule {name} uses a rule set (like `any of (abc*)`), which could include rules that aren't core")
+
+    lines = _lines(text.replace("\r\n", "\n"))
+    raw_lines = _lines(text)
+    previous_stop = 0
+    for rule in sorted(parsed, key=lambda r: r["start_line"]):
+        start, stop = rule["start_line"] - 1, rule["stop_line"]
+        if (
+            start < previous_stop
+            or not _yara_rule_start(rule["rule_name"]).match(lines[start])
+            or not _YARA_RULE_STOP.search(lines[stop - 1])
+        ):
+            problems.append(f"rule {rule['rule_name']} doesn't start and end on lines of its own")
+        previous_stop = stop
+    if problems:
         raise RuleError(
             path,
-            f"every rule in a YARA file must have the same {TIER_KEY} in its meta, since the file is synced as a "
-            f"whole; split it into files to give rules different tiers ({detail})",
+            "has core and non-core rules, so only its core rules are published, but "
+            + "; ".join(problems)
+            + ". Fix that, or give every rule in the file the same tier.",
         )
-    return Rule(path=path, id=None, name=None, tier=distinct.pop())
+
+    newline = _line_ending(raw_lines[0]) if raw_lines else "\n"
+    imports = sorted({module for rule in parsed if tiers[rule["rule_name"]].is_public for module in rule.get("imports", [])})
+    parts = ["".join(f'import "{module}"{newline}' for module in imports)] if imports else []
+    for rule in parsed:
+        if tiers[rule["rule_name"]].is_public:
+            block = "".join(raw_lines[rule["start_line"] - 1 : rule["stop_line"]])
+            parts.append(block if block.endswith("\n") else block + newline)
+    return rules, newline.join(parts).encode("utf-8")
 
 
 _META_HEADER = re.compile(r"^([ \t]*)meta[ \t]*:[ \t]*(?://.*)?$")
-_SECTION_HEADER = re.compile(r"^([ \t]*)(?:strings|condition)[ \t]*:[ \t]*(?://.*)?$")
+_SECTION_HEADER = re.compile(r"^([ \t]*)(?:strings|condition)[ \t]*:")
 _META_ENTRY = re.compile(r"^([ \t]*)[A-Za-z_][A-Za-z0-9_]*[ \t]*=")
 _META_TIER = re.compile(r'^([ \t]*feed_tier[ \t]*=[ \t]*)"[^"]*"')
 
@@ -263,38 +366,49 @@ def _without_tier(rule: dict) -> tuple:
     return (rule["rule_name"], rule.get("scopes"), rule.get("tags"), metadata, rule.get("raw_strings"), rule.get("raw_condition"))
 
 
-def _set_yara_tier(path: str, content: bytes, tier: str) -> bytes:
-    _parse_yara(path, content)
+def _set_yara_tier(path: str, content: bytes, tier: str, names: Collection[str] | None) -> bytes:
     rules = _yara_rules(path, content)
+    if names is not None:
+        missing = sorted(set(names) - {rule["rule_name"] for rule in rules})
+        if missing:
+            raise RuleError(path, f"has no YARA rule named {', '.join(missing)}")
+    chosen = {rule["rule_name"] for rule in rules if names is None or rule["rule_name"] in names}
     lines = _lines(content.decode("utf-8"))
     # From the last rule up, so earlier rules' line numbers stay right.
     for rule in sorted(rules, key=lambda r: r["start_line"], reverse=True):
+        if rule["rule_name"] not in chosen:
+            continue
         start, stop = rule["start_line"] - 1, rule["stop_line"]
         lines[start:stop] = _set_tier_in_rule(path, rule, lines[start:stop], tier)
     updated = "".join(lines).encode("utf-8")
 
     after = _yara_rules(path, updated)
-    if [_without_tier(r) for r in after] != [_without_tier(r) for r in rules] or any(
-        _yara_rule_tier(path, r) != tier for r in after
-    ):
+    expected_tiers = [tier if r["rule_name"] in chosen else _yara_rule_tier(path, r) for r in rules]
+    if [_without_tier(r) for r in after] != [_without_tier(r) for r in rules] or [
+        _yara_rule_tier(path, r) for r in after
+    ] != expected_tiers:
         raise RuleError(path, f"changing {TIER_KEY} would change other parts of the file")
     return updated
 
 
-def set_tier(path: str, content: bytes, tier: str) -> bytes:
+def set_tier(path: str, content: bytes, tier: str, names: Collection[str] | None = None) -> bytes:
     """Rewrites only the feed_tier line, leaving every other byte as it was.
 
     A rule with no feed_tier line gets one above its top-level id line if it has exactly one, else above its top-level
     source line if it has exactly one (automations and exclusions have no id, and often end in a source block with no
-    final newline, which a line after it would change), else at the end. In a YARA file, every rule gets
-    `feed_tier = "<tier>"` as its last meta entry (and a meta section if it has none).
+    final newline, which a line after it would change), else at the end.
+
+    In a YARA file, each rule named in names (every rule, if names is None) gets `feed_tier = "<tier>"`, replacing
+    its value or added as its last meta entry (with a meta section if it has none). names is only for YARA files.
     """
     if tier not in TIERS:
         raise ValueError(f"unknown tier {tier!r}")
     if not has_tier(path):
         raise RuleError(path, "is always public and has no tier")
     if is_yara(path):
-        return _set_yara_tier(path, content, tier)
+        return _set_yara_tier(path, content, tier, names)
+    if names is not None:
+        raise ValueError("names is only for YARA files")
     before = load_rule_document(path, content)
     rule = parse_rule(path, content)
 
@@ -319,25 +433,39 @@ def set_tier(path: str, content: bytes, tier: str) -> bytes:
     return updated
 
 
-def parse_rules(files: dict[str, bytes]) -> tuple[dict[str, Rule], list[str]]:
-    """Parses every file, collecting every problem rather than stopping at the first.
+def parse_rules(files: dict[str, bytes]) -> tuple[dict[str, list[Rule]], list[str]]:
+    """Parses every file into its rules, collecting every problem rather than stopping at the first.
 
-    Two files with the same id are an error: the feed keys rules by id, so one would silently replace the other.
+    Two files with the same id are an error: the feed keys rules by id, so one would silently replace the other. So
+    are two YARA rules with the same name, which is how a YARA rule is tracked (its tier history, its promotion).
     """
-    rules: dict[str, Rule] = {}
+    rules: dict[str, list[Rule]] = {}
     errors: list[str] = []
     for path in sorted(files):
         try:
-            rules[path] = parse_rule(path, files[path])
+            rules[path] = parse_file(path, files[path])
         except RuleError as e:
             errors.append(str(e))
+    errors += duplicate_errors(rule for file_rules in rules.values() for rule in file_rules)
+    return rules, errors
 
+
+def duplicate_errors(rules: Iterable[Rule]) -> list[str]:
     paths_by_id: dict[str, list[str]] = {}
-    for rule in rules.values():
+    paths_by_yara_name: dict[str, list[str]] = {}
+    for rule in rules:
         if rule.id is not None:
             paths_by_id.setdefault(rule.id, []).append(rule.path)
-    for rule_id, paths in sorted(paths_by_id.items()):
-        if len(paths) > 1:
-            errors.append(f"id {rule_id} is used by more than one rule: {', '.join(paths)}")
-
-    return rules, errors
+        if rule.yara_name is not None:
+            paths_by_yara_name.setdefault(rule.yara_name, []).append(rule.path)
+    errors = [
+        f"id {rule_id} is used by more than one rule: {', '.join(sorted(paths))}"
+        for rule_id, paths in sorted(paths_by_id.items())
+        if len(paths) > 1
+    ]
+    errors += [
+        f"YARA rule name {name} is used more than once: {', '.join(sorted(paths))}"
+        for name, paths in sorted(paths_by_yara_name.items())
+        if len(paths) > 1
+    ]
+    return errors

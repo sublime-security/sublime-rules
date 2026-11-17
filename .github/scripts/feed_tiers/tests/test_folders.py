@@ -21,8 +21,10 @@ from rules import (
     RuleError,
     has_tier,
     is_managed,
+    parse_file,
     parse_rule,
     parse_rules,
+    public_content,
     set_tier,
 )
 
@@ -30,11 +32,12 @@ YARA = b'rule x\n{\n    meta:\n        author = "a"\n    condition:\n        tru
 YAML_FOLDERS = ["automations", "detection-rules", "dlp-rules", "exclusions"]
 
 
-def yara(tier=None):
+def yara(tier=None, name="x"):
     """YARA, with feed_tier as its last meta entry, where set_tier puts it."""
+    content = YARA.replace(b"rule x\n", f"rule {name}\n".encode())
     if tier is None:
-        return YARA
-    return YARA.replace(b'author = "a"\n', f'author = "a"\n        feed_tier = "{tier}"\n'.encode())
+        return content
+    return content.replace(b'author = "a"\n', f'author = "a"\n        feed_tier = "{tier}"\n'.encode())
 
 
 TWO_RULES = (
@@ -106,11 +109,15 @@ class TestYara:
 
     def test_every_rule_agreeing(self):
         both = set_tier(self.P, TWO_RULES, CORE)
-        assert parse_rule(self.P, both).tier == CORE
+        assert [r.tier for r in parse_file(self.P, both)] == [CORE, CORE]
+        assert public_content(self.P, both) == both
 
-    def test_rules_disagreeing_fails(self):
+    def test_each_rule_has_its_own_tier(self):
         one = TWO_RULES.replace(b'\t\tdate = "2026-01-01"\n', b'\t\tdate = "2026-01-01"\n\t\tfeed_tier = "core"\n')
-        with pytest.raises(RuleError, match=r"every rule in a YARA file must have the same feed_tier .*\(a: core, b: none\)"):
+        rules = parse_file(self.P, one)
+        assert [(r.yara_name, r.tier, r.is_public) for r in rules] == [("a", CORE, True), ("b", None, False)]
+        assert rules[0].label == "YARA rule a (yara/x.yar)"
+        with pytest.raises(RuleError, match="has 2 YARA rules, not one"):
             parse_rule(self.P, one)
 
     @pytest.mark.parametrize("value", ['"Core"', '"enterprise"', '""', "true", "1"])
@@ -205,10 +212,10 @@ PRIVATE = {
     "automations/nokey.yml": rule_yaml("a-nokey", tier=None, rule_id_=None),
     "exclusions/core.yml": rule_yaml("e-core", tier=CORE, rule_id_=None),
     "exclusions/ent.yml": rule_yaml("e-ent", tier=ENTERPRISE_ONLY, rule_id_=None),
-    "yara/core.yar": yara(CORE),
-    "yara/delayed.yar": yara(CORE_WITH_DELAY),
-    "yara/ent.yar": yara(ENTERPRISE_ONLY),
-    "yara/nokey.yar": yara(),
+    "yara/core.yar": yara(CORE, "y_core"),
+    "yara/delayed.yar": yara(CORE_WITH_DELAY, "y_delayed"),
+    "yara/ent.yar": yara(ENTERPRISE_ONLY, "y_ent"),
+    "yara/nokey.yar": yara(None, "y_nokey"),
     "yara/sublime_yara_test.zip": b"PK\x03\x04 binary",
     "insights/category/q.yml": b"name: q\ntype: query\nsource: |\n  1\n",
 }
@@ -240,9 +247,9 @@ class TestProjection:
             ("automations/core.yml", rule_yaml("a-core", tier=ENTERPRISE_ONLY, rule_id_=None)),
             ("exclusions/core.yml", rule_yaml("e-core", tier=None, rule_id_=None)),
             ("dlp-rules/core.yml", rule_yaml("dlp-core", tier=CORE_WITH_DELAY)),
-            ("yara/core.yar", yara(CORE_WITH_DELAY)),
-            ("yara/core.yar", yara(ENTERPRISE_ONLY)),
-            ("yara/core.yar", yara()),
+            ("yara/core.yar", yara(CORE_WITH_DELAY, "y_core")),
+            ("yara/core.yar", yara(ENTERPRISE_ONLY, "y_core")),
+            ("yara/core.yar", yara(None, "y_core")),
         ],
     )
     def test_demotion_fails_in_every_folder(self, path, demoted):
@@ -252,7 +259,7 @@ class TestProjection:
 
     def test_bad_yara_tier_fails_the_whole_sync(self):
         with pytest.raises(ProjectionError, match="yara/bad.yar"):
-            project(entries({**PRIVATE, "yara/bad.yar": yara("Core")}), {})
+            project(entries({**PRIVATE, "yara/bad.yar": yara("Core", "y_bad")}), {})
 
 
 class TestTierCheck:
@@ -268,16 +275,16 @@ class TestTierCheck:
 
     @pytest.mark.parametrize("tier", [None, CORE, CORE_WITH_DELAY, ENTERPRISE_ONLY])
     def test_new_yara_any_tier(self, tier):
-        assert self.check({"yara/new.yar": yara(tier)}) == []
+        assert self.check({"yara/new.yar": yara(tier, "y_new")}) == []
 
     def test_yara_demoted_to_enterprise_only_fails(self):
-        [(path, problem)] = self.check({"yara/core.yar": yara(ENTERPRISE_ONLY)})
+        [(path, problem)] = self.check({"yara/core.yar": yara(ENTERPRISE_ONLY, "y_core")})
         assert path == "yara/core.yar" and "Rules are never demoted" in problem
 
     def test_gate_applies_to_every_folder(self):
         head = {
             "automations/new.yml": rule_yaml("a-new", tier=None, rule_id_=None),
-            "yara/new.yar": yara(CORE_WITH_DELAY),
+            "yara/new.yar": yara(CORE_WITH_DELAY, "y_new"),
             "exclusions/core2.yml": rule_yaml("e-core2", tier=CORE, rule_id_=None),
         }
         assert [p for p, _ in self.check(head, enabled=False)] == ["automations/new.yml", "yara/new.yar"]
@@ -290,7 +297,7 @@ class TestTierCheck:
         "path, content",
         [
             ("automations/core.yml", rule_yaml("a-core", tier=ENTERPRISE_ONLY, rule_id_=None)),
-            ("yara/core.yar", YARA),  # removing the meta entry
+            ("yara/core.yar", yara(None, "y_core")),  # removing the meta entry
         ],
     )
     def test_demotion_fails(self, path, content):
@@ -424,8 +431,8 @@ class TestPromote:
         report = promote.promote(str(repo.path), github, t0 + timedelta(days=91))
         assert report.errors == []
         branches = {pr["branch"] for pr in github.prs}
-        assert branches == {"auto/promote-core/yara-y", "auto/promote-core/automations-a"}
-        yara_branch = run_git(origin, "show", "auto/promote-core/yara-y:yara/y.yar").encode()
+        assert branches == {"auto/promote-core/yara-x", "auto/promote-core/automations-a"}
+        yara_branch = run_git(origin, "show", "auto/promote-core/yara-x:yara/y.yar").encode()
         assert yara_branch == yara(CORE)
 
 

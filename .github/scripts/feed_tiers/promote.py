@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
-"""Opens a PR promoting each core_with_delay rule to core once it's been on main for the delay.
+"""Opens a PR promoting each core_with_delay rule to core once it's been core_with_delay on main for the delay.
 
-A rule with no feed_tier key counts as core_with_delay; its promotion PR adds `feed_tier: core`.
+The delay counts from when the rule last became core_with_delay (see gitdates.py). A rule with no feed_tier key counts
+as core_with_delay; its promotion PR adds `feed_tier: core`. Each YARA rule is promoted on its own: its PR changes
+only that rule's meta.
 
     promote.py --repo . --github-repo owner/name [--delay-days 90] [--as-of 2027-01-31] [--dry-run true]
 
 --repo is a full-history checkout of main. For each due rule:
-- skip it if a PR from its branch, auto/promote-core/<rule id>, is already open;
+- skip it if a PR from its branch, auto/promote-core/<rule id, or yara-<name>, or path>, is already open;
 - otherwise commit the one-line tier change (or addition) on top of HEAD, force-push the branch, open the PR and start
   rule-validate on it.
 
@@ -28,7 +30,7 @@ from datetime import datetime, timedelta, timezone
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import ci  # noqa: E402
-from gitdates import DateError, first_merged  # noqa: E402
+from gitdates import DateError, delayed_since  # noqa: E402
 from github import GhCli, GitHub, GitHubError  # noqa: E402
 from gittree import Entry, GitError, commit_changes, git, read_tree, rev_parse  # noqa: E402
 from rules import CORE, CORE_WITH_DELAY, MANAGED_DIRS, Rule, RuleError, parse_rules, set_tier  # noqa: E402
@@ -44,7 +46,7 @@ DEFAULT_DELAY_DAYS = 90
 class Candidate:
     rule: Rule
     entry: Entry
-    first_merged: datetime
+    delayed_since: datetime
 
     @property
     def branch(self) -> str:
@@ -63,6 +65,8 @@ class Report:
 def branch_key(rule: Rule) -> str:
     if rule.id is not None:
         key = rule.id
+    elif rule.yara_name is not None:
+        key = f"yara-{rule.yara_name}"
     else:
         # The path, not just the file name: automations/x.yml and exclusions/x.yml are different files.
         key = os.path.splitext(rule.path)[0]
@@ -70,17 +74,18 @@ def branch_key(rule: Rule) -> str:
 
 
 def candidates(repo: str, rev: str = "HEAD") -> tuple[list[Candidate], list[str]]:
-    """Every core_with_delay rule at rev (including those with no feed_tier key), with its merge date."""
+    """Every core_with_delay rule at rev (including those with no feed_tier key), with when it became one."""
     files = read_tree(repo, rev, MANAGED_DIRS)
     rules, errors = parse_rules({path: entry.content for path, entry in files.items()})
     out = []
-    for path, rule in sorted(rules.items()):
-        if rule.effective_tier != CORE_WITH_DELAY:
-            continue
-        try:
-            out.append(Candidate(rule, files[path], first_merged(repo, path, rule.id, rev)))
-        except (DateError, GitError) as e:
-            errors.append(str(e))
+    for path, file_rules in sorted(rules.items()):
+        for rule in file_rules:
+            if rule.effective_tier != CORE_WITH_DELAY:
+                continue
+            try:
+                out.append(Candidate(rule, files[path], delayed_since(repo, rule, rev)))
+            except (DateError, GitError) as e:
+                errors.append(str(e))
     return out, errors
 
 
@@ -98,7 +103,7 @@ def promote(
     found, report.errors = candidates(repo, head)
 
     for candidate in found:
-        if now - candidate.first_merged < delay:
+        if now - candidate.delayed_since < delay:
             report.waiting.append(candidate)
             continue
         try:
@@ -112,21 +117,22 @@ def promote(
             url = _open_pr(repo, github, head, candidate, now, base, remote)
             report.opened.append((candidate, url))
         except (GitError, GitHubError, RuleError) as e:
-            report.errors.append(f"{candidate.rule.path}: {e}")
+            report.errors.append(f"{candidate.rule.label}: {e}")
 
     return report
 
 
 def _open_pr(repo: str, github: GitHub, head: str, candidate: Candidate, now: datetime, base: str, remote: str) -> str:
     rule = candidate.rule
-    promoted = Entry(candidate.entry.mode, set_tier(rule.path, candidate.entry.content, CORE))
-    days = (now - candidate.first_merged).days
+    names = [rule.yara_name] if rule.yara_name is not None else None
+    promoted = Entry(candidate.entry.mode, set_tier(rule.path, candidate.entry.content, CORE, names))
+    days = (now - candidate.delayed_since).days
     title = f"Promote {rule.name or rule.path} to core"
     commit = commit_changes(
         repo,
         head,
         {rule.path: promoted},
-        f"{title}\n\nIt first merged {candidate.first_merged.date().isoformat()}, {days} days ago.\n",
+        f"{title}\n\nIt became {CORE_WITH_DELAY} {candidate.delayed_since.date().isoformat()}, {days} days ago.\n",
     )
     git(repo, "push", "--force", remote, f"{commit}:refs/heads/{candidate.branch}")
     url = github.create_pr(branch=candidate.branch, base=base, title=title, body=_body(candidate, days), label=LABEL)
@@ -139,16 +145,22 @@ def _body(candidate: Candidate, days: int) -> str:
     rule = candidate.rule
     return "\n".join(
         [
-            f"`{rule.path}` has been {_tier_phrase(rule)} since it first merged on "
-            f"{candidate.first_merged.date().isoformat()}, {days} days ago. Merging this makes it `{CORE}`, and the "
+            f"{_what(rule)} has been {_tier_phrase(rule)} since "
+            f"{candidate.delayed_since.date().isoformat()}, {days} days ago. Merging this makes it `{CORE}`, and the "
             "next sync publishes it to the public repo.",
             "",
             f"To keep it private instead, change `feed_tier` to `enterprise_only` in this PR and merge it. "
+            "That stops the clock; changing it back to `core_with_delay` later starts the delay again. "
             "Closing this PR without merging only postpones it: it's opened again on the next run.",
-            "",
-            f"Rule id: `{rule.id}`" if rule.id else "This rule has no id.",
         ]
+        + ([] if rule.yara_name else ["", f"Rule id: `{rule.id}`" if rule.id else "This rule has no id."])
     )
+
+
+def _what(rule: Rule) -> str:
+    if rule.yara_name is not None:
+        return f"YARA rule `{rule.yara_name}` in `{rule.path}`"
+    return f"`{rule.path}`"
 
 
 def _tier_phrase(rule: Rule) -> str:
@@ -167,13 +179,13 @@ def parse_as_of(value: str) -> datetime:
 def _summary(report: Report, dry_run: bool) -> str:
     lines = []
     for candidate, url in report.opened:
-        lines.append(f"- opened {url} for `{candidate.rule.path}`")
+        lines.append(f"- opened {url} for {_what(candidate.rule)}")
     for candidate in report.would_open:
-        lines.append(f"- would open a PR for `{candidate.rule.path}`")
+        lines.append(f"- would open a PR for {_what(candidate.rule)}")
     for candidate, url in report.already_open:
-        lines.append(f"- already open: {url} for `{candidate.rule.path}`")
+        lines.append(f"- already open: {url} for {_what(candidate.rule)}")
     for candidate in report.waiting:
-        lines.append(f"- waiting: `{candidate.rule.path}` (first merged {candidate.first_merged.date().isoformat()})")
+        lines.append(f"- waiting: {_what(candidate.rule)} ({CORE_WITH_DELAY} since {candidate.delayed_since.date().isoformat()})")
     return "\n".join(lines) if lines else "No core_with_delay rules."
 
 

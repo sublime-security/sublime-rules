@@ -118,7 +118,7 @@ class TestValidity:
 
     def test_duplicate_id(self):
         problems = check(BASE, {**BASE, "detection-rules/copy.yml": rule_yaml("copy", tier=CORE, rule_id_=rule_yaml("core").split(b'id: "')[1][:36].decode())})
-        assert len(problems) == 1 and "also used by detection-rules/core.yml" in problems[0][1]
+        assert len(problems) == 1 and problems[0][1].endswith("is used by more than one rule: detection-rules/copy.yml, detection-rules/core.yml")
 
 
 class TestCli:

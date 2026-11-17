@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Adds `feed_tier: core_with_delay` to rules a PR adds or changes without a feed_tier key, and says so on the PR.
 
-Every folder with tiers counts (see rules.TIERED_DIRS); in a YARA file, every rule gets
+Every folder with tiers counts (see rules.TIERED_DIRS); in a YARA file, each rule without one gets
 `feed_tier = "core_with_delay"` in its meta.
 
     default_tier.py --repo . --base <sha> --head <sha> --branch <pr branch> --github-repo owner/name --pr <number>
@@ -33,7 +33,7 @@ import ci  # noqa: E402
 from github import GhCli, GitHub, GitHubError  # noqa: E402
 from gittree import Entry, GitError, commit_changes, git, read_tree, rev_parse  # noqa: E402
 from promote import DEFAULT_DELAY_DAYS, REQUIRED_CHECK_WORKFLOWS  # noqa: E402
-from rules import CORE, CORE_WITH_DELAY, ENTERPRISE_ONLY, MANAGED_DIRS, TIER_KEY, RuleError, parse_rule, set_tier  # noqa: E402
+from rules import CORE, CORE_WITH_DELAY, ENTERPRISE_ONLY, MANAGED_DIRS, TIER_KEY, RuleError, parse_file, set_tier  # noqa: E402
 
 COMMIT_TITLE = f"Add the default {TIER_KEY}: {CORE_WITH_DELAY}"
 # Marks the bot's comments, so they're easy to find.
@@ -54,13 +54,15 @@ def missing_tiers(base_files: dict[str, Entry], head_files: dict[str, Entry]) ->
         if base_files.get(path) == entry:
             continue
         try:
-            rule = parse_rule(path, entry.content)
+            rules = parse_file(path, entry.content)
         except RuleError:
             continue  # tier-check reports it
-        if rule.tier is not None or rule.always_public:
+        missing = [rule for rule in rules if rule.tier is None and not rule.always_public]
+        if not missing:
             continue
+        names = [rule.yara_name for rule in missing] if missing[0].yara_name is not None else None
         try:
-            result.updates[path] = Entry(entry.mode, set_tier(path, entry.content, CORE_WITH_DELAY))
+            result.updates[path] = Entry(entry.mode, set_tier(path, entry.content, CORE_WITH_DELAY, names))
         except RuleError as e:
             result.skipped.append((path, e.message))
     return result
@@ -82,7 +84,7 @@ def comment_body(paths: list[str], skipped: list[tuple[str, str]], commit: str) 
             "",
             f"A rule with no `{TIER_KEY}` was already `{CORE_WITH_DELAY}`, so this doesn't change anything; it just "
             f"makes the tier visible. `{CORE_WITH_DELAY}` keeps the rule out of the public repo until a promotion PR "
-            f"makes it `{CORE}`, {DEFAULT_DELAY_DAYS} days after it first merges. To choose differently, change the "
+            f"makes it `{CORE}`, {DEFAULT_DELAY_DAYS} days after it merges as `{CORE_WITH_DELAY}`. To choose differently, change the "
             f"line to `{CORE}` (public as soon as this merges) or `{ENTERPRISE_ONLY}` (never public).",
             "",
             "Pull before you push to this branch again.",
