@@ -4,16 +4,28 @@ type: "rule"
 severity: "high"
 source: |
   type.inbound
-  // at least one link to screenconnect
   and any(body.links,
-          strings.iends_with(.href_url.path, '.msi', '.exe')
-          // https://docs.connectwise.com/ScreenConnect_Documentation/Developers/Integration_guide
-          // e = SessionType. Support, Meet, or Access
-          and strings.icontains(.href_url.query_params, "e=Access")
-          // y = ProcessType (host vs guest)
-          and strings.icontains(.href_url.query_params, "y=Guest")
-          // exclude tenant_domains (if the customer users screenconnect and has their own subdomain)
-          and .href_url.domain.domain not in $tenant_domains
+          (
+            strings.iends_with(.href_url.path, '.msi', '.exe')
+            // https://docs.connectwise.com/ScreenConnect_Documentation/Developers/Integration_guide
+            // e = SessionType. Support, Meet, or Access
+            and strings.icontains(.href_url.query_params, "e=Access")
+            // y = ProcessType (host vs guest)
+            and strings.icontains(.href_url.query_params, "y=Guest")
+            // exclude tenant_domains (if the customer users screenconnect and has their own subdomain)
+            and .href_url.domain.domain not in $tenant_domains
+          )
+          // handle mimecast
+          or (
+            .href_url.domain.root_domain in (
+              "mimecastprotect.com",
+              "mimecast.com"
+            )
+            and any(.href_url.query_params_decoded['domain'],
+                    strings.parse_domain(.).root_domain == "screenconnect.com"
+                    and strings.parse_domain(.).domain not in $tenant_domains
+            )
+          )
   )
 attack_types:
   - "Malware/Ransomware"
