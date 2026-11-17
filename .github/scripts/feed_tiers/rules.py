@@ -12,7 +12,8 @@ predate tiers get an explicit `feed_tier: core` from stamp_core.py before the sy
 Which files have tiers (the folders the platform's feeds read):
 
     detection-rules/, dlp-rules/, automations/, exclusions/   every file; YAML, tier as above
-    yara/*.yar                                                 tier on the first line as `// feed_tier: <tier>`
+    yara/*.yar                                                 `feed_tier = "<tier>"` in each rule's meta, the
+                                                               same in every rule in the file
     insights/, and yara/ files that aren't .yar               no tier: always public
 
 Everything else in the repo isn't managed by the sync at all.
@@ -23,6 +24,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
+import plyara
 import yaml
 
 RULES_DIR = "detection-rules"
@@ -49,8 +51,6 @@ _TIER_LINE = re.compile(rb"^(?:feed_tier|\"feed_tier\"|'feed_tier')[ \t]*:.*?(\r
 # A top-level id line, which set_tier adds a missing feed_tier line above; failing that, a top-level source line.
 _ID_LINE = re.compile(rb"^(?:id|\"id\"|'id')[ \t]*:", re.MULTILINE)
 _SOURCE_LINE = re.compile(rb"^(?:source|\"source\"|'source')[ \t]*:", re.MULTILINE)
-# A YARA file's tier: its first line, a comment.
-_YARA_TIER_LINE = re.compile(rb"\A//[ \t]*feed_tier[ \t]*:[ \t]*([^\s]*)[ \t]*(\r?\n|\Z)")
 
 
 class RuleError(Exception):
@@ -170,35 +170,114 @@ def parse_rule(path: str, content: bytes) -> Rule:
     return Rule(path=path, id=rule_id, name=name if isinstance(name, str) else None, tier=tier)
 
 
-def _parse_yara(path: str, content: bytes) -> Rule:
+def _yara_rules(path: str, content: bytes) -> list[dict]:
     try:
-        content.decode("utf-8")
+        text = content.decode("utf-8")
     except UnicodeDecodeError:
         raise RuleError(path, "is not valid UTF-8")
-    match = _YARA_TIER_LINE.match(content)
-    if match is not None:
-        tier = match.group(1).decode()
-        if tier not in TIERS:
-            raise RuleError(path, f"{TIER_KEY} must be one of {', '.join(TIERS)}, not {tier!r}")
-        rest = content[match.end() :]
+    try:
+        # plyara counts a CRLF as two lines; with LF its line numbers match _lines().
+        rules = plyara.Plyara().parse_string(text.replace("\r\n", "\n"))
+    except Exception as e:  # plyara raises several exception types for bad input
+        raise RuleError(path, f"is not valid YARA: {e}")
+    if not rules:
+        raise RuleError(path, "has no YARA rules")
+    return rules
+
+
+def _yara_rule_tier(path: str, rule: dict) -> str | None:
+    values = [value for entry in rule.get("metadata", []) for key, value in entry.items() if key == TIER_KEY]
+    if not values:
+        return None
+    if len(values) > 1:
+        raise RuleError(path, f"rule {rule['rule_name']} has more than one {TIER_KEY} in its meta")
+    if not isinstance(values[0], str) or values[0] not in TIERS:
+        raise RuleError(path, f"{TIER_KEY} must be one of {', '.join(TIERS)}, not {values[0]!r} (rule {rule['rule_name']})")
+    return values[0]
+
+
+def _parse_yara(path: str, content: bytes) -> Rule:
+    """A YARA file's tier is the feed_tier in each rule's meta. The platform syncs a .yar file as a whole, so every
+    rule in it must agree (all with the same value, or all without one)."""
+    tiers = {rule["rule_name"]: _yara_rule_tier(path, rule) for rule in _yara_rules(path, content)}
+    distinct = set(tiers.values())
+    if len(distinct) > 1:
+        detail = ", ".join(f"{name}: {tier or 'none'}" for name, tier in tiers.items())
+        raise RuleError(
+            path,
+            f"every rule in a YARA file must have the same {TIER_KEY} in its meta, since the file is synced as a "
+            f"whole; split it into files to give rules different tiers ({detail})",
+        )
+    return Rule(path=path, id=None, name=None, tier=distinct.pop())
+
+
+_META_HEADER = re.compile(r"^([ \t]*)meta[ \t]*:[ \t]*(?://.*)?$")
+_SECTION_HEADER = re.compile(r"^([ \t]*)(?:strings|condition)[ \t]*:[ \t]*(?://.*)?$")
+_META_ENTRY = re.compile(r"^([ \t]*)[A-Za-z_][A-Za-z0-9_]*[ \t]*=")
+_META_TIER = re.compile(r'^([ \t]*feed_tier[ \t]*=[ \t]*)"[^"]*"')
+
+
+def _lines(text: str) -> list[str]:
+    """Lines with their endings, split only at newlines (str.splitlines also splits at form feeds and others)."""
+    parts = text.split("\n")
+    lines = [part + "\n" for part in parts[:-1]]
+    return lines + [parts[-1]] if parts[-1] else lines
+
+
+def _line_ending(line: str) -> str:
+    return line[len(line.rstrip("\r\n")) :] or "\n"
+
+
+def _set_tier_in_rule(path: str, rule: dict, lines: list[str], tier: str) -> list[str]:
+    """lines are one rule's lines, with their endings. Sets feed_tier in its meta, adding a meta section if needed."""
+    bare = [line.rstrip("\r\n") for line in lines]
+    meta = next((i for i, line in enumerate(bare) if _META_HEADER.match(line)), None)
+    value = f'{TIER_KEY} = "{tier}"'
+    if meta is None:
+        if rule.get("metadata"):
+            raise RuleError(path, f"can't find the meta: line of rule {rule['rule_name']}")
+        section = next((i for i, line in enumerate(bare) if _SECTION_HEADER.match(line)), None)
+        if section is None:
+            raise RuleError(path, f"can't find where to add meta to rule {rule['rule_name']}")
+        indent = _SECTION_HEADER.match(bare[section]).group(1)
+        newline = _line_ending(lines[section])
+        added = [f"{indent}meta:{newline}", f"{indent * 2 or '    '}{value}{newline}"]
+        return lines[:section] + added + lines[section:]
+
+    end = next((i for i in range(meta + 1, len(bare)) if _SECTION_HEADER.match(bare[i])), len(bare) - 1)
+    for i in range(meta + 1, end):
+        match = _META_TIER.match(bare[i])
+        if match:
+            return lines[:i] + [match.group(1) + f'"{tier}"' + lines[i][match.end() :]] + lines[i + 1 :]
+    entries = [i for i in range(meta + 1, end) if _META_ENTRY.match(bare[i])]
+    after = entries[-1] if entries else meta
+    if entries:
+        indent = _META_ENTRY.match(bare[entries[-1]]).group(1)
     else:
-        tier, rest = None, content
-    if TIER_KEY.encode() in rest:
-        raise RuleError(path, f"{TIER_KEY} must only appear on the first line, as `// {TIER_KEY}: <tier>`")
-    return Rule(path=path, id=None, name=None, tier=tier)
+        indent = _META_HEADER.match(bare[meta]).group(1) * 2 or "    "
+    return lines[: after + 1] + [f"{indent}{value}{_line_ending(lines[after])}"] + lines[after + 1 :]
+
+
+def _without_tier(rule: dict) -> tuple:
+    metadata = [entry for entry in rule.get("metadata", []) if TIER_KEY not in entry]
+    return (rule["rule_name"], rule.get("scopes"), rule.get("tags"), metadata, rule.get("raw_strings"), rule.get("raw_condition"))
 
 
 def _set_yara_tier(path: str, content: bytes, tier: str) -> bytes:
-    rule = _parse_yara(path, content)
-    if rule.tier is not None:
-        match = _YARA_TIER_LINE.match(content)
-        newline = match.group(2) or (b"\r\n" if b"\r\n" in content else b"\n")
-        updated = f"// {TIER_KEY}: {tier}".encode() + newline + content[match.end() :]
-    else:
-        newline = b"\r\n" if b"\r\n" in content else b"\n"
-        updated = f"// {TIER_KEY}: {tier}".encode() + newline + content
-    if _parse_yara(path, updated).tier != tier:
-        raise RuleError(path, f"couldn't set {TIER_KEY}")
+    _parse_yara(path, content)
+    rules = _yara_rules(path, content)
+    lines = _lines(content.decode("utf-8"))
+    # From the last rule up, so earlier rules' line numbers stay right.
+    for rule in sorted(rules, key=lambda r: r["start_line"], reverse=True):
+        start, stop = rule["start_line"] - 1, rule["stop_line"]
+        lines[start:stop] = _set_tier_in_rule(path, rule, lines[start:stop], tier)
+    updated = "".join(lines).encode("utf-8")
+
+    after = _yara_rules(path, updated)
+    if [_without_tier(r) for r in after] != [_without_tier(r) for r in rules] or any(
+        _yara_rule_tier(path, r) != tier for r in after
+    ):
+        raise RuleError(path, f"changing {TIER_KEY} would change other parts of the file")
     return updated
 
 
@@ -207,7 +286,8 @@ def set_tier(path: str, content: bytes, tier: str) -> bytes:
 
     A rule with no feed_tier line gets one above its top-level id line if it has exactly one, else above its top-level
     source line if it has exactly one (automations and exclusions have no id, and often end in a source block with no
-    final newline, which a line after it would change), else at the end. A YARA file's line is always its first.
+    final newline, which a line after it would change), else at the end. In a YARA file, every rule gets
+    `feed_tier = "<tier>"` as its last meta entry (and a meta section if it has none).
     """
     if tier not in TIERS:
         raise ValueError(f"unknown tier {tier!r}")

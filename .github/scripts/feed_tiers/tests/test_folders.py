@@ -26,12 +26,22 @@ from rules import (
     set_tier,
 )
 
-YARA = b"rule x\n{\n    condition:\n        true\n}\n"
+YARA = b'rule x\n{\n    meta:\n        author = "a"\n    condition:\n        true\n}\n'
 YAML_FOLDERS = ["automations", "detection-rules", "dlp-rules", "exclusions"]
 
 
-def yara(tier=None, body=YARA):
-    return (f"// feed_tier: {tier}\n".encode() if tier else b"") + body
+def yara(tier=None):
+    """YARA, with feed_tier as its last meta entry, where set_tier puts it."""
+    if tier is None:
+        return YARA
+    return YARA.replace(b'author = "a"\n', f'author = "a"\n        feed_tier = "{tier}"\n'.encode())
+
+
+TWO_RULES = (
+    b'rule a\n{\n\tmeta:\n\t\tauthor = "x"\n\t\tdate = "2026-01-01"\n\n\tstrings:\n\t\t$s = "a"\n\tcondition:\n\t\t$s\n}\n'
+    b"\n"
+    b"rule b : tag1\n{\n    strings:\n        $s = { 50 4b }\n    condition:\n        $s at 0\n}\n"
+)
 
 
 def entries(files):
@@ -85,60 +95,90 @@ class TestYamlFolders:
 class TestYara:
     P = "yara/x.yar"
 
-    def test_no_line_is_core_with_delay(self):
-        rule = parse_rule(self.P, yara())
+    def test_no_key_is_core_with_delay(self):
+        rule = parse_rule(self.P, YARA)
         assert (rule.tier, rule.effective_tier, rule.is_public) == (None, CORE_WITH_DELAY, False)
 
     @pytest.mark.parametrize("tier", [CORE, CORE_WITH_DELAY, ENTERPRISE_ONLY])
-    def test_first_line(self, tier):
-        assert parse_rule(self.P, yara(tier)).tier == tier
+    def test_meta(self, tier):
+        rule = parse_rule(self.P, yara(tier))
+        assert rule.tier == tier and rule.is_public is (tier == CORE)
 
-    @pytest.mark.parametrize("line", [b"//feed_tier:core\n", b"//   feed_tier :  core  \n", b"// feed_tier: core\r\n"])
-    def test_spacing_and_crlf(self, line):
-        assert parse_rule(self.P, line + YARA).tier == CORE
+    def test_every_rule_agreeing(self):
+        both = set_tier(self.P, TWO_RULES, CORE)
+        assert parse_rule(self.P, both).tier == CORE
 
-    def test_enterprise_only_is_private(self):
-        rule = parse_rule(self.P, yara(ENTERPRISE_ONLY))
-        assert rule.tier == ENTERPRISE_ONLY and not rule.is_public
+    def test_rules_disagreeing_fails(self):
+        one = TWO_RULES.replace(b'\t\tdate = "2026-01-01"\n', b'\t\tdate = "2026-01-01"\n\t\tfeed_tier = "core"\n')
+        with pytest.raises(RuleError, match=r"every rule in a YARA file must have the same feed_tier .*\(a: core, b: none\)"):
+            parse_rule(self.P, one)
 
-    @pytest.mark.parametrize("tier", ["Core", "enterprise", ""])
-    def test_unknown_tier_fails(self, tier):
+    @pytest.mark.parametrize("value", ['"Core"', '"enterprise"', '""', "true", "1"])
+    def test_unknown_tier_fails(self, value):
+        content = YARA.replace(b'author = "a"\n', f'author = "a"\n        feed_tier = {value}\n'.encode())
         with pytest.raises(RuleError, match="must be one of core, core_with_delay, enterprise_only"):
-            parse_rule(self.P, f"// feed_tier: {tier}\n".encode() + YARA)
+            parse_rule(self.P, content)
+
+    def test_twice_in_one_rule_fails(self):
+        content = yara(CORE).replace(b'feed_tier = "core"\n', b'feed_tier = "core"\n        feed_tier = "core"\n')
+        with pytest.raises(RuleError, match="more than one feed_tier"):
+            parse_rule(self.P, content)
 
     @pytest.mark.parametrize(
         "content",
         [
-            b"rule x { condition: true }\n// feed_tier: core\n",  # not the first line
-            b"\n// feed_tier: core\n" + YARA,  # not the first line either
-            yara(CORE) + b"// feed_tier: core\n",  # twice
-            b"/* feed_tier: core */\n" + YARA,  # not a line comment
-            b"// feed_tier: core # public\n" + YARA,  # extra text
+            b"// feed_tier: core\n" + YARA,  # a comment isn't meta
+            YARA.replace(b"    condition:", b'    strings:\n        $feed_tier = "core"\n    condition:\n        $feed_tier or'),
         ],
     )
-    def test_anywhere_else_fails(self, content):
-        with pytest.raises(RuleError, match="must only appear on the first line"):
+    def test_feed_tier_outside_meta_is_ignored(self, content):
+        assert parse_rule(self.P, content).tier is None
+
+    @pytest.mark.parametrize("content", [b"rule x { condition: }", b"not yara at all {", b""])
+    def test_invalid_or_empty_fails(self, content):
+        with pytest.raises(RuleError, match="is not valid YARA|has no YARA rules"):
             parse_rule(self.P, content)
 
     def test_not_utf8_fails(self):
         with pytest.raises(RuleError, match="UTF-8"):
             parse_rule(self.P, b"\xff\xfe" + YARA)
 
-    def test_set_tier_adds_the_first_line(self):
-        assert set_tier(self.P, YARA, CORE) == b"// feed_tier: core\n" + YARA
-
-    def test_set_tier_replaces_the_first_line(self):
-        assert set_tier(self.P, yara(CORE_WITH_DELAY), CORE) == yara(CORE)
-
-    def test_set_tier_keeps_crlf(self):
-        body = YARA.replace(b"\n", b"\r\n")
-        assert set_tier(self.P, body, CORE) == b"// feed_tier: core\r\n" + body
-        assert set_tier(self.P, b"// feed_tier: core_with_delay\r\n" + body, CORE) == b"// feed_tier: core\r\n" + body
+    @pytest.mark.parametrize("tier", [CORE, CORE_WITH_DELAY, ENTERPRISE_ONLY])
+    def test_set_tier_adds_it_last_in_meta(self, tier):
+        assert set_tier(self.P, YARA, tier) == yara(tier)
 
     @pytest.mark.parametrize("tier", [CORE, CORE_WITH_DELAY, ENTERPRISE_ONLY])
-    def test_set_tier_any_tier(self, tier):
-        assert set_tier(self.P, YARA, tier) == yara(tier)
+    def test_set_tier_replaces_the_value(self, tier):
         assert set_tier(self.P, yara(CORE_WITH_DELAY), tier) == yara(tier)
+
+    def test_set_tier_every_rule_with_its_own_indentation_and_a_new_meta_section(self):
+        expected = (
+            b'rule a\n{\n\tmeta:\n\t\tauthor = "x"\n\t\tdate = "2026-01-01"\n\t\tfeed_tier = "core"\n\n\tstrings:\n'
+            b'\t\t$s = "a"\n\tcondition:\n\t\t$s\n}\n'
+            b"\n"
+            b'rule b : tag1\n{\n    meta:\n        feed_tier = "core"\n    strings:\n        $s = { 50 4b }\n'
+            b"    condition:\n        $s at 0\n}\n"
+        )
+        assert set_tier(self.P, TWO_RULES, CORE) == expected
+
+    def test_set_tier_keeps_crlf(self):
+        crlf = TWO_RULES.replace(b"\n", b"\r\n")
+        stamped = set_tier(self.P, crlf, CORE)
+        assert b"\n" not in stamped.replace(b"\r\n", b"")
+        assert stamped == set_tier(self.P, TWO_RULES, CORE).replace(b"\n", b"\r\n")
+
+    def test_set_tier_with_meta_on_the_rule_line_fails_safely(self):
+        content = b'rule x { meta: author = "a" condition: true }\n'
+        with pytest.raises(RuleError, match="can't find the meta: line"):
+            set_tier(self.P, content, CORE)
+
+    def test_set_tier_on_a_one_line_rule_fails_safely(self):
+        with pytest.raises(RuleError, match="can't find where to add meta"):
+            set_tier(self.P, b"rule x { condition: true }\n", CORE)
+
+    def test_set_tier_leaves_comments_and_imports(self):
+        content = b'import "pe"\n// header\n/* block\n   comment */\n' + YARA
+        assert set_tier(self.P, content, CORE) == b'import "pe"\n// header\n/* block\n   comment */\n' + yara(CORE)
 
     def test_non_yar_files_are_always_public(self):
         rule = parse_rule("yara/sublime_yara_test.zip", b"PK\x03\x04\xff\xfe binary")
@@ -250,7 +290,7 @@ class TestTierCheck:
         "path, content",
         [
             ("automations/core.yml", rule_yaml("a-core", tier=ENTERPRISE_ONLY, rule_id_=None)),
-            ("yara/core.yar", YARA),  # removing the line
+            ("yara/core.yar", YARA),  # removing the meta entry
         ],
     )
     def test_demotion_fails(self, path, content):

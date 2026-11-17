@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-"""Adds `feed_tier: core` to every file in a checkout that has a tier but no feed_tier key (YARA files get
-`// feed_tier: core` as their first line).
+"""Adds `feed_tier: core` to every file in a checkout that has a tier but no feed_tier key (in a YARA file,
+every rule gets `feed_tier = "core"` in its meta).
 
     stamp_core.py --repo . [--dry-run true]
 

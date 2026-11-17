@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Adds `feed_tier: core_with_delay` to rules a PR adds or changes without a feed_tier key, and says so on the PR.
 
-Every folder with tiers counts (see rules.TIERED_DIRS); a YARA file gets `// feed_tier: core_with_delay` as its first
-line.
+Every folder with tiers counts (see rules.TIERED_DIRS); in a YARA file, every rule gets
+`feed_tier = "core_with_delay"` in its meta.
 
     default_tier.py --repo . --base <sha> --head <sha> --branch <pr branch> --github-repo owner/name --pr <number>
 
