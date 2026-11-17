@@ -1,0 +1,30 @@
+name: "Brand impersonation: Sendo invitation"
+description: "Detects inbound messages that embed images hosted on sendomatic.com—typically used in legitimate invitation templates—while the sender's domain and DMARC alignment do not correspond to an authentic sendomatic.com sender. This mismatch indicates the hosted imagery is being reused to lend false credibility to a message that did not originate from sendomatic.com."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  // sendomatic hosted imagery retained from the genuine invitation template
+  and any(html.xpath(body.html, '//img/@src').nodes,
+          // calling parse_url allows url decoding to help us
+          strings.parse_url(.raw).domain.root_domain == 'sendomatic.com'
+  )
+  // not a genuine invitation sent by sendomatic
+  and not (
+    sender.email.domain.root_domain == 'sendomatic.com'
+    and coalesce(headers.auth_summary.dmarc.pass, false)
+  )
+attack_types:
+  - "Spam"
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Image as content"
+  - "Social engineering"
+  - "Spoofing"
+detection_methods:
+  - "HTML analysis"
+  - "URL analysis"
+  - "Header analysis"
+  - "Sender analysis"
+id: "26899e1b-38ae-5229-83cc-0acc17cc7360"
