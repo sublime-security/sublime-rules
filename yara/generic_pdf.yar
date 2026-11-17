@@ -1032,3 +1032,14 @@ rule pdf_click_to_view_red_lure {
 		and $image
 }
 
+rule pdf_w9_signature_update {
+	meta:
+		author      = "kyle eaton"
+		date        = "2026-11-17"
+		description = "PDF containing jpeg bytes related to a set of fake W9 signatures."
+	strings:
+		$image = { FF DA 00 0C 03 00 00 01 11 02 11 00 3F 00 95 22 22 02 22 20 22 22 02 22 20 22 22 02 22 20 22 22 02 22 20 22 22 02 22 20 22 22 02 22 20 22 22 02 22 20 22 22 02 22 20 22 22 02 22 20 22 22 02 22 20 22 22 02 22 20 22 22 02 22 20 22 22 02 22 20 22 22 02 22 20 22 22 02 22 20 22 22 02 22 20 22 22 02 22 20 22 22 02 22 20 22 22 02 22 20 22 22 02 22 20 22 22 02 22 20 22 22 02 22 20 22 22 02 22 20 22 22 02 22 20 22 22 02 22 20 22 22 02 22 20 22 22 02 22 20 22 22 02 22 20 22 22 02 22 20 22 22 02 22 20 22 22 02 22 20 22 22 0F FF D0 95 22 22 02 22 20 22 22 02 2E 6A 2A 19 F1 29 9B 05 3C 6E 92 47 5F 4B 5A 2E E3 60 49 DB BC 16 5B D2 8D }
+	condition:
+		uint32be(0) == 0x25504446
+		and $image
+}
