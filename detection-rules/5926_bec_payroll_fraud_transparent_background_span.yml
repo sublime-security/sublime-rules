@@ -1,0 +1,62 @@
+name: "PR# 5926 - BEC/Fraud: Payroll diversion with with recipient name in transparent background span"
+description: "Detects inbound, non-reply messages from free email providers that reference payroll, direct deposit, or salary topics and contains a HTML span (transparent background color) embedding the recipient's email username."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and not (
+    (subject.is_reply or subject.is_forward)
+    and (length(headers.references) > 0 or headers.in_reply_to is not null)
+  )
+  and sender.email.domain.root_domain in $free_email_providers
+  and (
+    length(body.current_thread.text) < 800
+    or (
+      any(map(filter(ml.nlu_classifier(body.current_thread.text).entities,
+                     .name == "disclaimer"
+              ),
+              .text
+          ),
+          (length(body.current_thread.text) - length(.)) < 800
+      )
+    )
+  )
+  and any(html.xpath(body.html,
+                     "//span[contains(@style,'background-color:transparent')]"
+          ).nodes,
+          .display_text != ''
+          and length(.display_text) > 2
+          and strings.icontains(recipients.to[0].email.local_part, .display_text)
+  )
+  and all(html.xpath(body.html,
+                     "//span[contains(@style,'background-color:transparent')]"
+          ).nodes,
+          length(.display_text) < 30
+  )
+  and 1 of (
+    regex.icontains(body.current_thread.text,
+                    '(?:pay\s?(?:roll|check|date|day)|direct deposit|(?:acct|account) rephrase|paid.{0,50}problems|\bACH\b|\bdd\b|gehalt|salario|salary|employee self[-\s]?service|\bESS\b.{0,30}(?:portal|access|log[-\s]?in)|access.{0,30}(?:HR|employee).{0,30}portal)'
+    ),
+    regex.icontains(subject.subject,
+                    '(?:pay\s?(?:roll|check|date|day)|direct deposit|(?:acct|account) rephrase|paid.{0,50}problems|\bACH\b|\bdd\b|gehalt|salario|salary|employee self[-\s]?service|\bESS\b.{0,15}portal)'
+    )
+  )
+attack_types:
+  - "BEC/Fraud"
+tactics_and_techniques:
+  - "Free email provider"
+  - "Evasion"
+  - "Social engineering"
+detection_methods:
+  - "HTML analysis"
+  - "Content analysis"
+  - "Natural Language Understanding"
+  - "Header analysis"
+  - "Sender analysis"
+id: "76579865-f777-5d3a-9d67-3bd44146d3ad"
+tags:
+  - created_from_open_prs
+  - rule_status_added
+  - pr_author_D-Bolton
+references:
+  - https://github.com/sublime-security/sublime-rules/pull/5926
