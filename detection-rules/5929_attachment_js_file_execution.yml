@@ -1,0 +1,60 @@
+name: "Attachment: File execution via Javascript"
+description: |
+  Javascript contains identifiers or strings that may attempt to execute files.
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and any(attachments,
+          .file_type in $file_extensions_common_archives
+          and any(file.explode(.),
+                  any(.scan.javascript.identifiers,
+                      strings.ilike(.,
+                                    'activexobject',
+                                    'shellexecute',
+                                    'wscript',
+                                    'createobject'
+                      )
+                  )
+                  or (
+                    length(.scan.javascript.strings) > 0
+                    and all(.scan.javascript.strings,
+                            strings.ilike(., 'shell.application', '*.exe')
+                    )
+                  )
+                  or any(.scan.javascript.strings,
+                         strings.ilike(.,
+                                       'wscript.shell',
+                                       'adodb.stream',
+                                       'winhttp.winhttprequest*',
+                                       'msxml2.xmlhttp*',
+                                       'system.net.webclient'
+                         )
+                  )
+                  or (
+                    .file_extension == "js"
+                    and regex.icontains(.scan.strings.raw,
+                                        '(?:wscript\.shell|adodb\.stream|winhttp\.winhttprequest|msxml2\.xmlhttp|system\.net\.webclient)'
+                    )
+                    and regex.icontains(.scan.strings.raw,
+                                        '(?:savetofile|shellexecute|downloadfile)'
+                    )
+                  )
+          )
+  )
+tags:
+  - "Attack surface reduction"
+attack_types:
+  - "Malware/Ransomware"
+tactics_and_techniques:
+  - "Evasion"
+  - "Scripting"
+detection_methods:
+  - "Archive analysis"
+  - "File analysis"
+  - "Javascript analysis"
+  - "Sender analysis"
+id: "7e39c492-e312-5c13-9453-d01b694200cd"
+og_id: "627ae0b1-fbe7-58cf-ba7d-0cf51b806c8a"
+testing_pr: 5929
+testing_sha: c3ac851c5a5d396982f9e8c768c53418eee611e6
