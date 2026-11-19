@@ -1,4 +1,5 @@
-"""Tiers beyond detection-rules/: automations, exclusions, DLP rules and YARA, plus the always-public folders."""
+"""Tiers beyond detection-rules/: exclusions and YARA, plus the always-public folders. dlp-rules/ and automations/
+aren't synced: every script must leave them alone."""
 
 from datetime import datetime, timedelta, timezone
 
@@ -29,7 +30,8 @@ from rules import (
 )
 
 YARA = b'rule x\n{\n    meta:\n        author = "a"\n    condition:\n        true\n}\n'
-YAML_FOLDERS = ["automations", "detection-rules", "dlp-rules", "exclusions"]
+YAML_FOLDERS = ["detection-rules", "exclusions"]
+UNSYNCED_FOLDERS = ["automations", "dlp-rules"]
 
 
 def yara(tier=None, name="x"):
@@ -57,8 +59,8 @@ class TestWhichFilesHaveTiers:
         [
             ("detection-rules/a.yml", True, True),
             ("detection-rules/no_extension", True, True),
-            ("dlp-rules/a.yml", True, True),
-            ("automations/a.yml", True, True),
+            ("dlp-rules/a.yml", False, False),
+            ("automations/a.yml", False, False),
             ("exclusions/a.yml", True, True),
             ("yara/a.yar", True, True),
             ("yara/sublime_yara_test.zip", True, False),
@@ -74,7 +76,7 @@ class TestWhichFilesHaveTiers:
         assert has_tier(path) is tiered
 
     def test_managed_dirs(self):
-        assert MANAGED_DIRS == ("automations", "detection-rules", "dlp-rules", "exclusions", "insights", "yara")
+        assert MANAGED_DIRS == ("detection-rules", "exclusions", "insights", "yara")
 
 
 class TestYamlFolders:
@@ -91,8 +93,16 @@ class TestYamlFolders:
             parse_rule(f"{folder}/r.yml", rule_yaml("r", tier="Core", rule_id_=None))
 
     def test_duplicate_id_across_folders_fails(self):
-        _, errors = parse_rules({"detection-rules/a.yml": rule_yaml("same"), "dlp-rules/b.yml": rule_yaml("same")})
+        _, errors = parse_rules({"detection-rules/a.yml": rule_yaml("same"), "exclusions/b.yml": rule_yaml("same")})
         assert len(errors) == 1 and "is used by more than one rule" in errors[0]
+
+
+class TestUnsyncedFolders:
+    @pytest.mark.parametrize("folder", [*UNSYNCED_FOLDERS, "discovery-rules"])
+    def test_parsing_refuses(self, folder):
+        # Rather than reading it as always public, which would publish it if a caller forgot to filter by folder.
+        with pytest.raises(RuleError, match="isn't in a folder the sync manages"):
+            parse_rule(f"{folder}/r.yml", rule_yaml("r", tier=CORE))
 
 
 class TestYara:
@@ -206,12 +216,9 @@ class TestAlwaysPublic:
 PRIVATE = {
     "detection-rules/core.yml": rule_yaml("d-core", tier=CORE),
     "detection-rules/ent.yml": rule_yaml("d-ent", tier=ENTERPRISE_ONLY),
-    "dlp-rules/core.yml": rule_yaml("dlp-core", tier=CORE),
-    "dlp-rules/delayed.yml": rule_yaml("dlp-delayed", tier=CORE_WITH_DELAY),
-    "automations/core.yml": rule_yaml("a-core", tier=CORE, rule_id_=None),
-    "automations/nokey.yml": rule_yaml("a-nokey", tier=None, rule_id_=None),
     "exclusions/core.yml": rule_yaml("e-core", tier=CORE, rule_id_=None),
     "exclusions/ent.yml": rule_yaml("e-ent", tier=ENTERPRISE_ONLY, rule_id_=None),
+    "exclusions/nokey.yml": rule_yaml("e-nokey", tier=None, rule_id_=None),
     "yara/core.yar": yara(CORE, "y_core"),
     "yara/delayed.yar": yara(CORE_WITH_DELAY, "y_delayed"),
     "yara/ent.yar": yara(ENTERPRISE_ONLY, "y_ent"),
@@ -221,12 +228,22 @@ PRIVATE = {
 }
 PUBLIC = {
     "detection-rules/core.yml",
-    "dlp-rules/core.yml",
-    "automations/core.yml",
     "exclusions/core.yml",
     "yara/core.yar",
     "yara/sublime_yara_test.zip",
     "insights/category/q.yml",
+}
+# What the private repo has in the unsynced folders: nothing here is ever read, so even a bad tier is fine.
+UNSYNCED_PRIVATE = {
+    "dlp-rules/core.yml": rule_yaml("dlp-core", tier=CORE),
+    "dlp-rules/ent.yml": rule_yaml("dlp-ent", tier=ENTERPRISE_ONLY),
+    "automations/nokey.yml": rule_yaml("a-nokey", tier=None, rule_id_=None),
+    "automations/bad.yml": rule_yaml("a-bad", tier="Core", rule_id_=None),
+}
+# The public repo's own copies, which the sync must keep as they are.
+UNSYNCED_PUBLIC = {
+    "dlp-rules/core.yml": rule_yaml("dlp-core-public", tier=None),
+    "automations/public.yml": rule_yaml("a-public", tier=None, rule_id_=None),
 }
 
 
@@ -244,9 +261,9 @@ class TestProjection:
     @pytest.mark.parametrize(
         "path, demoted",
         [
-            ("automations/core.yml", rule_yaml("a-core", tier=ENTERPRISE_ONLY, rule_id_=None)),
+            ("exclusions/core.yml", rule_yaml("e-core", tier=ENTERPRISE_ONLY, rule_id_=None)),
             ("exclusions/core.yml", rule_yaml("e-core", tier=None, rule_id_=None)),
-            ("dlp-rules/core.yml", rule_yaml("dlp-core", tier=CORE_WITH_DELAY)),
+            ("detection-rules/core.yml", rule_yaml("d-core", tier=CORE_WITH_DELAY)),
             ("yara/core.yar", yara(CORE_WITH_DELAY, "y_core")),
             ("yara/core.yar", yara(ENTERPRISE_ONLY, "y_core")),
             ("yara/core.yar", yara(None, "y_core")),
@@ -268,7 +285,7 @@ class TestTierCheck:
     def check(self, head, enabled=True):
         return tier_check.check(entries(self.BASE), entries({**self.BASE, **head}), enabled)
 
-    @pytest.mark.parametrize("folder", ["automations", "exclusions", "dlp-rules"])
+    @pytest.mark.parametrize("folder", ["exclusions"])
     @pytest.mark.parametrize("tier", [None, CORE, CORE_WITH_DELAY, ENTERPRISE_ONLY])
     def test_new_yaml_rule_any_tier(self, folder, tier):
         assert self.check({f"{folder}/new.yml": rule_yaml(f"{folder}-new", tier=tier, rule_id_=None)}) == []
@@ -283,11 +300,11 @@ class TestTierCheck:
 
     def test_gate_applies_to_every_folder(self):
         head = {
-            "automations/new.yml": rule_yaml("a-new", tier=None, rule_id_=None),
+            "exclusions/new.yml": rule_yaml("e-new", tier=None, rule_id_=None),
             "yara/new.yar": yara(CORE_WITH_DELAY, "y_new"),
             "exclusions/core2.yml": rule_yaml("e-core2", tier=CORE, rule_id_=None),
         }
-        assert [p for p, _ in self.check(head, enabled=False)] == ["automations/new.yml", "yara/new.yar"]
+        assert [p for p, _ in self.check(head, enabled=False)] == ["exclusions/new.yml", "yara/new.yar"]
 
     def test_always_public_files_pass_even_with_the_gate_off(self):
         head = {"insights/new.yml": b"anything\n", "yara/other.zip": b"\x00"}
@@ -296,13 +313,29 @@ class TestTierCheck:
     @pytest.mark.parametrize(
         "path, content",
         [
-            ("automations/core.yml", rule_yaml("a-core", tier=ENTERPRISE_ONLY, rule_id_=None)),
+            ("exclusions/core.yml", rule_yaml("e-core", tier=ENTERPRISE_ONLY, rule_id_=None)),
             ("yara/core.yar", yara(None, "y_core")),  # removing the meta entry
         ],
     )
     def test_demotion_fails(self, path, content):
         [(got, problem)] = self.check({path: content})
         assert got == path and "Rules are never demoted" in problem
+
+    def test_unsynced_folders_are_ignored(self, tmp_path):
+        # Through main, which reads the trees the way the workflow does: any tier, a bad tier, the gate off, a core rule
+        # becoming enterprise_only and a reused id all pass.
+        repo = Repo(tmp_path / "r")
+        repo.commit({**UNSYNCED_PRIVATE, "detection-rules/d.yml": rule_yaml("d-id", tier=CORE)})
+        base = run_git(repo.path, "rev-parse", "HEAD").strip()
+        repo.commit(
+            {
+                "dlp-rules/core.yml": rule_yaml("dlp-core", tier=ENTERPRISE_ONLY),
+                "dlp-rules/copy.yml": rule_yaml("d-id", tier=None),
+                "automations/new.yml": rule_yaml("a-new", tier="nonsense", rule_id_=None),
+            }
+        )
+        args = ["--repo", str(repo.path), "--base", base, "--non-core-tiers-enabled", "false"]
+        assert tier_check.main(args) == 0
 
 
 @pytest.fixture
@@ -313,6 +346,7 @@ def stamp_repo(tmp_path):
             "automations/a.yml": rule_yaml("a", tier=None, rule_id_=None),
             "exclusions/e.yml": rule_yaml("e", tier=None, rule_id_=None),
             "dlp-rules/d.yml": rule_yaml("d", tier=None),
+            "detection-rules/r.yml": rule_yaml("r", tier=None),
             "yara/y.yar": YARA,
             "yara/t.zip": b"PK binary",
             "insights/q.yml": b"name: q\n",
@@ -323,29 +357,32 @@ def stamp_repo(tmp_path):
 
 
 class TestRealShapes:
-    def test_automation_ending_in_source_with_no_final_newline(self):
-        # automations/remediate_messages_via_herd_immunity.yml today.
+    # Shapes taken from automations/ files. That folder isn't synced any more, but exclusions/ files have the same shape:
+    # no id, and a source line last.
+    def test_ending_in_source_with_no_final_newline(self):
+        # automations/remediate_messages_via_herd_immunity.yml.
         content = (
             b'name: "Remediate"\ntype: "triage_rule"\ntriage_abuse_reports: true\n'
             b'default_actions: ["quarantine_message"]\nsource: |\n  type.inbound\n  and triage.user_reports.count > 5'
         )
-        stamped = set_tier("automations/r.yml", content, CORE)
+        stamped = set_tier("exclusions/r.yml", content, CORE)
         assert stamped == content.replace(b"source: |", b"feed_tier: core\nsource: |")
 
-    def test_automation_with_plain_source_and_no_final_newline(self):
-        # automations/acknowledge_user_report.yml today.
+    def test_plain_source_and_no_final_newline(self):
+        # automations/acknowledge_user_report.yml.
         content = b'name: "Ack"\ntype: "triage_rule"\nsource: true'
-        assert set_tier("automations/a.yml", content, CORE) == b'name: "Ack"\ntype: "triage_rule"\nfeed_tier: core\nsource: true'
+        assert set_tier("exclusions/a.yml", content, CORE) == b'name: "Ack"\ntype: "triage_rule"\nfeed_tier: core\nsource: true'
 
 
 class TestStamp:
     def test_every_tiered_folder(self, stamp_repo):
         stamped = stamp_core.stamp(stamp_repo.path)
-        assert stamped == ["automations/a.yml", "dlp-rules/d.yml", "exclusions/e.yml", "yara/y.yar"]
+        assert stamped == ["detection-rules/r.yml", "exclusions/e.yml", "yara/y.yar"]
         assert (stamp_repo.path / "yara/y.yar").read_bytes() == yara(CORE)
-        automation = rule_yaml("a", tier=None, rule_id_=None).replace(b"source: |", b"feed_tier: core\nsource: |")
-        assert (stamp_repo.path / "automations/a.yml").read_bytes() == automation
-        for untouched in ("yara/t.zip", "insights/q.yml", "discovery-rules/x.yml"):
+        exclusion = rule_yaml("e", tier=None, rule_id_=None).replace(b"source: |", b"feed_tier: core\nsource: |")
+        assert (stamp_repo.path / "exclusions/e.yml").read_bytes() == exclusion
+        untouched = ("automations/a.yml", "dlp-rules/d.yml", "yara/t.zip", "insights/q.yml", "discovery-rules/x.yml")
+        for untouched in untouched:
             assert (stamp_repo.path / untouched).read_bytes() == stamp_repo.read(untouched)
 
 
@@ -365,19 +402,34 @@ def repos(tmp_path):
 class TestSyncAndGuard:
     def test_syncs_each_folder_and_the_guard_passes(self, repos):
         private, public = repos
-        private.commit(PRIVATE)
+        public.commit(UNSYNCED_PUBLIC)
+        private.commit({**PRIVATE, **UNSYNCED_PRIVATE})
         result = sync.sync(str(private.path), str(public.path))
         assert result.commit is not None
         tree = read_tree(public.path, "HEAD", MANAGED_DIRS)
         assert {p: e.content for p, e in tree.items()} == {p: PRIVATE[p] for p in PUBLIC}
         assert guard.main(["--repo", str(public.path)]) == 0
 
+    def test_leaves_the_public_unsynced_folders_alone(self, repos):
+        private, public = repos
+        public.commit(UNSYNCED_PUBLIC)
+        private.commit({**PRIVATE, **UNSYNCED_PRIVATE})
+        sync.sync(str(private.path), str(public.path))
+        unsynced = read_tree(public.path, "HEAD", tuple(UNSYNCED_FOLDERS))
+        assert {p: e.content for p, e in unsynced.items()} == UNSYNCED_PUBLIC
+
+        # A change only in the unsynced folders makes no commit.
+        head = run_git(public.path, "rev-parse", "HEAD").strip()
+        private.commit({"dlp-rules/new.yml": rule_yaml("dlp-new", tier=CORE), "automations/nokey.yml": None})
+        assert sync.sync(str(private.path), str(public.path)).commit is None
+        assert run_git(public.path, "rev-parse", "HEAD").strip() == head
+
     @pytest.mark.parametrize(
         "path, content",
         [
-            ("automations/leak.yml", rule_yaml("leak", tier=ENTERPRISE_ONLY, rule_id_=None)),
+            ("exclusions/leak.yml", rule_yaml("leak", tier=ENTERPRISE_ONLY, rule_id_=None)),
             ("exclusions/leak.yml", rule_yaml("leak", tier=None, rule_id_=None)),
-            ("dlp-rules/leak.yml", rule_yaml("leak", tier=CORE_WITH_DELAY)),
+            ("detection-rules/leak.yml", rule_yaml("leak", tier=CORE_WITH_DELAY)),
             ("yara/leak.yar", yara(CORE_WITH_DELAY)),
             ("yara/leak.yar", yara(ENTERPRISE_ONLY)),
             ("yara/leak.yar", YARA),
@@ -388,9 +440,10 @@ class TestSyncAndGuard:
         public.commit({path: content})
         assert guard.main(["--repo", str(public.path)]) == 1
 
-    def test_guard_ignores_unmanaged_folders(self, repos):
+    @pytest.mark.parametrize("folder", [*UNSYNCED_FOLDERS, "discovery-rules"])
+    def test_guard_ignores_unmanaged_folders(self, repos, folder):
         _, public = repos
-        public.commit({"discovery-rules/x.yml": rule_yaml("x", tier=ENTERPRISE_ONLY)})
+        public.commit({f"{folder}/x.yml": rule_yaml("x", tier=ENTERPRISE_ONLY)})
         assert guard.main(["--repo", str(public.path)]) == 0
 
 
@@ -413,7 +466,7 @@ class FakeGitHub:
 
 
 class TestPromote:
-    def test_yara_and_automation_are_promoted(self, tmp_path):
+    def test_yara_and_exclusion_are_promoted_but_not_unsynced_folders(self, tmp_path):
         origin = tmp_path / "origin.git"
         run_git(tmp_path, "init", "-q", "--bare", "-b", "main", str(origin))
         repo = Repo(tmp_path / "work")
@@ -421,7 +474,9 @@ class TestPromote:
         repo.commit(
             {
                 "yara/y.yar": yara(CORE_WITH_DELAY),
-                "automations/a.yml": rule_yaml("a", tier=None, rule_id_=None),
+                "exclusions/a.yml": rule_yaml("a", tier=None, rule_id_=None),
+                "automations/z.yml": rule_yaml("z", tier=None, rule_id_=None),
+                "dlp-rules/d.yml": rule_yaml("d", tier=CORE_WITH_DELAY),
                 "insights/q.yml": b"name: q\n",
             },
             when=t0,
@@ -431,7 +486,7 @@ class TestPromote:
         report = promote.promote(str(repo.path), github, t0 + timedelta(days=91))
         assert report.errors == []
         branches = {pr["branch"] for pr in github.prs}
-        assert branches == {"auto/promote-core/yara-x", "auto/promote-core/automations-a"}
+        assert branches == {"auto/promote-core/yara-x", "auto/promote-core/exclusions-a"}
         yara_branch = run_git(origin, "show", "auto/promote-core/yara-x:yara/y.yar").encode()
         assert yara_branch == yara(CORE)
 
@@ -440,14 +495,16 @@ class TestDefaultTier:
     def test_each_folder(self):
         head = entries(
             {
-                "automations/a.yml": rule_yaml("a", tier=None, rule_id_=None),
+                "exclusions/a.yml": rule_yaml("a", tier=None, rule_id_=None),
                 "yara/y.yar": YARA,
                 "yara/t.zip": b"PK",
                 "insights/q.yml": b"name: q\n",
                 "exclusions/e.yml": rule_yaml("e", tier=CORE, rule_id_=None),
+                "automations/z.yml": rule_yaml("z", tier=None, rule_id_=None),
+                "dlp-rules/d.yml": rule_yaml("d", tier=None),
             }
         )
         result = default_tier.missing_tiers({}, head)
-        assert sorted(result.updates) == ["automations/a.yml", "yara/y.yar"]
+        assert sorted(result.updates) == ["exclusions/a.yml", "yara/y.yar"]
         assert result.updates["yara/y.yar"].content == yara(CORE_WITH_DELAY)
         assert result.skipped == []

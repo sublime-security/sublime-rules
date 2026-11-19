@@ -9,14 +9,15 @@ A rule's tier is the top-level `feed_tier` key:
 A rule with no `feed_tier` key is core_with_delay, so forgetting the key can't publish a rule early. Rules that
 predate tiers get an explicit `feed_tier: core` from stamp_core.py before the sync is turned on.
 
-Which files have tiers (the folders the platform's feeds read):
+Which files have tiers:
 
-    detection-rules/, dlp-rules/, automations/, exclusions/   every file; YAML, tier as above
-    yara/*.yar                                                 `feed_tier = "<tier>"` in each YARA rule's meta;
-                                                               every YARA rule has its own tier
-    insights/, and yara/ files that aren't .yar               no tier: always public
+    detection-rules/, exclusions/          every file; YAML, tier as above
+    yara/*.yar                             `feed_tier = "<tier>"` in each YARA rule's meta; every YARA rule has its own
+                                           tier
+    insights/, and yara/ files that aren't .yar   no tier: always public
 
-Everything else in the repo isn't managed by the sync at all.
+Everything else in the repo isn't managed by the sync at all, including dlp-rules/ and automations/: the public repo
+keeps its own copies of those, and the sync never reads or writes them.
 
 A YARA file whose rules have different tiers is published with only its core rules (see public_content). That only
 works if the core rules don't need anything left out, so such a file can't have include lines or global rules, and a
@@ -35,8 +36,8 @@ import yaml
 RULES_DIR = "detection-rules"
 YARA_DIR = "yara"
 YARA_SUFFIX = ".yar"
-# Folders whose files have a tier.
-TIERED_DIRS = ("automations", RULES_DIR, "dlp-rules", "exclusions", YARA_DIR)
+# Folders whose files have a tier. dlp-rules/ and automations/ aren't synced: each repo keeps its own.
+TIERED_DIRS = (RULES_DIR, "exclusions", YARA_DIR)
 # Folders mirrored as they are, with no tiers.
 ALWAYS_PUBLIC_DIRS = ("insights",)
 # Everything the sync reads and writes.
@@ -151,7 +152,12 @@ def is_yara(path: str) -> bool:
 
 def parse_file(path: str, content: bytes) -> list[Rule]:
     """Parses a file into its rules (one, except in a YARA file), failing on anything that would make a tier
-    ambiguous or keep the file from being published as its core rules."""
+    ambiguous or keep the file from being published as its core rules.
+
+    A file outside the managed folders is an error rather than always public, so a caller that forgets to filter by
+    folder can't publish an unsynced folder like dlp-rules/."""
+    if not is_managed(path):
+        raise RuleError(path, f"isn't in a folder the sync manages ({', '.join(d + '/' for d in MANAGED_DIRS)})")
     if not has_tier(path):
         return [Rule(path=path, id=None, name=None, tier=None, always_public=True)]
     if is_yara(path):
@@ -395,7 +401,7 @@ def set_tier(path: str, content: bytes, tier: str, names: Collection[str] | None
     """Rewrites only the feed_tier line, leaving every other byte as it was.
 
     A rule with no feed_tier line gets one above its top-level id line if it has exactly one, else above its top-level
-    source line if it has exactly one (automations and exclusions have no id, and often end in a source block with no
+    source line if it has exactly one (exclusions have no id, and often end in a source block with no
     final newline, which a line after it would change), else at the end.
 
     In a YARA file, each rule named in names (every rule, if names is None) gets `feed_tier = "<tier>"`, replacing

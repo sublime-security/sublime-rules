@@ -237,7 +237,7 @@ class TestSetTier:
         assert set_tier(P, doc(*BASE[:-1]), CORE) == doc(*BASE[:2], "feed_tier: core", *BASE[2:-1])
 
     def test_no_id_and_a_block_scalar_with_no_final_newline(self):
-        # Like automations/ and exclusions/ files: the line goes above source, so its value is unchanged.
+        # Like exclusions/ files: the line goes above source, so its value is unchanged.
         before = doc(*BASE[:-1]).rstrip(b"\n")
         assert set_tier(P, before, CORE) == doc(*BASE[:2], "feed_tier: core", *BASE[2:-1]).rstrip(b"\n")
 

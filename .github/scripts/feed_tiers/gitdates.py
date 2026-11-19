@@ -11,7 +11,7 @@ A rule is followed back through the commits that changed its file, reading its t
 - a rule with an id is the rule with that id, and a YARA rule is the YARA rule with that name, so if it isn't in the
   file just before a commit (the commit added or moved it), it's looked for elsewhere in the managed folders, and
   followed there if it was already core_with_delay;
-- a rule without an id (automations, exclusions) is its path, so moving it starts its clock again, which matches the
+- a rule without an id (exclusions) is its path, so moving it starts its clock again, which matches the
   platform: it identifies a file with no id by its path.
 
 A version of the file that doesn't parse counts as not core_with_delay, so the clock starts after it.
