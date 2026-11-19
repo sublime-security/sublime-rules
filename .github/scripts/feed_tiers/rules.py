@@ -469,3 +469,28 @@ def duplicate_errors(rules: Iterable[Rule]) -> list[str]:
         if len(paths) > 1
     ]
     return errors
+
+
+@dataclass(frozen=True)
+class PublicRules:
+    """The rules that are public (core) at some commit, keyed the way a demotion is detected."""
+
+    paths: frozenset[str]  # non-YARA rules, by path
+    ids: frozenset[str]  # non-YARA rules, by id
+    yara_names: frozenset[str]  # YARA rules, by name
+
+    @classmethod
+    def of(cls, rules: dict[str, list[Rule]]) -> PublicRules:
+        public = [r for file_rules in rules.values() for r in file_rules if r.is_public]
+        return cls(
+            paths=frozenset(r.path for r in public if r.yara_name is None),
+            ids=frozenset(r.id for r in public if r.id is not None),
+            yara_names=frozenset(r.yara_name for r in public if r.yara_name is not None),
+        )
+
+    def includes(self, rule: Rule) -> bool:
+        """Whether rule was one of these: a YARA rule by its name, any other rule by its path or its id, so renaming
+        or moving it doesn't hide it."""
+        if rule.yara_name is not None:
+            return rule.yara_name in self.yara_names
+        return rule.path in self.paths or rule.id in self.ids

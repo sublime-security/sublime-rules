@@ -15,6 +15,11 @@ with GITHUB_TOKEN starts no workflows, so the PR's required checks are then star
 way promote.py does it. If the branch moved meanwhile, the push is rejected and nothing else happens: that newer push
 started its own run, which will see the same rules.
 
+A rule that's public (core) at the merge base and has lost its feed_tier line is being demoted, not added without a
+tier, so it's left alone too: adding the default line would write the demotion into the PR as if it were the
+author's choice. tier-check blocks it, and it's listed in the job summary (and in the comment, if one is posted). It's
+matched the same way tier-check matches it: a YARA rule by name, any other rule by path or id.
+
 Rules that don't parse, or where the line can't be added without changing anything else, are left alone: tier-check
 reports parse errors, and the others are listed in the job summary (and in the comment, if one is posted). The bot
 comments only when it pushes, so a PR gets one comment per commit it adds, not one per push.
@@ -33,7 +38,18 @@ import ci  # noqa: E402
 from github import GhCli, GitHub, GitHubError  # noqa: E402
 from gittree import Entry, GitError, commit_changes, git, read_tree, rev_parse  # noqa: E402
 from promote import DEFAULT_DELAY_DAYS, REQUIRED_CHECK_WORKFLOWS  # noqa: E402
-from rules import CORE, CORE_WITH_DELAY, ENTERPRISE_ONLY, MANAGED_DIRS, TIER_KEY, RuleError, parse_file, set_tier  # noqa: E402
+from rules import (  # noqa: E402
+    CORE,
+    CORE_WITH_DELAY,
+    ENTERPRISE_ONLY,
+    MANAGED_DIRS,
+    TIER_KEY,
+    PublicRules,
+    RuleError,
+    parse_file,
+    parse_rules,
+    set_tier,
+)
 
 COMMIT_TITLE = f"Add the default {TIER_KEY}: {CORE_WITH_DELAY}"
 # Marks the bot's comments, so they're easy to find.
@@ -44,11 +60,14 @@ COMMENT_MARKER = "<!-- feed-tier-default -->"
 class Result:
     updates: dict[str, Entry] = field(default_factory=dict)  # path -> the rule with the line added
     skipped: list[tuple[str, str]] = field(default_factory=list)  # (path, why)
+    demoted: list[str] = field(default_factory=list)  # rules that were core at base and lost their feed_tier line
 
 
 def missing_tiers(base_files: dict[str, Entry], head_files: dict[str, Entry]) -> Result:
     """The rules added or changed since base that have no feed_tier key, with the default line added."""
     result = Result()
+    base_rules, _ = parse_rules({path: entry.content for path, entry in base_files.items()})
+    base_public = PublicRules.of(base_rules)
     for path in sorted(head_files):
         entry = head_files[path]
         if base_files.get(path) == entry:
@@ -57,7 +76,14 @@ def missing_tiers(base_files: dict[str, Entry], head_files: dict[str, Entry]) ->
             rules = parse_file(path, entry.content)
         except RuleError:
             continue  # tier-check reports it
-        missing = [rule for rule in rules if rule.tier is None and not rule.always_public]
+        missing = []
+        for rule in rules:
+            if rule.tier is not None or rule.always_public:
+                continue
+            if base_public.includes(rule):
+                result.demoted.append(rule.label)  # tier-check blocks it
+            else:
+                missing.append(rule)
         if not missing:
             continue
         names = [rule.yara_name for rule in missing] if missing[0].yara_name is not None else None
@@ -73,7 +99,18 @@ def commit_message(paths: list[str]) -> str:
     return f"{COMMIT_TITLE}\n\nThese rules had no {TIER_KEY}, which means {CORE_WITH_DELAY}:\n\n{listed}\n"
 
 
-def comment_body(paths: list[str], skipped: list[tuple[str, str]], commit: str) -> str:
+def demoted_message(labels: list[str]) -> list[str]:
+    return [
+        f"These rules are `{CORE}` on the base branch and this PR removes their `{TIER_KEY}`. No `{TIER_KEY}` means "
+        f"`{CORE_WITH_DELAY}`, so that's a demotion, which isn't allowed: the line wasn't added back, and tier-check "
+        f"blocks the PR until it's restored. Put back `{TIER_KEY}: {CORE}` (in a YARA rule's meta, "
+        f'`{TIER_KEY} = "{CORE}"`), or delete the rule to take it out of the public feed:',
+        "",
+        *[f"- {label}" for label in labels],
+    ]
+
+
+def comment_body(paths: list[str], skipped: list[tuple[str, str]], commit: str, demoted: list[str] = ()) -> str:
     lines = [COMMENT_MARKER]
     if paths:
         lines += [
@@ -98,6 +135,8 @@ def comment_body(paths: list[str], skipped: list[tuple[str, str]], commit: str) 
             "",
             *[f"- `{path}`: {why}" for path, why in skipped],
         ]
+    if demoted:
+        lines += ["", *demoted_message(list(demoted))]
     return "\n".join(lines) + "\n"
 
 
@@ -118,7 +157,7 @@ def add_defaults(
             return result, None
         for workflow in REQUIRED_CHECK_WORKFLOWS:
             github.dispatch_workflow(workflow, branch)
-        github.comment_pr(pr, comment_body(paths, result.skipped, commit[:12]))
+        github.comment_pr(pr, comment_body(paths, result.skipped, commit[:12], result.demoted))
     return result, commit
 
 
@@ -145,10 +184,14 @@ def main(argv: list[str] | None = None) -> int:
         message = f"Added {TIER_KEY}: {CORE_WITH_DELAY} to {len(result.updates)} rule(s) in {commit[:12]}."
     elif result.updates:
         message = "Rules need the default line, but the branch moved; the newer run handles them."
+    elif result.demoted:
+        message = "No rule needs the default line."
     else:
         message = f"Every added or changed rule has a {TIER_KEY}."
     for path, why in result.skipped:
         message += f"\n- couldn't add {TIER_KEY} to `{path}`: {why}"
+    if result.demoted:
+        message += "\n\n" + "\n".join(demoted_message(result.demoted))
     print(message)
     ci.summary(message)
     return 0

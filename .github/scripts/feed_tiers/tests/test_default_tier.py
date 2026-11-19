@@ -82,6 +82,27 @@ class TestMissingTiers:
         updated = default_tier.missing_tiers({}, entries({rule_path("new"): content})).updates[rule_path("new")].content
         assert parse_rule(rule_path("new"), updated).effective_tier == before.effective_tier == CORE_WITH_DELAY
 
+    def test_core_rule_losing_its_key_is_a_demotion_not_a_default(self):
+        base = entries({rule_path("old"): rule_yaml("old", tier=CORE)})
+        head = entries({rule_path("old"): rule_yaml("old", tier=None)})
+        result = default_tier.missing_tiers(base, head)
+        assert result.updates == {} and result.skipped == []
+        assert result.demoted == [f"old ({rule_path('old')})"]
+        assert check(base, head, non_core_enabled=True) != []
+
+    def test_moved_core_rule_losing_its_key_is_still_a_demotion(self):
+        base = entries({rule_path("old"): rule_yaml("old", tier=CORE)})
+        head = entries({rule_path("moved"): rule_yaml("old", tier=None)})
+        result = default_tier.missing_tiers(base, head)
+        assert result.updates == {} and result.demoted == [f"old ({rule_path('moved')})"]
+
+    @pytest.mark.parametrize("tier", [None, CORE_WITH_DELAY, ENTERPRISE_ONLY])
+    def test_rule_that_wasnt_core_still_gets_the_default(self, tier):
+        base = entries({rule_path("old"): rule_yaml("old", tier=tier)})
+        head = entries({rule_path("old"): rule_yaml("old", tier=None, source="type.inbound\nand 1 == 1")})
+        result = default_tier.missing_tiers(base, head)
+        assert list(result.updates) == [rule_path("old")] and result.demoted == []
+
 
 class TestComment:
     def test_says_what_and_why(self):
@@ -95,6 +116,13 @@ class TestComment:
     def test_lists_skipped_rules(self):
         body = default_tier.comment_body([rule_path("a")], [(rule_path("x"), "why")], "abc")
         assert f"- `{rule_path('x')}`: why" in body
+
+    def test_lists_demoted_rules(self):
+        body = default_tier.comment_body([rule_path("a")], [], "abc", ["old (detection-rules/old.yml)"])
+        assert "demotion" in body and "- old (detection-rules/old.yml)" in body and "`feed_tier: core`" in body
+
+    def test_no_demotion_section_without_demotions(self):
+        assert "demotion" not in default_tier.comment_body([rule_path("a")], [], "abc")
 
     def test_commit_message_lists_paths(self):
         message = default_tier.commit_message([rule_path("a"), rule_path("b")])
@@ -154,6 +182,34 @@ class TestAddDefaults:
         assert number == 7 and commit[:12] in body and rule_path("new") in body
         assert rule_path("tiered") not in body and rule_path("unstamped") not in body
         assert list(result.updates) == [rule_path("new")]
+
+    def test_demotion_alone_pushes_nothing_and_tier_check_blocks_it(self, repo, origin):
+        base = repo.head()
+        repo.commit({rule_path("legacy"): rule_yaml("legacy", tier=None)})  # main has it as core
+        push_branch(repo)
+        head = repo.head()
+        github = FakeGitHub()
+
+        result, commit = run(repo, github)
+
+        assert commit is None and result.updates == {}
+        assert result.demoted == [f"legacy ({rule_path('legacy')})"]
+        assert run_git(origin, "rev-parse", f"refs/heads/{BRANCH}").strip() == head
+        assert github.dispatches == [] and github.comments == []
+        [(path, problem)] = check(read_tree(repo.path, base, RULES_DIR), read_tree(repo.path, head, RULES_DIR), True)
+        assert path == rule_path("legacy") and "never demoted" in problem
+
+    def test_demotion_next_to_a_new_rule_is_named_in_the_comment(self, repo, origin):
+        repo.commit({rule_path("legacy"): rule_yaml("legacy", tier=None), rule_path("new"): rule_yaml("new", tier=None)})
+        push_branch(repo)
+        github = FakeGitHub()
+
+        _, commit = run(repo, github)
+
+        assert run_git(origin, "show", f"{commit}:{rule_path('legacy')}").encode() == rule_yaml("legacy", tier=None)
+        assert run_git(origin, "diff", "--name-only", f"{commit}^", commit).split() == [rule_path("new")]
+        [(_, body)] = github.comments
+        assert "demotion" in body and rule_path("legacy") in body
 
     def test_main_is_not_touched(self, repo, origin):
         main_before = run_git(origin, "rev-parse", "main").strip()

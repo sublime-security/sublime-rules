@@ -412,6 +412,20 @@ class TestDefaultTierAndStamp:
         result = default_tier.missing_tiers({}, entries({P: content}))
         assert result.updates[P].content == simple("e", ENTERPRISE_ONLY) + simple("f", CORE_WITH_DELAY) + simple("g", CORE)
 
+    def test_default_tier_leaves_a_demoted_yara_rule_alone(self):
+        base = entries({P: simple("c", CORE)})
+        head = entries({P: simple("c", None) + simple("n", None)})
+        result = default_tier.missing_tiers(base, head)
+        assert result.updates[P].content == simple("c", None) + simple("n", CORE_WITH_DELAY)
+        assert result.demoted == [f"YARA rule c ({P})"]
+        assert tier_check.check(base, {P: result.updates[P]}, non_core_enabled=True) != []
+
+    def test_default_tier_follows_a_demoted_yara_rule_to_another_file(self):
+        base = entries({P: simple("c", CORE)})
+        head = entries({P: simple("other", CORE), "yara/moved.yar": simple("c", None)})
+        result = default_tier.missing_tiers(base, head)
+        assert result.updates == {} and result.demoted == ["YARA rule c (yara/moved.yar)"]
+
     def test_stamp_only_where_missing(self, tmp_path):
         repo = Repo(tmp_path / "r")
         repo.commit({P: simple("e", ENTERPRISE_ONLY) + simple("f", None)})

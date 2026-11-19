@@ -23,7 +23,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import ci  # noqa: E402
 from gittree import GitError, read_tree, rev_parse  # noqa: E402
-from rules import CORE, MANAGED_DIRS, TIER_KEY, RuleError, duplicate_errors, parse_file, parse_rules  # noqa: E402
+from rules import CORE, MANAGED_DIRS, TIER_KEY, PublicRules, RuleError, duplicate_errors, parse_file, parse_rules  # noqa: E402
 
 
 def check(base_files: dict, head_files: dict, non_core_enabled: bool) -> list[tuple[str, str]]:
@@ -31,10 +31,7 @@ def check(base_files: dict, head_files: dict, non_core_enabled: bool) -> list[tu
     problems: list[tuple[str, str]] = []
 
     base_rules, _ = parse_rules({p: e.content for p, e in base_files.items()})
-    base_public = [r for rules in base_rules.values() for r in rules if r.is_public]
-    base_public_paths = {r.path for r in base_public if r.yara_name is None}
-    base_public_ids = {r.id for r in base_public if r.id is not None}
-    base_public_yara = {r.yara_name for r in base_public if r.yara_name is not None}
+    base_public = PublicRules.of(base_rules)
 
     changed = sorted(p for p, e in head_files.items() if base_files.get(p) != e)
     head_rules: dict[str, list] = {}
@@ -67,11 +64,7 @@ def check(base_files: dict, head_files: dict, non_core_enabled: bool) -> list[tu
                 problems.append((path, f"{what}is {rule.tier_label}, which isn't allowed yet: set {fix} (NON_CORE_TIERS_ENABLED is off)"))
             if rule.is_public:
                 continue
-            if rule.yara_name is not None:
-                demoted = rule.yara_name in base_public_yara
-            else:
-                demoted = path in base_public_paths or rule.id in base_public_ids
-            if demoted:
+            if base_public.includes(rule):
                 problems.append(
                     (
                         path,
