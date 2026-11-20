@@ -1,0 +1,71 @@
+name: Mirror test-rules to sublime-rules-enterprise
+
+# Deployments with go-mantis's test_rules_feed_from_enterprise_repo flag read the test-rules feed from
+# sublime-security/sublime-rules-enterprise instead of this repo. This makes that repo's test-rules branch match
+# this one's. sync-test-rules.yml and clear-old-test-rules.yml call it after they push; the schedule catches up
+# after a missed or failed run. Remove it once test-rules is written in sublime-rules-enterprise directly.
+
+on:
+  workflow_call: {}
+  schedule:
+    - cron: "37 * * * *"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  mirror:
+    if: github.repository == 'sublime-security/sublime-rules'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # Holds ENTERPRISE_TEST_RULES_DEPLOY_KEY, a deploy key with write access to sublime-rules-enterprise.
+    # Deployments are allowed from main only, so a workflow on another branch can't read it.
+    environment: enterprise-test-rules
+    # One mirror at a time, so an older run can't push over a newer one. A queued run fetches when it starts.
+    concurrency:
+      group: enterprise-test-rules-mirror
+      cancel-in-progress: false
+    steps:
+      - name: Check the deploy key is set
+        env:
+          DEPLOY_KEY: ${{ secrets.ENTERPRISE_TEST_RULES_DEPLOY_KEY }}
+        run: |
+          if [[ -z "$DEPLOY_KEY" ]]; then
+            echo "::error::ENTERPRISE_TEST_RULES_DEPLOY_KEY isn't set in the enterprise-test-rules environment."
+            exit 1
+          fi
+
+      - name: Check out the enterprise test-rules branch
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          repository: sublime-security/sublime-rules-enterprise
+          ref: test-rules
+          fetch-depth: 0
+          ssh-key: ${{ secrets.ENTERPRISE_TEST_RULES_DEPLOY_KEY }}
+
+      - name: Push this repo's test-rules branch to it
+        env:
+          SOURCE_URL: https://github.com/${{ github.repository }}.git
+        run: |
+          set -euo pipefail
+          git fetch --no-tags "$SOURCE_URL" test-rules
+          source_sha=$(git rev-parse FETCH_HEAD)
+          enterprise_sha=$(git rev-parse HEAD)
+
+          if [[ "$source_sha" == "$enterprise_sha" ]]; then
+            echo "Already up to date at $source_sha." | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          if git merge-base --is-ancestor "$enterprise_sha" "$source_sha"; then
+            summary="Fast-forwarded $enterprise_sha to $source_sha ($(git rev-list --count "$enterprise_sha..$source_sha") commits)."
+          else
+            # Something else wrote to the enterprise branch. This repo's branch is the source, so it wins.
+            echo "::warning::sublime-rules-enterprise's test-rules ($enterprise_sha) isn't an ancestor of this repo's ($source_sha). Overwriting it."
+            summary="Overwrote $enterprise_sha with $source_sha."
+          fi
+
+          # The lease fails the push if the enterprise branch moved after the checkout, rather than discarding that.
+          git push --force-with-lease="refs/heads/test-rules:$enterprise_sha" origin "$source_sha:refs/heads/test-rules"
+          echo "$summary" | tee -a "$GITHUB_STEP_SUMMARY"

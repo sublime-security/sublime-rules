@@ -13,6 +13,8 @@ jobs:
     permissions:
       contents: write
       pull-requests: read
+    outputs:
+      pushed: ${{ steps.delete.outputs.pushed }}
 
     steps:
       - name: Checkout repository
@@ -41,6 +43,7 @@ jobs:
             });
 
       - name: Delete stale test files
+        id: delete
         env:
           OPEN_PRS: ${{ steps.open_prs.outputs.open_prs }}
         run: |
@@ -87,4 +90,11 @@ jobs:
           
           git commit --allow-empty -F ../message.txt
           git push origin test-rules
+          echo "pushed=true" >> "$GITHUB_OUTPUT"
 
+  mirror-to-enterprise:
+    needs: remove-stale
+    if: needs.remove-stale.outputs.pushed == 'true'
+    permissions:
+      contents: read
+    uses: ./.github/workflows/mirror-test-rules-to-enterprise.yml
