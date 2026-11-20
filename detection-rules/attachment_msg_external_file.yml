@@ -1,0 +1,47 @@
+name: "Attachment: Outlook item with external file reference"
+description: "Detects an attached Outlook item (MSG or OFT) with atypical message properties whose body references a file on an external host outside of a standard hyperlink. This combination is rarely seen in legitimate mail."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and any(filter(attachments,
+                 .file_extension in~ ("msg", "oft")
+                 or .content_type == "application/vnd.ms-outlook"
+          ),
+          any(file.explode(.),
+              strings.ends_with(.file_name, "__properties_version1.0")
+              and any(.scan.yara.matches, .name == "MSG_Props_Unsent_Flag")
+          )
+          and any(file.explode(.),
+                  (
+                    .flavors.mime == "text/html"
+                    and any(html.xpath(strings.parse_html(.scan.strings.raw),
+                                       '//*[not(self::a or self::area)]/@* | //comment() | //style/text()'
+                            ).nodes,
+                            regex.icontains(.raw,
+                                            '(?:^|[\s"\x27=(;,])(?:file:(?:[/\\]|%5c|%2f)+|\\[\\/]+|/\\[\\/]*|(?:%5c){2,})(?:[?.][\\/]+UNC[\\/]+)?[^\\/\s"\x27<>()%.@]+[.@][^\\/\s"\x27<>()]*(?:[\\/]|%5c|%2f)'
+                            )
+                    )
+                  )
+                  or (
+                    .flavors.mime == "text/rtf"
+                    // html will be handled by the above section
+                    and not regex.imatch(.scan.strings.raw,
+                                         '^\s*\{\\rtf1?[^{}]{0,200}\\fromhtml1.*'
+                    )
+                    and regex.icontains(.scan.strings.raw,
+                                        '(?:^|[\s"\x27=(>;,])(?:(?:\\(?:\\|\x275c|u92\??)){2,}|file:(?:/+|(?:\\(?:\\|\x275c|u92\??)){2,}))(?:[?.](?:\\(?:\\|\x275c|u92\??))+UNC(?:\\(?:\\|\x275c|u92\??))+)?[^\\/\s"\x27{}<>()%.@]+[.@][^\\/\s"\x27{}<>()]*(?:\\(?:\\|\x275c|u92\??)|/)'
+                    )
+                  )
+          )
+  )
+attack_types:
+  - "Malware/Ransomware"
+tactics_and_techniques:
+  - "Evasion"
+detection_methods:
+  - "File analysis"
+  - "YARA"
+  - "HTML analysis"
+  - "Content analysis"
+id: "724376a8-d396-5492-a768-caf31d8916e4"
