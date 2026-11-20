@@ -1,0 +1,52 @@
+name: Feed tier check
+
+# Blocks unknown tiers, demotions and (until NON_CORE_TIERS_ENABLED) anything but core.
+# See .github/scripts/feed_tiers/tier_check.py.
+
+on:
+  pull_request:
+  merge_group:
+  # promote.py starts it on each promotion PR's branch: PRs opened with GITHUB_TOKEN don't trigger pull_request.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  tier-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: "3.13"
+
+      - name: Install dependencies
+        run: pip install -r .github/scripts/feed_tiers/requirements.txt
+
+      # What HEAD is compared with:
+      # - pull_request checks out the PR merged into its base, whose first parent is that base;
+      # - merge_group checks out the queued result, compared with the base the queue started from;
+      # - workflow_dispatch checks out a branch, compared with where it forked from main.
+      - name: Check feed tiers
+        env:
+          MERGE_GROUP_BASE: ${{ github.event.merge_group.base_sha }}
+          NON_CORE_TIERS_ENABLED: ${{ vars.NON_CORE_TIERS_ENABLED }}
+        run: |
+          case "$GITHUB_EVENT_NAME" in
+            merge_group) base="$MERGE_GROUP_BASE" ;;
+            pull_request) base="HEAD^1" ;;
+            *) base="$(git merge-base origin/main HEAD)" ;;
+          esac
+          python .github/scripts/feed_tiers/tier_check.py \
+            --repo . \
+            --base "$base" \
+            --head HEAD \
+            --non-core-tiers-enabled "$NON_CORE_TIERS_ENABLED"

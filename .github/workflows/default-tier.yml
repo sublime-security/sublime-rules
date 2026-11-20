@@ -1,0 +1,65 @@
+name: Default feed tier
+
+# Adds feed_tier: core_with_delay to rules a PR adds or changes without a feed_tier key, pushes that to the PR branch
+# and comments on the PR. See .github/scripts/feed_tiers/default_tier.py.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:  # rules.TIERED_DIRS
+      - "automations/**"
+      - "detection-rules/**"
+      - "dlp-rules/**"
+      - "exclusions/**"
+      - "yara/**"
+
+concurrency:
+  group: default-tier-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write  # push the commit to the PR branch
+  pull-requests: write  # comment on the PR
+  actions: write  # start the required checks on the new commit
+
+jobs:
+  default-tier:
+    # A fork PR's token can't push to its branch. Until non-core tiers are enabled, tier-check rejects anything but
+    # core, so adding core_with_delay wouldn't help.
+    if: github.event.pull_request.head.repo.full_name == github.repository && vars.NON_CORE_TIERS_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out the PR branch
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0  # the merge base with the PR's base branch
+
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: "3.13"
+
+      - name: Install dependencies
+        run: pip install -r .github/scripts/feed_tiers/requirements.txt
+
+      - name: Set the bot identity
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Add missing feed tiers
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: >-
+          python .github/scripts/feed_tiers/default_tier.py
+          --repo .
+          --base "origin/$BASE_REF"
+          --head HEAD
+          --branch "$HEAD_REF"
+          --github-repo "$GITHUB_REPOSITORY"
+          --pr "$PR_NUMBER"
