@@ -113,8 +113,8 @@ class TestDelayedSince:
         repo.commit({rule_path("d"): rule_yaml("d", tier=CORE_WITH_DELAY)}, when=day(0))
         repo.rename(rule_path("d"), "detection-rules/a.yml", when=day(10))
         repo.commit({"detection-rules/a.yml": rule_yaml("d", tier=CORE_WITH_DELAY, source="edited")}, when=day(15))
-        repo.rename("detection-rules/a.yml", "dlp-rules/b.yml", when=day(20))
-        assert since(repo, "dlp-rules/b.yml", rule_id("d")) == day(0)
+        repo.rename("detection-rules/a.yml", "exclusions/b.yml", when=day(20))
+        assert since(repo, "exclusions/b.yml", rule_id("d")) == day(0)
 
     def test_similar_rule_is_not_its_ancestor(self, repo):
         # git log --follow calls this a copy or rename of the older rule; the id doesn't.
@@ -391,7 +391,7 @@ class TestPromote:
     def test_same_file_name_in_two_folders_gets_two_branches(self, repo):
         repo.commit(
             {
-                "automations/report.yml": rule_yaml("a", tier=CORE_WITH_DELAY, rule_id_=None),
+                "detection-rules/report.yml": rule_yaml("a", tier=CORE_WITH_DELAY, rule_id_=None),
                 "exclusions/report.yml": rule_yaml("e", tier=CORE_WITH_DELAY, rule_id_=None),
             },
             when=day(0),
@@ -399,7 +399,7 @@ class TestPromote:
         github = FakeGitHub()
         self.run(repo, github, day(90))
         assert sorted(pr["branch"] for pr in github.prs) == [
-            "auto/promote-core/automations-report",
+            "auto/promote-core/detection-rules-report",
             "auto/promote-core/exclusions-report",
         ]
 

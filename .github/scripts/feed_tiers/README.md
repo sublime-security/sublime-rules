@@ -15,15 +15,16 @@ No key means `core_with_delay`, so forgetting it can't publish a rule early. Rul
 The 90 days start when a rule becomes `core_with_delay`: when it merges that way, or when another tier changes to it.
 Edits don't move it. Changing to `enterprise_only` and back starts it again (`gitdates.py`).
 
-The sync manages the folders the platform's feeds read (`rules.py`):
+The sync manages these folders (`rules.py`):
 
 | Folder | Tier |
 |---|---|
-| `detection-rules/`, `dlp-rules/`, `automations/`, `exclusions/` | `feed_tier:` key, as above |
+| `detection-rules/`, `exclusions/` | `feed_tier:` key, as above |
 | `yara/*.yar` | `feed_tier = "<tier>"` in each YARA rule's `meta:`; each rule has its own tier |
 | `insights/`, and files in `yara/` that aren't `.yar` | none: always public |
 
-Everything else in the public repo (`discovery-rules/`, `emls/`, the README, ...) is left alone.
+Everything else in the public repo is left alone, including `dlp-rules/` and `automations/`: each repo keeps its own
+copy of those, and no script reads, checks, stamps or syncs them (`discovery-rules/`, `emls/`, the README, ...).
 
 A `.yar` file whose rules are all `core` is published as it is. One with some `core` rules is published as just those
 rules, line for line, after an `import` for each module they use; comments and everything else between rules are left
@@ -53,7 +54,8 @@ python -m pytest -n auto
 
 - `test_rules.py`, `test_project.py`: parsing tiers and the projection, as pure functions.
 - `test_sync.py`, `test_promote.py`, `test_tier_check.py`, `test_default_tier.py`: each script against real temporary git repos.
-- `test_folders.py`: the folders beyond `detection-rules/` (YARA tiers, always-public files) through every script.
+- `test_folders.py`: the folders beyond `detection-rules/` (YARA tiers, always-public files) and the unsynced ones
+  (`dlp-rules/`, `automations/`) through every script.
 - `test_yara_rules.py`: YARA files whose rules have different tiers, through every script.
 - `test_property.py`: Hypothesis generates random histories of rule changes, tampering and syncs, and checks the
   invariants after each sync.

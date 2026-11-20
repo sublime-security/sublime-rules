@@ -68,7 +68,7 @@ def branch_key(rule: Rule) -> str:
     elif rule.yara_name is not None:
         key = f"yara-{rule.yara_name}"
     else:
-        # The path, not just the file name: automations/x.yml and exclusions/x.yml are different files.
+        # The path, not just the file name: exclusions/x.yml and detection-rules/x.yml are different files.
         key = os.path.splitext(rule.path)[0]
     return re.sub(r"[^A-Za-z0-9._-]+", "-", key).strip("-.") or "rule"
 
