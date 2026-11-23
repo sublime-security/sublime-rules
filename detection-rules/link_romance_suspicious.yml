@@ -5,9 +5,21 @@ severity: "low"
 source: |
   type.inbound
   and length(body.previous_threads) == 0
-  and any(ml.nlu_classifier(body.current_thread.text).topics,
-          .name in ("Romance", "Sexually Explicit Messages")
-          and .confidence == "high"
+  and (
+    any(ml.nlu_classifier(body.current_thread.text).topics,
+        .name in ("Romance", "Sexually Explicit Messages")
+        and .confidence == "high"
+    )
+    or (
+      length(body.current_thread.links) < 5
+      and any(body.links,
+              any(ml.nlu_classifier(ml.link_analysis(., mode="aggressive").final_dom.display_text
+                  ).topics,
+                  .name in ("Romance", "Sexually Explicit Messages")
+                  and .confidence == "high"
+              )
+      )
+    )
   )
   and 1 of (
     any(body.links, network.whois(.href_url.domain).days_old < 30),
