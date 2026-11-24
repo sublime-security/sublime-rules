@@ -1,0 +1,39 @@
+name: "PR# 5951 - Brand impersonation: ING"
+description: "Detects inbound emails that reference ING as a standalone word in the subject line combined with indicators of brand impersonation, such as an ING logo detected via computer vision on a message screenshot, the Spanish phrase 'equipo de ING España' in the body text, or ING's signature orange color (rgb(255,102,0)) used as a background or text color in the HTML body. Legitimate emails from verified ING domains (ing.com, ing.nl, psfinteco.pl) that pass DMARC authentication are excluded from this rule."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and regex.contains(subject.base, '\bING\b')
+  and (
+    any(ml.logo_detect(file.message_screenshot()).brands, .name == 'ING')
+    or strings.contains(body.current_thread.text, 'equipo de ING España')
+    // ING’s orange
+    or regex.icontains(body.html.raw,
+                       'b(?:ackground(?:-color)?|g?color):\s*rgb\(255,\s*102,\s*0\)'
+    )
+  )
+  and not (
+    sender.email.domain.root_domain in~ ('psfinteco.pl', 'ing.com', 'ing.nl')
+    and coalesce(headers.auth_summary.dmarc.pass, false)
+  )
+attack_types:
+  - "Credential Phishing"
+  - "BEC/Fraud"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Social engineering"
+  - "Image as content"
+detection_methods:
+  - "Computer Vision"
+  - "Content analysis"
+  - "HTML analysis"
+  - "Header analysis"
+  - "Sender analysis"
+id: "c8b521d2-b170-5175-b482-c8abb9108641"
+tags:
+  - created_from_open_prs
+  - rule_status_added
+  - pr_author_D-Bolton
+references:
+  - https://github.com/sublime-security/sublime-rules/pull/5951
