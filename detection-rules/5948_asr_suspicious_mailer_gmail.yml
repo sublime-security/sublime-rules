@@ -1,0 +1,36 @@
+name: "PR# 5948 - Suspicious mailer received from Gmail servers"
+description: "Mailer is atypical of sends from Gmail infrastructure. Observed sending callback phishing and general spam."
+type: "rule"
+severity: "low"
+source: |
+  type.inbound
+  and (
+    strings.ilike(headers.mailer,
+                  "Microsoft CDO for Windows 2000",
+                  "PHPMailer*",
+                  "nodemailer*",
+                  "supmailer*"
+    )
+    or any(headers.hops, any(.fields, .value == "Produced By Microsoft MimeOLE"))
+  )
+  and (
+    any(headers.hops, .index == 0 and .received.server.raw == "smtp.gmail.com")
+    or headers.return_path.domain.root_domain in ("gmail.com", "googlemail.com")
+  )
+  and not profile.by_sender().any_messages_benign
+tags:
+  - "Attack surface reduction"
+  - pr_author_JFarina5
+  - created_from_open_prs
+  - rule_status_modified
+attack_types:
+  - "Callback Phishing"
+  - "Spam"
+tactics_and_techniques:
+  - "Free email provider"
+  - "Social engineering"
+detection_methods:
+  - "Header analysis"
+id: "9b79fe8a-c991-53c1-8525-19db6c97f63e"
+references:
+  - https://github.com/sublime-security/sublime-rules/pull/5948
