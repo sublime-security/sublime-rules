@@ -1,0 +1,28 @@
+name: "Brand impersonation: Proofpoint Encryption notification as image"
+description: "Detects inbound messages that only contain image attachments, where at least one image contains OCR text referencing 'Secured by Proofpoint Encryption,' while the HTML body also embeds inline images referenced via CID. This pattern is consistent with attempts to impersonate legitimate Proofpoint encrypted message notifications using image-based content to evade text-based detection."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and length(filter(attachments, .file_type not in $file_types_images)) == 0
+  and length(filter(attachments, .file_type in $file_types_images)) > 0
+  and any(attachments,
+      any(file.explode(.),
+          strings.icontains(.scan.ocr.raw, "Secured by Proofpoint Encryption")
+      )
+  )
+  and any(html.xpath(body.html, '//a/img').nodes,
+      strings.contains(.raw, "src=\"cid:")
+      or strings.contains(.raw, "src='cid:")
+  )
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Impersonation: Brand"
+  - "Image as content"
+  - "Evasion"
+  - "Social engineering"
+detection_methods:
+  - "Optical Character Recognition"
+  - "HTML analysis"
+  - "Content analysis"
