@@ -1,0 +1,28 @@
+name: "Attachment: Encrypted PDF 'Protected Message' lure"
+description: "Detects password-protected PDF attachments that were successfully unlocked and whose document metadata matches a credential phishing kit used to deliver encrypted lure documents."
+type: "rule"
+severity: "high"
+source: |
+  type.inbound
+  and any(filter(attachments, .file_type == "pdf"),
+          any(file.explode(.), .scan.encrypted_pdf.cracked_password is not null)
+          and any(file.explode(.),
+                  any(.scan.exiftool.fields,
+                      .key == "Title" and .value == "Protected Message"
+                  )
+                  and any(.scan.exiftool.fields,
+                          .key == "Producer"
+                          and strings.icontains(.value, "modified using iText")
+                  )
+          )
+  )
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "PDF"
+  - "Encryption"
+  - "Evasion"
+detection_methods:
+  - "File analysis"
+  - "Exif analysis"
+id: "c18dcbd9-7f46-5195-8fe0-f394f5feb4b3"
