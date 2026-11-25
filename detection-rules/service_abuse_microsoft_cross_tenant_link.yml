@@ -1,13 +1,25 @@
 name: "Service abuse: CrossTenant Microsoft notification with link"
-description: "Detects inbound messages sent from Microsoft's legitimate messaging/alert infrastructure (messaging.microsoft.com or office365alerts@microsoft.com) that carry cross-tenant headers and include at least one link in the body. Legitimate Purview encryption links and rpmsg-protected attachments are excluded, isolating cases where the trusted Microsoft notification channel is being leveraged to deliver suspicious links."
+description: "Detects inbound messages sent from Microsoft's legitimate messaging/alert infrastructure that carry cross-tenant headers and include at least one non-Microsoft action link in the body. Legitimate Purview encryption links and rpmsg-protected attachments are excluded, isolating cases where the trusted Microsoft notification channel is being leveraged to deliver suspicious links."
 type: "rule"
 severity: "medium"
 source: |
   type.inbound
   and (
-    sender.email.domain.domain == "messaging.microsoft.com"
-    or sender.email.email == 'office365alerts@microsoft.com'
+    sender.email.domain.domain in (
+      'accountprotection.microsoft.com',
+      'communication.microsoft.com',
+      'email.microsoft.com',
+      'mail.support.microsoft.com',
+      'messaging.microsoft.com',
+      'notificationmail.microsoft.com'
+    )
+    or sender.email.email in (
+      'consultant@microsoft.com',
+      'githubsupport@microsoft.com',
+      'office365alerts@microsoft.com'
+    )
   )
+  
   // CrossTenant headers
   and any(headers.hops,
           any(.fields,
@@ -16,17 +28,47 @@ source: |
               )
           )
   )
-  // needs to contain at least one link
-  and length(filter(body.current_thread.links, .href_url.scheme != 'mailto')) > 0
+  
+  // must contain at least one action link that doesn't lead to microsoft
+  and not all(filter(body.current_thread.links,
+                     .href_url.scheme != 'mailto' and .parser != 'plain'
+              ),
+              .href_url.domain.root_domain in (
+                'aka.ms',
+                'azure.com',
+                'azure.net',
+                'live.com',
+                'microsoft.com',
+                'microsoftonline.com',
+                'office.com',
+                'office365.com',
+                'outlook.com',
+                'sharepoint.com',
+                // ignore warning banner links
+                'inky.com',
+                'inkyphishfence.com'
+              )
+              // google groups workspace footer links
+              or (
+                .href_url.domain.domain == 'groups.google.com'
+                and regex.imatch(.href_url.path,
+                                 '/a/[^/]+/d/(msgid/[^/]+/.+|optout)/?'
+                )
+              )
+  )
+  
   // exclude Purview links or rpmsg attachments
   and not (
     any(body.current_thread.links,
-        strings.starts_with(.href_url.url,
-                            'https://outlook.office365.com/Encryption'
-        )
-        or .href_url.domain.domain in (
-          'purview.microsoft.com',
-          'security.microsoft.com'
+        .parser != 'plain'
+        and (
+          strings.starts_with(.href_url.url,
+                              'https://outlook.office365.com/Encryption'
+          )
+          or .href_url.domain.domain in (
+            'purview.microsoft.com',
+            'security.microsoft.com'
+          )
         )
     )
     or any(attachments,
