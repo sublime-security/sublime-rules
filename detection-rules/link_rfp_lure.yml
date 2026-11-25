@@ -1,0 +1,37 @@
+name: "Link: RFP/RFQ lure"
+description: "Flags inbound messages containing a thread with fewer than five links where at least one link's display text begins with 'RFP' or 'RFQ'."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and length(body.current_thread.links) < 5
+  and strings.starts_with(body.current_thread.links[0].display_text, "RFP", "RFQ")
+  and (
+    //
+    // This rule makes use of a beta feature and is subject to change without notice
+    // using the beta feature in custom rules is not suggested until it has been formally released
+    //
+    beta.link_domain_history(body.current_thread.links[0].href_url.domain).domain.days_since.first_seen < 7
+    or body.current_thread.links[0].href_url.domain.domain in $url_shorteners
+    or (
+      body.current_thread.links[0].href_url.domain.root_domain == "google.com"
+      and body.current_thread.links[0].href_url.path == "/goto"
+    )
+  )
+  and body.current_thread.links[0].href_url.scheme != "mailto"
+  and length(body.current_thread.links[0].display_text) > 3
+  and length(filter(body.current_thread.links,
+                    strings.starts_with(.display_text, "RF")
+             )
+  ) == 1
+  and length(filter(attachments, .file_type == "pdf")) == 0
+tags:
+  - "Attack surface reduction"
+attack_types:
+  - "BEC/Fraud"
+tactics_and_techniques:
+  - "Social engineering"
+detection_methods:
+  - "URL analysis"
+  - "Content analysis"
+id: "f42391cd-a8b6-5c0b-a961-0aa1b7872283"
