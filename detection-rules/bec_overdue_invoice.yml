@@ -1,0 +1,27 @@
+name: "BEC/Fraud: Overdue invoice reminder with 90-day threat"
+description: "Detects inbound emails with no attachments whose subject begins with 'Overdue' or 'Invoice' and whose body references a single invoice-style identifier (e.g., two or three letters followed by three to seven digits)."
+type: "rule"
+severity: "low"
+source: |
+  type.inbound
+  and strings.istarts_with(subject.base, "Overdue", "Invoice")
+  and length(attachments) == 0
+  and length(regex.extract(body.current_thread.text,
+                           '\b(?P<prefix>[A-Z]{2,3})[-]?(?P<digit>[0-9]{3,7})\b'
+             )
+  ) == 1
+  and strings.icontains(body.current_thread.text, " 90")
+  and any(regex.extract(body.current_thread.text,
+                        '\b(?P<prefix>[A-Z]{2,3})[-]?(?P<digit>[0-9]{3,7})\b'
+          ),
+          strings.icontains(body.current_thread.text,
+                            strings.concat("invoice ", .full_match)
+          )
+  )
+attack_types:
+  - "BEC/Fraud"
+tactics_and_techniques:
+  - "Social engineering"
+detection_methods:
+  - "Content analysis"
+id: "a2aa28e6-a608-537d-b54e-ecaffbe3d7cc"
