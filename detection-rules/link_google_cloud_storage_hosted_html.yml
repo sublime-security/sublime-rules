@@ -1,0 +1,24 @@
+name: "Link: Google Cloud Storage hosted HTML pages"
+description: "Detects inbound emails containing links to storage.googleapis.com or storage.cloud.google.com that resolve to HTML pages hosted under Firebase Storage or App Engine project paths, a pattern commonly used to abuse trusted Google infrastructure for hosting malicious content."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and any(body.links,
+          .href_url.domain.domain in (
+            "storage.googleapis.com",
+            "storage.cloud.google.com"
+          )
+          // /<project>[.]firebasestorage[.]app/<object>[.]html
+          // or /<project>[.]appspot[.]com/<dir>/<object>[.]html
+          and regex.imatch(.href_url.path,
+                           '/[^/]+\.(?:firebasestorage\.app|appspot\.com)/[^/]+\.s?html?'
+          )
+  )
+attack_types:
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Free file host"
+  - "Evasion"
+detection_methods:
+  - "URL analysis"
