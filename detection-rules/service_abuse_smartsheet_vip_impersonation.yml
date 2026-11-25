@@ -1,0 +1,29 @@
+name: "Service abuse: Smartsheet VIP impersonation"
+description: "Detects inbound messages sent from Smartsheet's legitimate automation address where the sender display name matches a VIP within the organization, while the reply-to address resolves to a domain that does not belong to the recipient's organization or Smartsheet. This pattern indicates abuse of a trusted automation service to impersonate a VIP and redirect replies to an external domain."
+type: "rule"
+severity: "medium"
+source: |
+  type.inbound
+  and sender.email.email == 'automation@app.smartsheet.com'
+  and any($org_vips, strings.icontains(sender.display_name, .display_name))
+  and any(headers.reply_to,
+          .email.domain.root_domain not in (
+            recipients.to[0].email.domain.root_domain,
+            'smartsheet.com'
+          )
+  )
+  and strings.contains(body.current_thread.text,
+                       'create your account and get started'
+  )
+tags:
+  - "Attack surface reduction"
+attack_types:
+  - "BEC/Fraud"
+  - "Credential Phishing"
+tactics_and_techniques:
+  - "Impersonation: VIP"
+  - "Social engineering"
+detection_methods:
+  - "Header analysis"
+  - "Sender analysis"
+id: "6fcf1e0e-d869-5b0a-b2bc-871357814622"
