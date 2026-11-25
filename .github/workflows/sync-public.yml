@@ -1,0 +1,74 @@
+name: Sync public mirror
+
+# Projects this repo's public rules onto the public sublime-rules repo. Inert until this repo is renamed to
+# sublime-rules-enterprise. See .github/scripts/feed_tiers/sync.py.
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "17 * * * *"  # hourly, to heal a missed or failed run
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Show what would sync without pushing
+        type: boolean
+        default: false
+
+concurrency:
+  group: public-mirror
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  sync:
+    if: github.repository == 'sublime-security/sublime-rules-enterprise'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: public-mirror  # holds PUBLIC_MIRROR_DEPLOY_KEY; deployments allowed from main only
+    steps:
+      - name: Check out the private repo
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          ref: main  # the latest main, not the triggering commit, so a delayed run never syncs an older state
+          fetch-depth: 0
+          path: private
+          persist-credentials: false
+
+      - name: Check out the public repo
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          repository: sublime-security/sublime-rules
+          ref: main
+          ssh-key: ${{ secrets.PUBLIC_MIRROR_DEPLOY_KEY }}
+          path: public
+
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: "3.13"
+
+      - name: Install dependencies
+        run: pip install -r private/.github/scripts/feed_tiers/requirements.txt
+
+      - name: Set the mirror identity
+        working-directory: public
+        run: |
+          git config user.name "Sublime Rules Mirror"
+          git config user.email "sublime-rules-mirror@users.noreply.github.com"
+
+      - name: Project private rules onto the public repo
+        id: sync
+        env:
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: python private/.github/scripts/feed_tiers/sync.py --private private --public public --dry-run "$DRY_RUN"
+
+      - name: Leak guard
+        run: python private/.github/scripts/feed_tiers/guard.py --repo public --rev HEAD
+
+      - name: Push
+        if: steps.sync.outputs.changed == 'true'
+        working-directory: public
+        run: git push origin HEAD:refs/heads/main
