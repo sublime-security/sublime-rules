@@ -25,7 +25,16 @@ source: |
     )
     or (
       network.whois(sender.email.domain).days_old < 30
-      and sender.email.domain.tld in $suspicious_tlds
+      and (
+        sender.email.domain.tld in $suspicious_tlds
+        // the quoted thread was sent to the sender's domain name on a different tld...
+        or any(body.previous_threads,
+               any(.recipients.to,
+                   .email.domain.sld == sender.email.domain.sld
+                   and .email.domain.root_domain != sender.email.domain.root_domain
+               )
+        )
+      )
     )
   )
   // request is being made
